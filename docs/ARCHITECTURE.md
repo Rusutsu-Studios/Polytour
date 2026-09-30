@@ -85,14 +85,17 @@ Add them only when a concrete requirement appears.
 | `GET /*` (non-API) | Static assets / SPA shell (Worker not invoked) |
 | `POST /api/auth/guest` | Verify Turnstile, create guest user in D1, set signed session cookie |
 | `GET /api/me` | Current user profile |
-| `POST /api/rooms` | Create private room → returns 6-char room code |
+| `POST /api/rooms` | Create private room: generate a 6-char code, call `GAME_ROOM.getByName(code).init()`; on "already initialized", retry with a new code → returns the code |
 | `GET /api/leaderboard` | Top ratings from D1 (cache with Workers Cache) |
 | `GET /api/matches/:id/replay` | Stream event log from R2 |
-| `GET /ws/room/:code` | Authenticate cookie → `env.GAME_ROOM.getByName(code).fetch(req)` |
-| `GET /ws/queue/:mode` | Authenticate → `env.MATCHMAKER.getByName(mode).fetch(req)` |
+| `GET /ws/room/:code` | Check `Origin`, authenticate cookie → `env.GAME_ROOM.getByName(code).fetch(req)` |
+| `GET /ws/queue/:mode` | Check `Origin`, authenticate → `env.MATCHMAKER.getByName(mode).fetch(req)` |
 
 The Worker authenticates **before** forwarding a WS upgrade and passes the verified
 `userId` to the DO in a header it sets itself (strip any incoming copy of that header first).
+It also rejects upgrades whose `Origin` header is not one of our own origins (403);
+browsers don't apply CORS to WebSockets, so this is the defense against cross-site
+WebSocket hijacking on top of `SameSite=Lax`.
 
 ## GameRoom Durable Object
 
@@ -100,7 +103,7 @@ The Worker authenticates **before** forwarding a WS upgrade and passes the verif
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Lobby: first connect / created via API
+  [*] --> Lobby: init() from POST /api/rooms or the Matchmaker
   Lobby --> Playing: host starts (2–4 seats filled, bots fill empties)
   Playing --> Playing: intents → engine → events
   Playing --> Finished: win condition or round limit
@@ -108,11 +111,16 @@ stateDiagram-v2
   Archived --> [*]: alarm deletes storage after grace period
 ```
 
+Connecting never creates a room. A WebSocket upgrade for a code whose DO has not
+been initialized (never created, or already cleaned up) is rejected, so guessing
+codes can't spawn rooms. `init()` refuses to run twice, which also turns a room-code
+collision into a retry with a fresh code.
+
 ### Storage (DO SQLite)
 
 ```sql
 CREATE TABLE IF NOT EXISTS meta    (k TEXT PRIMARY KEY, v TEXT NOT NULL);         -- phase, roomCode, createdAt, config
-CREATE TABLE IF NOT EXISTS seats   (seat INTEGER PRIMARY KEY, user_id TEXT, is_bot INTEGER, connected INTEGER);
+CREATE TABLE IF NOT EXISTS seats   (seat INTEGER PRIMARY KEY, user_id TEXT, is_bot INTEGER);
 CREATE TABLE IF NOT EXISTS state   (id INTEGER PRIMARY KEY CHECK (id = 1), seq INTEGER NOT NULL, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events  (seq INTEGER PRIMARY KEY, json TEXT NOT NULL); -- append-only log
 CREATE TABLE IF NOT EXISTS timers  (kind TEXT PRIMARY KEY, fire_at INTEGER NOT NULL, payload TEXT);
@@ -120,6 +128,9 @@ CREATE TABLE IF NOT EXISTS timers  (kind TEXT PRIMARY KEY, fire_at INTEGER NOT N
 
 - `state` holds the full engine state (including PRNG state) as of `seq`.
 - `events` is the append-only log. It powers reconnect catch-up and replays.
+- Presence is **not** stored: a seat is online iff `ctx.getWebSockets("seat:<n>")`
+  returns an open socket. A persisted `connected` flag would go stale whenever the
+  runtime drops sockets without a close handler running (e.g. a deploy restart).
 - `timers` works around "one alarm per DO": after any change, set the alarm to
   `MIN(fire_at)`. The `alarm()` handler processes every due timer, then re-arms.
 
@@ -133,17 +144,22 @@ sequenceDiagram
   participant S as DO SQLite
   participant All as All sockets
 
-  C->>DO: {type:"intent", id, action:{type:"roll"}}
-  DO->>DO: Zod-parse, check seat from ws attachment
-  DO->>E: applyAction(state, action, now)
-  alt illegal
-    E-->>DO: error
-    DO-->>C: {type:"reject", id, reason}
-  else legal
-    E-->>DO: { state', events[] }
-    DO->>S: UPDATE state, INSERT events, UPSERT timers (no await between)
-    DO->>DO: setAlarm(min fire_at)
-    DO-->>All: {type:"events", fromSeq, events}
+  C->>DO: {type:"intent", id, atSeq, action:{type:"roll"}}
+  DO->>DO: Zod-parse, check synced + seat from ws attachment
+  alt atSeq ≠ current seq
+    DO-->>C: {type:"reject", id, reason:"stale"}
+  else current
+    DO->>E: applyAction(state, seat, action, { now })
+    alt illegal
+      E-->>DO: error
+      DO-->>C: {type:"reject", id, reason}
+    else legal
+      E-->>DO: { state', events[] }
+      DO->>S: UPDATE state, INSERT events, UPSERT decision timer = state'.pending.deadline (no await between)
+      DO->>DO: setAlarm(min fire_at)
+      DO-->>C: {type:"ack", id}
+      DO-->>All: {type:"events", fromSeq, toSeq, events}
+    end
   end
 ```
 
@@ -155,25 +171,34 @@ info is added later, redact per socket using the seat in the attachment.
 
 | Timer | Fires | Effect |
 | --- | --- | --- |
-| `turn` | `now + turnSeconds + animationBudget(events)` | Engine applies the default action (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
-| `grace:<seat>` | 60 s after socket close | Seat becomes bot-controlled until the player reconnects. |
-| `bot` | 0.8–1.5 s after a bot's turn starts | Bot picks an action via `shared/engine/bot`. |
+| `decision` | `state.pending.deadline` (computed by the engine) | `applyTimeout` applies the rule-defined default for a human seat (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
+| `grace:<seat>` | 60 s after socket close | Seat becomes a bot seat (`botAction`, medium) until the player reconnects. |
+| `bot` | 0.8–1.5 s after a bot seat's decision opens | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
 | `cleanup` | 10 min after `Finished` | `deleteAll()` storage. |
 
-`animationBudget` is computed from the events (e.g. 350 ms per tile moved, 1.2 s per
-purchase) so a slow animation never eats a player's decision time.
+The DO never computes deadlines itself: the engine sets
+`deadline = now + decisionSeconds + animationBudget(events)` and puts it in the
+events and in `state.pending`, so the countdown clients see and the alarm always
+agree. `animationBudget` and the per-event animation durations live together in
+`shared/board/timing.ts`: the budget is each event's 1× animation duration plus a
+fixed slack (e.g. 20%), so a slow animation never eats a player's decision time and
+the server and the client Director can't drift apart.
 
 ### Reconnect
 
-The client keeps `lastSeq`. On connect it sends `{type:"sync", lastSeq}`:
-- If `lastSeq` is within the last 500 events → replay `events WHERE seq > lastSeq`.
-- Otherwise → send a full snapshot; the client snaps `viewState` to it (no animation).
+The client keeps `lastSeq`. On connect it sends `{type:"sync", lastSeq}`. The DO
+always answers with `welcome` first (protocol version, seat, current `seq`), then:
+- If `lastSeq` is within the last 500 events → `welcome.snapshot = null`, followed by
+  `events WHERE seq > lastSeq`.
+- Otherwise → `welcome` carries a full snapshot; the client snaps `viewState` to it
+  (no animation).
 
 ## Matchmaker Durable Object
 
 One instance per queue, e.g. `getByName("quick-4p")`. Holds hibernatable sockets of
 waiting players, groups them by rating band (widening over time via a timer), then:
-1. Generates a room code, calls `env.GAME_ROOM.getByName(code).init(seats, config)` over RPC.
+1. Generates a room code, calls `env.GAME_ROOM.getByName(code).init(seats, config)` over RPC
+   (retrying with a new code if that room is already initialized).
 2. Sends each waiting socket `{type:"matched", roomCode}` and closes it.
 
 If a single queue ever becomes a bottleneck, shard by region or rating band
@@ -206,6 +231,7 @@ cached for 60 s with Workers Cache.
 ## Security & abuse checklist
 
 - Validate every inbound message with Zod; drop sockets that send malformed frames repeatedly.
+- Check `Origin` on every WebSocket upgrade; reject upgrades to uninitialized rooms.
 - Cap message size (e.g. 4 KB) and rate (e.g. 20 msgs/s per socket) in the DO.
 - Chat: length limit, rate limit, profanity filter, per-player mute. Emotes preferred over free text for quick-match.
 - Room codes: 6 chars from an unambiguous alphabet (no 0/O/1/I), ~1B combinations; rate-limit join attempts.

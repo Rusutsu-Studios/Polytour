@@ -5,21 +5,39 @@ a discriminated union on `type`, defined once with Zod in `src/shared/protocol/`
 imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
+## Phase 0 verification socket
+
+During local development only, the scaffold page connects to `/ws/debug/hello`.
+That route addresses a `GameRoom` Durable Object and receives exactly one frame:
+`{ type: "phase0.hello", status: "ok" }`. It is a temporary health check, not a
+match room: it has no player identity, game state, or action handling, and must be
+removed before Phase 2 adds the real `/ws/room/:code` flow below.
+
 ## Principles
 
 - **Intents up, events down.** The client asks (`intent`); only the server decides.
-- **Monotonic `seq`.** Every event batch has a server sequence number. The client
-  applies batches strictly in order and remembers `lastSeq`.
-- **Idempotent intents.** Each intent carries a client-generated `id`; the server
-  answers with `ack` or `reject` for that `id`, so double-taps and retries are safe.
+- **Monotonic `seq`.** Every game event has its own server sequence number; an
+  `events` message carries the contiguous range `fromSeq..toSeq`. The client applies
+  events strictly in order and remembers `lastSeq`.
+- **Stale intents are rejected, so retries are safe.** Each intent carries a
+  client-generated `id` and `atSeq`, the latest event `seq` the client had received
+  from the server (its `serverState`, not the lagging `viewState`) when the player
+  acted. The server rejects it with `stale` unless `atSeq` equals its current `seq`.
+  A double-tap, a retry, or an intent that arrives after the situation moved on
+  (timeout, bot takeover) therefore never applies twice or to the wrong decision.
+  The server answers each `id` with `ack` or `reject`.
+- **No offline queue.** The client never buffers game messages while disconnected
+  (`partysocket` option `maxEnqueuedMessages: 0`; action buttons are disabled while
+  the socket is not open). `partysocket` would otherwise flush queued messages on
+  reconnect *before* the `open` handler sends `sync`.
 - **State is recoverable.** Any client can be thrown away and rebuilt from a snapshot.
 
 ## Client → server
 
 ```ts
 type ClientMessage =
-  | { type: "sync"; lastSeq: number | null }          // first message after (re)connect
-  | { type: "intent"; id: string; action: Action }    // game actions, see below
+  | { type: "sync"; lastSeq: number | null }          // must be the first message after (re)connect
+  | { type: "intent"; id: string; atSeq: number; action: Action } // game actions, see below
   | { type: "lobby"; id: string; op: LobbyOp }        // pick seat/color, add bot, start (host only)
   | { type: "emote"; emote: EmoteId }
   | { type: "chat"; text: string }                    // ≤ 120 chars, private rooms only
@@ -31,21 +49,24 @@ type Action =
   | { type: "build"; tile: TileId; level: 1 | 2 | 3 | 4 }
   | { type: "buyout"; tile: TileId }
   | { type: "decline" }                               // skip current optional decision
-  | { type: "useCard"; card: "angel" | "coupon" }
+  | { type: "useCard"; card: "angel" | "coupon" }     // only while a rent-card decision is pending
   | { type: "chooseTile"; tile: TileId }              // championship host, travel, card target
   | { type: "leaveIsland"; method: "pay" | "roll" }
-  | { type: "sell"; tiles: TileId[] }                 // forced-sell phase
-  | { type: "endTurn" };
+  | { type: "sell"; tiles: TileId[] };                // forced-sell phase
 ```
+
+There is no `endTurn`: a turn ends automatically once no decision is pending and no
+extra roll is due. The DO ignores every message on a socket until that socket has
+sent `sync` (tracked in its attachment).
 
 ## Server → client
 
 ```ts
 type ServerMessage =
-  | { type: "welcome"; protocolVersion: number; you: { seat: Seat | null; userId: string }; snapshot: Snapshot; seq: number }
+  | { type: "welcome"; protocolVersion: number; you: { seat: Seat | null; userId: string }; seq: number; snapshot: Snapshot | null }
   | { type: "events"; fromSeq: number; toSeq: number; events: GameEvent[] }
   | { type: "ack"; id: string }
-  | { type: "reject"; id: string; reason: RuleError }
+  | { type: "reject"; id: string; reason: RuleError | "stale" | "not-your-turn" }
   | { type: "lobby"; lobby: LobbyState }
   | { type: "presence"; seat: Seat; status: "online" | "away" | "bot" }
   | { type: "emote"; seat: Seat; emote: EmoteId }
@@ -53,41 +74,62 @@ type ServerMessage =
   | { type: "pong"; t: number; serverNow: number };   // clock offset for countdown rings
 ```
 
-`Snapshot` = public `GameState` (no PRNG state, no deck order) + `deadline` for the
-current pending decision.
+`welcome` is **always** the first message the server sends on a socket, on first
+connect and on every reconnect, so the client checks `protocolVersion` before it
+applies anything. `snapshot` is `null` when the server can replay the gap: the
+missing events follow immediately in an `events` message. Current `lobby` and
+`presence` messages follow as well.
+
+`Snapshot` = `toPublic(GameState)` (no PRNG state, no deck order), including
+`turnOrder` and the current `pending` decision with its `deadline`.
 
 ## Game events
 
 Events are small, past-tense facts. Each one maps to exactly one Director handler
-on the client (see [ANIMATION.md](ANIMATION.md)).
+on the client (see [ANIMATION.md](ANIMATION.md)) and is folded into state by the
+shared reducer `applyEvent` (see [GAME_DESIGN.md](GAME_DESIGN.md#engine-contract)).
+Events must be complete: the reducer never re-derives a rule. Each money movement
+appears in exactly one event, and `MoneyTransferred` is only for movements without
+a dedicated event (tax, card effects, Island and World Tour fees). This list is the
+v0.1 draft; it grows with the engine, and the reducer property test decides when it
+is complete.
 
 ```ts
+type InstantWinKind = "triple-monopoly" | "line-monopoly" | "resort-monopoly";
+type WinKind = "last-standing" | InstantWinKind | "round-limit";
+
 type GameEvent =
+  | { type: "GameStarted"; turnOrder: Seat[]; startingCash: number }
   | { type: "TurnStarted"; seat: Seat; round: number; deadline: number }
-  | { type: "DiceRolled"; seat: Seat; dice: [Die, Die]; isDouble: boolean }
+  | { type: "DiceRolled"; seat: Seat; dice: [Die, Die]; isDouble: boolean; purpose: "move" | "escape" }
   | { type: "PawnMoved"; seat: Seat; path: TileId[]; mode: "walk" | "teleport" | "backward" }
-  | { type: "SalaryPaid"; seat: Seat; amount: number }
+  | { type: "SalaryPaid"; seat: Seat; amount: number }    // one per Start crossing = one lap
   | { type: "DecisionRequested"; pending: Pending; deadline: number }
   | { type: "PropertyBought"; seat: Seat; tile: TileId; level: Level; cost: number }
-  | { type: "PropertyUpgraded"; seat: Seat; tile: TileId; from: Level; to: Level; cost: number }
-  | { type: "RentPaid"; from: Seat; to: Seat; tile: TileId; amount: number; multiplier: number }
+  | { type: "PropertyUpgraded"; seat: Seat; tile: TileId; from: Level; to: Level; cost: number } // cost 0 = Contractor
+  | { type: "RentPaid"; from: Seat; to: Seat; tile: TileId; amount: number; multiplier: number } // amount after any card
   | { type: "BoughtOut"; buyer: Seat; seller: Seat; tile: TileId; price: number }
   | { type: "CardDrawn"; seat: Seat; card: CardId }
   | { type: "CardUsed"; seat: Seat; card: CardId }
   | { type: "MoneyTransferred"; from: Seat | "bank"; to: Seat | "bank"; amount: number; reason: MoneyReason }
   | { type: "PropertyDowngraded"; tile: TileId; from: Level; to: Level; cause: "earthquake" }
-  | { type: "PropertiesSwapped"; a: { seat: Seat; tile: TileId }; b: { seat: Seat; tile: TileId } }
+  | { type: "PropertiesSwapped"; a: { seat: Seat; tile: TileId }; b: { seat: Seat; tile: TileId } } // levels move with tiles
   | { type: "PropertySold"; seat: Seat; tile: TileId; refund: number }
   | { type: "ChampionshipHosted"; seat: Seat; tile: TileId; multiplier: number }
+  | { type: "ChampionshipCleared"; tile: TileId; reason: "owner-change" | "sold" | "landmark" }
+  | { type: "TravelOption"; seat: Seat; available: boolean } // World Tour option granted / used or expired
   | { type: "SentToIsland"; seat: Seat; reason: "tile" | "card" | "triple-double" }
-  | { type: "LeftIsland"; seat: Seat; method: "pay" | "doubles" | "timeout" | "card" }
-  | { type: "PlayerBankrupt"; seat: Seat; creditor: Seat | "bank" }
-  | { type: "MonopolyThreat"; seat: Seat; kind: WinKind; missingTiles: TileId[] } // UI warning
-  | { type: "GameOver"; winner: Seat | null; kind: WinKind | "round-limit"; standings: Standing[] };
+  | { type: "IslandEscapeFailed"; seat: Seat; islandTurns: number }
+  | { type: "LeftIsland"; seat: Seat; method: "pay" | "doubles" | "released" | "card" }
+  | { type: "PlayerBankrupt"; seat: Seat; creditor: Seat | "bank"; writtenOff: number } // bank absorbs writtenOff
+  | { type: "MonopolyThreat"; seat: Seat; kind: InstantWinKind; missingTiles: TileId[] } // UI warning
+  | { type: "GameOver"; winner: Seat; kind: WinKind; standings: Standing[] };        // always exactly one winner
 ```
 
 `MonopolyThreat` exists purely for drama: the client flashes the missing tiles so
-opponents know to block.
+opponents know to block. A Guardian Angel or Coupon is offered through a
+`DecisionRequested` (`pending.kind: "rentCard"`) before `RentPaid`; if used, a
+`CardUsed` precedes the `RentPaid` carrying the reduced amount.
 
 ## Connection lifecycle
 
@@ -98,20 +140,33 @@ sequenceDiagram
   participant DO as GameRoom
 
   C->>W: GET /ws/room/K7QP2X (Upgrade, session cookie)
-  W->>W: verify cookie → userId
+  W->>W: check Origin, verify cookie → userId
   W->>DO: fetch(req + x-user-id)
-  DO-->>C: 101 Switching Protocols (acceptWebSocket, attachment {userId, seat})
+  DO->>DO: room not initialized? → reject (no room is created by connecting)
+  DO-->>C: 101 Switching Protocols (acceptWebSocket, attachment {userId, seat, synced: false})
   C->>DO: sync {lastSeq: null}
-  DO-->>C: welcome {snapshot, seq: 0..n}
+  DO-->>C: welcome {protocolVersion, seq: n, snapshot}
   loop game
-    C->>DO: intent {id, action}
-    DO-->>C: ack {id}
+    C->>DO: intent {id, atSeq, action}
+    DO-->>C: ack {id}  (or reject {id, "stale"} if atSeq ≠ seq)
     DO-->>C: events {fromSeq, toSeq, events}
   end
-  Note over C,DO: connection drops
-  C->>W: reconnect (partysocket backoff)
+  Note over C,DO: connection drops (network, or a deploy restarting the DO)
+  C->>W: reconnect (partysocket backoff, no queued intents)
   C->>DO: sync {lastSeq: 118}
-  DO-->>C: events {fromSeq:119, toSeq:131, ...}  (or welcome+snapshot if gap too large)
+  DO-->>C: welcome {protocolVersion, seq: 131, snapshot: null}
+  DO-->>C: events {fromSeq:119, toSeq:131, ...}  (or welcome with a snapshot if the gap is > 500)
+```
+
+## Matchmaker (`/ws/queue/:mode`)
+
+A separate, short-lived socket per waiting player:
+
+```ts
+type QueueClientMessage = { type: "leave" } | { type: "ping"; t: number };
+type QueueServerMessage =
+  | { type: "queued"; mode: string; since: number }
+  | { type: "matched"; roomCode: string }; // server then closes with 1000; client opens /ws/room/:code
 ```
 
 ## Limits (enforced in the DO)
@@ -128,3 +183,10 @@ sequenceDiagram
 `welcome` includes `protocolVersion`. On mismatch the client shows "Update
 available" and reloads (the service worker fetches the new build). Never deploy a
 protocol change that old clients can misread silently — bump the version.
+
+Every deploy restarts the Durable Objects and drops their WebSockets, so every open
+client reconnects to the new code within seconds. That reconnect's `welcome` is
+where a mismatch is caught, which is why `welcome` is never skipped. A deploy also
+removes the previous build's hashed chunks: an old client that later lazy-loads the
+3D scene gets a failed import. The client listens for Vite's `vite:preloadError` and
+reloads (after restoring the room code from the URL).

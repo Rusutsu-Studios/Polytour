@@ -7,21 +7,25 @@ once the protocol is stable.
 
 ## Phase 0 — Scaffold (½ week)
 
-- [ ] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
-- [ ] `wrangler.jsonc` with GameRoom/Matchmaker DOs (SQLite), D1, R2, Analytics Engine bindings
-- [ ] Biome, strict TS, Vitest 4 (+ `@cloudflare/vitest-plugin` project for worker tests)
-- [ ] GitHub Actions: typecheck, lint, test on PR; Workers Builds for preview deploys per branch
-- [ ] Update CLAUDE.md "Commands" with the real scripts
+- [x] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
+- [x] `wrangler.jsonc` with GameRoom/Matchmaker DOs (SQLite), D1, R2, Analytics Engine bindings
+- [x] Biome, strict TS, Vitest 4 (+ `@cloudflare/vitest-plugin` project for worker tests)
+- [x] GitHub Actions: typecheck, lint, test on PR
+- [x] Staging: a separate `staging` environment in `wrangler.jsonc` (own Worker, D1, R2), deployed on
+      merge to `main`. Per-branch preview URLs are not an option: Cloudflare does not generate
+      version preview URLs for Workers that implement Durable Objects.
+- [x] Update CLAUDE.md "Commands" with the real scripts
 
 **Done when:** `pnpm dev` serves a page that opens a WebSocket to a hello-world DO, and CI is green.
 
 ## Phase 1 — Rules engine (1–2 weeks)
 
 - [ ] Board + economy config (`shared/board`)
-- [ ] `createGame`, `applyAction`, `applyTimeout`, `legalActions` with seeded PRNG
+- [ ] `createGame`, `applyAction`, `applyTimeout`, `applyEvent`, `legalActions` with seeded PRNG
 - [ ] All tiles, Chance deck, buyouts, forced selling, bankruptcy, all 5 win conditions
 - [ ] Easy/medium heuristic bots
-- [ ] fast-check invariants: money conservation, no stuck states, always terminates
+- [ ] fast-check invariants: money conservation (player cash + bank ledger), no stuck states,
+      always terminates, `reduce(applyEvent)` over emitted events reproduces the public state
 - [ ] `tools/sim` with stats output; first balance pass
 
 **Done when:** 10,000 simulated games finish with sane length and win-condition mix.
@@ -33,7 +37,8 @@ once the protocol is stable.
 - [ ] Reconnect with `lastSeq`; bot takeover after grace period
 - [ ] Private rooms: `POST /api/rooms`, join by code, lobby (seats, bots, start)
 - [ ] **Debug 2D board** (plain SVG/DOM) to play full games in 4 browser tabs
-- [ ] DO tests: intent flow, reject, reconnect replay, alarm-driven timeout
+- [ ] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
+      connect to an uninitialized room rejected, alarm-driven timeout
 
 **Done when:** four people can finish a full game over the internet with refreshes and dropped connections mid-game.
 
