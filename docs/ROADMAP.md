@@ -14,7 +14,7 @@ once the protocol is stable.
 - [x] GitHub Actions: typecheck, lint, test on PR
 - [x] Cloudflare account (Rusutsu Studios) provisioned: D1 + R2, `account_id` pinned
 - [x] First production deploy (`polytour` on `*.workers.dev`)
-- [ ] Workers Builds connected: push to `main` → production (see
+- [x] Workers Builds connected: push to `main` → production (see
       [ARCHITECTURE.md → Environments and deploys](ARCHITECTURE.md#environments-and-deploys))
 - [x] Update CLAUDE.md "Commands" with the real scripts
 
@@ -82,10 +82,9 @@ once the protocol is stable.
 - [ ] Rate limits, message size caps, chat filter, abuse reporting
 - [ ] Analytics Engine telemetry + a balancing dashboard query set (enable Analytics Engine in the
       dashboard, then add the `TELEMETRY` binding in `wrangler.jsonc`)
-- [ ] Staging environment for testing against real Cloudflare resources before production. Its
-      empty resources already exist (Worker `polytour-staging`, D1 `polytour-staging`, R2
-      `polytour-replays-staging`). Per-branch preview URLs are not an option: Cloudflare does not
-      generate them for Workers that implement Durable Objects.
+- [ ] Staging environment (own Worker, D1, R2) for testing against real Cloudflare resources
+      before production. Per-branch preview URLs are not an option: Cloudflare does not generate
+      them for Workers that implement Durable Objects.
 - [ ] Error tracking (Workers Logs/Traces + client error reporting)
 - [ ] Load test: 500 concurrent simulated rooms; measure cost per match
 - [ ] Custom domain, OG images, landing page, privacy policy
