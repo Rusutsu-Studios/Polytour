@@ -1,6 +1,8 @@
-import { ECONOMY } from "../board/index.js";
-import { shuffle } from "./rng.js";
+import { BOARD_SIZE, ECONOMY } from "../board/index.js";
+import { nextRandom, shuffle } from "./rng.js";
 import type {
+  Action,
+  ApplyActionResult,
   CreateGameResult,
   EngineContext,
   GameConfig,
@@ -89,6 +91,100 @@ export function applyEvent(_state: PublicState, event: GameEvent): PublicState {
   switch (event.type) {
     case "GameCreated":
       return event.state;
+    case "DiceRolled":
+      return { ..._state, lastRoll: { seat: event.seat, dice: event.dice } };
+    case "PlayerMoved":
+      return {
+        ..._state,
+        players: _state.players.map((player) =>
+          player.seat === event.seat
+            ? { ...player, position: event.position, laps: event.laps }
+            : player,
+        ),
+      };
+    case "SalaryPaid":
+      return {
+        ..._state,
+        players: _state.players.map((player) =>
+          player.seat === event.seat ? { ...player, cash: event.cash } : player,
+        ),
+      };
+    case "TurnPhaseChanged":
+      return { ..._state, phase: event.phase };
+  }
+}
+
+function rollDie(rngState: number): {
+  readonly rngState: number;
+  readonly die: number;
+} {
+  const result = nextRandom(rngState);
+
+  return { rngState: result.state, die: Math.floor(result.value * 6) + 1 };
+}
+
+export function applyAction(
+  state: GameState,
+  seat: Seat,
+  action: Action,
+  _context: EngineContext,
+): ApplyActionResult {
+  if (state.activeSeat !== seat) {
+    return {
+      ok: false,
+      error: { code: "not-active-seat", message: "It is not this seat's turn" },
+    };
+  }
+
+  if (state.phase !== "roll" || state.pending !== null) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid-phase",
+        message: "A normal roll is not legal now",
+      },
+    };
+  }
+
+  switch (action.type) {
+    case "Roll": {
+      const firstRoll = rollDie(state.rngState);
+      const secondRoll = rollDie(firstRoll.rngState);
+      const dice: readonly [number, number] = [firstRoll.die, secondRoll.die];
+      const activePlayer = state.players.find((player) => player.seat === seat);
+
+      if (!activePlayer) {
+        throw new Error(`The active seat ${seat} has no player`);
+      }
+
+      const absolutePosition = activePlayer.position + dice[0] + dice[1];
+      const passedStart = absolutePosition >= BOARD_SIZE;
+      const position = absolutePosition % BOARD_SIZE;
+      const laps = activePlayer.laps + Number(passedStart);
+      const events: GameEvent[] = [
+        { type: "DiceRolled", seat, dice },
+        { type: "PlayerMoved", seat, position, laps },
+      ];
+
+      if (passedStart) {
+        events.push({
+          type: "SalaryPaid",
+          seat,
+          amount: state.config.startSalary,
+          cash: activePlayer.cash + state.config.startSalary,
+        });
+      }
+
+      events.push({ type: "TurnPhaseChanged", phase: "resolve" });
+
+      const publicState = events.reduce(applyEvent, toPublic(state));
+      const nextState: GameState = {
+        ...publicState,
+        rngState: secondRoll.rngState,
+      };
+
+      return { ok: true, state: nextState, events };
+    }
   }
 }
 
@@ -123,6 +219,7 @@ export function createGame(
     round: 1,
     phase: "roll",
     pending: null,
+    lastRoll: null,
     bankLedger: 0,
     championshipHost: null,
     status: "active",
