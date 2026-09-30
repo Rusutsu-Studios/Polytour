@@ -2,7 +2,7 @@ import { BOARD, ECONOMY, getTileLandPrice } from "../../shared/board/index.js";
 import type { Seat } from "../../shared/engine/index.js";
 
 export const PLAYER_COLORS = [
-  "#d84929",
+  "#be3d24",
   "#236cce",
   "#8151b5",
   "#26764c",

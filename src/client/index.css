@@ -1,15 +1,15 @@
 :root {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   color: #173b45;
-  background: #9fded2;
+  background: #75d4ed;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   font-size: 16px;
   --ink: #173b45;
   --muted: #47666c;
   --paper: #fffaf0;
-  --coral: #e95131;
-  --coral-dark: #bd3620;
+  --coral: #c74024;
+  --coral-dark: #98291a;
 }
 * {
   box-sizing: border-box;

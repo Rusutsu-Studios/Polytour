@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { PublicState, Seat } from "../src/shared/engine/index.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -23,6 +24,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.locator(".canvas-layer")).toHaveAttribute(
+    "data-scene-ready",
+    "true",
+  );
   const roll = page.getByRole("button", {
     name: "Lancer les dés",
     exact: true,
@@ -71,18 +76,175 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     const { director } = await import(modulePath);
     director.reset(snapshot);
   }, original);
+  // The board and the four corner HUDs fit the supported PC viewports.
+  // Every secondary panel starts closed; a match needs no page scrolling.
+  await expect(page.locator(".journal")).not.toBeVisible();
+  await expect(page.locator(".inspector")).not.toBeVisible();
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect(page.locator(".board-stage")).toHaveCSS(
+      "height",
+      `${size.height}px`,
+    );
+    const layout = await page.evaluate(() => {
+      const bounds = [
+        ...document.querySelectorAll(".player-card, .decision-panel"),
+      ].map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          top: rect.top,
+          left: rect.left,
+          right: rect.right,
+          bottom: rect.bottom,
+        };
+      });
+      return {
+        width: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        height: window.innerHeight,
+        scrollHeight: document.documentElement.scrollHeight,
+        bounds,
+      };
+    });
+    expect(layout.scrollWidth).toBe(layout.width);
+    expect(layout.scrollHeight).toBeLessThanOrEqual(layout.height);
+    for (const rect of layout.bounds) {
+      expect(rect.top).toBeGreaterThanOrEqual(0);
+      expect(rect.left).toBeGreaterThanOrEqual(0);
+      expect(rect.right).toBeLessThanOrEqual(size.width);
+      expect(rect.bottom).toBeLessThanOrEqual(size.height);
+    }
+    await page.screenshot({
+      path: `.local/verification/desktop-match-${size.width}.png`,
+    });
+  }
+  // Synthetic presentation fixture: development levels and a five-choice buy
+  // decision. The Worker remains untouched; restore its snapshot before rolling.
+  const presentationBase = await page.evaluate(async () => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (!snapshot) throw new Error("Expected an active snapshot");
+    const samples: Record<
+      number,
+      { owner: Seat; level: 0 | 1 | 2 | 3 | 4 | 5 }
+    > = {
+      4: { owner: 0, level: 1 },
+      7: { owner: 1, level: 2 },
+      11: { owner: 2, level: 3 },
+      15: { owner: 3, level: 4 },
+      20: { owner: 0, level: 5 },
+      25: { owner: 1, level: 4 },
+      30: { owner: 2, level: 5 },
+      31: { owner: 3, level: 3 },
+    };
+    const properties = snapshot.properties.map((property) => ({
+      ...property,
+      owner: samples[property.tile]?.owner ?? null,
+      level: samples[property.tile]?.level ?? 0,
+    }));
+    director.reset({
+      ...snapshot,
+      activeSeat: 0,
+      pending: {
+        kind: "buy",
+        seat: 0,
+        tile: 1,
+        maxLevel: 4,
+        deadline: Date.now() + 60_000,
+      },
+      properties,
+      players: snapshot.players.map((player) => ({
+        ...player,
+        cash: 2_000_000,
+        laps: 1,
+        position: [1, 12, 24, 31][player.seat],
+        properties: properties
+          .filter((property) => property.owner === player.seat)
+          .map((property) => property.tile),
+      })),
+    });
+    return snapshot;
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.locator(".decision-actions button")).toHaveCount(6);
+  await expect(page.locator(".decision-panel")).toContainText("Roubaix");
+  const overlap = await page.evaluate(() => {
+    const action = document
+      .querySelector(".decision-panel")
+      ?.getBoundingClientRect();
+    if (!action) throw new Error("Expected a purchase decision");
+    return [...document.querySelectorAll(".player-card")].some((card) => {
+      const rect = card.getBoundingClientRect();
+      return (
+        action.left < rect.right &&
+        action.right > rect.left &&
+        action.top < rect.bottom &&
+        action.bottom > rect.top
+      );
+    });
+  });
+  expect(overlap).toBe(false);
+  await page.screenshot({
+    path: ".local/verification/desktop-developed-fixture.png",
+  });
+  await page.evaluate(async (snapshot) => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.reset(snapshot);
+  }, presentationBase);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page
+    .getByRole("button", { name: "Vue et animations", exact: true })
+    .click();
+  await expect(page.getByLabel("Réduire les animations")).toBeChecked();
+  await page.getByLabel("Vitesse des animations").selectOption("2");
+  await expect(page.getByLabel("Vitesse des animations")).toHaveValue("2");
+  await page.getByLabel("Réduire les animations").uncheck();
+  await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
+  await page.getByLabel("Réduire les animations").check();
+  await expect(
+    page.getByRole("button", { name: "Terminer l’animation en cours" }),
+  ).toBeDisabled();
+  await page.getByLabel("Réduire les animations").uncheck();
+  await page.getByLabel("Vitesse des animations").press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Vue et animations", exact: true }),
+  ).toBeFocused();
+  const previousTime = await page.locator(".match-clock").innerText();
+  await expect
+    .poll(() => page.locator(".match-clock").innerText())
+    .not.toBe(previousTime);
   await roll.click();
+  await page
+    .getByRole("button", { name: "Passer l’animation ↗", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Carnet de voyage", exact: true })
+    .click();
   await expect(page.locator(".journal")).toContainText("Raimundo lance", {
     timeout: 20_000,
   });
+  await page
+    .getByRole("button", { name: "Explorer le plateau", exact: true })
+    .click();
   await page.getByLabel("Explorer une case").selectOption("31");
   await expect(page.locator(".inspector")).toContainText("Tokyo");
   await expect(page.locator(".property-numbers")).toContainText("400 k");
+  await page.getByLabel("Explorer une case").press("Escape");
+  await expect(page.locator(".inspector")).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Explorer le plateau", exact: true }),
+  ).toBeFocused();
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
-  await expect(page.locator(".match-location")).toContainText("En ligne");
+  await expect(page.locator(".match-connection")).toContainText("En ligne");
   await expect(
-    page.getByRole("button", { name: "Quitter", exact: true }),
+    page.getByRole("button", { name: "Quitter la partie", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Comment jouer" }).click();
   await expect(page.locator("dialog")).toBeVisible();
@@ -91,11 +253,11 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   expect(errors).toEqual([]);
 });
 
-test("mobile room controls fit, create and join preserve the host settings", async ({
+test("desktop room controls fit, create and join preserve the host settings", async ({
   page,
   browser,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
   await page.locator(".settings-disclosure summary").click();
@@ -107,7 +269,7 @@ test("mobile room controls fit, create and join preserve the host settings", asy
   await expect(page.locator(".lobby-seats")).toBeVisible();
   const code = await page.locator(".room-code-block strong").innerText();
   const friend = await browser.newContext({
-    viewport: { width: 390, height: 844 },
+    viewport: { width: 1280, height: 720 },
     reducedMotion: "reduce",
   });
   try {
@@ -153,9 +315,9 @@ test("mobile room controls fit, create and join preserve the host settings", asy
     await expect(page.locator(".decision-panel")).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
-    ).toBe(390);
+    ).toBe(1280);
     await page.screenshot({
-      path: ".local/verification/mobile-client-test.png",
+      path: ".local/verification/desktop-room-controls.png",
       fullPage: true,
     });
   } finally {

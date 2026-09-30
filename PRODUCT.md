@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Friends who want to play a four-seat property board game in a browser. A player can also start alone with three server-controlled bots. This first playable prototype is evaluated locally on desktop and mobile.
+Friends who want to play a four-seat property board game in a PC browser with a mouse and keyboard. A player can also start alone with three server-controlled bots. Desktop is the product priority: 1280×720 is the minimum layout target, with 1440×900 and 1920×1080 as the main evaluation sizes. Mobile support is best effort and may become a separate future adaptation; it is not a release gate for this prototype.
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ The user explicitly asks for a property game without paid advantages and with ho
 
 ## Operating Context
 
-The existing architecture specifies a Cloudflare Worker, one authoritative Durable Object per room, deterministic shared rules, and events driving animation. A room has four seats; empty seats may be filled by bots. Reconnection restores the player's seat from a credential stored in the current browser session.
+The existing architecture specifies a Cloudflare Worker, one authoritative Durable Object per room, deterministic shared rules, and events driving animation. A room has four seats; empty seats may be filled by bots. Reconnection restores the player's seat from a credential stored in the current browser session. During a match, the board occupies the desktop viewport and four compact player HUDs frame its corners. Contextual decisions appear when needed; journal, proof, instructions, room information and tile details are closed by default.
 
 ## Capabilities and Constraints
 
@@ -34,7 +34,7 @@ The existing architecture specifies a Cloudflare Worker, one authoritative Durab
 
 ## Brand Commitments
 
-Polytour is the existing name. The user supplied board-game screenshots as references for feel, values, and room settings, and asked about Three.js. The repository pins a premium toy diorama with readable, satisfying motion. The user selected a travel progression from affordable French cities toward international cities, finishing with Osaka and Tokyo. Build original geometry; do not import competitor branding, characters, or artwork. The first product interface is French, reflecting the user's working language.
+Polytour is the existing name. The user supplied board-game screenshots as references for feel, values, and room settings, and asked about Three.js. On 1 October 2026 the user clarified that the game is for PC and should follow the familiar property-board game composition: a large central isometric board, player information at the corners and discreet menus. This replaces the previous dashboard composition with large permanent panels. Retain the original premium toy geometry, readable motion, ivory board and player symbols, with a sky-blue surround and a grassy center. The user selected a travel progression from affordable French cities toward international cities, finishing with Osaka and Tokyo. Build original geometry; do not import competitor branding, characters, or artwork. The first product interface is French, reflecting the user's working language.
 
 ## Evidence on Hand
 
@@ -47,7 +47,8 @@ The architecture and animation documentation live in `docs/`. Screenshots and ex
 - Player choices stay legible while animation catches up.
 - Randomness claims require visible, inspectable evidence.
 - The room code and reconnect path make playing with friends practical.
+- The board leads the PC experience; the interface supports the match without occupying its play area.
 
 ## Accessibility & Inclusion
 
-Every player color also has a distinct symbol. All decisions, room controls, and tile inspection have keyboard-accessible DOM controls. Respect reduced motion and provide animation speed and skip controls. Money and essential labels stay legible on phone screens.
+Every player color also has a distinct symbol. All decisions, room controls, and tile inspection have keyboard-accessible DOM controls. Respect reduced motion and provide animation speed and skip controls. Money, deadlines and essential labels must remain legible at the minimum desktop target, and overlays must preserve keyboard focus and dismissal. Optional mobile adaptation must not compromise the desktop board or require a physical phone FPS result to ship this prototype.

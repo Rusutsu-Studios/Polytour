@@ -1,9 +1,4 @@
-import {
-  AnimatePresence,
-  animate,
-  motion,
-  useReducedMotion,
-} from "motion/react";
+import { AnimatePresence, animate, motion } from "motion/react";
 import type { CSSProperties, ErrorInfo, ReactNode } from "react";
 import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { BOARD, ECONOMY } from "../shared/board/index.js";
@@ -37,7 +32,6 @@ import {
   LEVEL_NAMES,
   money,
   PLAYER_COLORS,
-  PLAYER_LABELS,
   PLAYER_SYMBOLS,
   TILE_ICONS,
   TILE_NAMES,
@@ -498,6 +492,9 @@ function DecisionPanel({
   return (
     <section
       className={`decision-panel ${ownTurn ? "your-turn" : ""}`}
+      data-kind={pending?.kind ?? "roll"}
+      data-own={ownTurn}
+      data-busy={busy || rngBusy}
       aria-labelledby="decision-heading"
       aria-live="polite"
     >
@@ -742,9 +739,11 @@ function TileInspector({
 function RandomnessPanel({
   value,
   mode,
+  expanded = false,
 }: {
   value: RandomnessStatus | null;
   mode: RoomConfig["randomnessMode"];
+  expanded?: boolean;
 }) {
   const proof = value?.proof;
   const commitment = value?.commitment ?? proof;
@@ -760,7 +759,7 @@ function RandomnessPanel({
     setTimeout(() => URL.revokeObjectURL(href), 1000);
   }
   return (
-    <details className="proof-panel">
+    <details className="proof-panel" open={expanded}>
       <summary>
         <span
           className={`proof-indicator ${proof?.verified ? "verified" : ""}`}
@@ -954,6 +953,595 @@ function MatchClock({
   );
 }
 
+type GameTool = "journal" | "proof" | "view" | "room" | null;
+
+// THESIS: The PC board fills the screen; the interface occupies its unused corners.
+// OWN-WORLD: sky blue, ivory toy controls, four colored pawn identities, physical buttons.
+// STORY: watch the board, make the current choice, open a tool only when needed.
+// FIRST VIEWPORT: four corner players, discreet top controls, one context action at the bottom.
+// FORM: the user's pinned isometric board-game reference; the scene remains the main surface.
+function MatchView({
+  game,
+  credentials,
+  room,
+  config,
+  selected,
+  onSelect,
+  zoom,
+  onZoom,
+  copied,
+  copyRoom,
+  onLeave,
+  onHelp,
+  onReplay,
+  debug,
+}: {
+  game: PublicState;
+  credentials: RoomCredentials;
+  room: ReturnType<typeof useRoom>;
+  config: RoomConfig;
+  selected: number | null;
+  onSelect: (tile: number) => void;
+  zoom: number;
+  onZoom: (zoom: number) => void;
+  copied: boolean;
+  copyRoom: () => Promise<void>;
+  onLeave: () => void;
+  onHelp: () => void;
+  onReplay: () => void;
+  debug: boolean;
+}) {
+  const { serverState, busy, speed, history, reducedMotion } = useDirector();
+  const [tool, setTool] = useState<GameTool>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const overlayTrigger = useRef<HTMLButtonElement | null>(null);
+  const inspectorRef = useRef<HTMLElement | null>(null);
+  const toolRef = useRef<HTMLElement | null>(null);
+  const decidingSeat = game.pending?.seat ?? game.activeSeat;
+  const ownPlayer = game.players.find(
+    (player) => player.seat === credentials.seat,
+  );
+  const toolsTitle =
+    tool === "journal"
+      ? "Carnet de voyage"
+      : tool === "proof"
+        ? "Les dés et leur preuve"
+        : tool === "view"
+          ? "Vue et animations"
+          : "Votre salle";
+  const latestAction = history
+    .map((event) => eventText(event, game))
+    .filter((text): text is string => text !== null)
+    .at(-1);
+  function showTool(
+    next: Exclude<GameTool, null>,
+    trigger?: HTMLButtonElement,
+  ) {
+    overlayTrigger.current = trigger ?? null;
+    setTool((current) => (current === next ? null : next));
+    setInspectorOpen(false);
+  }
+  function closeTools() {
+    setTool(null);
+    setInspectorOpen(false);
+    overlayTrigger.current?.focus();
+  }
+  function inspectTile(tile: number) {
+    overlayTrigger.current = null;
+    onSelect(tile);
+    setInspectorOpen(true);
+    setTool(null);
+  }
+  useEffect(() => {
+    if (!tool && !inspectorOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const panel = tool ? toolRef.current : inspectorRef.current;
+      panel?.querySelector<HTMLButtonElement>("button")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tool, inspectorOpen]);
+  useEffect(() => {
+    const closeOverlays = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setTool(null);
+        setInspectorOpen(false);
+        overlayTrigger.current?.focus();
+      }
+    };
+    const fullscreenChanged = () =>
+      setFullscreen(Boolean(document.fullscreenElement));
+    window.addEventListener("keydown", closeOverlays);
+    document.addEventListener("fullscreenchange", fullscreenChanged);
+    return () => {
+      window.removeEventListener("keydown", closeOverlays);
+      document.removeEventListener("fullscreenchange", fullscreenChanged);
+    };
+  }, []);
+  function toggleFullscreen() {
+    if (document.fullscreenElement)
+      void document.exitFullscreen().catch(() => {});
+    else void document.documentElement.requestFullscreen().catch(() => {});
+  }
+  return (
+    <>
+      <div className="board-stage">
+        <SceneBoundary
+          fallback={<BoardFallback state={game} onSelect={inspectTile} />}
+        >
+          <Suspense
+            fallback={
+              <div className="scene-loading">
+                <span className="spinner" />
+                Votre plateau prend place…
+              </div>
+            }
+          >
+            <BoardScene
+              state={game}
+              selected={selected}
+              onSelect={inspectTile}
+              zoom={zoom}
+            />
+          </Suspense>
+        </SceneBoundary>
+      </div>
+
+      <header className="match-topbar">
+        <Logo small />
+        <div className="match-time">
+          <span>Manche {game.round}</span>
+          <MatchClock
+            deadline={game.matchDeadline}
+            finished={game.status === "finished"}
+          />
+        </div>
+        <span
+          className="match-connection"
+          role="status"
+          title={
+            room.connection === "online"
+              ? "Connecté à votre salle"
+              : "Reconnexion à la salle"
+          }
+        >
+          <span className="connection-dot" data-state={room.connection} />
+          {room.connection === "online"
+            ? "En ligne"
+            : room.connection === "offline"
+              ? "Hors ligne"
+              : "Reconnexion…"}
+        </span>
+      </header>
+
+      <nav className="game-tools" aria-label="Outils de la partie">
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label="Carnet de voyage"
+          title="Carnet de voyage"
+          aria-expanded={tool === "journal"}
+          onClick={(event) => showTool("journal", event.currentTarget)}
+        >
+          <Icon name="journal" size={18} />
+        </button>
+        <button
+          type="button"
+          className={`game-tool-button ${room.randomness?.proof?.verified ? "proof-verified" : ""}`}
+          aria-label="Dés et preuve"
+          title="Dés et preuve"
+          aria-expanded={tool === "proof"}
+          onClick={(event) => showTool("proof", event.currentTarget)}
+        >
+          <Icon name="shield" size={18} />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label="Explorer le plateau"
+          title="Explorer le plateau"
+          aria-expanded={inspectorOpen}
+          onClick={(event) => {
+            overlayTrigger.current = event.currentTarget;
+            setInspectorOpen((value) => !value);
+            setTool(null);
+          }}
+        >
+          <Icon name="search" size={18} />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label="Vue et animations"
+          title="Vue et animations"
+          aria-expanded={tool === "view"}
+          onClick={(event) => showTool("view", event.currentTarget)}
+        >
+          <Icon name="settings" size={18} />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label="Inviter et voir les réglages"
+          title="Inviter et voir les réglages"
+          aria-expanded={tool === "room"}
+          onClick={(event) => showTool("room", event.currentTarget)}
+        >
+          <Icon name="people" size={18} />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label="Comment jouer"
+          title="Comment jouer"
+          onClick={onHelp}
+        >
+          <Icon name="help" size={18} />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label={fullscreen ? "Quitter le plein écran" : "Plein écran"}
+          title={fullscreen ? "Quitter le plein écran" : "Plein écran"}
+          onClick={toggleFullscreen}
+        >
+          <Icon name="fullscreen" size={17} />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label="Quitter la partie"
+          title="Quitter la partie"
+          onClick={onLeave}
+        >
+          <Icon name="exit" size={18} />
+        </button>
+      </nav>
+
+      <section className="player-roster" aria-label="Joueurs de la partie">
+        {game.players.map((player) => {
+          const active =
+            decidingSeat === player.seat && game.status === "active";
+          const presence = room.lobby?.seats.find(
+            (entry) => entry.seat === player.seat,
+          );
+          return (
+            <motion.article
+              key={player.seat}
+              data-seat={player.seat}
+              className={`player-card ${active ? "active" : ""} ${player.bankrupt ? "bankrupt" : ""}`}
+              style={
+                {
+                  "--player-color": PLAYER_COLORS[player.seat],
+                } as CSSProperties
+              }
+              animate={{ opacity: player.bankrupt ? 0.7 : 1 }}
+              transition={{ duration: reducedMotion ? 0 : 0.2 / speed }}
+            >
+              <div className="player-avatar" aria-hidden="true">
+                <span>{PLAYER_SYMBOLS[player.seat]}</span>
+              </div>
+              <div className="player-card-body">
+                <div className="player-name-row">
+                  <strong>{player.name}</strong>
+                  <span>
+                    {player.seat === credentials.seat
+                      ? "Vous"
+                      : player.control === "bot"
+                        ? "Bot"
+                        : presence?.online
+                          ? "En ligne"
+                          : "Absent"}
+                  </span>
+                </div>
+                <div className="player-cash">
+                  <span className="coin-symbol" aria-hidden="true">
+                    ●
+                  </span>
+                  <MoneyCounter value={player.cash} />
+                </div>
+                <p>
+                  <span>
+                    {player.bankrupt
+                      ? "Faillite"
+                      : `${player.properties.length} ville${player.properties.length > 1 ? "s" : ""}`}
+                  </span>
+                  <span title="Argent et valeur des propriétés">
+                    Fortune {money(netWorth(game, player.seat))}
+                  </span>
+                </p>
+              </div>
+              {active && (
+                <span className="active-marker">
+                  {player.seat === credentials.seat
+                    ? "Votre décision"
+                    : "À son tour"}
+                </span>
+              )}
+              {player.heldCards.length > 0 && (
+                <span
+                  className="player-held-cards"
+                  title={player.heldCards
+                    .map((card) => CARD_NAMES[card])
+                    .join(" · ")}
+                >
+                  {player.heldCards.length} carte
+                  {player.heldCards.length > 1 ? "s" : ""}
+                </span>
+              )}
+            </motion.article>
+          );
+        })}
+      </section>
+
+      <AnimatePresence mode="wait">
+        {game.status === "finished" && game.result && !busy ? (
+          <motion.section
+            key="finished"
+            className="end-panel match-end-panel"
+            initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 / speed }}
+          >
+            <span className="winner-trophy">
+              <Icon name="trophy" size={44} />
+            </span>
+            <p className="small-label">Le voyage est terminé</p>
+            <h2>
+              {
+                game.players.find(
+                  (player) => player.seat === game.result?.winner,
+                )?.name
+              }{" "}
+              remporte la partie !
+            </h2>
+            <ol className="standings">
+              {game.result.standings.map((standing, index) => (
+                <li key={standing.seat}>
+                  <span>{index + 1}</span>
+                  <b>
+                    {PLAYER_SYMBOLS[standing.seat]}{" "}
+                    {
+                      game.players.find(
+                        (player) => player.seat === standing.seat,
+                      )?.name
+                    }
+                  </b>
+                  <strong>{money(standing.netWorth)}</strong>
+                </li>
+              ))}
+            </ol>
+            <button type="button" className="button primary" onClick={onReplay}>
+              Rejouer avec des bots <Icon name="arrow" />
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={onLeave}
+            >
+              Nouvelle salle entre amis
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => showTool("journal")}
+            >
+              Revoir le carnet de voyage <Icon name="journal" size={16} />
+            </button>
+          </motion.section>
+        ) : (
+          <motion.div
+            key="decision"
+            className="contextual-action"
+            initial={false}
+            animate={{ opacity: 1 }}
+          >
+            <DecisionPanel
+              state={serverState ?? game}
+              seat={credentials.seat}
+              act={room.act}
+              blocked={room.pending || room.connection !== "online"}
+              randomness={room.randomness}
+              selected={selected}
+              onSelect={onSelect}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {inspectorOpen && (
+          <motion.aside
+            ref={inspectorRef}
+            key="inspector"
+            className="inspector-popover"
+            aria-label="Inspection du plateau"
+            initial={reducedMotion ? false : { opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 / speed }}
+          >
+            <button
+              type="button"
+              className="popover-close icon-button"
+              aria-label="Fermer l’inspection"
+              onClick={closeTools}
+            >
+              <Icon name="close" size={16} />
+            </button>
+            <TileInspector
+              state={game}
+              selected={selected}
+              onSelect={onSelect}
+            />
+          </motion.aside>
+        )}
+        {tool && (
+          <motion.section
+            ref={toolRef}
+            key={tool}
+            className="tool-drawer"
+            aria-labelledby="tool-title"
+            initial={reducedMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 / speed }}
+          >
+            <div className="tool-drawer-head">
+              <h2 id="tool-title">{toolsTitle}</h2>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Fermer les outils"
+                onClick={closeTools}
+              >
+                <Icon name="close" size={17} />
+              </button>
+            </div>
+            {tool === "journal" && (
+              <div className="journal">
+                <p className="held-cards-note">
+                  {ownPlayer?.heldCards.length
+                    ? `Vos cartes : ${ownPlayer.heldCards.map((card) => CARD_NAMES[card]).join(" · ")}`
+                    : "Toutes les actions récentes de la partie."}
+                </p>
+                <ol>
+                  {history
+                    .map((event, index) => ({
+                      text: eventText(event, game),
+                      key: index,
+                    }))
+                    .filter((item) => item.text)
+                    .slice(-40)
+                    .reverse()
+                    .map((item) => (
+                      <li key={item.key}>{item.text}</li>
+                    ))}
+                </ol>
+                {!latestAction && (
+                  <p>Votre aventure commence ici. Lancez les dés !</p>
+                )}
+              </div>
+            )}
+            {tool === "proof" && (
+              <RandomnessPanel
+                value={room.randomness}
+                mode={config.randomnessMode}
+                expanded
+              />
+            )}
+            {tool === "view" && (
+              <div className="view-settings">
+                <label htmlFor="animation-speed">
+                  Vitesse des animations
+                  <select
+                    id="animation-speed"
+                    value={speed}
+                    onChange={(event) =>
+                      director.setSpeed(
+                        Number(event.target.value) as 1 | 1.5 | 2,
+                      )
+                    }
+                  >
+                    <option value={1}>1× · Prendre le temps</option>
+                    <option value={1.5}>1,5× · Classique</option>
+                    <option value={2}>2× · Partie rapide</option>
+                  </select>
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={reducedMotion}
+                    onChange={(event) =>
+                      director.setReducedMotion(event.target.checked)
+                    }
+                  />
+                  Réduire les animations
+                </label>
+                <div className="zoom-control">
+                  <span>Taille du plateau</span>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Dézoomer le plateau"
+                    disabled={zoom <= 0.8}
+                    onClick={() => onZoom(Math.max(0.8, zoom - 0.1))}
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => onZoom(1)}
+                  >
+                    Recentrer
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Zoomer le plateau"
+                    disabled={zoom >= 1.3}
+                    onClick={() => onZoom(Math.min(1.3, zoom + 0.1))}
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={!busy}
+                  onClick={director.skip}
+                >
+                  Terminer l’animation en cours
+                </button>
+              </div>
+            )}
+            {tool === "room" && (
+              <div className="room-tool">
+                <span className="small-label">Code de votre salle</span>
+                <div className="room-tool-code">
+                  <strong>{credentials.roomCode}</strong>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => void copyRoom()}
+                  >
+                    <Icon name={copied ? "check" : "copy"} size={16} />
+                    {copied ? "Invitation copiée" : "Copier l’invitation"}
+                  </button>
+                </div>
+                <p className="field-note">
+                  Les réglages sont fixés pour toute la durée de cette partie.
+                </p>
+                <RoomSettings config={config} disabled onChange={() => {}} />
+              </div>
+            )}
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      <div className="match-caption">
+        <span>
+          {latestAction ?? "Bienvenue autour du plateau. Bon voyage !"}
+        </span>
+        <button
+          type="button"
+          className="text-button"
+          disabled={!busy}
+          onClick={director.skip}
+        >
+          {busy ? "Passer l’animation ↗" : ""}
+        </button>
+      </div>
+      {debug && (
+        <div id="frame-monitor" className="frame-monitor">
+          Scène au repos · rendu à la demande
+        </div>
+      )}
+    </>
+  );
+}
+
 function App() {
   const initialCode =
     new URLSearchParams(window.location.search).get("room")?.toUpperCase() ??
@@ -975,9 +1563,8 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const { serverState, viewState, busy, speed, history } = useDirector();
+  const { serverState, viewState } = useDirector();
   const room = useRoom(credentials);
-  const reducedMotion = useReducedMotion();
   useEffect(() => {
     if (
       !autoStart ||
@@ -1068,27 +1655,29 @@ function App() {
   const host = credentials?.seat === room.lobby?.hostSeat;
   return (
     <main className={isGame ? "game-shell" : "lobby-shell"}>
-      <header className="topbar">
-        <span className="brand-button">
-          <Logo small={Boolean(isGame)} />
-        </span>
-        <div className="topbar-right">
-          <span className="prototype-tag">Premier voyage · prototype</span>
-          <button
-            type="button"
-            className="text-button help-button"
-            onClick={() => setHelpOpen(true)}
-          >
-            <Icon name="help" size={18} />
-            <span>Comment jouer</span>
-          </button>
-          {credentials && (
-            <button type="button" className="text-button" onClick={leave}>
-              Quitter
+      {!isGame && (
+        <header className="topbar">
+          <span className="brand-button">
+            <Logo small={Boolean(isGame)} />
+          </span>
+          <div className="topbar-right">
+            <span className="prototype-tag">Premier voyage · prototype</span>
+            <button
+              type="button"
+              className="text-button help-button"
+              onClick={() => setHelpOpen(true)}
+            >
+              <Icon name="help" size={18} />
+              <span>Comment jouer</span>
             </button>
-          )}
-        </div>
-      </header>
+            {credentials && (
+              <button type="button" className="text-button" onClick={leave}>
+                Quitter
+              </button>
+            )}
+          </div>
+        </header>
+      )}
       {!credentials ? (
         <section className="welcome-grid">
           <div className="welcome-copy">
@@ -1373,296 +1962,25 @@ function App() {
           </div>
         </section>
       ) : (
-        <>
-          <div className="match-bar">
-            <div className="match-location">
-              <span className="connection-dot" data-state={room.connection} />
-              <span>
-                {room.connection === "online"
-                  ? "En ligne"
-                  : room.connection === "offline"
-                    ? "Hors ligne"
-                    : "Reconnexion…"}
-              </span>
-              <span className="room-code-inline">
-                Salle <b>{credentials.roomCode}</b>
-              </span>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => void copyRoom()}
-                aria-label={
-                  copied ? "Invitation copiée" : "Copier l’invitation"
-                }
-              >
-                <Icon name={copied ? "check" : "copy"} size={16} />
-              </button>
-            </div>
-            <div className="match-round">
-              Manche <b>{game.round}</b>
-              <span>
-                {" "}
-                ·{" "}
-                <MatchClock
-                  deadline={game.matchDeadline}
-                  finished={game.status === "finished"}
-                />{" "}
-                restant
-              </span>
-            </div>
-            <div className="animation-controls">
-              <label htmlFor="animation-speed">Vitesse</label>
-              <select
-                id="animation-speed"
-                value={speed}
-                onChange={(event) =>
-                  director.setSpeed(Number(event.target.value) as 1 | 1.5 | 2)
-                }
-              >
-                <option value={1}>1×</option>
-                <option value={1.5}>1,5×</option>
-                <option value={2}>2×</option>
-              </select>
-              <button
-                type="button"
-                className="text-button"
-                disabled={!busy}
-                onClick={director.skip}
-              >
-                Passer l’animation
-              </button>
-            </div>
-          </div>
-          <div className="player-roster">
-            {game.players.map((player) => (
-              <motion.article
-                key={player.seat}
-                layout={!reducedMotion}
-                className={`player-card ${game.activeSeat === player.seat && game.status === "active" ? "active" : ""} ${player.bankrupt ? "bankrupt" : ""}`}
-                style={
-                  {
-                    "--player-color": PLAYER_COLORS[player.seat],
-                  } as CSSProperties
-                }
-              >
-                <div className="player-avatar">
-                  {PLAYER_SYMBOLS[player.seat]}
-                </div>
-                <div className="player-card-body">
-                  <div className="player-name-row">
-                    <strong>{player.name}</strong>
-                    <span>
-                      {player.seat === credentials.seat
-                        ? "Vous"
-                        : player.control === "bot"
-                          ? "Bot"
-                          : PLAYER_LABELS[player.seat]}
-                    </span>
-                  </div>
-                  <div className="player-cash">
-                    <MoneyCounter value={player.cash} />
-                    <span className="coin-symbol">●</span>
-                  </div>
-                  <p>
-                    {player.bankrupt
-                      ? "Faillite"
-                      : `${player.properties.length} adresse${player.properties.length > 1 ? "s" : ""}`}
-                    <span>Fortune {money(netWorth(game, player.seat))}</span>
-                  </p>
-                </div>
-                {game.activeSeat === player.seat &&
-                  game.status === "active" && (
-                    <span className="active-marker">À vous de jouer</span>
-                  )}
-              </motion.article>
-            ))}
-          </div>
-          <div className="match-grid">
-            <div className="board-stage">
-              <div className="board-top-caption">
-                <span>Le grand tour</span>
-                <span>
-                  {game.lastCard
-                    ? `Carte : ${CARD_NAMES[game.lastCard.card] ?? game.lastCard.card}`
-                    : "32 étapes. À vous de tracer votre route."}
-                </span>
-              </div>
-              <SceneBoundary
-                fallback={<BoardFallback state={game} onSelect={setSelected} />}
-              >
-                <Suspense
-                  fallback={
-                    <div className="scene-loading">
-                      <span className="spinner" />
-                      Le plateau prend place…
-                    </div>
-                  }
-                >
-                  <BoardScene
-                    state={game}
-                    selected={selected}
-                    onSelect={setSelected}
-                    zoom={zoom}
-                  />
-                </Suspense>
-              </SceneBoundary>
-              <div className="board-tools">
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Dézoomer le plateau"
-                  disabled={zoom <= 0.8}
-                  onClick={() => setZoom((value) => Math.max(0.8, value - 0.1))}
-                >
-                  −
-                </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Recentrer le plateau"
-                  onClick={() => setZoom(1)}
-                >
-                  ⌖
-                </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Zoomer le plateau"
-                  disabled={zoom >= 1.3}
-                  onClick={() => setZoom((value) => Math.min(1.3, value + 0.1))}
-                >
-                  +
-                </button>
-              </div>
-              {debug && (
-                <div id="frame-monitor" className="frame-monitor">
-                  Scène au repos · rendu à la demande
-                </div>
-              )}
-              <div className="board-bottom-caption">
-                <span className="table-stamp">POLYTOUR TRAVEL CLUB</span>
-                <span>Cliquez une ville pour l’explorer</span>
-              </div>
-            </div>
-            <aside className="game-sidebar">
-              <AnimatePresence mode="wait">
-                {game.status === "finished" && game.result && !busy ? (
-                  <motion.section
-                    key="finished"
-                    className="end-panel"
-                    initial={reducedMotion ? false : { opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35 / speed }}
-                  >
-                    <span className="winner-trophy">
-                      <Icon name="trophy" size={44} />
-                    </span>
-                    <p className="small-label">Le voyage est terminé</p>
-                    <h2>
-                      {
-                        game.players.find(
-                          (player) => player.seat === game.result?.winner,
-                        )?.name
-                      }{" "}
-                      remporte la partie !
-                    </h2>
-                    <ol className="standings">
-                      {game.result.standings.map((standing, index) => (
-                        <li key={standing.seat}>
-                          <span>{index + 1}</span>
-                          <b>
-                            {PLAYER_SYMBOLS[standing.seat]}{" "}
-                            {
-                              game.players.find(
-                                (player) => player.seat === standing.seat,
-                              )?.name
-                            }
-                          </b>
-                          <strong>{money(standing.netWorth)}</strong>
-                        </li>
-                      ))}
-                    </ol>
-                    <button
-                      type="button"
-                      className="button primary"
-                      onClick={() => {
-                        leave();
-                        void enter(true);
-                      }}
-                    >
-                      Rejouer avec des bots <Icon name="arrow" />
-                    </button>
-                    <button
-                      type="button"
-                      className="button secondary"
-                      onClick={leave}
-                    >
-                      Nouvelle salle entre amis
-                    </button>
-                    <p className="field-note">
-                      Le journal ci-dessous retrace votre partie.
-                    </p>
-                  </motion.section>
-                ) : (
-                  <motion.div
-                    key="decision"
-                    initial={false}
-                    animate={{ opacity: 1 }}
-                  >
-                    <DecisionPanel
-                      state={serverState ?? game}
-                      seat={credentials.seat}
-                      act={room.act}
-                      blocked={blockActions}
-                      randomness={room.randomness}
-                      selected={selected}
-                      onSelect={setSelected}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <TileInspector
-                state={game}
-                selected={selected}
-                onSelect={setSelected}
-              />
-              <RandomnessPanel
-                value={room.randomness}
-                mode={config.randomnessMode}
-              />
-            </aside>
-          </div>
-          <section className="journal" aria-labelledby="journal-title">
-            <div className="journal-title">
-              <h3 id="journal-title">Carnet de voyage</h3>
-              <span>
-                {game.players.find((player) => player.seat === credentials.seat)
-                  ?.heldCards.length
-                  ? `Vos cartes : ${game.players
-                      .find((player) => player.seat === credentials.seat)
-                      ?.heldCards.map((card) => CARD_NAMES[card])
-                      .join(" · ")}`
-                  : "Le fil de votre partie"}
-              </span>
-            </div>
-            <ol>
-              {history
-                .map((event, index) => ({
-                  text: eventText(event, game),
-                  key: index,
-                }))
-                .filter((item) => item.text)
-                .slice(-8)
-                .reverse()
-                .map((item) => (
-                  <li key={item.key}>{item.text}</li>
-                ))}
-            </ol>
-            {!history.some((event) => eventText(event, game)) && (
-              <p>Votre aventure commence ici. Lancez les dés !</p>
-            )}
-          </section>
-        </>
+        <MatchView
+          game={game}
+          credentials={credentials}
+          room={room}
+          config={config}
+          selected={selected}
+          onSelect={setSelected}
+          zoom={zoom}
+          onZoom={setZoom}
+          copied={copied}
+          copyRoom={copyRoom}
+          onLeave={leave}
+          onHelp={() => setHelpOpen(true)}
+          onReplay={() => {
+            leave();
+            void enter(true);
+          }}
+          debug={debug}
+        />
       )}
       {credentials && !game && (
         <div className="lobby-connection" role="status">

@@ -1,27 +1,28 @@
 ---
 name: Polytour
-description: A playful travel-board diorama with a precise, readable match interface.
+description: A PC property-board game with a central toy diorama and compact corner HUDs.
 colors:
   ink: "#173b45"
   muted-ink: "#47666c"
-  table: "#9fded2"
-  table-deep: "#54b6b0"
+  sky: "#75d4ed"
+  grass: "#a5c957"
+  grass-light: "#badb72"
+  grass-deep: "#95b949"
+  grass-detail: "#d5e698"
   paper: "#fffaf0"
-  primary: "#e95131"
-  primary-dark: "#bd3620"
+  primary: "#c74024"
+  primary-dark: "#98291a"
+  primary-hover: "#b8331b"
   gold: "#ffcb55"
-  sea: "#57bfcd"
-  player-coral: "#d84929"
+  sea: "#67cbe3"
+  player-coral: "#be3d24"
   player-blue: "#236cce"
   player-violet: "#8151b5"
   player-green: "#26764c"
 typography:
   display:
     fontFamily: "Trebuchet MS, Segoe UI, sans-serif"
-    fontSize: "clamp(3rem, 5.7vw, 5.6rem)"
     fontWeight: 900
-    lineHeight: 0.98
-    letterSpacing: "-0.04em"
   body:
     fontFamily: "Segoe UI, system-ui, sans-serif"
     fontSize: "16px"
@@ -34,7 +35,6 @@ spacing:
   small: "8px"
   control: "12px"
   panel: "24px"
-  section: "40px"
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
@@ -50,52 +50,76 @@ components:
 
 ## Overview
 
-**Creative North Star: “A little world on the table.”**
+**Creative North Star: “The board is the game.”**
 
-A daylight tabletop experience: friends sit around an original world-travel diorama, beginning in French cities and ending in Tokyo. The turquoise surface owns the whole viewport. An ivory board, tiny roofs, seaside palms, rounded pawns, and physical-looking dice supply the game’s personality. Menus remain direct and functional beside that object.
+The user confirmed the familiar PC property-board game composition on 1 October 2026: an original isometric toy board fills the play viewport, four compact player HUDs occupy the corners and discreet controls expose the current decision. The old dashboard composition with a persistent sidebar and stacked information panels is replaced. Local browser captures verify the replacement at 1280×720, 1440×900 and 1920×1080 without page scroll or off-screen controls. The final independent visual review found no remaining material defects; dated evidence and the still-pending remote Preview and hardware FPS checks live in `docs/PLAYABLE_CHECKPOINT.md`.
 
-The scene is the artifact. Build it with React Three Fiber and original geometry rather than imitating 3D in a screenshot. GSAP owns the scene’s choreographed events; Motion owns DOM transitions. Authoritative state is separate from the state already shown to the player.
+Retain the travel progression from French cities to Tokyo and the original toy geometry, rounded pawns, raised buildings, flags and dice. A sky-blue surround, grassy center and ivory track provide the setting. The board carries the story; interface tools open on demand rather than sharing equal visual weight with it.
+
+Build the scene with React Three Fiber and Three.js. GSAP owns scene choreography and Motion owns DOM transitions. The Director separates authoritative state from the events already shown to the player. The screen's strategy is recorded in its Experience surface brief, not a marketing-page layout.
 
 ## Colors
 
-The table and sea establish the setting; paper carries controls and prices; ink gives contrast. Coral names the primary action. Four player colors have circle, diamond, triangle, and square identifiers. Ownership always combines color and the corresponding symbol.
+Sky blue owns the viewport, grass owns the board center and ivory carries the track and compact functional controls. Ink preserves readable prices and names; coral identifies the current primary action; gold identifies festivals and their multiplier. Four player colors retain circle, diamond, triangle and square identifiers.
 
-**The Identity Rule.** No gameplay information is carried by color alone.
+**The Identity Rule.** Ownership combines player color and symbol on the pawn, flag, corner HUD and inspector. Color alone never carries a rule or player identity.
 
 ## Typography
 
-Use the existing system-font capability without a network font dependency. Trebuchet’s compact, friendly forms suit the toy-box title. Segoe UI is the functional body face. Cash, prices, turn numbers, and dice values use tabular numerals. Display tracking stops at the documented floor.
+Keep system fonts and avoid a network font requirement. Trebuchet supplies the compact toy-game identity; Segoe UI supplies functional labels. Cash, prices, dice values and countdowns use tabular numerals. Essential desktop HUD labels remain at least 14 px at the minimum layout target. Large marketing headlines do not occupy the match viewport.
+
+Primary player names, decision prompts, deadlines and choices use at least 14 px.
+Supporting portfolio counts and connection/seat captions may use 9–12 px; money
+uses 24–31 px, contextual titles 21–24 px, and the lobby alone uses display sizes.
+Solid coral actions use a darker tone so ivory button text exceeds 4.5:1 contrast.
+
+Board lettering is part of the track: town names and prices sit on their tiles. Selected and decision-related destinations receive a readable DOM label with their price, owner and rent; small perspective labels never become the only way to understand a choice.
 
 ## Layout
 
-The lobby introduces the playable world at substantial scale, with name, create/join actions, and settings immediately accessible. During a match, a compact room toolbar and four player strips frame the scene; the current decision and tile inspector sit beside it on desktop. On phones, a compact two-column roster leads directly to the current decision so its action remains in the first viewport; the board and inspection follow. All secondary panels stay reachable by natural scroll.
+PC browser play with a mouse and keyboard is the priority. Validate 1280×720 as the minimum, with 1440×900 and 1920×1080 as the main targets. During a match, the board fills the viewport and all four corners stay visible through a fixed diagonal orthographic camera. The page must not require vertical scrolling to find a required action.
+
+Place four compact player HUDs at the corners, approximately 220×112 px at the main target, with name, symbol, cash and concise portfolio status. Keep room/connection state, remaining match time and animation controls discreet. The current decision sits near the bottom center; its normal footprint is around 112–220 px high and no more than 620 px wide. Expand only for the current legal choice, then recede. Fit controls around the board rather than shrinking the board into a card.
+
+Journal, randomness proof, instructions, room information and tile details are closed by default. Open them as dismissible popovers or dialogs through labeled controls. An inspector opened by selecting a tile or Explorer may show the keyboard-accessible tile index. The lobby exposes name, create/join and settings alongside the world; it does not determine the match's composition.
+
+Mobile is best effort. A future touch adaptation may use its own layout; portrait stacking and physical phone FPS do not constrain the PC design or block this prototype.
 
 ## Elevation & Depth
 
-Panel shadows offset downward with a diffuse blur; buttons have a darker lower edge so their press reads physically. The board has an extruded ivory base, warm directional lighting, soft contact shadows, and original raised landmarks. Avoid expensive persistent animation while idle.
+The board has an extruded ivory base, soft shadows and original raised buildings. The grassy center stays available to the dice and match action; it does not carry an oversized decorative sign or object that obscures play.
 
-**The Material Rule.** Depth describes the physical toy or the functional panel, rather than a decorative glow.
+Compact ivory controls use restrained structural shadows, and action buttons retain a darker lower edge for a physical press. Avoid permanent glass overlays across the board. Hover, ownership changes and festivals add local feedback, not general interface ornament.
+
+**The Material Rule.** Depth describes a physical toy or a usable control.
 
 ## Shapes
 
-Small controls use softly curved corners; functional panels use the documented panel radius. Chips are reserved for short status labels. Original roofs, palms, flags, and pawns share a chunky low-poly language. Player symbols repeat on the pawn, roster, ownership badge, and inspector.
+Softly curved controls belong to the toy-game language. Corner HUDs remain compact rather than becoming a repeated grid of large cards. Roofs, palms, flags and pawns retain chunky low-poly geometry. Building levels must remain distinguishable; festival markers show a star and multiplier, while ownership flags repeat the player's symbol.
 
 ## Components
 
-The decision panel leads with whose turn it is and the actual required choice. A roll has one strong action. Multi-destination choices use a labeled select and a clear confirm action. Legal choices come from the shared engine rather than being inferred in the UI.
+The contextual decision names its actual decision-maker using `pending.seat`, including off-turn debts. Purchase, development, rent protection and buyout decisions show the destination and relevant cost/owner/rent beside their legal choices. A roll has one strong action. Multi-destination choices use a labeled select and confirm control. Legal actions come from the shared engine.
 
-Pending decisions identify the actual decision-maker, including off-turn debts. Purchase and buyout panels name the city, its current owner, and rent immediately beside the choices. Festival cities carry raised gold multiplier markers; ownership flags repeat the player's symbol. Host settings have an explicit save action with a visible draft state.
+Host settings remain a visible local draft until explicitly saved; starting with unsaved changes is blocked. Room-code copy and sharing support invitation. The match timer counts down to the server-provided deadline. Busy, reconnecting, rejected, waiting and finished states stay explicit without exposing engine implementation details in the main play flow.
 
-Tile selection works through the scene and a keyboard-accessible index. Inspectors show name, ownership, cost, rent, and building level. A room-code copy control and share link make invitation immediate. The randomness panel exposes the committed drand round and proof, with an honest waiting state. Game-end standings name the actual winner and support reviewing the event history or starting another match.
+The closed proof tool exposes the committed drand round, the honest waiting/error state and the server-verified proof when available. Fast crypto remains separately labelled. Game-end standings name the actual winner in a contextual overlay while preserving the board behind it.
 
-**The Timing Rule.** Decisions appear only once the Director has shown their leading events. Speed and skip apply consistently; reduced motion retains informative state changes without spectacle.
+Menus restore keyboard focus on dismissal, support Escape where appropriate and retain a visible focus indicator. Reduced motion keeps informative changes without camera spectacle.
+
+**The Timing Rule.** The Director shows the events leading to a decision before the choice opens. Speed and skip apply consistently.
+
+Local browser verification covers 2× speed, the reduced-animation toggle, a decreasing match countdown and skip during a real roll's event playback. Skip is disabled at rest. Separate presentation fixtures demonstrate levels 1–5, all six purchase choices at 1280×720 without HUD collisions and off-turn debt presentation; the Worker remains unmodified for these fixtures. These visual checks do not establish a hardware frame rate or confirm the replacement on the remote Preview.
 
 ## Do's and Don'ts
 
-- Do let the board occupy the visual center and retain clear prices in DOM inspection.
-- Do keep busy, reconnecting, rejected, empty, and finished states explicit.
-- Do make every action usable with keyboard focus and touch.
+- Do keep the whole board dominant at all three desktop target sizes.
+- Do keep four compact corner HUDs and the required action visible together.
+- Do open detail tools only when requested and make dismissal clear.
+- Do preserve mouse and keyboard access, player symbols and reduced motion.
 - Do use original geometry and the confirmed France-to-world geography.
-- Don't claim reference prices were verified when they are prototype values.
-- Don't display a cryptographic verification badge without a server-supplied proof.
-- Don't mutate money, ownership, turn order, or dice in rendering code.
+- Don't rebuild the match as a dashboard, permanent sidebar or scrolling panel stack.
+- Don't claim new desktop tests or frame rates passed before measured evidence exists.
+- Don't claim reference prices are confirmed when they remain prototype values.
+- Don't show a verified randomness badge without the matching proof.
+- Don't mutate rules, money, ownership, turn order or dice in rendering code.
