@@ -3,6 +3,7 @@ export {
   BOARD_SIZE,
   getCountryCityTiles,
   getTile,
+  ISLAND_TILE_INDEX,
   isCityTile,
   isResortTile,
 } from "./board.js";
