@@ -6,8 +6,10 @@ matches). It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: pre-scaffold.** Only docs exist. Commands and paths below are the
-> agreed plan. When you scaffold or change them, update this file in the same change.
+> **Status: Phase 0 scaffold.** The React client, Worker, SQLite Durable Object
+> bindings, and local integration tests exist. The deterministic rules engine is the
+> next implementation phase. When you change commands or paths, update this file in
+> the same change.
 
 ## Read before working
 
@@ -48,7 +50,7 @@ migrations/   # D1 SQL migrations
 Import rules: `shared/` imports nothing from `client/` or `worker/`. `client/` and
 `worker/` never import each other; they talk only through `shared/protocol`.
 
-## Commands (planned)
+## Commands
 
 ```bash
 pnpm dev            # Vite dev server; Worker + DOs run in workerd via the Cloudflare Vite plugin
@@ -57,10 +59,12 @@ pnpm typecheck      # tsc -b
 pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm deploy         # build + wrangler deploy
+pnpm deploy:staging # build + deploy the isolated staging environment
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
-pnpm sim -- --games 5000   # balance simulation, prints length/winner/economy stats
-pnpm db:migrate:local      # wrangler d1 migrations apply DB --local
 ```
+
+`pnpm sim` and `pnpm db:migrate:local` are added with the rules engine and D1
+schema, respectively; do not imply that either exists before its phase.
 
 ## Golden rules (architecture)
 

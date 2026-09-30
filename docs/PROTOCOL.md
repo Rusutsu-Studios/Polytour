@@ -5,6 +5,14 @@ a discriminated union on `type`, defined once with Zod in `src/shared/protocol/`
 imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
+## Phase 0 verification socket
+
+During local development only, the scaffold page connects to `/ws/debug/hello`.
+That route addresses a `GameRoom` Durable Object and receives exactly one frame:
+`{ type: "phase0.hello", status: "ok" }`. It is a temporary health check, not a
+match room: it has no player identity, game state, or action handling, and must be
+removed before Phase 2 adds the real `/ws/room/:code` flow below.
+
 ## Principles
 
 - **Intents up, events down.** The client asks (`intent`); only the server decides.
