@@ -24,5 +24,6 @@ export type {
   SalaryPaidEvent,
   Seat,
   SeatInfo,
+  TurnAdvancedEvent,
   TurnPhaseChangedEvent,
 } from "./types.js";

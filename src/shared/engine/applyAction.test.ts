@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { SeatInfo } from "./index.js";
-import { applyAction, createGame, DEFAULT_GAME_CONFIG } from "./index.js";
+import {
+  applyAction,
+  applyEvent,
+  createGame,
+  DEFAULT_GAME_CONFIG,
+  toPublic,
+} from "./index.js";
 
 const SEATS: readonly SeatInfo[] = [
   { playerId: "ada", name: "Ada", control: "human" },
@@ -8,8 +14,9 @@ const SEATS: readonly SeatInfo[] = [
 ];
 
 describe("applyAction", () => {
-  it("rolls deterministic dice, moves the active player, and enters resolution", () => {
+  it("rolls deterministic dice, moves the active player, and advances the turn", () => {
     const game = createGame(DEFAULT_GAME_CONFIG, SEATS, 7, { now: 0 });
+    const rollingSeat = game.state.activeSeat;
     const result = applyAction(
       game.state,
       game.state.activeSeat,
@@ -27,15 +34,20 @@ describe("applyAction", () => {
       "DiceRolled",
       "PlayerMoved",
       "TurnPhaseChanged",
+      "TurnAdvanced",
     ]);
-    expect(result.state.lastRoll?.seat).toBe(game.state.activeSeat);
+    expect(result.state.lastRoll?.seat).toBe(rollingSeat);
     expect(result.state.lastRoll?.dice).toEqual([1, 6]);
     expect(
-      result.state.players.find(
-        (player) => player.seat === game.state.activeSeat,
-      ),
+      result.state.players.find((player) => player.seat === rollingSeat),
     ).toMatchObject({ position: 7, laps: 0, cash: 1500 });
-    expect(result.state.phase).toBe("resolve");
+    expect(result.state.activeSeat).toBe(
+      game.state.turnOrder[(game.state.turnOrder.indexOf(rollingSeat) + 1) % 2],
+    );
+    expect(result.state.phase).toBe("roll");
+    expect(result.events.reduce(applyEvent, toPublic(game.state))).toEqual(
+      toPublic(result.state),
+    );
   });
 
   it("pays Start salary exactly once when movement crosses the board boundary", () => {
@@ -74,12 +86,40 @@ describe("applyAction", () => {
       "PlayerMoved",
       "SalaryPaid",
       "TurnPhaseChanged",
+      "TurnAdvanced",
     ]);
     expect(
-      result.state.players.find(
-        (player) => player.seat === game.state.activeSeat,
-      ),
+      result.state.players.find((player) => player.seat === activePlayer.seat),
     ).toMatchObject({ position: 3, laps: 1, cash: 1700 });
+  });
+
+  it("increments the round after the final seat completes its turn", () => {
+    const game = createGame(DEFAULT_GAME_CONFIG, SEATS, 7, { now: 0 });
+    const lastSeat = game.state.turnOrder[game.state.turnOrder.length - 1];
+
+    if (lastSeat === undefined) {
+      throw new Error("Expected a final seat");
+    }
+
+    const finalSeatState = { ...game.state, activeSeat: lastSeat };
+    const result = applyAction(
+      finalSeatState,
+      lastSeat,
+      { type: "Roll" },
+      { now: 1 },
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.state).toMatchObject({
+      activeSeat: game.state.turnOrder[0],
+      round: 2,
+      phase: "roll",
+    });
   });
 
   it("rejects a roll from another seat or during resolution", () => {
