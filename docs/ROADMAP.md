@@ -8,12 +8,15 @@ once the protocol is stable.
 ## Phase 0 — Scaffold (½ week)
 
 - [x] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
-- [x] `wrangler.jsonc` with GameRoom/Matchmaker DOs (SQLite), D1, R2, Analytics Engine bindings
+- [x] `wrangler.jsonc` with GameRoom/Matchmaker DOs (SQLite), D1, R2 bindings (Analytics Engine
+      deferred to Phase 6: it must first be enabled on the account)
 - [x] Biome, strict TS, Vitest 4 (+ `@cloudflare/vitest-plugin` project for worker tests)
 - [x] GitHub Actions: typecheck, lint, test on PR
-- [x] Staging: a separate `staging` environment in `wrangler.jsonc` (own Worker, D1, R2), deployed on
-      merge to `main`. Per-branch preview URLs are not an option: Cloudflare does not generate
-      version preview URLs for Workers that implement Durable Objects.
+- [x] Cloudflare account (Rusutsu Studios) provisioned: D1 + R2, `account_id` pinned
+- [x] First production deploy (`polytour` on `*.workers.dev`)
+- [x] Workers Builds connected: push to `main` → production, any other branch → its own
+      Worker Preview (see
+      [ARCHITECTURE.md → Environments and deploys](ARCHITECTURE.md#environments-and-deploys))
 - [x] Update CLAUDE.md "Commands" with the real scripts
 
 **Done when:** `pnpm dev` serves a page that opens a WebSocket to a hello-world DO, and CI is green.
@@ -39,6 +42,9 @@ once the protocol is stable.
 - [ ] **Debug 2D board** (plain SVG/DOM) to play full games in 4 browser tabs
 - [ ] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
       connect to an uninitialized room rejected, alarm-driven timeout
+- [ ] Deploy safety: `stateVersion` migration on load, `rulesVersion` in game state, and a test
+      that restarts a DO mid-game and checks every client resumes (see
+      [ARCHITECTURE.md → Deploys and games in progress](ARCHITECTURE.md#deploys-and-games-in-progress))
 
 **Done when:** four people can finish a full game over the internet with refreshes and dropped connections mid-game.
 
@@ -58,6 +64,9 @@ once the protocol is stable.
 
 - [ ] Guest auth with Turnstile + signed session cookie
 - [ ] D1 schema (users, matches, match_players, ratings) with Drizzle migrations
+- [ ] Preview-only D1 database (migrated) and R2 bucket bound under `previews` in
+      `wrangler.jsonc`, so branch Previews can use `env.DB` / `env.REPLAYS` without
+      touching production data
 - [ ] Match results written at game end; event log archived to R2
 - [ ] Matchmaker DO: quick match 2p/4p, bot backfill after timeout
 - [ ] Profile page (history), leaderboard
@@ -75,7 +84,8 @@ once the protocol is stable.
 ## Phase 6 — Launch readiness (1 week)
 
 - [ ] Rate limits, message size caps, chat filter, abuse reporting
-- [ ] Analytics Engine telemetry + a balancing dashboard query set
+- [ ] Analytics Engine telemetry + a balancing dashboard query set (enable Analytics Engine in the
+      dashboard, then add the `TELEMETRY` binding in `wrangler.jsonc`)
 - [ ] Error tracking (Workers Logs/Traces + client error reporting)
 - [ ] Load test: 500 concurrent simulated rooms; measure cost per match
 - [ ] Custom domain, OG images, landing page, privacy policy

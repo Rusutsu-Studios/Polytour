@@ -1,6 +1,9 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "polytour",
+  // Rusutsu Studios account. Pinned so no command can reach another account;
+  // the `polytour` Wrangler auth profile is bound to the repo directory.
+  "account_id": "6fbe63b84a8636139e419b1383eeefcb",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-09-30",
   "assets": {
@@ -19,29 +22,37 @@
       "new_sqlite_classes": ["GameRoom", "Matchmaker"]
     }
   ],
-  "d1_databases": [{ "binding": "DB", "database_name": "polytour" }],
-  "r2_buckets": [{ "binding": "REPLAYS" }],
-  "analytics_engine_datasets": [
-    { "binding": "TELEMETRY", "dataset": "polytour_events" }
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "polytour",
+      "database_id": "f28fcd42-85a6-4964-b22d-9b2f00711080"
+    }
   ],
+  "r2_buckets": [{ "binding": "REPLAYS", "bucket_name": "polytour-replays" }],
+  // Analytics Engine (TELEMETRY → polytour_events) comes back with the telemetry
+  // task in ROADMAP Phase 6, once it is enabled on the account.
+
+  // Served on *.workers.dev until a custom domain lands (ROADMAP Phase 6).
+  // `preview_urls` gives each Worker Preview (below) its own
+  // <preview>-polytour.<subdomain>.workers.dev URL. It is a Worker-level setting, so it
+  // takes effect with the next production deploy.
+  "workers_dev": true,
+  "preview_urls": true,
   "observability": {
     "enabled": true
   },
   "upload_source_maps": true,
-  "env": {
-    "staging": {
-      "durable_objects": {
-        "bindings": [
-          { "name": "GAME_ROOM", "class_name": "GameRoom" },
-          { "name": "MATCHMAKER", "class_name": "Matchmaker" }
-        ]
-      },
-      "d1_databases": [
-        { "binding": "DB", "database_name": "polytour-staging" }
-      ],
-      "r2_buckets": [{ "binding": "REPLAYS" }],
-      "analytics_engine_datasets": [
-        { "binding": "TELEMETRY", "dataset": "polytour_events_staging" }
+
+  // Worker Previews: Workers Builds runs `wrangler preview` for every branch except
+  // `main`. Previews do not inherit production bindings. Each Preview gets its own
+  // Durable Object namespaces and storage; D1 and R2 stay unbound until preview-only
+  // resources exist. Never point a Preview at production data.
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        { "name": "GAME_ROOM", "class_name": "GameRoom" },
+        { "name": "MATCHMAKER", "class_name": "Matchmaker" }
       ]
     }
   }
