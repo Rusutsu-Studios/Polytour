@@ -23,6 +23,8 @@ implemented; intermediate costs and rents remain provisional.
 - TypeScript, Biome, 68 unit/Worker tests and production build pass.
 - A complete game runs through four isolated Chromium contexts against the real
   local Worker, including reconnection and matching public state on all seats.
+- The same four-browser match and live drand/proof-export scenarios also pass
+  against the deployed branch Worker Preview over HTTPS and secure WebSockets.
 - Browser checks cover settings, a human dice roll, tile inspection, refresh,
   create/join and desktop/mobile controls. Four browser scenarios are verified,
   including a regression fixture for a debtor deciding during another seat's turn
@@ -35,8 +37,8 @@ implemented; intermediate costs and rents remain provisional.
 - Desktop (1440 px) and phone (390 px) rendering checks show no runtime exceptions
   or horizontal overflow. Phone layout keeps the decision before the board.
 
-These are local runtime and browser-emulation checks. They do not establish
-physical phone frame rate, public load capacity, or a production deployment.
+These are local/Preview runtime and browser-emulation checks. They do not establish
+physical phone frame rate, public load capacity, or a main-branch production deployment.
 
 ## Simulator findings
 
@@ -62,6 +64,6 @@ values after the remaining reference prices and rents are captured.
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, physical phone performance,
-public internet playtests, independent browser BLS verification, accounts,
+human group playtests, independent browser BLS verification, accounts,
 matchmaking, audio and advanced artwork remain future work. Current geometry and
 graphics are original; no competitor art or purchasable gameplay boosts are used.

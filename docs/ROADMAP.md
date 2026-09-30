@@ -14,7 +14,7 @@ wins, and future drand commitments provide verified uniform dice. Costs at the
 first city and Tokyo match supplied captures; the remaining economy is provisional.
 
 The checklist below records implemented parts, not completion of every phase's
-acceptance criteria. A real phone performance check, public internet playtest,
+acceptance criteria. A real phone performance check, human group playtest,
 exact economy comparison and a balance pass remain necessary.
 
 ## Phase 0 — Scaffold (½ week)

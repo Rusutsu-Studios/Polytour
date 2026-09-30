@@ -62,7 +62,7 @@ async function connect(
   await page.evaluate((session) => {
     const surface = window as TestWindow;
     surface.polytourTestSocket = new WebSocket(
-      `ws://${location.host}/ws/room/${session.roomCode}`,
+      `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/room/${session.roomCode}`,
       ["polytour", `seat.${session.token}`],
     );
     surface.polytourTestSocket.onmessage = (event) => {
