@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "polytour",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-09-30",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "GAME_ROOM", "class_name": "GameRoom" },
+      { "name": "MATCHMAKER", "class_name": "Matchmaker" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GameRoom", "Matchmaker"]
+    }
+  ],
+  "d1_databases": [{ "binding": "DB", "database_name": "polytour" }],
+  "r2_buckets": [{ "binding": "REPLAYS" }],
+  "analytics_engine_datasets": [
+    { "binding": "TELEMETRY", "dataset": "polytour_events" }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  "env": {
+    "staging": {
+      "durable_objects": {
+        "bindings": [
+          { "name": "GAME_ROOM", "class_name": "GameRoom" },
+          { "name": "MATCHMAKER", "class_name": "Matchmaker" }
+        ]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "polytour-staging" }
+      ],
+      "r2_buckets": [{ "binding": "REPLAYS" }],
+      "analytics_engine_datasets": [
+        { "binding": "TELEMETRY", "dataset": "polytour_events_staging" }
+      ]
+    }
+  }
+}

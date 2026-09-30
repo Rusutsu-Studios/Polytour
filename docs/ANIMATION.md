@@ -27,15 +27,22 @@ flowchart LR
   WS[events from server] --> Q[Director queue]
   Q -->|next event| H[handler for event.type]
   H -->|GSAP timeline / Motion| SCENE[R3F scene + HUD]
-  H -->|await finished| V[apply event to viewState]
+  H -->|await finished| V["viewState = applyEvent(viewState, event)"]
   V --> Q
   SS[(serverState)] -.-> UI[decision buttons use serverState + deadline]
   V -.-> HUD[HUD shows viewState]
 ```
 
 - `serverState` is always the truth; `viewState` lags behind it until animations finish.
+  Both are advanced with the engine's shared reducer `applyEvent`: `serverState` as
+  soon as an event arrives, `viewState` when its animation finishes.
 - Each handler is `async (event, ctx) => void` and must resolve within its budget.
-- **Speed:** global `timeScale` (1×, 1.5×, 2×) applied to GSAP's global timeline.
+  Budgets live in `shared/board/timing.ts`, the same config the server uses for
+  `animationBudget`, so decision deadlines always cover the animation.
+- **Speed:** a Director `speed` (1×, 1.5×, 2×) is applied to GSAP's global timeline
+  (`gsap.globalTimeline.timeScale(speed)`) **and** to DOM animation: Motion has no
+  global clock, so HUD transitions and money counters read `speed` from the Director
+  store and divide their durations by it. Otherwise the HUD lags behind the scene at 2×.
 - **Catch-up:** if the queue holds more than ~6 events (reconnect, tab was hidden),
   play at 3× and skip camera moves; if > 30, snap straight to `serverState`.
 - **Tab hidden:** `document.visibilitychange` → snap on return, don't queue minutes of animation.
@@ -62,7 +69,8 @@ flowchart LR
 | `GameOver` | Board-orbit camera, winner's pawn on a pedestal, confetti, stat cards slide in (net worth graph over time, biggest rent, most buyouts). | 4–6 s |
 
 Rule of thumb: an ordinary turn (roll → move 7 tiles → pay rent) should read in
-**≈ 4 s** at 1×. Anything longer gets boring by round 10.
+**≈ 4–5 s** at 1× (1.2 s dice + 7 × 0.28 s hops + 1.0–1.6 s rent ≈ 4.2–4.8 s).
+Anything longer gets boring by round 10.
 
 ## Dice: deterministic result, physical feel
 
@@ -72,21 +80,26 @@ The server decides the dice. The client must *show* those exact values.
   ends in the quaternion showing the target face, with 2–3 bounces via a custom
   bounce ease. Fast to build, fully controllable, looks good with contact shadows.
 - **Phase 5 (upgrade): physics with face remapping.** On `DiceRolled`, run a
-  headless Rapier simulation of a random throw to rest (a few ms), read which face
-  ended up on top, then rotate the die's *visual mesh* relative to its rigid body so
-  that face shows the server value, and replay the simulation visibly. Real physics,
-  guaranteed result. Rapier is lazy-loaded only when the scene is.
+  headless Rapier simulation of a random throw to rest (a few ms), **recording each
+  die's transform at every step**, and read which face ended up on top. Then rotate
+  the die's *visual mesh* relative to its rigid body so that face shows the server
+  value, and play the recorded frames back. Play back the recording rather than
+  re-simulating, so the visible throw is guaranteed to match the one that was
+  measured. Real physics, guaranteed result. Rapier is lazy-loaded only when the
+  scene is.
 
 ## Motion language
 
-| Purpose | Ease (GSAP) | Duration |
-| --- | --- | --- |
-| Things appearing (buildings, cards) | `back.out(1.7)` / `elastic.out(1, 0.5)` | 0.4–0.7 s |
-| Things leaving | `power2.in` | 0.2–0.3 s |
-| Camera moves | `power3.inOut` (or `expo.inOut` for big pushes) | 0.6–1.2 s |
-| Pawn hops | custom hop ease; squash 0.85/1.15 on land | 0.28 s |
-| Money counters | `power1.out`, duration scales with log(amount) | 0.4–1.0 s |
-| UI panels (Motion) | spring, `stiffness 400, damping 30` | — |
+| Purpose | System | Ease | Duration |
+| --- | --- | --- | --- |
+| Things appearing (buildings, cards) | GSAP | `back.out(1.7)` / `elastic.out(1, 0.5)` | 0.4–0.7 s |
+| Things leaving | GSAP | `power2.in` | 0.2–0.3 s |
+| Camera moves | GSAP | `power3.inOut` (or `expo.inOut` for big pushes) | 0.6–1.2 s |
+| Pawn hops | GSAP | custom hop ease; squash 0.85/1.15 on land | 0.28 s |
+| HUD money counters | Motion (`animate()`) | `easeOut`, duration scales with log(amount) | 0.4–1.0 s |
+| UI panels | Motion | spring, `stiffness 400, damping 30` | — |
+
+All durations are at 1× and are divided by the Director's `speed`.
 
 Consistency matters more than any single animation: reuse these presets from
 `client/director/easings.ts`, don't invent per-component curves.

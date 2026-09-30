@@ -6,8 +6,10 @@ matches). It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: pre-scaffold.** Only docs exist. Commands and paths below are the
-> agreed plan. When you scaffold or change them, update this file in the same change.
+> **Status: Phase 0 scaffold.** The React client, Worker, SQLite Durable Object
+> bindings, and local integration tests exist. The deterministic rules engine is the
+> next implementation phase. When you change commands or paths, update this file in
+> the same change.
 
 ## Read before working
 
@@ -35,7 +37,7 @@ a stylized 3D board with juicy, choreographed animations.
 ```
 src/
   shared/     # Pure TS, no DOM, no Workers APIs. Imported by both sides.
-    engine/   # Rules engine: applyAction(state, action, rng) -> { state, events }
+    engine/   # Rules engine: applyAction(state, seat, action, { now }) -> { state, events }; applyEvent reducer
     board/    # Board definition + economy config (data, not code)
     protocol/ # Zod schemas + types for every WS/HTTP message
   worker/     # Worker entry (Hono), GameRoom + Matchmaker Durable Objects, D1 access
@@ -48,7 +50,7 @@ migrations/   # D1 SQL migrations
 Import rules: `shared/` imports nothing from `client/` or `worker/`. `client/` and
 `worker/` never import each other; they talk only through `shared/protocol`.
 
-## Commands (planned)
+## Commands
 
 ```bash
 pnpm dev            # Vite dev server; Worker + DOs run in workerd via the Cloudflare Vite plugin
@@ -57,10 +59,12 @@ pnpm typecheck      # tsc -b
 pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm deploy         # build + wrangler deploy
+pnpm deploy:staging # build + deploy the isolated staging environment
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
-pnpm sim -- --games 5000   # balance simulation, prints length/winner/economy stats
-pnpm db:migrate:local      # wrangler d1 migrations apply DB --local
 ```
+
+`pnpm sim` and `pnpm db:migrate:local` are added with the rules engine and D1
+schema, respectively; do not imply that either exists before its phase.
 
 ## Golden rules (architecture)
 
@@ -74,9 +78,11 @@ pnpm db:migrate:local      # wrangler d1 migrations apply DB --local
    draws as events, never the seed or the deck order.
 4. **Events drive animation; snapshots drive recovery.** Clients animate the event
    stream in order. On join/reconnect they get a snapshot and snap the view to it.
-   Rendering code must never mutate game state.
-5. **Every rule change gets an engine test.** Invariants (money conservation, turn
-   progression, termination) are property-tested with fast-check.
+   Public state only ever changes through the shared reducer `applyEvent`, on both
+   server and client. Rendering code must never mutate game state.
+5. **Every rule change gets an engine test.** Invariants (money conservation as
+   player cash + bank ledger, turn progression, termination, events reproduce the
+   public state) are property-tested with fast-check.
 
 ## Cloudflare rules
 
@@ -88,9 +94,13 @@ pnpm db:migrate:local      # wrangler d1 migrations apply DB --local
 - Per-connection identity (playerId, seat) goes in `ws.serializeAttachment()` (≤16 KB);
   anything else must be reloaded from SQLite after hibernation. The constructor runs
   on every wake-up — keep it cheap (schema setup inside `blockConcurrencyWhile` only).
+  Presence comes from `ctx.getWebSockets(tag)`, never from a stored flag.
+- Connecting never creates a room: only `init()` (from `POST /api/rooms` or the
+  Matchmaker) does. The Worker checks `Origin` before forwarding any WS upgrade.
 - **No `setTimeout`/`setInterval` in DOs** (they block hibernation). All timers
-  (turn deadline, disconnect grace, bot think time) go in a `timers` SQLite table;
-  the single DO alarm is always set to the earliest `fire_at`.
+  (decision deadline, disconnect grace, bot think time) go in a `timers` SQLite table;
+  the single DO alarm is always set to the earliest `fire_at`. Decision deadlines are
+  computed by the engine, never by the DO.
 - Persist first, then broadcast. Write the new state + event log rows in one
   synchronous `sql.exec` sequence (no `await` between related writes).
 - SQLite-backed DO classes only (`new_sqlite_classes` in migrations). DO migrations
@@ -111,8 +121,9 @@ pnpm db:migrate:local      # wrangler d1 migrations apply DB --local
   Components don't start game animations on their own.
 - Keep two stores: `serverState` (latest authoritative) and `viewState` (what the
   player has seen so far). The Director advances `viewState` as each event finishes.
-- Support speed multiplier (1×/2×) and "skip" (fast-forward backlog). Respect
-  `prefers-reduced-motion`: no camera shake, shortened camera moves.
+- Support speed multiplier (1×/1.5×/2×, applied to GSAP *and* Motion durations) and
+  "skip" (fast-forward backlog). Respect `prefers-reduced-motion`: no camera shake,
+  no slow-mo, camera cuts instead of sweeps.
 - Never allocate in `useFrame`. Reuse vectors/quaternions; use instancing for
   repeated meshes (tiles, houses, coins).
 - 3D assets: glTF + Meshopt/Draco + KTX2 textures, generated components via gltfjsx.
@@ -124,7 +135,9 @@ pnpm db:migrate:local      # wrangler d1 migrations apply DB --local
 - TypeScript `strict`, no `any` (use `unknown` + Zod parse at boundaries).
 - Discriminated unions for actions/events/messages (`type` field), exhaustive
   `switch` with a `never` check.
-- Money is integer units (no floats). Tile indices are `0..31`.
+- Money is integer units (no floats). Economy coefficients are integer percentages
+  evaluated with integer math (`1.4 * 90` is `125.99999999999999` in JS); fractions
+  of money round up for charges and down for payouts. Tile indices are `0..31`.
 - Names: `PascalCase` components/classes, `camelCase` functions, `SCREAMING_SNAKE`
   constants, kebab-case filenames except React components (`PascalCase.tsx`).
 - Game tuning numbers live in `shared/board/*.ts` config, never inline in logic.
