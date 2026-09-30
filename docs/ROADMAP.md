@@ -14,7 +14,8 @@ once the protocol is stable.
 - [x] GitHub Actions: typecheck, lint, test on PR
 - [x] Cloudflare account (Rusutsu Studios) provisioned: D1 + R2, `account_id` pinned
 - [x] First production deploy (`polytour` on `*.workers.dev`)
-- [x] Workers Builds connected: push to `main` → production (see
+- [x] Workers Builds connected: push to `main` → production, any other branch → its own
+      Worker Preview (see
       [ARCHITECTURE.md → Environments and deploys](ARCHITECTURE.md#environments-and-deploys))
 - [x] Update CLAUDE.md "Commands" with the real scripts
 
@@ -63,6 +64,9 @@ once the protocol is stable.
 
 - [ ] Guest auth with Turnstile + signed session cookie
 - [ ] D1 schema (users, matches, match_players, ratings) with Drizzle migrations
+- [ ] Preview-only D1 database (migrated) and R2 bucket bound under `previews` in
+      `wrangler.jsonc`, so branch Previews can use `env.DB` / `env.REPLAYS` without
+      touching production data
 - [ ] Match results written at game end; event log archived to R2
 - [ ] Matchmaker DO: quick match 2p/4p, bot backfill after timeout
 - [ ] Profile page (history), leaderboard
@@ -82,9 +86,6 @@ once the protocol is stable.
 - [ ] Rate limits, message size caps, chat filter, abuse reporting
 - [ ] Analytics Engine telemetry + a balancing dashboard query set (enable Analytics Engine in the
       dashboard, then add the `TELEMETRY` binding in `wrangler.jsonc`)
-- [ ] Staging environment (own Worker, D1, R2) for testing against real Cloudflare resources
-      before production. Per-branch preview URLs are not an option: Cloudflare does not generate
-      them for Workers that implement Durable Objects.
 - [ ] Error tracking (Workers Logs/Traces + client error reporting)
 - [ ] Load test: 500 concurrent simulated rooms; measure cost per match
 - [ ] Custom domain, OG images, landing page, privacy policy
