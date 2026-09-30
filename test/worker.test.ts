@@ -35,7 +35,7 @@ describe("Phase 0 Worker scaffold", () => {
     }
 
     const hello = new Promise<string>((resolve) => {
-      socket.addEventListener("message", (event) =>
+      socket.addEventListener("message", (event: MessageEvent) =>
         resolve(String(event.data)),
       );
     });
