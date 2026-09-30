@@ -555,7 +555,10 @@ describe("Authoritative private rooms", () => {
       );
       // Simulate an interrupted resolver: it leaves the persisted commitment
       // untouched. The alarm must retain the durable retry through that await.
-      const resolver = instance as unknown as { finishDice(): Promise<void> };
+      const resolver = instance as unknown as {
+        finishDice(): Promise<void>;
+        alarm(): Promise<void>;
+      };
       const original = resolver.finishDice;
       resolver.finishDice = async () => {
         expect(
@@ -565,7 +568,7 @@ describe("Authoritative private rooms", () => {
         ).toHaveLength(1);
       };
       try {
-        await instance.alarm();
+        await resolver.alarm();
       } finally {
         resolver.finishDice = original;
       }

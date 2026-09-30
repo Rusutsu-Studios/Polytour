@@ -68,7 +68,7 @@ Feature branches have isolated Worker Preview storage. Production deploys from
 
 | Doc | What's in it |
 | --- | --- |
-| [CLAUDE.md](CLAUDE.md) | Working rules for AI-assisted development in this repo |
+| [AGENTS.md](AGENTS.md) | Working rules for AI coding agents (Codex reads it; [CLAUDE.md](CLAUDE.md) imports it for Claude Code) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Cloudflare system design, Durable Objects, storage, auth |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Libraries picked, the reasons, and what we rejected |
 | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | Playable rules v0.2, board, economy, win conditions, engine contract |

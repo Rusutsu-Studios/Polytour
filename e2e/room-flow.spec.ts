@@ -60,7 +60,7 @@ async function connect(
   });
   await page.goto("/");
   await page.evaluate((session) => {
-    const surface = window as TestWindow;
+    const surface = window as unknown as TestWindow;
     surface.polytourTestSocket = new WebSocket(
       `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/room/${session.roomCode}`,
       ["polytour", `seat.${session.token}`],
@@ -82,7 +82,9 @@ async function connect(
 async function send(actor: Actor, message: ClientMessage) {
   await actor.page.evaluate(
     (frame) =>
-      (window as TestWindow).polytourTestSocket.send(JSON.stringify(frame)),
+      (window as unknown as TestWindow).polytourTestSocket.send(
+        JSON.stringify(frame),
+      ),
     message,
   );
 }
@@ -133,7 +135,7 @@ test("four isolated browser seats finish a real authoritative match and reconnec
   );
   const lastActor = actors[3];
   await lastActor.page.evaluate(() =>
-    (window as TestWindow).polytourTestSocket.close(),
+    (window as unknown as TestWindow).polytourTestSocket.close(),
   );
   await lastActor.page.context().close();
   actors[3] = await connect(browser, credentials[3]);
