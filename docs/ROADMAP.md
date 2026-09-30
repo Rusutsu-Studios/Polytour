@@ -12,14 +12,10 @@ once the protocol is stable.
       deferred to Phase 6: it must first be enabled on the account)
 - [x] Biome, strict TS, Vitest 4 (+ `@cloudflare/vitest-plugin` project for worker tests)
 - [x] GitHub Actions: typecheck, lint, test on PR
-- [x] Staging: a separate `staging` environment in `wrangler.jsonc` (own Worker, D1, R2). Per-branch
-      preview URLs are not an option: Cloudflare does not generate version preview URLs for
-      Workers that implement Durable Objects.
-- [x] Cloudflare account (Rusutsu Studios) provisioned: D1 + R2 for production and staging,
-      `account_id` pinned
-- [x] First deploy of both Workers (`polytour` and `polytour-staging` on `*.workers.dev`)
-- [ ] Workers Builds connected: `main` → `polytour`, `staging` → `polytour-staging`
-      (see [ARCHITECTURE.md → Environments and deploys](ARCHITECTURE.md#environments-and-deploys))
+- [x] Cloudflare account (Rusutsu Studios) provisioned: D1 + R2, `account_id` pinned
+- [x] First production deploy (`polytour` on `*.workers.dev`)
+- [ ] Workers Builds connected: push to `main` → production (see
+      [ARCHITECTURE.md → Environments and deploys](ARCHITECTURE.md#environments-and-deploys))
 - [x] Update CLAUDE.md "Commands" with the real scripts
 
 **Done when:** `pnpm dev` serves a page that opens a WebSocket to a hello-world DO, and CI is green.
@@ -85,7 +81,11 @@ once the protocol is stable.
 
 - [ ] Rate limits, message size caps, chat filter, abuse reporting
 - [ ] Analytics Engine telemetry + a balancing dashboard query set (enable Analytics Engine in the
-      dashboard, then add the `TELEMETRY` binding to both environments in `wrangler.jsonc`)
+      dashboard, then add the `TELEMETRY` binding in `wrangler.jsonc`)
+- [ ] Staging environment for testing against real Cloudflare resources before production. Its
+      empty resources already exist (Worker `polytour-staging`, D1 `polytour-staging`, R2
+      `polytour-replays-staging`). Per-branch preview URLs are not an option: Cloudflare does not
+      generate them for Workers that implement Durable Objects.
 - [ ] Error tracking (Workers Logs/Traces + client error reporting)
 - [ ] Load test: 500 concurrent simulated rooms; measure cost per match
 - [ ] Custom domain, OG images, landing page, privacy policy

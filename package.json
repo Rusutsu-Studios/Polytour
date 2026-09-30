@@ -15,7 +15,6 @@
     "build": "pnpm typecheck && vite build",
     "preview": "pnpm run build && vite preview",
     "deploy": "pnpm run build && wrangler deploy",
-    "deploy:staging": "CLOUDFLARE_ENV=staging pnpm run build && CLOUDFLARE_ENV=staging wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
