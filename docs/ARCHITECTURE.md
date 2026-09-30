@@ -193,6 +193,28 @@ always answers with `welcome` first (protocol version, seat, current `seq`), the
 - Otherwise → `welcome` carries a full snapshot; the client snaps `viewState` to it
   (no animation).
 
+### Deploys and games in progress
+
+Every deploy restarts every Durable Object and drops all WebSockets; no Cloudflare
+setting prevents it. A deploy must cost players a 1–2 s "reconnecting…", never the
+game:
+
+- Nothing lives only in memory: state, event log, and timers are in SQLite (persist
+  first, then broadcast), and the alarm survives the restart.
+- Clients reconnect on their own and resync through `welcome` + `lastSeq`; a
+  protocol mismatch reloads the page ([PROTOCOL.md → Versioning](PROTOCOL.md#versioning)).
+- The 60 s `grace:<seat>` timer is far longer than a deploy reconnect, so a deploy
+  never hands a seat to a bot.
+- **New code must load games saved by the previous version.** `meta` stores a
+  `stateVersion`; on load the DO migrates older state JSON step by step before
+  handing it to the engine. Never ship a state shape change without its migration
+  and a test that loads the previous shape.
+- **Rule and balance changes never rewrite a match in progress.** The game state
+  records the `rulesVersion` it was created with and the engine honors it until the
+  game ends (matches last ~20 minutes, so old rules only need to survive briefly).
+- A DO class lifecycle change (new, renamed, or deleted class in `migrations`) cannot
+  be rolled back or deployed gradually: ship it on its own.
+
 ## Matchmaker Durable Object
 
 One instance per queue, e.g. `getByName("quick-4p")`. Holds hibernatable sockets of
@@ -236,6 +258,41 @@ cached for 60 s with Workers Cache.
 - Chat: length limit, rate limit, profanity filter, per-player mute. Emotes preferred over free text for quick-match.
 - Room codes: 6 chars from an unambiguous alphabet (no 0/O/1/I), ~1B combinations; rate-limit join attempts.
 - Never expose the PRNG seed, other players' session tokens, or internal user ids beyond what the UI needs.
+
+## Environments and deploys
+
+One production Worker, `polytour` (D1 `polytour`, R2 `polytour-replays`), served on
+`*.workers.dev`. Workers Builds deploys it on every push to `main`. Pushes that only
+touch docs or Markdown are excluded (watch-path excludes `docs/*` and `*.md`), since
+every deploy restarts the running games (see
+[Deploys and games in progress](#deploys-and-games-in-progress)). Build: `pnpm run build`,
+deploy: `npx wrangler deploy`, build caching on; configured under the Worker's
+**Settings → Build** in the dashboard.
+
+Every other branch gets a **Worker Preview**: Workers Builds runs `pnpm run build` then
+`npx wrangler preview`, which creates or updates a Preview named after the branch with
+its own public URL. Previews do not inherit production bindings; they use the
+`previews` block in `wrangler.jsonc`:
+
+- Each Preview gets its own Durable Object namespaces and storage, so a branch never
+  touches production games. State persists across pushes to the same branch and is
+  deleted with the Preview.
+- D1 and R2 are **not bound** in Previews yet (`env.DB` / `env.REPLAYS` are undefined
+  there). Before code on a branch reads them, create preview-only resources and bind
+  them under `previews` (ROADMAP Phase 4). Never point a Preview at production data.
+- Preview URLs are public; protect them with Cloudflare Access if that ever matters.
+
+- The Worker lives in the Rusutsu Studios account, pinned by `account_id` in
+  `wrangler.jsonc` so no command can reach another account. Locally, create a
+  Wrangler auth profile and bind it to the repo directory
+  (`wrangler auth create polytour`, then `wrangler auth activate polytour <repo>`),
+  which leaves other Cloudflare logins untouched.
+- Workers Builds and CI take pnpm from `packageManager` in `package.json` and Node
+  from `.node-version`. Bump them there, not in the dashboard or the workflow.
+- There is no shared staging environment: Worker Previews cover per-branch testing. If
+  one is ever added as an `env.staging` block, remember that with the Cloudflare Vite
+  plugin the environment is chosen at **build** time (`CLOUDFLARE_ENV=staging`), not
+  with `wrangler deploy --env`.
 
 ## Cost model (rough)
 

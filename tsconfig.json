@@ -8,6 +8,9 @@
       "path": "./tsconfig.node.json"
     },
     {
+      "path": "./tsconfig.shared.json"
+    },
+    {
       "path": "./tsconfig.worker.json"
     }
   ]
