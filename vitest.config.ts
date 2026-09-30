@@ -1,5 +1,5 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [
@@ -7,4 +7,8 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
     }),
   ],
+  test: {
+    // Playwright owns e2e/ (`pnpm test:e2e`).
+    exclude: [...configDefaults.exclude, "e2e/**"],
+  },
 });
