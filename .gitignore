@@ -31,5 +31,17 @@ worker-configuration.d.ts
 .env*
 !.env.example
 
+# Keys and certificates. Secrets go in `wrangler secret put` or .dev.vars, never git.
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Personal agent files. The shared instructions are AGENTS.md (CLAUDE.md imports it);
+# a committed AGENTS.override.md would silently replace them for Codex only.
+CLAUDE.local.md
+.claude/settings.local.json
+AGENTS.override.md
+
 # Local template inspection directory; never part of the application.
 polytour-scaffold/
