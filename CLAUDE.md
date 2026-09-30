@@ -1,15 +1,16 @@
 # Polytour — CLAUDE.md
 
 Polytour is a web-first, real-time multiplayer property-trading board game in the
-spirit of Business Tour / Modoo Marble (Monopoly-like, 2–4 players, ~20-minute
-matches). It runs entirely on Cloudflare: a Worker serves the SPA and API, and
+spirit of Business Tour / Modoo Marble (property game, four-seat rooms, configurable
+20/60/120-minute limits). It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: Phase 0 scaffold.** The React client, Worker, SQLite Durable Object
-> bindings, and local integration tests exist. The deterministic rules engine is the
-> next implementation phase. When you change commands or paths, update this file in
-> the same change.
+> **Status: first playable prototype.** Shared rules, private four-seat rooms,
+> server bots, persistence/reconnection, a Three.js diorama, and verified drand dice
+> are implemented. The user's preset is 2 M cash, 400 k salary, 3 festivals, line/triple
+> wins enabled, and 120 minutes. Intermediate prices/rents remain provisional;
+> see `docs/REFERENCE_PARITY.md`. When changing commands or paths, update this file.
 
 ## Read before working
 
@@ -21,6 +22,8 @@ a stylized 3D board with juicy, choreographed animations.
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Any client↔server message change |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Any rendering, VFX, sound, or UI motion work |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Picking the next task |
+| [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Dice, entropy, commitments, proof verification |
+| [docs/REFERENCE_PARITY.md](docs/REFERENCE_PARITY.md) | Captured values versus provisional balance |
 
 ## Stack (short version)
 
@@ -31,6 +34,10 @@ a stylized 3D board with juicy, choreographed animations.
   postprocessing (3D board), GSAP (3D/scene choreography), Motion (DOM/UI animation),
   Tailwind CSS v4, Zustand, Howler.js, `partysocket` (reconnecting WebSocket).
 - **Tooling:** pnpm, Biome, Vitest 4 + `@cloudflare/vitest-plugin`, fast-check, Playwright.
+
+The current prototype uses React Three Fiber/Three.js, GSAP, Motion, ordinary CSS,
+React state and a small reconnecting socket adapter. Drei, postprocessing,
+Tailwind, Zustand, Howler and partysocket above remain planned; see TECH_STACK.md.
 
 ## Layout (planned — single package, one Worker, one deploy)
 
@@ -60,10 +67,14 @@ pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm run deploy     # build + wrangler deploy (bare `pnpm deploy` is a pnpm builtin)
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
+pnpm sim -- --games 1000 # deterministic bot simulations
+pnpm test:e2e       # real browser/socket and UI flows (Playwright Chromium)
+pnpm check:drand    # real future-round network check, writes local proof evidence
+pnpm verify:dice path/to/proof.json # independent beacon/dice verification
 ```
 
-`pnpm sim` and `pnpm db:migrate:local` are added with the rules engine and D1
-schema, respectively; do not imply that either exists before its phase.
+`pnpm db:migrate:local` remains planned with the D1 schema. The simulator and
+verification commands above exist; local proof and browser evidence are gitignored.
 
 ## Golden rules (architecture)
 
@@ -71,10 +82,12 @@ schema, respectively; do not imply that either exists before its phase.
    with the engine and broadcasts resulting *events*. Never trust client-side money,
    dice, positions, or turn order.
 2. **The engine is pure and deterministic.** `shared/engine` has no I/O, no
-   `Date.now()`, no `Math.random()`. Randomness comes from a seeded PRNG whose state
-   lives in the game state; time is passed in as input. Same inputs → same outputs.
+   `Date.now()`, no `Math.random()`. Live dice arrive via `EngineContext.dice` after
+   server entropy verification. The private seeded PRNG handles shuffles and
+   repeatable simulations. Time is passed in as input. Same inputs → same outputs.
 3. **The RNG seed never leaves the server.** Clients receive dice results and card
-   draws as events, never the seed or the deck order.
+   draws as events, never the seed or the deck order. Public drand proofs are safe
+   to expose after the committed round is published; they are not the deck seed.
 4. **Events drive animation; snapshots drive recovery.** Clients animate the event
    stream in order. On join/reconnect they get a snapshot and snap the view to it.
    Public state only ever changes through the shared reducer `applyEvent`, on both

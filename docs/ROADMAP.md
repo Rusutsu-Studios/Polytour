@@ -5,6 +5,18 @@ multiplayer is solid → it looks amazing → people can find games → launch**
 blocks gameplay; the 3D scene is a consumer of events and can be built in parallel
 once the protocol is stable.
 
+## First playable checkpoint — October 2026
+
+A vertical slice now joins the rules engine, authoritative private rooms and the
+Three.js client. Four friends can join by room code; empty seats can become bots.
+The user preset is 2 M / 400 k / 3 festivals / 120 minutes with line and triple
+wins, and future drand commitments provide verified uniform dice. Costs at the
+first city and Tokyo match supplied captures; the remaining economy is provisional.
+
+The checklist below records implemented parts, not completion of every phase's
+acceptance criteria. A real phone performance check, public internet playtest,
+exact economy comparison and a balance pass remain necessary.
+
 ## Phase 0 — Scaffold (½ week)
 
 - [x] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
@@ -23,24 +35,25 @@ once the protocol is stable.
 
 ## Phase 1 — Rules engine (1–2 weeks)
 
-- [ ] Board + economy config (`shared/board`)
-- [ ] `createGame`, `applyAction`, `applyTimeout`, `applyEvent`, `legalActions` with seeded PRNG
-- [ ] All tiles, Chance deck, buyouts, forced selling, bankruptcy, all 5 win conditions
-- [ ] Easy/medium heuristic bots
-- [ ] fast-check invariants: money conservation (player cash + bank ledger), no stuck states,
+- [x] Board + economy config (`shared/board`)
+- [x] `createGame`, `applyAction`, `applyTimeout`, `applyEvent`, `legalActions` with seeded PRNG
+- [x] All tiles, Chance deck, buyouts, forced selling, bankruptcy, five original win conditions plus real-time expiry
+- [x] Easy/medium heuristic bots
+- [x] fast-check invariants: money conservation (player cash + bank ledger), no stuck states,
       always terminates, `reduce(applyEvent)` over emitted events reproduces the public state
-- [ ] `tools/sim` with stats output; first balance pass
+- [x] `tools/sim` with stats output and a recorded 10,000-game baseline
+- [ ] First balance pass (baseline misses round-limit and turn-position targets)
 
 **Done when:** 10,000 simulated games finish with sane length and win-condition mix.
 
 ## Phase 2 — Multiplayer backbone (1–2 weeks)
 
-- [ ] Zod protocol package
-- [ ] GameRoom DO: hibernatable sockets, attachments, SQLite state + event log, timers table + alarm
-- [ ] Reconnect with `lastSeq`; bot takeover after grace period
-- [ ] Private rooms: `POST /api/rooms`, join by code, lobby (seats, bots, start)
-- [ ] **Debug 2D board** (plain SVG/DOM) to play full games in 4 browser tabs
-- [ ] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
+- [x] Zod protocol package
+- [x] GameRoom DO: hibernatable sockets, attachments, SQLite state + event log, timers table + alarm
+- [x] Reconnect with `lastSeq`; bot takeover after grace period
+- [x] Private rooms: `POST /api/rooms`, join by code, lobby (seats, bots, start)
+- [x] Accessible DOM board fallback alongside the 3D client; full four-browser game test
+- [x] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
       connect to an uninitialized room rejected, alarm-driven timeout
 - [ ] Deploy safety: `stateVersion` migration on load, `rulesVersion` in game state, and a test
       that restarts a DO mid-game and checks every client resumes (see
@@ -52,10 +65,10 @@ once the protocol is stable.
 
 - [ ] Art direction spike: 1 country + 1 pawn + dice + tile in Blender → glTF pipeline
 - [ ] R3F scene: board, tiles (instanced), pawns, buildings per level, camera rig
-- [ ] Director queue + `viewState`/`serverState` stores, speed control, catch-up
+- [x] Director queue + `viewState`/`serverState` stores, speed control, catch-up
 - [ ] Handlers for every event in [PROTOCOL.md](PROTOCOL.md) (placeholder-quality where needed)
-- [ ] Keyframed dice
-- [ ] HUD: player cards, money counters, decision cards, countdown rings (Motion)
+- [x] Keyframed dice
+- [x] HUD: player cards, money counters, decision cards, countdown rings (Motion)
 - [ ] Decide 3D vs 2D for good based on a mid-range phone test (see TECH_STACK.md)
 
 **Done when:** a full game is playable in the 3D client at 60 fps on a mid-range phone.
@@ -78,7 +91,7 @@ once the protocol is stable.
 - [ ] Physics dice with face remapping (Rapier)
 - [ ] Particles, post-processing, quality tiers, reduced-motion mode
 - [ ] PWA: manifest, icons, precaching, "update available" flow
-- [ ] Experimental dice power gauge (playtest-gated)
+- [ ] Cosmetic dice throw controls only (uniform outcomes; weighted power gauge removed by user requirement)
 - [ ] Emotes
 
 ## Phase 6 — Launch readiness (1 week)

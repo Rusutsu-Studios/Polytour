@@ -33,3 +33,8 @@ worker-configuration.d.ts
 
 # Local template inspection directory; never part of the application.
 polytour-scaffold/
+
+# Local visual QA, browser output and live entropy evidence.
+.local/
+playwright-report/
+test-results/
