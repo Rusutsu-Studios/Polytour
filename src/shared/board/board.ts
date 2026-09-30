@@ -37,6 +37,18 @@ export const BOARD: readonly Tile[] = [
   { kind: "city", index: 31, country: "H", city: 2, side: 4 },
 ] satisfies readonly Tile[];
 
+function findTileIndex(kind: Tile["kind"]): number {
+  const tile = BOARD.find((candidate) => candidate.kind === kind);
+
+  if (!tile) {
+    throw new Error(`The board has no ${kind} tile`);
+  }
+
+  return tile.index;
+}
+
+export const ISLAND_TILE_INDEX = findTileIndex("island");
+
 export function getTile(index: number): Tile | undefined {
   return BOARD[index];
 }

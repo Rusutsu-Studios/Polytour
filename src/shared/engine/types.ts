@@ -21,6 +21,7 @@ export type PlayerState = {
   readonly cash: number;
   readonly position: number;
   readonly laps: number;
+  readonly onIsland: boolean;
   readonly islandTurns: number;
   readonly bankrupt: boolean;
   readonly properties: readonly number[];
@@ -35,6 +36,8 @@ export type PublicState = {
   readonly activeSeat: Seat;
   readonly round: number;
   readonly phase: "roll" | "resolve";
+  /** Consecutive doubles rolled for movement this turn; resets when the turn ends. */
+  readonly doublesInTurn: number;
   readonly pending: null;
   readonly lastRoll: {
     readonly seat: Seat;
@@ -42,8 +45,28 @@ export type PublicState = {
   } | null;
   readonly bankLedger: 0;
   readonly championshipHost: null;
-  readonly status: "active";
+  readonly status: "active" | "finished";
+  readonly result: GameResult | null;
   readonly startedAt: number;
+};
+
+export type WinKind =
+  | "last-standing"
+  | "triple-monopoly"
+  | "line-monopoly"
+  | "resort-monopoly"
+  | "round-limit";
+
+export type Standing = {
+  readonly seat: Seat;
+  readonly netWorth: number;
+};
+
+export type GameResult = {
+  readonly winner: Seat;
+  readonly kind: WinKind;
+  /** Every player in placement order; the winner is first. */
+  readonly standings: readonly Standing[];
 };
 
 export type GameState = PublicState & {
@@ -59,6 +82,8 @@ export type DiceRolledEvent = {
   readonly type: "DiceRolled";
   readonly seat: Seat;
   readonly dice: readonly [number, number];
+  readonly isDouble: boolean;
+  readonly purpose: "move" | "escape";
 };
 
 export type PlayerMovedEvent = {
@@ -86,13 +111,39 @@ export type TurnAdvancedEvent = {
   readonly round: number;
 };
 
+export type SentToIslandEvent = {
+  readonly type: "SentToIsland";
+  readonly seat: Seat;
+  readonly reason: "tile" | "triple-double";
+};
+
+export type IslandEscapeFailedEvent = {
+  readonly type: "IslandEscapeFailed";
+  readonly seat: Seat;
+  readonly islandTurns: number;
+};
+
+export type LeftIslandEvent = {
+  readonly type: "LeftIsland";
+  readonly seat: Seat;
+  readonly method: "doubles" | "released";
+};
+
+export type GameOverEvent = {
+  readonly type: "GameOver";
+} & GameResult;
+
 export type GameEvent =
   | GameCreatedEvent
   | DiceRolledEvent
   | PlayerMovedEvent
   | SalaryPaidEvent
   | TurnPhaseChangedEvent
-  | TurnAdvancedEvent;
+  | TurnAdvancedEvent
+  | SentToIslandEvent
+  | IslandEscapeFailedEvent
+  | LeftIslandEvent
+  | GameOverEvent;
 
 export type RollAction = {
   readonly type: "Roll";
@@ -101,7 +152,7 @@ export type RollAction = {
 export type Action = RollAction;
 
 export type RuleError = {
-  readonly code: "not-active-seat" | "invalid-phase";
+  readonly code: "not-active-seat" | "invalid-phase" | "game-over";
   readonly message: string;
 };
 
