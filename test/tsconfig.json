@@ -1,7 +1,9 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "../tsconfig.worker.json",
   "compilerOptions": {
     "moduleResolution": "bundler",
+    "module": "ESNext",
+    "lib": ["ES2023", "ESNext.Disposable"],
     "types": ["@cloudflare/vitest-plugin/types"]
   },
   "include": ["./**/*.ts", "../worker-configuration.d.ts"]

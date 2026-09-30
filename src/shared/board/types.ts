@@ -2,7 +2,7 @@ export const COUNTRY_IDS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 
 export type CountryId = (typeof COUNTRY_IDS)[number];
 export type BoardSide = 1 | 2 | 3 | 4;
-export type BuildLevel = 0 | 1 | 2 | 3 | 4;
+export type BuildLevel = 0 | 1 | 2 | 3 | 4 | 5;
 export type ResortId = 1 | 2 | 3 | 4;
 
 export type CityTile = {
@@ -32,9 +32,13 @@ export type Tile =
 
 export type BuildLevelConfig = {
   readonly level: BuildLevel;
-  readonly name: "Land" | "House" | "Villa" | "Hotel" | "Landmark";
-  readonly buildCostPercent: number;
-  readonly rentPercent: number;
+  readonly name:
+    | "Land"
+    | "House I"
+    | "House II"
+    | "House III"
+    | "Hotel"
+    | "Landmark";
 };
 
 export type CountryConfig = {

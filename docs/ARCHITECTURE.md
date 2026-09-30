@@ -1,5 +1,26 @@
 # Architecture
 
+## Implemented prototype boundary
+
+The first playable slice uses a Worker and one SQLite-backed GameRoom per private
+four-seat match. It stores state, events, proof receipts, commands and timers in
+that room. Create/join issues a cryptographically random seat capability; only its
+hash is stored. The WebSocket sends the token in `Sec-WebSocket-Protocol`, never
+the URL. The client keeps it in sessionStorage, so refresh restores its seat in
+that browser session. Accounts, Turnstile, signed cookies, D1 results and R2 replay
+archives below remain the planned launch architecture rather than implemented auth.
+
+Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
+expiry, and future drand-round resolution. A drand commitment survives retry and
+reconnect; strict mode has no crypto fallback. See [RANDOMNESS.md](RANDOMNESS.md).
+State version1 and rules version2 are pinned for this first playable schema;
+unknown saved versions are rejected rather than loaded under changed rules.
+
+The React client lazy-loads the Three.js/R3F board and uses a Director to advance
+the rendered state separately from authoritative state. Original procedural
+geometry avoids an external asset dependency. No production deploy is implied by
+local verification.
+
 Polytour is one Cloudflare Worker that serves the web client, an HTTP API, and
 WebSocket upgrades. Each live match is a `GameRoom` Durable Object: a single-threaded,
 strongly consistent actor that owns the game state, the players' sockets, and the

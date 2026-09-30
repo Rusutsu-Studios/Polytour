@@ -5,13 +5,39 @@ a discriminated union on `type`, defined once with Zod in `src/shared/protocol/`
 imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
-## Phase 0 verification socket
+## Implemented playable protocol
 
-During local development only, the scaffold page connects to `/ws/debug/hello`.
-That route addresses a `GameRoom` Durable Object and receives exactly one frame:
-`{ type: "phase0.hello", status: "ok" }`. It is a temporary health check, not a
-match room: it has no player identity, game state, or action handling, and must be
-removed before Phase 2 adds the real `/ws/room/:code` flow below.
+`src/shared/protocol/index.ts` is the current executable contract. It supersedes
+the older illustrative launch sketches below wherever they differ. The scaffold
+debug socket has been removed; `/api/health` remains.
+
+- `POST /api/rooms {name, config?}` returns201 and `{roomCode, seat, token}`.
+- `POST /api/rooms/:code/join {name}` returns200 and another seat capability.
+- The WebSocket uses `Sec-WebSocket-Protocol: polytour, seat.<token>`, selects
+  `polytour` in the response, and checks the same Origin before entering the room.
+  Capability tokens never appear in public state, lobby, events, or URLs.
+- First send `sync {lastSeq:null}` for a snapshot, or a known sequence for replay.
+  `welcome {protocolVersion,you,seq,snapshot,lobby,randomness}` always comes first.
+  Replay then sends the contiguous events and any persisted dice proof receipts.
+- Host lobby operations are `start {fillBots}` and `settings {config}`. All rooms
+  start with exactly four seats. Empty seats can become server bots. Settings are
+  validated and freeze when the match starts.
+- Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
+  `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
+  `legalActions` supplies the choices; tile indices are0..31 and levels0..5.
+- Each intent has an id and `atSeq`; duplicates, stale state, wrong seats, malformed
+  actions, and actions during pending entropy are rejected.
+- `randomness {status,commitment?,proof?,message?}` carries future-round commitment,
+  waiting/error status, and resolved proof. Persist the commitment before broadcast,
+  fetch only its future round, and retain that round on relay failure.
+- `events {fromSeq,toSeq,events,proofs?}` drives the shared reducer and Director.
+  Snapshots expose no deck, seed, hidden resolution queue, or session token.
+- Presence derives from live hibernatable sockets. A disconnected human has a
+  60-second grace period before server bot takeover; reconnect restores control.
+
+The prototype client requests a fresh snapshot on reconnect rather than buffering
+offline actions. Chat, emotes, accounts, matchmaking and spectator messages in the
+launch sketches below remain unimplemented.
 
 ## Principles
 
@@ -44,7 +70,7 @@ type ClientMessage =
   | { type: "ping"; t: number };
 
 type Action =
-  | { type: "roll"; gauge?: "low" | "mid" | "high" }
+  | { type: "roll" } // historical sketch; executable prototype uses PascalCase Roll
   | { type: "buy"; tile: TileId; level: 0 | 1 | 2 | 3 }
   | { type: "build"; tile: TileId; level: 1 | 2 | 3 | 4 }
   | { type: "buyout"; tile: TileId }
