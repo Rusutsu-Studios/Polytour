@@ -109,7 +109,11 @@ Menus restore keyboard focus on dismissal, support Escape where appropriate and 
 
 **The Timing Rule.** The Director shows the events leading to a decision before the choice opens. Speed and skip apply consistently.
 
-Local browser verification covers 2× speed, the reduced-animation toggle, a decreasing match countdown and skip during a real roll's event playback. Skip is disabled at rest. Separate presentation fixtures demonstrate levels 1–5, all six purchase choices at 1280×720 without HUD collisions and off-turn debt presentation; the Worker remains unmodified for these fixtures. These visual checks do not establish a hardware frame rate or confirm the replacement on the remote Preview.
+Local browser verification covers 2× speed, the reduced-animation toggle, a decreasing match countdown and skip during a real roll's event playback. Skip is disabled at rest. Separate presentation fixtures demonstrate levels 1–5, all six purchase choices at 1280×720 without HUD collisions and off-turn debt presentation; the Worker remains unmodified for these fixtures. The deployed Preview passes a complete four-context match, live drand proof export and API/SPA smoke checks. Hardware frame rate remains unmeasured.
+
+An explicitly inspected city stays selected while pawns move. Until the user
+selects a city, the highlight follows the active pawn automatically. The city
+heading, selection and price are verified through a change of active position.
 
 ## Do's and Don'ts
 

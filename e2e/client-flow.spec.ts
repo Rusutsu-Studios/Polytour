@@ -233,8 +233,38 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .getByRole("button", { name: "Explorer le plateau", exact: true })
     .click();
   await page.getByLabel("Explorer une case").selectOption("31");
-  await expect(page.locator(".inspector")).toContainText("Tokyo");
+  await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
   await expect(page.locator(".property-numbers")).toContainText("400 k");
+  // An explicitly inspected city stays selected when another pawn moves.
+  // Presentation-only snapshot, restored before the real reconnect below.
+  const beforeMovement = await page.evaluate(async () => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const snapshot = (director.getSnapshot().viewState ??
+      director.getSnapshot().serverState) as PublicState | null;
+    if (!snapshot) throw new Error("Expected the current match snapshot");
+    director.reset({
+      ...snapshot,
+      players: snapshot.players.map((player) => ({
+        ...player,
+        position:
+          player.seat === snapshot.activeSeat
+            ? player.position === 8
+              ? 24
+              : 8
+            : player.position,
+      })),
+    });
+    return snapshot;
+  });
+  await expect(page.getByLabel("Explorer une case")).toHaveValue("31");
+  await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
+  await expect(page.locator(".property-numbers")).toContainText("400 k");
+  await page.evaluate(async (snapshot) => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.reset(snapshot);
+  }, beforeMovement);
   await page.getByLabel("Explorer une case").press("Escape");
   await expect(page.locator(".inspector")).not.toBeVisible();
   await expect(

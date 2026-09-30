@@ -42,7 +42,7 @@ They do not establish the replacement PC interface's remote Preview behavior,
 public load capacity, or a main-branch production deployment. The phone rendering
 result is historical only: mobile and physical phone FPS are not current gates.
 
-## Replacement PC interface — local verification, 1 October 2026
+## Replacement PC interface — verification, 1 October 2026
 
 The user now prioritizes a PC browser game with a full-screen central isometric
 board, compact player HUDs at four corners and contextual decisions. Journal,
@@ -70,6 +70,18 @@ playback with normal animations enabled, the two UI scenarios passed again in
 **20.5 seconds**. These are local browser/Worker results, not confirmation of the
 replacement interface on the remote Preview.
 
+The deployed branch Preview at commit `821994b` also passes four production
+browser scenarios in **29.6 seconds** over HTTPS/WSS: a complete four-seat match
+with reconnect, live drand verification and UI proof export, and both API/SPA
+smoke checks. Manual play validates a rent-protection card and a 640 k buyout in
+the local real match, including the resulting cash and ownership.
+
+CI then exposed an inspection race: animated pawn movement could overwrite the
+city a user selected. Explicit selections now stay pinned; automatic following
+applies only before a manual selection. The regression checks the actual city
+heading, price and selected value through a guaranteed change of active position.
+The focused browser scenario passes in **13.3 seconds** after this correction.
+
 Separate, explicitly authored presentation fixtures show building levels 1–5,
 all six purchase choices at 1280×720 without a HUD collision, and an off-turn
 debtor's decision. The Worker is not changed for these fixtures; they demonstrate
@@ -87,8 +99,8 @@ remaining material defects in the desktop presentation. A 60 fps result is still
 **unmeasured**: captures and automated browser checks do not establish performance
 on target PC hardware.
 
-- [ ] Confirm the replacement PC interface and relevant browser flows against
-      the remote branch Worker Preview after push
+- [x] Confirm the replacement PC interface and production browser flows against
+      the remote branch Worker Preview
 - [ ] Record target PC/GPU hardware and active-animation FPS before claiming 60 fps
 
 No new main-branch production deployment is established by these checks. Mobile

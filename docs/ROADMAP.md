@@ -20,8 +20,9 @@ open only when requested. Minimum layout target: 1280×720; main review sizes:
 1440×900 and 1920×1080. Mobile is best effort, with a dedicated adaptation optional
 later. The replacement desktop layout is locally verified at all three sizes,
 including a full four-context match, real drand proof export and an independent
-visual review with no remaining material defects. Its remote Preview after push,
-target-PC FPS, human group playtest, exact economy comparison and balance pass
+visual review with no remaining material defects. The deployed Preview passes
+the four production browser scenarios. Target-PC FPS, human group playtest,
+exact economy comparison and balance pass
 remain to verify. See [PLAYABLE_CHECKPOINT.md](PLAYABLE_CHECKPOINT.md) for dated
 results and the distinction between live gameplay and presentation fixtures.
 
@@ -84,7 +85,7 @@ results and the distinction between live gameplay and presentation fixtures.
 - [x] Verify 2× speed, real match countdown and active-event skip through a real roll
 - [x] Presentation fixtures: building levels 1–5, six purchase choices at 1280×720
       without HUD collisions, and an off-turn debtor's decision (Worker unmodified)
-- [ ] Confirm the PC replacement against the remote Worker Preview after push
+- [x] Confirm the PC replacement against the remote Worker Preview
 - [ ] Measure active-animation FPS on a documented desktop PC/GPU; retain Three.js
       without making optional phone support determine the renderer
 
