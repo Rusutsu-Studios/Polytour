@@ -34,11 +34,25 @@
   // task in ROADMAP Phase 6, once it is enabled on the account.
 
   // Served on *.workers.dev until a custom domain lands (ROADMAP Phase 6). Version
-  // preview URLs are never generated for Workers with Durable Objects.
+  // preview URLs are never generated for Workers with Durable Objects; branches get
+  // Worker Previews instead (below).
   "workers_dev": true,
   "preview_urls": false,
   "observability": {
     "enabled": true
   },
-  "upload_source_maps": true
+  "upload_source_maps": true,
+
+  // Worker Previews: Workers Builds runs `wrangler preview` for every branch except
+  // `main`. Previews do not inherit production bindings. Each Preview gets its own
+  // Durable Object namespaces and storage; D1 and R2 stay unbound until preview-only
+  // resources exist. Never point a Preview at production data.
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        { "name": "GAME_ROOM", "class_name": "GameRoom" },
+        { "name": "MATCHMAKER", "class_name": "Matchmaker" }
+      ]
+    }
+  }
 }

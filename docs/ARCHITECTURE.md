@@ -262,12 +262,25 @@ cached for 60 s with Workers Cache.
 ## Environments and deploys
 
 One production Worker, `polytour` (D1 `polytour`, R2 `polytour-replays`), served on
-`*.workers.dev`. Workers Builds deploys it on every push to `main`; other branches do
-not build. Pushes that only touch docs or Markdown are excluded (watch-path excludes
-`docs/*` and `*.md`), since every deploy restarts the running games (see
+`*.workers.dev`. Workers Builds deploys it on every push to `main`. Pushes that only
+touch docs or Markdown are excluded (watch-path excludes `docs/*` and `*.md`), since
+every deploy restarts the running games (see
 [Deploys and games in progress](#deploys-and-games-in-progress)). Build: `pnpm run build`,
 deploy: `npx wrangler deploy`, build caching on; configured under the Worker's
 **Settings → Build** in the dashboard.
+
+Every other branch gets a **Worker Preview**: Workers Builds runs `pnpm run build` then
+`npx wrangler preview`, which creates or updates a Preview named after the branch with
+its own public URL. Previews do not inherit production bindings; they use the
+`previews` block in `wrangler.jsonc`:
+
+- Each Preview gets its own Durable Object namespaces and storage, so a branch never
+  touches production games. State persists across pushes to the same branch and is
+  deleted with the Preview.
+- D1 and R2 are **not bound** in Previews yet (`env.DB` / `env.REPLAYS` are undefined
+  there). Before code on a branch reads them, create preview-only resources and bind
+  them under `previews` (ROADMAP Phase 4). Never point a Preview at production data.
+- Preview URLs are public; protect them with Cloudflare Access if that ever matters.
 
 - The Worker lives in the Rusutsu Studios account, pinned by `account_id` in
   `wrangler.jsonc` so no command can reach another account. Locally, create a
@@ -276,8 +289,8 @@ deploy: `npx wrangler deploy`, build caching on; configured under the Worker's
   which leaves other Cloudflare logins untouched.
 - Workers Builds and CI take pnpm from `packageManager` in `package.json` and Node
   from `.node-version`. Bump them there, not in the dashboard or the workflow.
-- **Staging is deferred** (ROADMAP Phase 6). When it comes back as an `env.staging`
-  block with its own Worker, D1, and R2, remember that with the Cloudflare Vite
+- There is no shared staging environment: Worker Previews cover per-branch testing. If
+  one is ever added as an `env.staging` block, remember that with the Cloudflare Vite
   plugin the environment is chosen at **build** time (`CLOUDFLARE_ENV=staging`), not
   with `wrangler deploy --env`.
 

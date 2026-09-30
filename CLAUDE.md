@@ -111,7 +111,9 @@ schema, respectively; do not imply that either exists before its phase.
   already running (`rulesVersion`). See ARCHITECTURE.md → Deploys and games in progress.
 - The Rusutsu Studios account is pinned by `account_id` in `wrangler.jsonc`; locally,
   use the `polytour` Wrangler auth profile. Workers Builds deploys production on every
-  push to `main`; there is no staging environment yet.
+  push to `main` and a Worker Preview for every other branch. Previews get their own
+  DO storage but no D1/R2 yet (`previews` block in `wrangler.jsonc`); never bind a
+  Preview to production data.
 - Secrets via `wrangler secret put`; local values in `.dev.vars` (gitignored).
 - Check current Cloudflare docs before relying on limits, pricing, or compat flags.
   Set `compatibility_date` to the scaffold date; bump deliberately.
