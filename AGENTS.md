@@ -49,6 +49,9 @@ src/
   client/     # React app: ui/ (DOM HUD, menus), scene/ (R3F), director/ (animation queue), net/
 public/assets # Compressed glTF, KTX2 textures, audio sprites, fonts
 tools/sim/    # Headless bot-vs-bot simulator for balancing
+tools/ci/     # CI checks: bundle budgets, wrangler.jsonc guard (run with Node, no build step)
+e2e/          # Playwright tests against the production build
+test/         # Worker/DO integration tests (workerd)
 migrations/   # D1 SQL migrations
 ```
 
@@ -65,6 +68,10 @@ pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm run deploy     # build + wrangler deploy (bare `pnpm deploy` is a pnpm builtin)
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
+pnpm test:e2e       # Playwright on the production build (vite preview), desktop + phone
+                    # first run: pnpm exec playwright install chromium
+pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
+pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
 ```
 
 `pnpm sim` and `pnpm db:migrate:local` are added with the rules engine and D1
@@ -199,6 +206,28 @@ every branch, PR head, commit message, PR body, and review or issue comment.
   (connect → intent → broadcast, reconnect with `lastSeq`, alarm firing).
 - Visual change → run `pnpm dev` and check it in the browser at desktop and phone
   width; check the FPS overlay (`?debug=1`) stays at 60 on the target device tier.
+- Worker routing, `wrangler.jsonc`, or app shell change → `pnpm test:e2e`, and
+  `pnpm check:wrangler` for `wrangler.jsonc`.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request, push to `main`, and merge
+queue. `verify` is the one check to require: it fails if any job fails.
+
+| Job | What fails it |
+| --- | --- |
+| `lint` | CLAUDE.md lost `@AGENTS.md`; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
+| `typecheck` | `pnpm typecheck`, covering `src/`, `test/`, `e2e/` and `tools/` |
+| `test` | `pnpm test` |
+| `build` | `vite build`, `pnpm check:bundle` (job summary shows the sizes), `wrangler deploy --dry-run` |
+| `e2e` | `pnpm test:e2e`; on failure the Playwright report and traces are uploaded |
+| `cloudflare` | `pnpm check:wrangler` against the PR's base commit |
+| `secrets` | gitleaks over the full history and the tree |
+| `dependency-review` | PRs only: a new dependency or action with a high/critical advisory |
+
+If an architecture rule fires on code that genuinely needs the exception, add a
+`// biome-ignore lint/<group>/<rule>: <reason>` comment on that line; don't loosen
+`biome.json`. Actions are pinned to commit SHAs; Dependabot bumps them weekly.
 
 ## Don'ts
 

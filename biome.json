@@ -6,8 +6,10 @@
       "!.wrangler",
       "!dist",
       "!docs",
+      "!playwright-report",
       "!polytour-scaffold",
       "!src/client/assets",
+      "!test-results",
       "!worker-configuration.d.ts"
     ]
   },
@@ -22,5 +24,140 @@
       "preset": "recommended"
     }
   },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } }
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      "includes": ["src/shared/**"],
+      "linter": {
+        "rules": {
+          "correctness": { "noNodejsModules": "error" },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/client",
+                      "**/client/**",
+                      "**/worker",
+                      "**/worker/**"
+                    ],
+                    "message": "shared/ imports nothing from client/ or worker/ (AGENTS.md → Layout)."
+                  },
+                  {
+                    "group": [
+                      "cloudflare:*",
+                      "hono",
+                      "hono/*",
+                      "react",
+                      "react/*",
+                      "react-dom",
+                      "react-dom/*"
+                    ],
+                    "message": "shared/ is pure TS: no Workers, Hono, or React APIs (AGENTS.md → Layout)."
+                  }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Date": "The engine is deterministic: time is passed in as the `now` input, and state holds epoch numbers (AGENTS.md → Golden rule 2)."
+                }
+              }
+            }
+          },
+          "nursery": {
+            "noJsRestrictedProperties": {
+              "level": "error",
+              "options": {
+                "entries": [
+                  {
+                    "object": "Math",
+                    "property": "random",
+                    "message": "The engine is deterministic: draw from the seeded PRNG in shared/engine/rng.ts (AGENTS.md → Golden rule 2)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/client/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/worker", "**/worker/**", "cloudflare:*"],
+                    "message": "client/ never imports worker/: they talk only through shared/protocol (AGENTS.md → Layout)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/worker/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/client",
+                      "**/client/**",
+                      "react",
+                      "react/*",
+                      "react-dom",
+                      "react-dom/*"
+                    ],
+                    "message": "worker/ never imports client/: they talk only through shared/protocol (AGENTS.md → Layout)."
+                  }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "setInterval": "Timers block DO hibernation: add a row to the `timers` table and let the alarm fire it (AGENTS.md → Cloudflare rules).",
+                  "setTimeout": "Timers block DO hibernation: add a row to the `timers` table and let the alarm fire it (AGENTS.md → Cloudflare rules)."
+                }
+              }
+            }
+          },
+          "nursery": {
+            "noJsRestrictedProperties": {
+              "level": "error",
+              "options": {
+                "entries": [
+                  {
+                    "property": "accept",
+                    "message": "Use the WebSocket Hibernation API: this.ctx.acceptWebSocket(server, tags), never server.accept() (AGENTS.md → Cloudflare rules)."
+                  },
+                  {
+                    "property": "addEventListener",
+                    "message": "Use the WebSocket Hibernation API: webSocketMessage/webSocketClose/webSocketError handlers, never addEventListener (AGENTS.md → Cloudflare rules)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
