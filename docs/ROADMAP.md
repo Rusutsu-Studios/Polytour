@@ -7,14 +7,14 @@ once the protocol is stable.
 
 ## Phase 0 — Scaffold (½ week)
 
-- [ ] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
-- [ ] `wrangler.jsonc` with GameRoom/Matchmaker DOs (SQLite), D1, R2, Analytics Engine bindings
-- [ ] Biome, strict TS, Vitest 4 (+ `@cloudflare/vitest-plugin` project for worker tests)
-- [ ] GitHub Actions: typecheck, lint, test on PR
-- [ ] Staging: a separate `staging` environment in `wrangler.jsonc` (own Worker, D1, R2), deployed on
+- [x] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
+- [x] `wrangler.jsonc` with GameRoom/Matchmaker DOs (SQLite), D1, R2, Analytics Engine bindings
+- [x] Biome, strict TS, Vitest 4 (+ `@cloudflare/vitest-plugin` project for worker tests)
+- [x] GitHub Actions: typecheck, lint, test on PR
+- [x] Staging: a separate `staging` environment in `wrangler.jsonc` (own Worker, D1, R2), deployed on
       merge to `main`. Per-branch preview URLs are not an option: Cloudflare does not generate
       version preview URLs for Workers that implement Durable Objects.
-- [ ] Update CLAUDE.md "Commands" with the real scripts
+- [x] Update CLAUDE.md "Commands" with the real scripts
 
 **Done when:** `pnpm dev` serves a page that opens a WebSocket to a hello-world DO, and CI is green.
 
