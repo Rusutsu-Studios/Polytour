@@ -80,12 +80,19 @@ export type TurnPhaseChangedEvent = {
   readonly phase: "roll" | "resolve";
 };
 
+export type TurnAdvancedEvent = {
+  readonly type: "TurnAdvanced";
+  readonly activeSeat: Seat;
+  readonly round: number;
+};
+
 export type GameEvent =
   | GameCreatedEvent
   | DiceRolledEvent
   | PlayerMovedEvent
   | SalaryPaidEvent
-  | TurnPhaseChangedEvent;
+  | TurnPhaseChangedEvent
+  | TurnAdvancedEvent;
 
 export type RollAction = {
   readonly type: "Roll";

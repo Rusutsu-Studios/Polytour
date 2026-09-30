@@ -111,6 +111,13 @@ export function applyEvent(_state: PublicState, event: GameEvent): PublicState {
       };
     case "TurnPhaseChanged":
       return { ..._state, phase: event.phase };
+    case "TurnAdvanced":
+      return {
+        ..._state,
+        activeSeat: event.activeSeat,
+        round: event.round,
+        phase: "roll",
+      };
   }
 }
 
@@ -121,6 +128,29 @@ function rollDie(rngState: number): {
   const result = nextRandom(rngState);
 
   return { rngState: result.state, die: Math.floor(result.value * 6) + 1 };
+}
+
+function nextTurn(state: GameState): {
+  readonly activeSeat: Seat;
+  readonly round: number;
+} {
+  const activeIndex = state.turnOrder.indexOf(state.activeSeat);
+
+  if (activeIndex < 0) {
+    throw new Error(`The active seat ${state.activeSeat} is not in turn order`);
+  }
+
+  const nextIndex = (activeIndex + 1) % state.turnOrder.length;
+  const activeSeat = state.turnOrder[nextIndex];
+
+  if (activeSeat === undefined) {
+    throw new Error("A game requires a next active seat");
+  }
+
+  return {
+    activeSeat,
+    round: state.round + Number(nextIndex === 0),
+  };
 }
 
 export function applyAction(
@@ -176,6 +206,10 @@ export function applyAction(
       }
 
       events.push({ type: "TurnPhaseChanged", phase: "resolve" });
+
+      // Landing resolution has no decisions yet, so this turn completes
+      // immediately under the protocol's automatic-advance rule.
+      events.push({ type: "TurnAdvanced", ...nextTurn(state) });
 
       const publicState = events.reduce(applyEvent, toPublic(state));
       const nextState: GameState = {
