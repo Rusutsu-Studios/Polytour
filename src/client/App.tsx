@@ -1559,6 +1559,7 @@ function App() {
   const [formError, setFormError] = useState<string | null>(null);
   const [autoStart, setAutoStart] = useState(false);
   const [fillBots, setFillBots] = useState(true);
+  // Null follows the active pawn; an explicit inspection stays pinned.
   const [selected, setSelected] = useState<number | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1586,9 +1587,6 @@ function App() {
   }, [serverConfigKey]);
   const settingsDirty =
     serverConfigKey !== null && JSON.stringify(config) !== serverConfigKey;
-  useEffect(() => {
-    if (activePosition !== undefined) setSelected(activePosition);
-  }, [activePosition]);
   async function enter(solo: boolean, join = false) {
     const cleanName = name.trim();
     const code = joinCode.trim().toUpperCase();
@@ -1967,7 +1965,7 @@ function App() {
           credentials={credentials}
           room={room}
           config={config}
-          selected={selected}
+          selected={selected ?? activePosition ?? null}
           onSelect={setSelected}
           zoom={zoom}
           onZoom={setZoom}
