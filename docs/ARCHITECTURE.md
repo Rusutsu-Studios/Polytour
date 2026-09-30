@@ -263,8 +263,11 @@ cached for 60 s with Workers Cache.
 
 One production Worker, `polytour` (D1 `polytour`, R2 `polytour-replays`), served on
 `*.workers.dev`. Workers Builds deploys it on every push to `main`; other branches do
-not build. Pushes that only touch docs or Markdown are excluded, since every deploy
-restarts the running games (see [Deploys and games in progress](#deploys-and-games-in-progress)).
+not build. Pushes that only touch docs or Markdown are excluded (watch-path excludes
+`docs/*` and `*.md`), since every deploy restarts the running games (see
+[Deploys and games in progress](#deploys-and-games-in-progress)). Build: `pnpm run build`,
+deploy: `npx wrangler deploy`, build caching on; configured under the Worker's
+**Settings → Build** in the dashboard.
 
 - The Worker lives in the Rusutsu Studios account, pinned by `account_id` in
   `wrangler.jsonc` so no command can reach another account. Locally, create a
@@ -273,9 +276,8 @@ restarts the running games (see [Deploys and games in progress](#deploys-and-gam
   which leaves other Cloudflare logins untouched.
 - Workers Builds and CI take pnpm from `packageManager` in `package.json` and Node
   from `.node-version`. Bump them there, not in the dashboard or the workflow.
-- **Staging is deferred** (ROADMAP Phase 6). Its empty resources already exist
-  (Worker `polytour-staging`, D1 `polytour-staging`, R2 `polytour-replays-staging`).
-  When it comes back as an `env.staging` block, remember that with the Cloudflare Vite
+- **Staging is deferred** (ROADMAP Phase 6). When it comes back as an `env.staging`
+  block with its own Worker, D1, and R2, remember that with the Cloudflare Vite
   plugin the environment is chosen at **build** time (`CLOUDFLARE_ENV=staging`), not
   with `wrangler deploy --env`.
 
