@@ -43,7 +43,12 @@ export type PublicState = {
     readonly seat: Seat;
     readonly dice: readonly [number, number];
   } | null;
-  readonly bankLedger: 0;
+  /**
+   * Money held by the bank. Player cash plus this balance is invariant for the
+   * whole match: every payout decrements it and every charge increments it.
+   * It goes negative once the bank has paid out more than it has taken in.
+   */
+  readonly bankLedger: number;
   readonly championshipHost: null;
   readonly status: "active" | "finished";
   readonly result: GameResult | null;
@@ -96,8 +101,8 @@ export type PlayerMovedEvent = {
 export type SalaryPaidEvent = {
   readonly type: "SalaryPaid";
   readonly seat: Seat;
+  /** The amount moved. The reducer adds it; no absolute balance is carried. */
   readonly amount: number;
-  readonly cash: number;
 };
 
 export type TurnPhaseChangedEvent = {

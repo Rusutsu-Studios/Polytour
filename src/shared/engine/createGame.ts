@@ -110,61 +110,66 @@ function updatePlayer(
   };
 }
 
-export function applyEvent(_state: PublicState, event: GameEvent): PublicState {
+export function applyEvent(state: PublicState, event: GameEvent): PublicState {
   switch (event.type) {
     case "GameCreated":
       return event.state;
     case "DiceRolled":
       return {
-        ..._state,
+        ...state,
         lastRoll: { seat: event.seat, dice: event.dice },
         doublesInTurn:
           event.isDouble && event.purpose === "move"
-            ? _state.doublesInTurn + 1
-            : _state.doublesInTurn,
+            ? state.doublesInTurn + 1
+            : state.doublesInTurn,
       };
     case "PlayerMoved":
-      return updatePlayer(_state, event.seat, (player) => ({
+      return updatePlayer(state, event.seat, (player) => ({
         ...player,
         position: event.position,
         laps: event.laps,
       }));
-    case "SalaryPaid":
-      return updatePlayer(_state, event.seat, (player) => ({
+    case "SalaryPaid": {
+      // The bank funds the salary, so the match total is unchanged. Both sides
+      // of the movement come from `amount`, which keeps one source of truth.
+      const paid = updatePlayer(state, event.seat, (player) => ({
         ...player,
-        cash: event.cash,
+        cash: player.cash + event.amount,
       }));
+
+      return { ...paid, bankLedger: paid.bankLedger - event.amount };
+    }
     case "TurnPhaseChanged":
-      return { ..._state, phase: event.phase };
+      return { ...state, phase: event.phase };
     case "TurnAdvanced":
       return {
-        ..._state,
+        ...state,
         activeSeat: event.activeSeat,
         round: event.round,
         phase: "roll",
         doublesInTurn: 0,
       };
     case "SentToIsland":
-      return updatePlayer(_state, event.seat, (player) => ({
+      return updatePlayer(state, event.seat, (player) => ({
         ...player,
         position: ISLAND_TILE_INDEX,
         onIsland: true,
         islandTurns: 0,
       }));
     case "IslandEscapeFailed":
-      return updatePlayer(_state, event.seat, (player) => ({
+      return updatePlayer(state, event.seat, (player) => ({
         ...player,
         islandTurns: event.islandTurns,
       }));
     case "LeftIsland":
-      return updatePlayer(_state, event.seat, (player) => ({
+      return updatePlayer(state, event.seat, (player) => ({
         ...player,
         onIsland: false,
         islandTurns: 0,
       }));
     case "GameOver":
       return {
-        ..._state,
+        ...state,
         status: "finished",
         result: {
           winner: event.winner,
@@ -172,7 +177,24 @@ export function applyEvent(_state: PublicState, event: GameEvent): PublicState {
           standings: event.standings,
         },
       };
+    default: {
+      const unhandled: never = event;
+      throw new Error(`Unhandled game event: ${JSON.stringify(unhandled)}`);
+    }
   }
+}
+
+/**
+ * Total money in the match: player cash plus the bank's balance. Every event
+ * must leave this unchanged. That is the money-conservation invariant from
+ * GAME_DESIGN.md, asserted in `invariants.test.ts` and reported by the
+ * simulator once it exists.
+ */
+export function totalMoney(state: PublicState): number {
+  return state.players.reduce(
+    (sum, player) => sum + player.cash,
+    state.bankLedger,
+  );
 }
 
 function rollDie(rngState: number): {
@@ -300,7 +322,6 @@ function moveEvents(
       type: "SalaryPaid",
       seat: player.seat,
       amount: config.startSalary,
-      cash: player.cash + config.startSalary,
     });
   }
 
@@ -472,6 +493,10 @@ export function applyAction(
         state: nextState,
         events: [...turn.events, ...endEvents],
       };
+    }
+    default: {
+      const unhandled: never = action.type;
+      throw new Error(`Unhandled action: ${String(unhandled)}`);
     }
   }
 }
