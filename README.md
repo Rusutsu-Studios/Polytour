@@ -47,8 +47,11 @@ pnpm verify:dice path/to/downloaded-proof.json
 Browser tests use the local Worker and four isolated browser contexts; the drand
 integration requires its public relay to be reachable. `check:drand` waits for a
 real future round and writes evidence under the ignored `.local/` directory.
-CI runs the deterministic/browser flows with `--grep-invert @live`; the tagged
+CI runs the deterministic/browser flows with `--grep-invert '@live'`; the tagged
 live integration is run explicitly during release verification.
+Set `POLYTOUR_BASE_URL` to a branch Preview URL to run
+`pnpm test:e2e e2e/room-flow.spec.ts` against the deployed Worker. The UI regression
+fixture in `client-flow.spec.ts` requires the local Vite development server.
 
 ## Prototype boundaries
 
