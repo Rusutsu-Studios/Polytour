@@ -16,6 +16,8 @@
     "sim": "tsx tools/sim/run.ts",
     "verify:dice": "tsx tools/randomness/verify.ts",
     "check:drand": "tsx tools/randomness/live-check.ts",
+    "check:bundle": "node tools/ci/check-bundle-size.ts",
+    "check:wrangler": "node tools/ci/check-wrangler-config.ts",
     "build": "pnpm typecheck && vite build",
     "preview": "pnpm run build && vite preview",
     "deploy": "pnpm run build && wrangler deploy",

@@ -68,6 +68,10 @@ a flag; don't depend on it for launch.
 | Per-file asset size | < 25 MiB (hard Workers Static Assets limit) |
 | Device pixel ratio | clamp to `[1, 2]` desktop, `[1, 1.5]` mobile |
 
+CI enforces the lobby JS budget and the per-file asset limit on every pull request
+(`pnpm check:bundle`, constants in `tools/ci/check-bundle-size.ts`); change the
+budget here and there together.
+
 Use drei's `<PerformanceMonitor>` to step quality down (shadows → bloom → DPR)
 automatically, and `@pmndrs/detect-gpu` to pick the initial tier.
 
