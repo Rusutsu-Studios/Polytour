@@ -265,7 +265,9 @@ test("@live strict drand publishes a future commitment, verifies a live beacon, 
   }, credential);
   await actor.page.reload();
   await expect(actor.page.locator(".player-card")).toHaveCount(4);
-  await actor.page.locator(".proof-panel summary").click();
+  await actor.page
+    .getByRole("button", { name: "Dés et preuve", exact: true })
+    .click();
   await expect(actor.page.locator(".proof-panel")).toContainText(
     "Signature vérifiée par le serveur",
   );

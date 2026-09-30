@@ -14,8 +14,16 @@ wins, and future drand commitments provide verified uniform dice. Costs at the
 first city and Tokyo match supplied captures; the remaining economy is provisional.
 
 The checklist below records implemented parts, not completion of every phase's
-acceptance criteria. A real phone performance check, human group playtest,
-exact economy comparison and a balance pass remain necessary.
+acceptance criteria. The user clarified on 1 October 2026 that PC is the priority:
+the board fills the desktop viewport, player HUDs sit at its corners and details
+open only when requested. Minimum layout target: 1280×720; main review sizes:
+1440×900 and 1920×1080. Mobile is best effort, with a dedicated adaptation optional
+later. The replacement desktop layout is locally verified at all three sizes,
+including a full four-context match, real drand proof export and an independent
+visual review with no remaining material defects. Its remote Preview after push,
+target-PC FPS, human group playtest, exact economy comparison and balance pass
+remain to verify. See [PLAYABLE_CHECKPOINT.md](PLAYABLE_CHECKPOINT.md) for dated
+results and the distinction between live gameplay and presentation fixtures.
 
 ## Phase 0 — Scaffold (½ week)
 
@@ -68,10 +76,22 @@ exact economy comparison and a balance pass remain necessary.
 - [x] Director queue + `viewState`/`serverState` stores, speed control, catch-up
 - [ ] Handlers for every event in [PROTOCOL.md](PROTOCOL.md) (placeholder-quality where needed)
 - [x] Keyframed dice
-- [x] HUD: player cards, money counters, decision cards, countdown rings (Motion)
-- [ ] Decide 3D vs 2D for good based on a mid-range phone test (see TECH_STACK.md)
+- [x] Initial HUD, money, decision and countdown implementation (before the PC layout replacement)
+- [x] PC match composition: viewport-filling board, four compact corner HUDs,
+      contextual decisions and closed-by-default journal/proof/help/inspection tools
+- [x] Verify mouse/keyboard UI, overlay dismissal, reduced-animation toggle and whole-board
+      visibility at 1280×720, 1440×900 and 1920×1080
+- [x] Verify 2× speed, real match countdown and active-event skip through a real roll
+- [x] Presentation fixtures: building levels 1–5, six purchase choices at 1280×720
+      without HUD collisions, and an off-turn debtor's decision (Worker unmodified)
+- [ ] Confirm the PC replacement against the remote Worker Preview after push
+- [ ] Measure active-animation FPS on a documented desktop PC/GPU; retain Three.js
+      without making optional phone support determine the renderer
 
-**Done when:** a full game is playable in the 3D client at 60 fps on a mid-range phone.
+**Done when:** a full four-seat match is playable in the desktop 3D client at all
+three layout targets, essential choices are visible without opening unrelated
+tools, and measured performance on the documented target PC meets the chosen
+budget. Aiming for 60 fps is a PC target, not an unverified claim or a phone gate.
 
 ## Phase 4 — Accounts & matchmaking (1–2 weeks)
 
@@ -106,4 +126,5 @@ exact economy comparison and a balance pass remain necessary.
 ## Phase 7 — Post-launch
 
 - Ranked mode + seasons, 2v2 teams, spectating, replay viewer (from R2 logs),
-  cosmetics (pawn skins, dice skins, board themes), friends & invites, Capacitor app-store build.
+  cosmetics (pawn skins, dice skins, board themes), friends & invites; optional
+  mobile/touch adaptation, PWA installation and Capacitor app-store build.
