@@ -5,3 +5,7 @@
 allowBuilds:
   esbuild: true
   workerd: true
+
+# Run package scripts through pnpm's portable shell so `VAR=value cmd` (used by
+# `deploy:staging` to pick the Vite build environment) also works on Windows.
+shellEmulator: true

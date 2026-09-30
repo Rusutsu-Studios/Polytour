@@ -193,6 +193,28 @@ always answers with `welcome` first (protocol version, seat, current `seq`), the
 - Otherwise → `welcome` carries a full snapshot; the client snaps `viewState` to it
   (no animation).
 
+### Deploys and games in progress
+
+Every deploy restarts every Durable Object and drops all WebSockets; no Cloudflare
+setting prevents it. A deploy must cost players a 1–2 s "reconnecting…", never the
+game:
+
+- Nothing lives only in memory: state, event log, and timers are in SQLite (persist
+  first, then broadcast), and the alarm survives the restart.
+- Clients reconnect on their own and resync through `welcome` + `lastSeq`; a
+  protocol mismatch reloads the page ([PROTOCOL.md → Versioning](PROTOCOL.md#versioning)).
+- The 60 s `grace:<seat>` timer is far longer than a deploy reconnect, so a deploy
+  never hands a seat to a bot.
+- **New code must load games saved by the previous version.** `meta` stores a
+  `stateVersion`; on load the DO migrates older state JSON step by step before
+  handing it to the engine. Never ship a state shape change without its migration
+  and a test that loads the previous shape.
+- **Rule and balance changes never rewrite a match in progress.** The game state
+  records the `rulesVersion` it was created with and the engine honors it until the
+  game ends (matches last ~20 minutes, so old rules only need to survive briefly).
+- A DO class lifecycle change (new, renamed, or deleted class in `migrations`) cannot
+  be rolled back or deployed gradually: ship it on its own.
+
 ## Matchmaker Durable Object
 
 One instance per queue, e.g. `getByName("quick-4p")`. Holds hibernatable sockets of
@@ -236,6 +258,26 @@ cached for 60 s with Workers Cache.
 - Chat: length limit, rate limit, profanity filter, per-player mute. Emotes preferred over free text for quick-match.
 - Room codes: 6 chars from an unambiguous alphabet (no 0/O/1/I), ~1B combinations; rate-limit join attempts.
 - Never expose the PRNG seed, other players' session tokens, or internal user ids beyond what the UI needs.
+
+## Environments and deploys
+
+| Worker | Resources | Deployed by |
+| --- | --- | --- |
+| `polytour` (production) | D1 `polytour`, R2 `polytour-replays` | Workers Builds on push to `main` |
+| `polytour-staging` | D1 `polytour-staging`, R2 `polytour-replays-staging` | Workers Builds on push to `staging` |
+
+- Both Workers live in the Rusutsu Studios account, pinned by `account_id` in
+  `wrangler.jsonc` so no command can reach another account. Locally, create a
+  Wrangler auth profile and bind it to the repo directory
+  (`wrangler auth create polytour`, then `wrangler auth activate polytour <repo>`),
+  which leaves other Cloudflare logins untouched.
+- With the Cloudflare Vite plugin the environment is chosen at **build** time with
+  `CLOUDFLARE_ENV`, not with `wrangler deploy --env`. The staging Worker's Workers
+  Builds settings set the build variable `CLOUDFLARE_ENV=staging`.
+- Workers Builds and CI take pnpm from `packageManager` in `package.json` and Node
+  from `.node-version`. Bump them there, not in the dashboard or the workflow.
+- Staging exists to try a change against real Cloudflare resources with throwaway
+  data. It shares the account's Free-plan quotas with production.
 
 ## Cost model (rough)
 

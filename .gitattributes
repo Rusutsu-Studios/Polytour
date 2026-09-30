@@ -1,0 +1,2 @@
+# Biome and the Workers toolchain expect LF; keep it on Windows checkouts too.
+* text=auto eol=lf

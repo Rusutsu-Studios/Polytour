@@ -1,6 +1,9 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "polytour",
+  // Rusutsu Studios account. Pinned so no command can reach another account;
+  // the `polytour` Wrangler auth profile is bound to the repo directory.
+  "account_id": "6fbe63b84a8636139e419b1383eeefcb",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-09-30",
   "assets": {
@@ -19,11 +22,21 @@
       "new_sqlite_classes": ["GameRoom", "Matchmaker"]
     }
   ],
-  "d1_databases": [{ "binding": "DB", "database_name": "polytour" }],
-  "r2_buckets": [{ "binding": "REPLAYS" }],
-  "analytics_engine_datasets": [
-    { "binding": "TELEMETRY", "dataset": "polytour_events" }
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "polytour",
+      "database_id": "f28fcd42-85a6-4964-b22d-9b2f00711080"
+    }
   ],
+  "r2_buckets": [{ "binding": "REPLAYS", "bucket_name": "polytour-replays" }],
+  // Analytics Engine (TELEMETRY → polytour_events / polytour_events_staging) comes
+  // back with the telemetry task in ROADMAP Phase 6, once it is enabled on the account.
+
+  // Served on *.workers.dev until a custom domain lands (ROADMAP Phase 6). Version
+  // preview URLs are never generated for Workers with Durable Objects.
+  "workers_dev": true,
+  "preview_urls": false,
   "observability": {
     "enabled": true
   },
@@ -37,11 +50,14 @@
         ]
       },
       "d1_databases": [
-        { "binding": "DB", "database_name": "polytour-staging" }
+        {
+          "binding": "DB",
+          "database_name": "polytour-staging",
+          "database_id": "2194af05-40ee-4469-93cc-1dfad47c2af2"
+        }
       ],
-      "r2_buckets": [{ "binding": "REPLAYS" }],
-      "analytics_engine_datasets": [
-        { "binding": "TELEMETRY", "dataset": "polytour_events_staging" }
+      "r2_buckets": [
+        { "binding": "REPLAYS", "bucket_name": "polytour-replays-staging" }
       ]
     }
   }
