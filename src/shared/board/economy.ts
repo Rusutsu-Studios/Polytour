@@ -17,6 +17,8 @@ export const ECONOMY = {
   taxPercent: 10,
   minimumTax: 50,
   islandReleaseFee: 100,
+  islandMaxFailedEscapes: 2,
+  doublesToIsland: 3,
   worldTourFee: 50,
 } as const;
 
