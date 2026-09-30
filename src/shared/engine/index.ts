@@ -1,4 +1,5 @@
 export {
+  applyAction,
   applyEvent,
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -6,14 +7,22 @@ export {
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";
 export type {
+  Action,
+  ApplyActionResult,
   CreateGameResult,
+  DiceRolledEvent,
   EngineContext,
   GameConfig,
   GameCreatedEvent,
   GameEvent,
   GameState,
+  PlayerMovedEvent,
   PlayerState,
   PublicState,
+  RollAction,
+  RuleError,
+  SalaryPaidEvent,
   Seat,
   SeatInfo,
+  TurnPhaseChangedEvent,
 } from "./types.js";
