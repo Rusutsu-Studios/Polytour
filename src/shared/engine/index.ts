@@ -4,6 +4,7 @@ export {
   createGame,
   DEFAULT_GAME_CONFIG,
   toPublic,
+  totalMoney,
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";
 export type {
