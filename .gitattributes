@@ -1,0 +1,30 @@
+# Text files are stored and checked out with LF everywhere, including Windows.
+# Without `eol=lf`, a Windows clone with `core.autocrlf=true` gets CRLF working
+# copies and `pnpm lint` reports a formatter error on every file, while CI on
+# Linux stays green. Pinning LF here keeps the two in agreement.
+* text=auto eol=lf
+
+# Binary assets: never normalized, never diffed as text.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.webp   binary
+*.avif   binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.glb    binary
+*.ktx2   binary
+*.bin    binary
+*.mp3    binary
+*.ogg    binary
+*.wav    binary
+*.webm   binary
+*.mp4    binary
+*.zip    binary
+
+# Generated: collapse in diffs and exclude from language stats.
+pnpm-lock.yaml -diff linguist-generated
