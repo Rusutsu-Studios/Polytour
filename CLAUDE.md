@@ -58,8 +58,8 @@ pnpm test           # Vitest (engine in Node, worker/DO tests in workerd)
 pnpm typecheck      # tsc -b
 pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
-pnpm deploy         # build + wrangler deploy
-pnpm deploy:staging # build + deploy the isolated staging environment
+pnpm run deploy     # build + wrangler deploy (bare `pnpm deploy` is a pnpm builtin)
+pnpm deploy:staging # build with CLOUDFLARE_ENV=staging + deploy the staging Worker
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
 ```
 
@@ -107,6 +107,13 @@ schema, respectively; do not imply that either exists before its phase.
   in `wrangler.jsonc` are append-only — never edit or remove a shipped tag.
 - D1 holds cross-match data (users, match results, ratings). Game-in-progress state
   lives only in the DO.
+- Every deploy restarts all DOs mid-game. New code must load state saved by the
+  previous version (`stateVersion` migration) and never change the rules of a match
+  already running (`rulesVersion`). See ARCHITECTURE.md → Deploys and games in progress.
+- The Rusutsu Studios account is pinned by `account_id` in `wrangler.jsonc`; locally,
+  use the `polytour` Wrangler auth profile. Production deploys from `main` and staging
+  from `staging` via Workers Builds. With the Vite plugin, pick the environment at
+  build time (`CLOUDFLARE_ENV=staging`), never with `wrangler deploy --env`.
 - Secrets via `wrangler secret put`; local values in `.dev.vars` (gitignored).
 - Check current Cloudflare docs before relying on limits, pricing, or compat flags.
   Set `compatibility_date` to the scaffold date; bump deliberately.
