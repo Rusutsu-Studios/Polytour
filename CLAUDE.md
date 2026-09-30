@@ -59,7 +59,6 @@ pnpm typecheck      # tsc -b
 pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm run deploy     # build + wrangler deploy (bare `pnpm deploy` is a pnpm builtin)
-pnpm deploy:staging # build with CLOUDFLARE_ENV=staging + deploy the staging Worker
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
 ```
 
@@ -111,9 +110,8 @@ schema, respectively; do not imply that either exists before its phase.
   previous version (`stateVersion` migration) and never change the rules of a match
   already running (`rulesVersion`). See ARCHITECTURE.md → Deploys and games in progress.
 - The Rusutsu Studios account is pinned by `account_id` in `wrangler.jsonc`; locally,
-  use the `polytour` Wrangler auth profile. Production deploys from `main` and staging
-  from `staging` via Workers Builds. With the Vite plugin, pick the environment at
-  build time (`CLOUDFLARE_ENV=staging`), never with `wrangler deploy --env`.
+  use the `polytour` Wrangler auth profile. Workers Builds deploys production on every
+  push to `main`; there is no staging environment yet.
 - Secrets via `wrangler secret put`; local values in `.dev.vars` (gitignored).
 - Check current Cloudflare docs before relying on limits, pricing, or compat flags.
   Set `compatibility_date` to the scaffold date; bump deliberately.

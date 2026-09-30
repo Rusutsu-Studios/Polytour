@@ -261,23 +261,23 @@ cached for 60 s with Workers Cache.
 
 ## Environments and deploys
 
-| Worker | Resources | Deployed by |
-| --- | --- | --- |
-| `polytour` (production) | D1 `polytour`, R2 `polytour-replays` | Workers Builds on push to `main` |
-| `polytour-staging` | D1 `polytour-staging`, R2 `polytour-replays-staging` | Workers Builds on push to `staging` |
+One production Worker, `polytour` (D1 `polytour`, R2 `polytour-replays`), served on
+`*.workers.dev`. Workers Builds deploys it on every push to `main`; other branches do
+not build. Pushes that only touch docs or Markdown are excluded, since every deploy
+restarts the running games (see [Deploys and games in progress](#deploys-and-games-in-progress)).
 
-- Both Workers live in the Rusutsu Studios account, pinned by `account_id` in
+- The Worker lives in the Rusutsu Studios account, pinned by `account_id` in
   `wrangler.jsonc` so no command can reach another account. Locally, create a
   Wrangler auth profile and bind it to the repo directory
   (`wrangler auth create polytour`, then `wrangler auth activate polytour <repo>`),
   which leaves other Cloudflare logins untouched.
-- With the Cloudflare Vite plugin the environment is chosen at **build** time with
-  `CLOUDFLARE_ENV`, not with `wrangler deploy --env`. The staging Worker's Workers
-  Builds settings set the build variable `CLOUDFLARE_ENV=staging`.
 - Workers Builds and CI take pnpm from `packageManager` in `package.json` and Node
   from `.node-version`. Bump them there, not in the dashboard or the workflow.
-- Staging exists to try a change against real Cloudflare resources with throwaway
-  data. It shares the account's Free-plan quotas with production.
+- **Staging is deferred** (ROADMAP Phase 6). Its empty resources already exist
+  (Worker `polytour-staging`, D1 `polytour-staging`, R2 `polytour-replays-staging`).
+  When it comes back as an `env.staging` block, remember that with the Cloudflare Vite
+  plugin the environment is chosen at **build** time (`CLOUDFLARE_ENV=staging`), not
+  with `wrangler deploy --env`.
 
 ## Cost model (rough)
 

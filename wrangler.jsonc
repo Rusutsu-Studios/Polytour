@@ -30,8 +30,8 @@
     }
   ],
   "r2_buckets": [{ "binding": "REPLAYS", "bucket_name": "polytour-replays" }],
-  // Analytics Engine (TELEMETRY → polytour_events / polytour_events_staging) comes
-  // back with the telemetry task in ROADMAP Phase 6, once it is enabled on the account.
+  // Analytics Engine (TELEMETRY → polytour_events) comes back with the telemetry
+  // task in ROADMAP Phase 6, once it is enabled on the account.
 
   // Served on *.workers.dev until a custom domain lands (ROADMAP Phase 6). Version
   // preview URLs are never generated for Workers with Durable Objects.
@@ -40,25 +40,5 @@
   "observability": {
     "enabled": true
   },
-  "upload_source_maps": true,
-  "env": {
-    "staging": {
-      "durable_objects": {
-        "bindings": [
-          { "name": "GAME_ROOM", "class_name": "GameRoom" },
-          { "name": "MATCHMAKER", "class_name": "Matchmaker" }
-        ]
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "polytour-staging",
-          "database_id": "2194af05-40ee-4469-93cc-1dfad47c2af2"
-        }
-      ],
-      "r2_buckets": [
-        { "binding": "REPLAYS", "bucket_name": "polytour-replays-staging" }
-      ]
-    }
-  }
+  "upload_source_maps": true
 }
