@@ -33,11 +33,12 @@
   // Analytics Engine (TELEMETRY → polytour_events) comes back with the telemetry
   // task in ROADMAP Phase 6, once it is enabled on the account.
 
-  // Served on *.workers.dev until a custom domain lands (ROADMAP Phase 6). Version
-  // preview URLs are never generated for Workers with Durable Objects; branches get
-  // Worker Previews instead (below).
+  // Served on *.workers.dev until a custom domain lands (ROADMAP Phase 6).
+  // `preview_urls` gives each Worker Preview (below) its own
+  // <preview>-polytour.<subdomain>.workers.dev URL. It is a Worker-level setting, so it
+  // takes effect with the next production deploy.
   "workers_dev": true,
-  "preview_urls": false,
+  "preview_urls": true,
   "observability": {
     "enabled": true
   },
