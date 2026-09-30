@@ -5,15 +5,30 @@ on:
   push:
     branches:
       - main
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A new push to a pull request supersedes its running checks; runs on main
+# always finish so every commit there gets a verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
 jobs:
-  verify:
+  lint:
+    name: Lint & architecture rules
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # AGENTS.md is the shared instruction file for Claude Code and Codex. Claude
       # Code only sees it through this import, so fail if CLAUDE.md loses it.
       - name: CLAUDE.md imports AGENTS.md
@@ -22,28 +37,114 @@ jobs:
             echo "::error file=CLAUDE.md::CLAUDE.md must contain a line with only @AGENTS.md. Put project rules in AGENTS.md."
             exit 1
           }
-      # pnpm version comes from `packageManager` in package.json and Node from
-      # .node-version, the same pins Workers Builds uses for deploys.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: ./.github/actions/setup
+      # Formatting, lint, import order, and the AGENTS.md rules encoded in
+      # biome.json: shared/client/worker import boundaries, no Math.random or
+      # Date in shared/, no timers or non-hibernating sockets in worker/.
+      # Findings are annotated on the pull request diff.
+      - run: pnpm exec biome ci .
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # Regenerates worker-configuration.d.ts from wrangler.jsonc first, so
+      # bindings and code cannot drift apart.
       - run: pnpm typecheck
-      - run: pnpm lint
+
+  test:
+    name: Unit & Worker tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # Engine tests and Worker/DO tests inside workerd. Vitest fails on
+      # `.only` in CI and annotates failures on the diff.
       - run: pnpm test
-      - run: pnpm build
+
+  build:
+    name: Build, budgets & deploy dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # Workers Builds runs `pnpm run build` (typecheck + vite build); the
+      # typecheck half has its own job above.
+      - run: pnpm exec vite build
+      # Lobby JS budget from docs/TECH_STACK.md and Cloudflare asset and Worker
+      # size limits; the table lands in the job summary.
+      - run: pnpm check:bundle
+      # Everything `wrangler deploy` does except the upload: validates the
+      # generated config, bindings, migrations and assets. Needs no credentials.
+      - run: pnpm exec wrangler deploy --dry-run
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
+      # Builds, serves the production bundle with `vite preview` (Worker and
+      # Durable Objects in workerd), and smoke-tests it at desktop and phone
+      # sizes.
+      - run: pnpm test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+  cloudflare:
+    name: Cloudflare config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Keeps the read-only token so the base revision can be fetched below.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      # DO migrations append-only against the base revision, SQLite-only
+      # classes, every binding backed by a migration, and Previews never bound
+      # to production D1/R2/KV.
+      - name: Check wrangler.jsonc
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            pnpm check:wrangler --base "$BASE_SHA"
+          else
+            pnpm check:wrangler
+          fi
 
   # The repo is public, so a secret in any commit is a leak even after a later
   # commit deletes it. Scan all history, not just the diff. This runs the gitleaks
   # CLI directly because gitleaks-action needs a paid license for organization repos.
   secrets:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Install gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -60,3 +161,46 @@ jobs:
         run: |
           gitleaks git --redact --verbose --no-banner .
           gitleaks dir --redact --verbose --no-banner .
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Blocks pull requests that add a dependency (npm or GitHub Action) with
+      # a known high or critical vulnerability. Only the diff counts, so a new
+      # advisory on an existing package never turns an unrelated PR red.
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime, development
+
+  # The single check to require in branch protection. It fails if any job above
+  # failed or was cancelled (skipped jobs, like dependency review on pushes, are
+  # fine). `verify` and `secrets` keep their earlier check names, so existing
+  # required checks keep working.
+  verify:
+    if: always()
+    needs:
+      - lint
+      - typecheck
+      - test
+      - build
+      - e2e
+      - cloudflare
+      - secrets
+      - dependency-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          exit 1
+      - run: echo "All CI jobs passed."
