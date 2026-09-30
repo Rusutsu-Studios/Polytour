@@ -19,10 +19,10 @@ record them in `package.json`; this doc records the *choices* and the reasons.
 | Post-processing | **@react-three/postprocessing** | Selective bloom, tone mapping, SMAA, vignette in one merged pass. | Hand-rolled EffectComposer. |
 | Scene animation | **GSAP** (incl. CustomEase, MotionPath) | Best-in-class timelines/sequencing; tweens any JS object (Vector3, Quaternion, uniforms). Free for commercial use including plugins. | anime.js (weaker sequencing), react-spring (physics-y, harder to choreograph precise sequences). |
 | UI animation | **Motion** (`motion/react`) | Layout animations, `AnimatePresence`, gestures for DOM HUD and menus. | GSAP for DOM too (possible, but Motion is more idiomatic in React UI). |
-| Dice physics (phase 2) | **Rapier** (`@react-three/rapier` / `@dimforge/rapier3d-compat`) | Deterministic WASM physics; used for the "pre-simulate then remap faces" dice trick. Lazy-loaded. | cannon-es (unmaintained-ish, less deterministic). |
+| Dice physics (Phase 5) | **Rapier** (`@react-three/rapier` / `@dimforge/rapier3d-compat`) | Fast, stable WASM physics; used for the "pre-simulate, record, remap faces, play back" dice trick. Lazy-loaded. | cannon-es (unmaintained-ish, less stable). |
 | Styling | **Tailwind CSS v4** | Fast iteration on HUD/menus; design tokens as CSS vars. | CSS modules (fine, slower to iterate). |
 | Client state | **Zustand** | Tiny; works inside and outside React (Director and R3F `useFrame` read it without re-renders). | Redux Toolkit (more ceremony), Jotai (fine, but Zustand fits the two-store model better). |
-| Networking | **`partysocket`** client | Reconnecting WebSocket with backoff and message buffering; made for DO-backed rooms. | Hand-rolled reconnect logic. |
+| Networking | **`partysocket`** client | Reconnecting WebSocket with backoff; made for DO-backed rooms. Use it with `maxEnqueuedMessages: 0`: its offline buffer would replay stale intents before `sync` (see PROTOCOL.md). | Hand-rolled reconnect logic. |
 | Audio | **Howler.js** | Audio sprites, pooling, mobile unlock quirks handled. | Raw Web Audio (more work), Tone.js (music-focused, overkill). |
 | Tests | **Vitest 4** + **`@cloudflare/vitest-plugin`**, **fast-check**, **Playwright** | Engine unit + property tests, DO tests inside `workerd`, end-to-end multi-tab games. | Jest (not supported for Workers). |
 | Lint/format | **Biome** | One fast tool for lint + format. | ESLint + Prettier (slower, more config). |
