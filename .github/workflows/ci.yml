@@ -184,6 +184,33 @@ jobs:
   # failed or was cancelled (skipped jobs, like dependency review on pushes, are
   # fine). `verify` and `secrets` keep their earlier check names, so existing
   # required checks keep working.
+  # Every commit must be authored by a person. An agent records itself with a
+  # Co-Authored-By trailer instead, so the repository's contributor list stays
+  # human and attribution is not split across a second account.
+  authorship:
+    name: Commit authorship
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reject commits authored by an agent
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          offenders=$(git log --format='%h %an <%ae> %cn <%ce>' "$BASE_SHA..$HEAD_SHA" |
+            grep -Ei '<[^>]*@(anthropic|openai)[.]com>' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::Commits must be authored by a person. Record the agent with a Co-Authored-By trailer instead."
+            echo "$offenders"
+            exit 1
+          fi
+          echo "Every commit author and committer is a person."
+
   verify:
     if: always()
     needs:
@@ -195,6 +222,7 @@ jobs:
       - cloudflare
       - secrets
       - dependency-review
+      - authorship
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
