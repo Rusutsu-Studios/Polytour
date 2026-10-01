@@ -184,6 +184,13 @@ the public Director immediately after that click; subsequent bot events can
 legitimately begin another animation. A prior overlapping pair of test runs
 conflicted over artifacts and server lifetime; the final full run was serial.
 
+The deployed branch Preview at `f985ff0` passes all four production browser
+scenarios in **31.9 seconds** over HTTPS/WSS, including the complete four-seat
+match with reconnect and the legacy proof/new-room flow. The served JavaScript
+asset matches the locally verified production build. Both GitHub verification
+runs and the Cloudflare Preview build pass for that revision. No main-branch
+merge or production publication is implied by this branch verification.
+
 Authored presentation fixtures have been visually examined at 1280×720,
 1440×900 and 1920×1080. They cover staged purchases, festival rent, the custom
 hotel option, all building levels, and a victory where the actual winner differs
