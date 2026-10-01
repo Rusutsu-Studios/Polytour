@@ -28,8 +28,12 @@ building entrances and terraces, a local purchase accent, larger pawn identities
 in corner HUDs, and illustrated construction choices with engine-derived rent.
 The winner's name, victory condition and final fortune lead the finished state.
 The default staged hotel rule is explicit in the relevant decision; new-room
-construction cannot offer an initial hotel. These refinements need a fresh full
-browser pass; the results below describe the earlier verified revision.
+construction cannot offer an initial hotel. Six local browser scenarios pass in
+43.4 seconds; the deployed Preview at f985ff0 passes all four production scenarios
+in 31.9 seconds. The staged-rule 1,000-game report passes all invariants while
+still missing balance targets. Eighty-six unit/Worker tests, typecheck, lint,
+build and size budgets pass. The dated detail lives in PLAYABLE_CHECKPOINT.md;
+the results below describe the earlier composition verification.
 
 ## Verification and unresolved work
 
