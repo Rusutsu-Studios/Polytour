@@ -16,9 +16,12 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
 - **Style:** stylized low-poly with soft gradients, baked ambient occlusion, rounded
   bevels. Think "collectible toy", not realism. Each country gets a distinct color
   and a signature landmark model.
-- **Camera:** fixed diagonal isometric framing with an orthographic camera for
-  the PC board. Default view keeps all corners visible; any future action shot
-  must return to that frame and preserve access to the current decision.
+- **Camera:** fixed isometric framing with an orthographic camera for the PC
+  board, aimed from the Start corner: Start sits at the front and play leaves it
+  to the left, clockwise on screen. Default view keeps all corners visible
+  between the top tools and the bottom choice; any future action shot must
+  return to that frame and preserve access to the current decision. Geometry
+  lives in `client/scene/board-layout.ts` and its orientation is unit-tested.
 - **Lighting:** one warm key light with soft shadows (or baked + `ContactShadows`),
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),
@@ -96,6 +99,13 @@ newly started construction effect. Building bases, cornices and entrances are
 instanced; hotels and terraced landmarks stay visually distinct. These are the
 implemented construction accents, not the full sound/particle specification in
 the signature-moment table above.
+
+## Current dice feedback
+
+The dice take the roller's color and leave from the roller's side of the board,
+spinning to the server's values on the lawn's chalk circle. A small scoreboard
+then pops up with their total (gold for a double). The throw and the reveal fit
+the shared 1 s dice budget; reduced motion and skip snap straight to the result.
 
 ## Current illustrated moments
 

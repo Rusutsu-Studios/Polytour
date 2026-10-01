@@ -362,6 +362,46 @@ No rules, protocol, storage schema, billing or Durable Object behavior changes i
 this follow-up. These checks use local rooms or intercepted failures, never remote
 Durable Objects. Static Preview publication does not restore the exhausted quota.
 
+## Tabletop orientation and board look — 2 October 2026
+
+The user asked for the board to start on the right and play to go left, like the
+classic printed board and the reference screenshots. The camera now looks at the
+board from its Start corner: Start is at the front, a pawn leaving it walks left
+toward the island, then on to the festival at the back and the world tour on the
+right. This is the clockwise movement the rules already describe; no tile index,
+rule or protocol changes.
+
+- Geometry moved into `client/scene/board-layout.ts`. Unit tests check the
+  orientation and that play runs clockwise on screen. They also cover lots
+  filling the ring without overlaps, upright left-to-right printing on every
+  side, building plots above the print, facades toward the camera, pawns on the
+  road, and pawns of different players never colliding (including beside
+  corners). Each cash reserve also lies beside its own HUD.
+- Lots use classic proportions (large corner squares, seven deep lots per side)
+  with a strong colored plot, small name and large compact price. Corners carry
+  a printed Start, a palm island, a festival arena and an airport; a road rings
+  the mown lawn.
+- Corner HUDs become a portrait tile, a player-colored name ribbon and an ivory
+  cash plate. The sky gains a radial gradient and faint floating tiles.
+- Dice take the roller's color, leave from the roller's side and reveal their
+  total within the unchanged 1 s dice budget.
+
+Verification on this machine:
+
+- 122 unit/Worker tests (10 new layout tests), TypeScript and Biome pass.
+- The 15 CI browser scenarios (`--grep-invert @live`) pass. The language
+  switch scenario fails intermittently, about one run in three, on this branch
+  and equally on unchanged `main`, so that flakiness predates this change.
+- Welcome and match views are inspected at 1280×720, 1440×900 and 1920×1080,
+  plus a 390×844 phone view (best effort). A real roll shows the throw, the total
+  and the pawn walking left from Start.
+- The debug monitor reads about 240 draw calls per frame including the shadow
+  pass, after instancing the dice pips. That is above the 150 planning target in
+  ANIMATION.md; the four pawns (about 17 meshes each) are the largest remaining
+  cost. Software-rendered FPS figures are not hardware evidence.
+- On the two back sides, a pawn standing on the road can hide part of the price
+  of its own lot; the inspector and decision dialogs still show it.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,
