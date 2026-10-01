@@ -176,7 +176,7 @@ export function maxBuildLevel(
     return 3;
   return getPlayer(state, seat).laps > 0 ? 4 : 3;
 }
-function propertyRefund(state: PublicState, tile: number): number {
+export function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
     (propertyInvestedValue(state, tile) * ECONOMY.sellBackPercent) / 100,
   );
@@ -186,6 +186,14 @@ function purchaseCost(tileIndex: number, level: BuildLevel): number {
   return tile && isCityTile(tile)
     ? getTileInvestedValue(tileIndex, level)
     : ECONOMY.resortPrice;
+}
+/** The rent owed after choosing at most one protection; null pays it in full. */
+export function rentCardPayment(amount: number, card: KeepCard | null): number {
+  return card === "Guardian Angel"
+    ? 0
+    : card === "Coupon"
+      ? Math.ceil(amount / 2)
+      : amount;
 }
 export function actionCost(state: PublicState, action: Action): number {
   const pending = state.pending;
@@ -1078,10 +1086,7 @@ function resolver(initial: GameState, context: EngineContext) {
             kind: "rent",
             from: seat,
             to: pending.owner,
-            amount:
-              action.card === "Guardian Angel"
-                ? 0
-                : Math.ceil(pending.amount / 2),
+            amount: rentCardPayment(pending.amount, action.card),
             tile: pending.tile,
           });
         }
@@ -1092,7 +1097,7 @@ function resolver(initial: GameState, context: EngineContext) {
             kind: "rent",
             from: seat,
             to: pending.owner,
-            amount: pending.amount,
+            amount: rentCardPayment(pending.amount, null),
             tile: pending.tile,
           });
         break;

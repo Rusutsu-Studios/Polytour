@@ -36,6 +36,7 @@ class Director {
   private queue: GameEvent[] = [];
   private generation = 0;
   private animator: SceneAnimator | null = null;
+  private presenter: SceneAnimator | null = null;
 
   getSnapshot = () => this.value;
   subscribe = (listener: () => void) => {
@@ -54,10 +55,21 @@ class Director {
       animator.cancel();
     };
   }
+  /** DOM moments join the same event queue without replacing the 3D scene. */
+  registerPresenter(presenter: SceneAnimator) {
+    this.presenter?.cancel();
+    this.presenter = presenter;
+    presenter.snap(this.value.viewState);
+    return () => {
+      if (this.presenter === presenter) this.presenter = null;
+      presenter.cancel();
+    };
+  }
   reset(state: PublicState | null) {
     this.generation += 1;
     this.queue = [];
     this.animator?.cancel();
+    this.presenter?.cancel();
     this.update({
       serverState: state,
       viewState: state,
@@ -65,6 +77,7 @@ class Director {
       history: [],
     });
     this.animator?.snap(state);
+    this.presenter?.snap(state);
   }
   receive(events: readonly GameEvent[]) {
     let state = this.value.serverState;
@@ -93,13 +106,17 @@ class Director {
             ? applyEvent(previous, event)
             : null;
       if (!next) continue;
-      if (this.animator) {
-        await this.animator.animate(event, {
+      if (this.animator || this.presenter) {
+        const context = {
           previous,
           next,
           speed: this.queue.length > 6 ? 3 : this.value.speed,
           reducedMotion: this.value.reducedMotion,
-        });
+        };
+        await Promise.all([
+          this.animator?.animate(event, context),
+          this.presenter?.animate(event, context),
+        ]);
       }
       if (generation !== this.generation) return;
       this.update({ viewState: next });
@@ -110,8 +127,10 @@ class Director {
     this.generation += 1;
     this.queue = [];
     this.animator?.cancel();
+    this.presenter?.cancel();
     this.update({ viewState: this.value.serverState, busy: false });
     this.animator?.snap(this.value.serverState);
+    this.presenter?.snap(this.value.serverState);
   };
   setSpeed(speed: 1 | 1.5 | 2) {
     this.update({ speed });

@@ -1,24 +1,15 @@
 import { AnimatePresence, animate, motion } from "motion/react";
 import type { CSSProperties, ErrorInfo, ReactNode } from "react";
 import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
-import { BOARD, ECONOMY } from "../shared/board/index.js";
+import { BOARD } from "../shared/board/index.js";
 import type {
-  Action,
   GameEvent,
   PlayerState,
   PublicState,
   Seat,
   WinKind,
 } from "../shared/engine/index.js";
-import {
-  actionCost,
-  getProperty,
-  legalActions,
-  maxBuildLevel,
-  netWorth,
-  previewPropertyRent,
-  propertyRent,
-} from "../shared/engine/index.js";
+import { getProperty, netWorth, propertyRent } from "../shared/engine/index.js";
 import type {
   RandomnessStatus,
   RoomConfig,
@@ -42,30 +33,15 @@ import {
   tileColor,
   tilePrice,
 } from "./ui/board-display.js";
+import CardMoment from "./ui/CardMoment.js";
+import { CARD_NAMES } from "./ui/chance-display.js";
+import DecisionPanel from "./ui/DecisionPanel.js";
 import Icon from "./ui/Icon.js";
+import RoomSettings from "./ui/SettingsDialog.js";
 import "./App.css";
 
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
 const DEFAULT_CONFIG = RoomConfigSchema.parse({});
-const CARD_NAMES: Record<string, string> = {
-  "Grand Tour": "Grand tour",
-  Stranded: "Naufrage",
-  "Jet Set": "Jet-set",
-  "Stadium Call": "À vous le festival",
-  Windfall: "Bonne fortune",
-  "Parking Fine": "Stationnement",
-  Birthday: "Anniversaire",
-  Audit: "Contrôle fiscal",
-  "Guardian Angel": "Ange gardien",
-  Coupon: "Bon de réduction",
-  Earthquake: "Tremblement de terre",
-  "Land Swap": "Échange de terrain",
-  Detour: "Détour",
-  Contractor: "Coup de pouce",
-  Jailbreak: "Liberté",
-  Charity: "Solidarité",
-};
-
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -129,18 +105,6 @@ function PlayerAvatar({ seat }: { seat: Seat }) {
       <i className="avatar-body" />
       <span>{PLAYER_SYMBOLS[seat]}</span>
     </div>
-  );
-}
-
-function BuildingMiniature({ level }: { level: number }) {
-  return (
-    <span className="building-miniature" data-level={level} aria-hidden="true">
-      {["front", "middle", "back"]
-        .slice(0, level > 0 && level < 4 ? level : 1)
-        .map((part) => (
-          <i key={part} />
-        ))}
-    </span>
   );
 }
 
@@ -236,165 +200,6 @@ function MatchResults({
   );
 }
 
-function RoomSettings({
-  config,
-  onChange,
-  disabled = false,
-  save,
-}: {
-  config: RoomConfig;
-  onChange: (config: RoomConfig) => void;
-  disabled?: boolean;
-  save?: { dirty: boolean; onSave: () => void };
-}) {
-  const toggles = [
-    ["lineMonopoly", "Victoire par ligne complète"],
-    ["tripleMonopoly", "Victoire par trois collections"],
-    ["hotelsDirectly", "Hôtels directement achetables"],
-    ["extraRollOnDouble", "Rejouer après un double"],
-    ["botCanBuild", "Les bots peuvent construire"],
-    ["giftCanBankrupt", "Les cadeaux peuvent causer une faillite"],
-  ] as const;
-  return (
-    <details className="settings-disclosure">
-      <summary>
-        Réglages de la partie <span>Personnaliser</span>
-      </summary>
-      <div className="settings-fields">
-        <label>
-          Capital de départ{" "}
-          <span className="amount-caption">{money(config.startingCash)}</span>
-          <input
-            type="number"
-            min={0}
-            max={10_000_000}
-            step={10_000}
-            value={config.startingCash}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                startingCash: Math.max(
-                  0,
-                  Math.min(10_000_000, Math.round(Number(event.target.value))),
-                ),
-              })
-            }
-          />
-        </label>
-        <label>
-          Salaire au départ{" "}
-          <span className="amount-caption">{money(config.startSalary)}</span>
-          <input
-            type="number"
-            min={0}
-            max={1_000_000}
-            step={10_000}
-            value={config.startSalary}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                startSalary: Math.max(
-                  0,
-                  Math.min(1_000_000, Math.round(Number(event.target.value))),
-                ),
-              })
-            }
-          />
-        </label>
-        <label>
-          Durée de partie
-          <select
-            value={config.timeLimitMinutes}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                timeLimitMinutes: Number(event.target.value) as 20 | 60 | 120,
-              })
-            }
-          >
-            {[20, 60, 120].map((value) => (
-              <option key={value} value={value}>
-                {value} minutes
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Festivals initiaux
-          <input
-            type="number"
-            min={0}
-            max={20}
-            step={1}
-            value={config.festivalCount}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                festivalCount: Math.max(
-                  0,
-                  Math.min(20, Math.round(Number(event.target.value))),
-                ),
-              })
-            }
-          />
-        </label>
-        <label>
-          Temps de décision
-          <select
-            value={config.decisionSeconds}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                decisionSeconds: Number(event.target.value),
-              })
-            }
-          >
-            {[15, 30, 45, 60].map((value) => (
-              <option key={value} value={value}>
-                {value} secondes
-              </option>
-            ))}
-          </select>
-        </label>
-        {toggles.map(([key, label]) => (
-          <label className="checkbox-label wide-field" key={key}>
-            <input
-              type="checkbox"
-              disabled={disabled}
-              checked={config[key]}
-              onChange={(event) =>
-                onChange({ ...config, [key]: event.target.checked })
-              }
-            />
-            {label}
-          </label>
-        ))}
-        <p className="field-note wide-field">
-          {config.randomnessMode === "drand"
-            ? "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée."
-            : "Les dés utilisent un aléa cryptographique généré directement sur Cloudflare, sans attendre de signal externe. Les mêmes chances pour tous, sans avantage payant."}{" "}
-          Les loyers et effets restent une première économie à ajuster.
-        </p>
-        {save && (
-          <button
-            type="button"
-            className="button ink wide-field"
-            disabled={disabled || !save.dirty}
-            onClick={save.onSave}
-          >
-            {save.dirty ? "Enregistrer les réglages" : "Réglages enregistrés"}
-          </button>
-        )}
-      </div>
-    </details>
-  );
-}
-
 function BoardFallback({
   state,
   onSelect,
@@ -469,363 +274,6 @@ function eventText(event: GameEvent, state: PublicState): string | null {
       return null;
   }
 }
-const DECISIONS: Record<
-  NonNullable<PublicState["pending"]>["kind"],
-  { title: string; text: string }
-> = {
-  roll: {
-    title: "À vous de jouer !",
-    text: "Lancez les dés et voyez où le voyage vous mène.",
-  },
-  buy: {
-    title: "Une nouvelle adresse ?",
-    text: "Achetez le terrain ou arrivez directement avec un bâtiment.",
-  },
-  build: {
-    title: "Votre ville grandit",
-    text: "Développez cette adresse pour augmenter ses loyers.",
-  },
-  buyout: {
-    title: "Changez les règles du jeu",
-    text: "Rachetez cette propriété à son propriétaire, ou poursuivez le voyage.",
-  },
-  island: {
-    title: "Une pause sur l’île",
-    text: "Tentez un double pour repartir, ou payez votre traversée.",
-  },
-  travel: {
-    title: "Le monde vous attend",
-    text: "Choisissez votre prochaine destination sur le plateau.",
-  },
-  host: {
-    title: "Faites venir le festival",
-    text: "Choisissez une de vos villes. Son loyer sera multiplié.",
-  },
-  "card-target": {
-    title: "À vous de choisir",
-    text: "Sélectionnez la ville qui recevra l’effet de votre carte.",
-  },
-  "rent-card": {
-    title: "Une carte dans votre manche",
-    text: "Utilisez une protection ou réglez le loyer.",
-  },
-  sell: {
-    title: "Retrouvez de la trésorerie",
-    text: "Vendez une propriété pour couvrir votre dette.",
-  },
-};
-function actionLabel(action: Action, state: PublicState) {
-  switch (action.type) {
-    case "Roll":
-      return "Lancer les dés";
-    case "Decline":
-      return state.pending?.kind === "rent-card"
-        ? "Payer le loyer"
-        : state.pending?.kind === "sell"
-          ? "Déclarer faillite"
-          : "Passer";
-    case "PayIsland":
-      return `Quitter l’île · ${money(ECONOMY.islandReleaseFee)}`;
-    case "Buy":
-      return `${LEVEL_NAMES[action.level]} · ${money(actionCost(state, action))}`;
-    case "Build":
-      return `${LEVEL_NAMES[action.level]} · ${money(actionCost(state, action))}`;
-    case "Buyout":
-      return `Racheter · ${state.pending?.kind === "buyout" ? money(state.pending.price) : ""}`;
-    case "Travel":
-      return "Voyager ici";
-    case "ChooseHost":
-      return "Accueillir le festival";
-    case "ChooseTarget":
-      return "Choisir cette ville";
-    case "Sell":
-      return "Vendre cette propriété";
-    case "UseRentCard":
-      return CARD_NAMES[action.card] ?? action.card;
-  }
-}
-
-function DecisionPanel({
-  state,
-  seat,
-  act,
-  blocked,
-  randomness,
-  selected,
-  onSelect,
-}: {
-  state: PublicState;
-  seat: Seat;
-  act: (action: Action) => void;
-  blocked: boolean;
-  randomness: RandomnessStatus | null;
-  selected: number | null;
-  onSelect: (tile: number) => void;
-}) {
-  const { busy } = useDirector();
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  const pending = state.pending;
-  const decisionSeat = pending?.seat ?? state.activeSeat;
-  const ownTurn =
-    decisionSeat === seat &&
-    !state.players.find((player) => player.seat === seat)?.bankrupt;
-  const active = state.players.find((player) => player.seat === decisionSeat);
-  const rngBusy = randomness != null && randomness.status !== "resolved";
-  const waitingForDrand = randomness?.commitment?.mode === "drand";
-  const actions = ownTurn ? legalActions(state, seat) : [];
-  const destinations = actions.filter(
-    (action): action is Extract<Action, { tile: number }> => "tile" in action,
-  );
-  const destination =
-    destinations.find((action) => action.tile === selected) ?? destinations[0];
-  const others = actions.filter((action) => !("tile" in action));
-  const countdown = pending
-    ? Math.max(0, Math.ceil((pending.deadline - now) / 1000))
-    : 0;
-  const description = pending ? DECISIONS[pending.kind] : DECISIONS.roll;
-  const decisionTile =
-    pending && "tile" in pending ? pending.tile : destination?.tile;
-  const decisionProperty =
-    decisionTile !== undefined ? getProperty(state, decisionTile) : undefined;
-  const decisionOwner =
-    decisionProperty?.owner != null
-      ? state.players.find((player) => player.seat === decisionProperty.owner)
-      : undefined;
-  const decisionRent =
-    decisionProperty && decisionTile !== undefined
-      ? propertyRent(state, decisionTile)
-      : null;
-  const construction =
-    decisionTile !== undefined &&
-    BOARD[decisionTile].kind === "city" &&
-    (pending?.kind === "buy" || pending?.kind === "build");
-  const hotelNote =
-    construction &&
-    pending &&
-    "maxLevel" in pending &&
-    Math.min(
-      pending.maxLevel,
-      maxBuildLevel(state, decisionSeat, pending.tile, pending.kind === "buy"),
-    ) < 4 &&
-    !state.config.hotelsDirectly
-      ? state.config.hotelPurchaseRule === "staged-hotels"
-        ? "Hôtel : 3 maisons, un tour complet, puis revenir ici."
-        : "L’hôtel se débloque après votre premier tour complet du plateau."
-      : null;
-  return (
-    <section
-      className={`decision-panel ${ownTurn ? "your-turn" : ""}`}
-      data-kind={pending?.kind ?? "roll"}
-      data-own={ownTurn}
-      data-busy={busy || rngBusy}
-      aria-labelledby="decision-heading"
-      aria-live="polite"
-    >
-      <div className="decision-kicker">
-        <span
-          className="player-symbol"
-          style={{ color: PLAYER_COLORS[decisionSeat] }}
-        >
-          {PLAYER_SYMBOLS[decisionSeat]}
-        </span>
-        <span>
-          {ownTurn
-            ? pending?.kind === "sell"
-              ? "Votre dette à régler"
-              : "À vous de décider"
-            : `Décision de ${active?.name ?? "…"}`}
-        </span>
-        {pending && !rngBusy && (
-          <span
-            className="decision-timer"
-            role="timer"
-            aria-label={`${countdown} secondes restantes`}
-          >
-            {countdown}s
-          </span>
-        )}
-      </div>
-      <h2 id="decision-heading">
-        {busy
-          ? "Le voyage continue…"
-          : rngBusy
-            ? randomness.status === "error"
-              ? waitingForDrand
-                ? "Le signal se fait attendre"
-                : "Le lancer se fait attendre"
-              : waitingForDrand
-                ? "Les dés attendent leur signal"
-                : "Les dés se préparent"
-            : ownTurn
-              ? description.title
-              : `${active?.name} joue`}
-      </h2>
-      <p>
-        {busy
-          ? "Le plateau vous montre les dernières actions."
-          : rngBusy
-            ? waitingForDrand
-              ? "Le tour drand est fixé. Le serveur attend sa publication puis vérifie sa signature."
-              : "Le serveur prépare votre lancer."
-            : ownTurn
-              ? description.text
-              : active?.control === "bot"
-                ? "Votre adversaire réfléchit. Votre prochain tour arrive."
-                : "Vous pouvez explorer les villes pendant son tour."}
-      </p>
-      {decisionTile !== undefined && !busy && !rngBusy && (
-        <div className="decision-property">
-          <strong>{TILE_NAMES[decisionTile]}</strong>
-          <span>
-            {decisionOwner
-              ? `${PLAYER_SYMBOLS[decisionOwner.seat]} ${decisionOwner.name}`
-              : "Ville disponible"}
-            {decisionRent !== null ? ` · loyer ${money(decisionRent)}` : ""}
-          </span>
-        </div>
-      )}
-      {rngBusy && (
-        <div className="rng-wait">
-          <span className="spinner" />
-          {randomness.commitment?.round
-            ? `Signal drand #${randomness.commitment.round}`
-            : "Tirage serveur…"}
-        </div>
-      )}
-      {ownTurn && !busy && !rngBusy && (
-        <div
-          className="decision-actions"
-          data-construction={construction}
-          style={
-            { "--choice-count": Math.max(1, others.length) } as CSSProperties
-          }
-        >
-          {destinations.length > 0 && (
-            <div className="destination-choice">
-              <label htmlFor="destination">
-                {pending?.kind === "sell"
-                  ? "Propriété à vendre"
-                  : "Destination"}
-              </label>
-              <select
-                id="destination"
-                value={destination?.tile}
-                onChange={(event) => onSelect(Number(event.target.value))}
-              >
-                {destinations.map((action) => (
-                  <option
-                    key={`${action.type}-${action.tile}`}
-                    value={action.tile}
-                  >
-                    {TILE_NAMES[action.tile]}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="button primary"
-                disabled={blocked || !destination}
-                onClick={() => {
-                  if (destination) act(destination);
-                }}
-              >
-                {destination ? actionLabel(destination, state) : "Choisir"}
-                <Icon name="arrow" />
-              </button>
-            </div>
-          )}
-          {others.map((action, index) => (
-            <button
-              type="button"
-              key={`${action.type}-${"level" in action ? action.level : index}`}
-              className={`button ${action.type === "Decline" ? "quiet" : action.type === "Roll" || others.length < 3 ? "primary" : "secondary"} ${action.type === "Roll" ? "roll-button" : ""} ${construction && (action.type === "Buy" || action.type === "Build") ? "construction-choice" : ""}`}
-              aria-label={
-                construction &&
-                decisionTile !== undefined &&
-                (action.type === "Buy" || action.type === "Build")
-                  ? `${actionLabel(action, state)} · loyer futur ${money(previewPropertyRent(state, decisionTile, seat, action.level))}`
-                  : actionLabel(action, state)
-              }
-              disabled={blocked}
-              onClick={() => act(action)}
-            >
-              {action.type === "Roll" && <Icon name="dice" size={24} />}
-              {construction &&
-              decisionTile !== undefined &&
-              (action.type === "Buy" || action.type === "Build") ? (
-                <>
-                  <BuildingMiniature level={action.level} />
-                  <span className="construction-name">
-                    {LEVEL_NAMES[action.level]}
-                  </span>
-                  <strong
-                    className="construction-cost"
-                    title={
-                      action.type === "Buy"
-                        ? "Prix total, terrain et constructions inclus"
-                        : "Coût des nouvelles constructions"
-                    }
-                  >
-                    {money(actionCost(state, action))}
-                  </strong>
-                  <span className="construction-rent">
-                    Loyer{" "}
-                    {money(
-                      previewPropertyRent(
-                        state,
-                        decisionTile,
-                        seat,
-                        action.level,
-                      ),
-                    )}
-                  </span>
-                </>
-              ) : (
-                actionLabel(action, state)
-              )}
-              {action.type === "Roll" && <Icon name="arrow" />}
-            </button>
-          ))}
-          {!actions.length && (
-            <p className="field-note">
-              Les choix vont s’actualiser automatiquement.
-            </p>
-          )}
-        </div>
-      )}
-      {ownTurn && construction && !busy && !rngBusy && (
-        <p className="construction-guide">
-          <span>
-            {pending?.kind === "buy"
-              ? "Prix tout compris : terrain + constructions."
-              : `Déjà construit : ${LEVEL_NAMES[decisionProperty?.level ?? 0]}. Vous payez seulement la différence.`}
-          </span>
-          {hotelNote && (
-            <span className="hotel-note">
-              <Icon name="help" size={13} />
-              {hotelNote}
-            </span>
-          )}
-        </p>
-      )}
-      {state.lastRoll && (
-        <div className="last-dice">
-          <span>Dernier lancer</span>
-          <b>{state.lastRoll.dice[0]}</b>
-          <b>{state.lastRoll.dice[1]}</b>
-          <span className="dice-total">
-            = {state.lastRoll.dice[0] + state.lastRoll.dice[1]}
-          </span>
-        </div>
-      )}
-    </section>
-  );
-}
-
 function TileInspector({
   state,
   selected,
@@ -1301,6 +749,8 @@ function MatchView({
           </Suspense>
         </SceneBoundary>
       </div>
+
+      <CardMoment />
 
       <header className="match-topbar">
         <Logo small />

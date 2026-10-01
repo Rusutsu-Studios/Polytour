@@ -3,7 +3,11 @@ import gsap from "gsap";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { BOARD, DECISION_TIMING } from "../../shared/board/index.js";
-import type { PublicState, Seat } from "../../shared/engine/index.js";
+import type {
+  GameEvent,
+  PublicState,
+  Seat,
+} from "../../shared/engine/index.js";
 import { getProperty, propertyRent } from "../../shared/engine/index.js";
 import type { AnimationContext } from "../director/director.js";
 import { director } from "../director/director.js";
@@ -1002,6 +1006,253 @@ function Pawn({
     </group>
   );
 }
+const CASH_PILES: readonly [number, number, number][] = [
+  [1.4, -0.26, 5.65],
+  [-5.65, -0.26, -1.4],
+  [-1.4, -0.26, -5.65],
+  [5.65, -0.26, 1.4],
+];
+const CASH_BUNDLES_PER_SEAT = 6;
+const CASH_TRANSFER_BUNDLES = 3;
+
+function noteTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.fillStyle = "#b9d98f";
+    context.fillRect(0, 0, 256, 128);
+    context.strokeStyle = "#689056";
+    context.lineWidth = 7;
+    context.strokeRect(9, 9, 238, 110);
+    context.strokeStyle = "#8db470";
+    context.lineWidth = 3;
+    context.strokeRect(19, 19, 218, 90);
+    for (const x of [42, 214]) {
+      context.fillStyle = "#749955";
+      context.beginPath();
+      context.ellipse(x, 64, 18, 29, 0, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#e4eec7";
+      context.fillRect(x - 6, 51, 12, 26);
+    }
+    context.fillStyle = "#91b66a";
+    context.beginPath();
+    context.ellipse(128, 64, 39, 34, 0, 0, Math.PI * 2);
+    context.fill();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function cashBundleCount(cash: number) {
+  // Visual denomination only; the authoritative amount is shown by the HUD.
+  return Math.min(
+    CASH_BUNDLES_PER_SEAT,
+    Math.ceil(Math.max(0, cash) / 400_000),
+  );
+}
+
+function CashReserveBadge({ seat, cash }: { seat: Seat; cash: number }) {
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.fillStyle = PLAYER_COLORS[seat];
+      context.beginPath();
+      context.arc(64, 64, 59, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = "#fffaf0";
+      context.lineWidth = 7;
+      context.beginPath();
+      context.arc(64, 64, 51, 0, Math.PI * 2);
+      context.stroke();
+      context.fillStyle = "#fffaf0";
+      context.font = "700 70px Segoe UI, sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(PLAYER_SYMBOLS[seat], 64, 64);
+    }
+    const result = new THREE.CanvasTexture(canvas);
+    result.colorSpace = THREE.SRGBColorSpace;
+    return result;
+  }, [seat]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  const bundle = cashBundleCount(cash) - 1;
+  if (bundle < 0) return null;
+  const [x, y, z] = CASH_PILES[seat];
+  const sideways = seat === 1 || seat === 3;
+  const across = ((bundle % 2) - 0.5) * 0.56;
+  const top = y + 0.144 + Math.floor(bundle / 2) * 0.15;
+  return (
+    <mesh
+      position={[x + (sideways ? across : 0), top, z + (sideways ? 0 : across)]}
+      rotation={[-Math.PI / 2, 0, -Math.PI / 4]}
+    >
+      <planeGeometry args={[0.155, 0.155]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </mesh>
+  );
+}
+
+function CashReserves({ state }: { state: PublicState }) {
+  const notes = useRef<THREE.InstancedMesh>(null);
+  const faces = useRef<THREE.InstancedMesh>(null);
+  const bands = useRef<THREE.InstancedMesh>(null);
+  const pageEdges = useRef<THREE.InstancedMesh>(null);
+  const coins = useRef<THREE.InstancedMesh>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+  const texture = useMemo(noteTexture, []);
+  const { invalidate } = useThree();
+  useEffect(() => () => texture.dispose(), [texture]);
+  useEffect(() => {
+    const body = notes.current;
+    const face = faces.current;
+    const band = bands.current;
+    const edges = pageEdges.current;
+    const gold = coins.current;
+    if (!body || !face || !band || !edges || !gold) return;
+    let count = 0;
+    let coinCount = 0;
+    let edgeCount = 0;
+    for (const player of state.players) {
+      if (player.bankrupt || player.cash <= 0) continue;
+      const [x, y, z] = CASH_PILES[player.seat];
+      const sideways = player.seat === 1 || player.seat === 3;
+      const rotation = sideways ? Math.PI / 2 : 0;
+      // This is a capped physical illustration, never an alternate cash counter.
+      const bundles = cashBundleCount(player.cash);
+      color.set(PLAYER_COLORS[player.seat]);
+      for (let index = 0; index < bundles; index++) {
+        const column = index % 2;
+        const layer = Math.floor(index / 2);
+        const across = (column - 0.5) * 0.56;
+        const dx = sideways ? across : 0;
+        const dz = sideways ? 0 : across;
+        transform.position.set(x + dx, y + 0.065 + layer * 0.15, z + dz);
+        transform.rotation.set(0, rotation + (layer % 2 ? 0.05 : -0.02), 0);
+        transform.scale.set(1, 1, 1);
+        transform.updateMatrix();
+        body.setMatrixAt(count, transform.matrix);
+        band.setMatrixAt(count, transform.matrix);
+        band.setColorAt(count, color);
+        transform.position.y += 0.061;
+        transform.updateMatrix();
+        face.setMatrixAt(count, transform.matrix);
+        for (const offset of [-0.029, 0.006]) {
+          transform.position.y = y + 0.065 + layer * 0.15 + offset;
+          transform.updateMatrix();
+          edges.setMatrixAt(edgeCount++, transform.matrix);
+        }
+        count += 1;
+      }
+      const goldCount = Math.min(6, Math.ceil(player.cash / 600_000));
+      for (let index = 0; index < goldCount; index++) {
+        const along = 0.61;
+        const across = -0.15 + Math.floor(index / 3) * 0.25;
+        transform.position.set(
+          x + (sideways ? across : along),
+          y + 0.035 + (index % 3) * 0.048,
+          z + (sideways ? along : across),
+        );
+        transform.rotation.set(0, 0, 0);
+        transform.updateMatrix();
+        gold.setMatrixAt(coinCount++, transform.matrix);
+      }
+    }
+    body.count = face.count = band.count = count;
+    edges.count = edgeCount;
+    gold.count = coinCount;
+    for (const mesh of [body, face, band, edges, gold]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+    invalidate();
+  }, [state, transform, color, invalidate]);
+  return (
+    <group>
+      {state.players
+        .filter((player) => !player.bankrupt)
+        .map((player) => (
+          <CashReserveBadge
+            key={player.seat}
+            seat={player.seat}
+            cash={player.cash}
+          />
+        ))}
+      <instancedMesh
+        ref={notes}
+        args={[undefined, undefined, CASH_BUNDLES_PER_SEAT * 4]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry args={[0.94, 0.12, 0.48]} />
+        <meshStandardMaterial color="#dae4bd" roughness={0.85} />
+      </instancedMesh>
+      <instancedMesh
+        ref={faces}
+        args={[undefined, undefined, CASH_BUNDLES_PER_SEAT * 4]}
+      >
+        <boxGeometry args={[0.95, 0.012, 0.49]} />
+        <meshStandardMaterial map={texture} roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh
+        ref={pageEdges}
+        args={[undefined, undefined, CASH_BUNDLES_PER_SEAT * 8]}
+      >
+        <boxGeometry args={[0.948, 0.008, 0.488]} />
+        <meshStandardMaterial color="#8da57d" roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh
+        ref={bands}
+        args={[undefined, undefined, CASH_BUNDLES_PER_SEAT * 4]}
+        castShadow
+      >
+        <boxGeometry args={[0.16, 0.145, 0.51]} />
+        <meshStandardMaterial roughness={0.7} />
+      </instancedMesh>
+      <instancedMesh ref={coins} args={[undefined, undefined, 24]} castShadow>
+        <cylinderGeometry args={[0.115, 0.115, 0.04, 12]} />
+        <meshStandardMaterial
+          color="#ffcf59"
+          metalness={0.3}
+          roughness={0.45}
+        />
+      </instancedMesh>
+    </group>
+  );
+}
+
+function cashTransfer(event: GameEvent) {
+  switch (event.type) {
+    case "SalaryPaid":
+    case "PropertySold":
+      return { from: null, to: event.seat, amount: event.amount };
+    case "RentPaid":
+      return { from: event.seat, to: event.owner, amount: event.amount };
+    case "MoneyTransferred":
+      return { from: event.from, to: event.to, amount: event.amount };
+    case "BoughtOut":
+      return {
+        from: event.seat,
+        to: event.previousOwner,
+        amount: event.amount,
+      };
+    case "PropertyBought":
+    case "PropertyUpgraded":
+      return { from: event.seat, to: null, amount: event.amount };
+    default:
+      return null;
+  }
+}
+
 function SceneContent(props: BoardProps) {
   const { state, preview, zoom = 1 } = props;
   const { camera, invalidate, size, gl } = useThree();
@@ -1012,9 +1263,18 @@ function SceneContent(props: BoardProps) {
   const sparks = useRef<THREE.InstancedMesh>(null);
   const sparkTransform = useMemo(() => new THREE.Object3D(), []);
   const sparkProgress = useMemo(() => ({ value: 0 }), []);
+  const cashFlight = useRef<THREE.Group>(null);
+  const cashNotes = useRef<THREE.InstancedMesh>(null);
+  const cashFaces = useRef<THREE.InstancedMesh>(null);
+  const cashBands = useRef<THREE.InstancedMesh>(null);
+  const cashTransform = useMemo(() => new THREE.Object3D(), []);
+  const cashProgress = useMemo(() => ({ value: 0 }), []);
+  const cashColor = useMemo(() => new THREE.Color(), []);
+  const cashTexture = useMemo(noteTexture, []);
   const rimGeometry = useMemo(() => roundedTile(0.018), []);
   const rendered = useRef(false);
   useEffect(() => () => rimGeometry.dispose(), [rimGeometry]);
+  useEffect(() => () => cashTexture.dispose(), [cashTexture]);
 
   useEffect(() => {
     const aspect = size.width / size.height;
@@ -1065,7 +1325,9 @@ function SceneContent(props: BoardProps) {
   useEffect(() => {
     if (preview) return;
     let propertyEffectGeneration = 0;
+    let cashEffectGeneration = 0;
     function snap(next: PublicState | null) {
+      if (cashFlight.current) cashFlight.current.visible = false;
       for (const player of next?.players ?? []) {
         const pawn = pawns.current[player.seat];
         if (!pawn) continue;
@@ -1086,6 +1348,7 @@ function SceneContent(props: BoardProps) {
     }
     function cancel() {
       propertyEffectGeneration += 1;
+      cashEffectGeneration += 1;
       for (const [timeline, done] of timelines.current) {
         timeline.kill();
         done();
@@ -1093,6 +1356,8 @@ function SceneContent(props: BoardProps) {
       timelines.current.clear();
       if (pulse.current) pulse.current.visible = false;
       if (sparks.current) sparks.current.visible = false;
+      if (cashFlight.current) cashFlight.current.visible = false;
+      invalidate();
     }
     function play(
       build: (timeline: gsap.core.Timeline) => void,
@@ -1113,6 +1378,83 @@ function SceneContent(props: BoardProps) {
         timeline.play();
       });
     }
+    async function animateCash(event: GameEvent, context: AnimationContext) {
+      const transfer = cashTransfer(event);
+      const flight = cashFlight.current;
+      const notes = cashNotes.current;
+      const faces = cashFaces.current;
+      const bands = cashBands.current;
+      if (
+        !transfer ||
+        transfer.amount <= 0 ||
+        !flight ||
+        !notes ||
+        !faces ||
+        !bands
+      )
+        return true;
+      const generation = ++cashEffectGeneration;
+      const [bankX, bankZ] = tilePosition(0);
+      const bank: readonly [number, number, number] = [bankX, 0.7, bankZ];
+      const from = transfer.from === null ? bank : CASH_PILES[transfer.from];
+      const to = transfer.to === null ? bank : CASH_PILES[transfer.to];
+      const count = Math.min(
+        CASH_TRANSFER_BUNDLES,
+        1 + Math.floor(Math.log10(1 + transfer.amount / 10_000)),
+      );
+      const identity = transfer.to ?? transfer.from;
+      cashColor.set(identity === null ? "#ffcf59" : PLAYER_COLORS[identity]);
+      notes.count = faces.count = bands.count = count;
+      for (let index = 0; index < count; index++)
+        bands.setColorAt(index, cashColor);
+      if (bands.instanceColor) bands.instanceColor.needsUpdate = true;
+      const updateCash = () => {
+        for (let index = 0; index < count; index++) {
+          const progress = THREE.MathUtils.clamp(
+            (cashProgress.value - index * 0.1) / (1 - (count - 1) * 0.1),
+            0,
+            1,
+          );
+          const arc = Math.sin(progress * Math.PI);
+          cashTransform.position.set(
+            from[0] + (to[0] - from[0]) * progress,
+            from[1] + 0.42 + (to[1] - from[1]) * progress + arc * 1.35,
+            from[2] + (to[2] - from[2]) * progress,
+          );
+          cashTransform.rotation.set(
+            arc * 0.22,
+            progress * Math.PI + index * 0.3,
+            0,
+          );
+          cashTransform.scale.setScalar(0.72 + arc * 0.28);
+          cashTransform.updateMatrix();
+          notes.setMatrixAt(index, cashTransform.matrix);
+          bands.setMatrixAt(index, cashTransform.matrix);
+          cashTransform.position.y += 0.066 * cashTransform.scale.y;
+          cashTransform.updateMatrix();
+          faces.setMatrixAt(index, cashTransform.matrix);
+        }
+        notes.instanceMatrix.needsUpdate = true;
+        faces.instanceMatrix.needsUpdate = true;
+        bands.instanceMatrix.needsUpdate = true;
+      };
+      cashProgress.value = 0;
+      updateCash();
+      flight.visible = true;
+      await play((timeline) => {
+        timeline.to(cashProgress, {
+          value: 1,
+          duration: DECISION_TIMING.moneyAnimation / 1000,
+          ease: "none",
+          onUpdate: updateCash,
+        });
+      }, context);
+      // Reset/skip can resolve an older timeline after a newer one began.
+      if (generation !== cashEffectGeneration) return false;
+      flight.visible = false;
+      invalidate();
+      return true;
+    }
     return director.register({
       snap,
       cancel,
@@ -1121,6 +1463,11 @@ function SceneContent(props: BoardProps) {
           snap(context.next);
           return;
         }
+        if (
+          (cashTransfer(event)?.amount ?? 0) > 0 &&
+          !(await animateCash(event, context))
+        )
+          return;
         if (event.type === "DiceRolled") {
           await play((timeline) => {
             for (let index = 0; index < 2; index++) {
@@ -1292,7 +1639,15 @@ function SceneContent(props: BoardProps) {
         }
       },
     });
-  }, [preview, invalidate, sparkProgress, sparkTransform]);
+  }, [
+    preview,
+    invalidate,
+    sparkProgress,
+    sparkTransform,
+    cashProgress,
+    cashTransform,
+    cashColor,
+  ]);
 
   useEffect(() => {
     if (state || preview) invalidate();
@@ -1359,6 +1714,7 @@ function SceneContent(props: BoardProps) {
         <meshStandardMaterial color="#ebddba" roughness={0.65} />
       </mesh>
       <CenterIsland />
+      {!preview && state && <CashReserves state={state} />}
       <BoardTiles {...props} />
       <TileFocus {...props} />
       <Towns state={state} preview={preview} />
@@ -1407,6 +1763,33 @@ function SceneContent(props: BoardProps) {
         <boxGeometry />
         <meshBasicMaterial color="#ffcf59" />
       </instancedMesh>
+      <group ref={cashFlight} visible={false}>
+        <instancedMesh
+          ref={cashNotes}
+          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+          frustumCulled={false}
+          castShadow
+        >
+          <boxGeometry args={[0.94, 0.12, 0.48]} />
+          <meshStandardMaterial color="#dae4bd" roughness={0.85} />
+        </instancedMesh>
+        <instancedMesh
+          ref={cashFaces}
+          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+          frustumCulled={false}
+        >
+          <boxGeometry args={[0.95, 0.012, 0.49]} />
+          <meshStandardMaterial map={cashTexture} roughness={0.9} />
+        </instancedMesh>
+        <instancedMesh
+          ref={cashBands}
+          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+          frustumCulled={false}
+        >
+          <boxGeometry args={[0.16, 0.145, 0.51]} />
+          <meshStandardMaterial roughness={0.7} />
+        </instancedMesh>
+      </group>
       <FrameMonitor />
     </>
   );

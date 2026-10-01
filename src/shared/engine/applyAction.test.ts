@@ -25,6 +25,7 @@ import {
   previewPropertyRent,
   propertyOwner,
   propertyRent,
+  rentCardPayment,
   toPublic,
 } from "./index.js";
 
@@ -832,28 +833,50 @@ describe("rounding and simultaneous win edges", () => {
     const taxed = land(state, 29).state;
     expect(getPlayer(taxed, seat).cash).toBe(1_829_000);
   });
-  it("rounds a Coupon payment up even for an odd rent amount", () => {
-    let state = newGame();
-    const seat = state.activeSeat;
-    const owner = other(state);
-    state = setPlayer(state, seat, { heldCards: ["Coupon"] });
-    state = {
-      ...state,
-      pending: {
-        kind: "rent-card",
-        seat,
-        owner,
-        amount: 101,
-        tile: 6,
-        cards: ["Coupon"],
-        deadline: 1_000,
-      },
-      resolutionQueue: [{ kind: "finish" }],
-    };
-    const paid = act(state, { type: "UseRentCard", card: "Coupon" }).state;
-    expect(getPlayer(paid, seat).cash).toBe(1_999_949);
-    expect(getPlayer(paid, owner).cash).toBe(2_000_051);
-  });
+  it.each([
+    { card: "Coupon" as const, expected: 51 },
+    { card: "Guardian Angel" as const, expected: 0 },
+    { card: null, expected: 101 },
+  ])(
+    "previews and pays $expected for odd rent with $card",
+    ({ card, expected }) => {
+      let state = newGame();
+      const seat = state.activeSeat;
+      const owner = other(state);
+      const cards = card ? [card] : (["Coupon"] as const);
+      state = setPlayer(state, seat, { heldCards: cards });
+      state = {
+        ...state,
+        pending: {
+          kind: "rent-card",
+          seat,
+          owner,
+          amount: 101,
+          tile: 6,
+          cards,
+          deadline: 1_000,
+        },
+        resolutionQueue: [{ kind: "finish" }],
+      };
+      const result = act(
+        state,
+        card ? { type: "UseRentCard", card } : { type: "Decline" },
+      );
+      const paidAmount = result.events.reduce(
+        (amount, event) =>
+          amount + (event.type === "RentPaid" ? event.amount : 0),
+        0,
+      );
+      expect(rentCardPayment(101, card)).toBe(expected);
+      expect(paidAmount).toBe(rentCardPayment(101, card));
+      expect(getPlayer(result.state, seat).cash).toBe(2_000_000 - expected);
+      expect(getPlayer(result.state, owner).cash).toBe(2_000_000 + expected);
+      if (card === "Guardian Angel")
+        expect(result.events.some((event) => event.type === "RentPaid")).toBe(
+          false,
+        );
+    },
+  );
   it("gives the active player priority when a Land Swap completes two Triple Monopolies", () => {
     let state = newGame(2);
     const seat = state.activeSeat;

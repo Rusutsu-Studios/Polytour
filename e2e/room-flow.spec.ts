@@ -264,6 +264,8 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
   }, credential);
   await actor.page.reload();
   await expect(actor.page.locator(".player-card")).toHaveCount(4);
+  if (await actor.page.locator(".decision-popup").isVisible())
+    await actor.page.keyboard.press("Escape");
   await actor.page
     .getByRole("button", { name: "Dés et preuve", exact: true })
     .click();
@@ -285,10 +287,11 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
   // Leaving a legacy room must not carry its hidden mode into a new UI room.
   await actor.page.keyboard.press("Escape");
   await actor.page.getByRole("button", { name: "Quitter la partie" }).click();
-  await actor.page.locator(".settings-disclosure summary").click();
-  await expect(actor.page.locator(".settings-fields")).not.toContainText(
-    "drand",
-  );
+  await actor.page.locator(".settings-trigger").click();
+  await expect(actor.page.locator(".room-settings")).not.toContainText("drand");
+  await actor.page
+    .getByRole("button", { name: "Appliquer les réglages" })
+    .click();
   await actor.page.getByLabel("Votre nom de joueur").fill("Fast after legacy");
   const createdResponse = actor.page.waitForResponse(
     (response) =>

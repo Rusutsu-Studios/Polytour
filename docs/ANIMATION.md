@@ -46,9 +46,11 @@ flowchart LR
 - `serverState` is always the truth; `viewState` lags behind it until animations finish.
   Both are advanced with the engine's shared reducer `applyEvent`: `serverState` as
   soon as an event arrives, `viewState` when its animation finishes.
-- Each handler is `async (event, ctx) => void` and must resolve within its budget.
-  Budgets live in `shared/board/timing.ts`, the same config the server uses for
-  `animationBudget`, so decision deadlines always cover the animation.
+- Scene handlers are `async (event, ctx) => void` and resolve within their shared
+  `shared/board/timing.ts` budgets. The server includes those motion budgets in
+  decision deadlines. The current DOM card-reading hold is a bounded prototype
+  exception: up to two additional seconds come from the existing choice window,
+  without pausing or extending the server clock. Continue/skip can end it early.
 - **Speed:** a Director `speed` (1×, 1.5×, 2×) is applied to GSAP's global timeline
   (`gsap.globalTimeline.timeScale(speed)`) **and** to DOM animation: Motion has no
   global clock, so HUD transitions and money counters read `speed` from the Director
@@ -94,6 +96,28 @@ newly started construction effect. Building bases, cornices and entrances are
 instanced; hotels and terraced landmarks stay visually distinct. These are the
 implemented construction accents, not the full sound/particle specification in
 the signature-moment table above.
+
+## Current illustrated moments
+
+Purchase, development and buyout dialogs use original isometric previews,
+selectable stages and a comparison slider. They preserve the authoritative
+decision deadline and submit only the confirmed legal action. Native dialogs
+protect keyboard focus; Escape minimizes a choice without spending money.
+
+The Director now has a separate DOM presenter alongside its scene animator.
+`CardDrawn` waits for a bounded illustrated reading moment (2.6 seconds, or
+850 ms when catching up) before the subsequent effects play. Continue and Escape
+resolve that moment; skip, snapshot replacement and reconnect cancel it. This
+reading hold uses the existing decision clock and does not extend a server
+deadline. Reduced motion keeps a static card and its instructions. Card art and
+prompts are documented in [CARD_ART.md](CARD_ART.md).
+
+Four capped banknote reserves and coin piles sit just outside the track. Repeated
+note faces, straps and coin details are instanced. Salary, rent, transfers,
+purchases, building, buyouts and sales animate a pooled bundle along the actual
+payer/recipient path, using the existing 200 ms money or 450 ms property budget.
+Cancelled timelines cannot hide a later effect. Static reserves follow view
+state; the DOM HUD remains the exact cash display.
 
 ## Dice: deterministic result, physical feel
 

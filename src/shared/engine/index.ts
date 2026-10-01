@@ -20,7 +20,9 @@ export {
   previewPropertyRent,
   propertyInvestedValue,
   propertyOwner,
+  propertyRefund,
   propertyRent,
+  rentCardPayment,
   toPublic,
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";
