@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import type { PublicState, Seat } from "../src/shared/engine/index.js";
+import type {
+  GameEvent,
+  PublicState,
+  Seat,
+} from "../src/shared/engine/index.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -436,12 +440,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Terminer l’animation en cours" }),
   ).toBeDisabled();
-  // Keep the 2x setting regression above, then use the normal animation window
-  // for a real mouse hit-test. At 2x, the animation can finish between
-  // Playwright's stability check and pointer dispatch on software-rendered CI.
+  // Keep the speed setting regression; the separate controlled queue test
+  // verifies Skip without racing the duration of a random real roll.
   await page.getByLabel("Vitesse des animations").selectOption("1");
   await expect(page.getByLabel("Vitesse des animations")).toHaveValue("1");
-  await page.getByLabel("Réduire les animations").uncheck();
   await page.getByLabel("Vitesse des animations").press("Escape");
   await expect(
     page.getByRole("button", { name: "Vue et animations", exact: true }),
@@ -451,46 +453,29 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .poll(() => page.locator(".match-clock").innerText())
     .not.toBe(previousTime);
   await roll.click();
-  const skip = page.getByRole("button", {
-    name: "Passer l’animation ↗",
-    exact: true,
-  });
-  await expect(skip).toBeEnabled();
-  const receivesPointer = await skip.evaluate(async (button) => {
-    const modulePath =
-      performance
-        .getEntriesByType("resource")
-        .find((entry) =>
-          entry.name.includes("/src/client/director/director.ts"),
-        )?.name ?? "/src/client/director/director.ts";
-    const { director } = await import(modulePath);
-    // Observe after React's delegated click handler, within the same task.
-    // A later bot event can legitimately make the Director busy again.
-    window.addEventListener(
-      "click",
-      (event) => {
-        if (!(event.target instanceof Node) || !button.contains(event.target))
-          return;
-        const snapshot = director.getSnapshot();
-        document.documentElement.dataset.skipSynced = String(
-          !snapshot.busy && snapshot.viewState === snapshot.serverState,
-        );
-      },
-      { once: true },
-    );
-    const rect = button.getBoundingClientRect();
-    const hit = document.elementFromPoint(
-      rect.left + rect.width / 2,
-      rect.top + rect.height / 2,
-    );
-    return hit !== null && button.contains(hit);
-  });
-  expect(receivesPointer).toBe(true);
-  await skip.click();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-skip-synced",
-    "true",
-  );
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const modulePath =
+            performance
+              .getEntriesByType("resource")
+              .find((entry) =>
+                entry.name.includes("/src/client/director/director.ts"),
+              )?.name ?? "/src/client/director/director.ts";
+          const { director } = await import(modulePath);
+          const snapshot = director.getSnapshot();
+          return (
+            !snapshot.busy &&
+            snapshot.history.some(
+              (event: GameEvent) =>
+                event.type === "DiceRolled" && event.seat === 0,
+            )
+          );
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   // Native decisions protect focus; minimize without sending a gameplay action.
   if (await page.locator(".decision-popup").isVisible())
     await page.keyboard.press("Escape");
@@ -570,6 +555,103 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   expect(errors).toEqual([]);
 });
 
+test("a real pointer click skips a controlled presentation queue synchronously", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Votre nom de joueur").fill("Skip QA");
+  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await expect(
+    page.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled({ timeout: 60_000 });
+  await expect(page.locator(".canvas-layer")).toHaveAttribute(
+    "data-scene-ready",
+    "true",
+  );
+  // Only this tab's presentation changes. Six normal movement events provide a
+  // stable pointer window without changing the server or a real roll's timing.
+  const original = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (!snapshot) throw new Error("Expected the current match snapshot");
+    window.addEventListener(
+      "click",
+      (event) => {
+        if (
+          !(event.target instanceof Element) ||
+          !event.target.closest(".match-caption button")
+        )
+          return;
+        const current = director.getSnapshot();
+        document.documentElement.dataset.skipSynced = String(
+          !current.busy && current.viewState === current.serverState,
+        );
+      },
+      { once: true },
+    );
+    const player = snapshot.players.find((candidate) => candidate.seat === 0);
+    if (!player) throw new Error("Expected the human seat");
+    director.setReducedMotion(false);
+    director.setSpeed(1);
+    director.receive(
+      Array.from(
+        { length: 6 },
+        (_, index): GameEvent => ({
+          type: "PlayerMoved",
+          seat: 0,
+          from: (player.position + index * 16) % 32,
+          position: (player.position + (index + 1) * 16) % 32,
+          steps: 16,
+          laps: player.laps,
+        }),
+      ),
+    );
+    return snapshot;
+  });
+  const skip = page.getByRole("button", {
+    name: "Passer l’animation ↗",
+    exact: true,
+  });
+  await expect(skip).toBeEnabled();
+  expect(
+    await skip.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      return hit !== null && button.contains(hit);
+    }),
+  ).toBe(true);
+  await skip.click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-skip-synced",
+    "true",
+  );
+  await expect(page.locator(".match-caption button")).toBeDisabled();
+  await page.evaluate(async (snapshot) => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.reset(snapshot);
+    director.setReducedMotion(true);
+  }, original);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled({ timeout: 60_000 });
+});
+
 test("desktop room controls fit, create and join preserve the host settings", async ({
   page,
   browser,
@@ -578,6 +660,17 @@ test("desktop room controls fit, create and join preserve the host settings", as
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
   await page.locator(".settings-trigger").click();
+  // No intermediate blur or render wait: switching from a slider to the exact
+  // field must preserve the entered amount, even while a draft sync is pending.
+  const capital = page.getByRole("slider", {
+    name: "Capital de départ",
+    exact: true,
+  });
+  await capital.focus();
+  await capital.press("ArrowRight");
+  await page
+    .getByRole("spinbutton", { name: "Capital de départ : valeur exacte" })
+    .fill("2000000");
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
   await expect(page.locator(".room-settings")).not.toContainText("drand");
   await page
@@ -604,6 +697,9 @@ test("desktop room controls fit, create and join preserve the host settings", as
     await expect(second.locator(".lobby-seats")).toContainText("Alice");
     await expect(page.locator(".lobby-seats")).toContainText("Bo");
     await second.locator(".settings-trigger").click();
+    await expect(
+      second.getByRole("slider", { name: "Capital de départ", exact: true }),
+    ).toHaveValue("2000000");
     await expect(
       second
         .getByRole("group", { name: "Durée de partie" })

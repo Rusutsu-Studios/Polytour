@@ -238,9 +238,11 @@ same pure calculation; game rules and the saved-state format are unchanged.
 
 - 88 unit/Worker tests, TypeScript, Biome across 69 files, production build,
   bundle budgets, deployment-config checks and a deployment dry run pass.
-- Eight local browser scenarios pass in **1.1 minutes**, including a complete
+- Nine local browser scenarios pass in **1.2 minutes**, including a complete
   four-seat match and reconnect, legacy proof/new-room compatibility, settings,
   card sequencing/focus/cancellation and travel/protection/exchange regressions.
+  A separate controlled movement queue verifies a real pointer click on Skip;
+  the random real-roll check no longer races that short animation window.
 - Browser captures at 1280×720, 1440×900 and 1920×1080 cover the new dialogs and
   cash reserves. The settings controls fit at 1280×720 without page scrolling.
   Authored presentation fixtures remain separate from the real match evidence.
@@ -251,6 +253,14 @@ same pure calculation; game rules and the saved-state format are unchanged.
 - Latest deployed Preview evidence and its exact revision are recorded in
   [PR #15](https://github.com/Rusutsu-Studios/Polytour/pull/15). Earlier remote
   checks above remain tied to their stated revisions.
+
+Independent Preview inspection reproduced a fast-input regression: moving a
+money slider and immediately filling its exact field could concatenate the prior
+draft with the entered value, then clamp the result to the maximum. Draft
+synchronization now completes before input events and a synchronous focus guard
+protects edited text. Twenty repetitions without an intermediate Tab preserve
+2 M; the browser create/join regression verifies that same amount on the second
+seat. Empty and out-of-range inputs still normalize safely.
 
 The existing balance reports still apply. Target-hardware FPS has not been
 measured; this presentation change does not establish the balance targets.
