@@ -10,7 +10,7 @@ once the protocol is stable.
 A vertical slice now joins the rules engine, authoritative private rooms and the
 Three.js client. Four friends can join by room code; empty seats can become bots.
 The user preset is 2 M / 400 k / 3 festivals / 120 minutes with line and triple
-wins, and future drand commitments provide verified uniform dice. Costs at the
+wins, and fresh server Web Crypto provides uniform dice without a beacon wait. Costs at the
 first city and Tokyo match supplied captures; the remaining economy is provisional.
 
 The checklist below records implemented parts, not completion of every phase's

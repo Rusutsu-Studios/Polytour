@@ -236,23 +236,6 @@ function RoomSettings({
             ))}
           </select>
         </label>
-        <label>
-          Lancers de dés
-          <select
-            value={config.randomnessMode}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                randomnessMode: event.target
-                  .value as RoomConfig["randomnessMode"],
-              })
-            }
-          >
-            <option value="drand">Vérifiables · drand</option>
-            <option value="secure">Rapides · crypto serveur</option>
-          </select>
-        </label>
         {toggles.map(([key, label]) => (
           <label className="checkbox-label wide-field" key={key}>
             <input
@@ -267,9 +250,10 @@ function RoomSettings({
           </label>
         ))}
         <p className="field-note wide-field">
-          drand fixe un signal public futur pour chaque lancer et attend sa
-          signature vérifiée. Les valeurs de départ suivent les réglages fournis
-          ; les loyers et effets restent une première économie à ajuster.
+          {config.randomnessMode === "drand"
+            ? "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée."
+            : "Les dés utilisent un aléa cryptographique généré directement sur Cloudflare, sans attendre de signal externe. Les mêmes chances pour tous, sans avantage payant."}{" "}
+          Les loyers et effets restent une première économie à ajuster.
         </p>
         {save && (
           <button
@@ -466,6 +450,7 @@ function DecisionPanel({
     !state.players.find((player) => player.seat === seat)?.bankrupt;
   const active = state.players.find((player) => player.seat === decisionSeat);
   const rngBusy = randomness != null && randomness.status !== "resolved";
+  const waitingForDrand = randomness?.commitment?.mode === "drand";
   const actions = ownTurn ? legalActions(state, seat) : [];
   const destinations = actions.filter(
     (action): action is Extract<Action, { tile: number }> => "tile" in action,
@@ -527,8 +512,12 @@ function DecisionPanel({
           ? "Le voyage continue…"
           : rngBusy
             ? randomness.status === "error"
-              ? "Le signal se fait attendre"
-              : "Les dés attendent leur signal"
+              ? waitingForDrand
+                ? "Le signal se fait attendre"
+                : "Le lancer se fait attendre"
+              : waitingForDrand
+                ? "Les dés attendent leur signal"
+                : "Les dés se préparent"
             : ownTurn
               ? description.title
               : `${active?.name} joue`}
@@ -537,7 +526,9 @@ function DecisionPanel({
         {busy
           ? "Le plateau vous montre les dernières actions."
           : rngBusy
-            ? "Le tour drand est fixé. Le serveur attend sa publication puis vérifie sa signature."
+            ? waitingForDrand
+              ? "Le tour drand est fixé. Le serveur attend sa publication puis vérifie sa signature."
+              : "Le serveur prépare votre lancer."
             : ownTurn
               ? description.text
               : active?.control === "bot"
@@ -560,7 +551,7 @@ function DecisionPanel({
           <span className="spinner" />
           {randomness.commitment?.round
             ? `Signal drand #${randomness.commitment.round}`
-            : "Réception du signal…"}
+            : "Tirage serveur…"}
         </div>
       )}
       {ownTurn && !busy && !rngBusy && (
@@ -758,24 +749,44 @@ function RandomnessPanel({
     link.click();
     setTimeout(() => URL.revokeObjectURL(href), 1000);
   }
+  if (mode === "secure") {
+    return (
+      <details className="proof-panel" open={expanded}>
+        <summary>
+          <span className="proof-indicator" />
+          Dés cryptographiques serveur
+          <span>↗</span>
+        </summary>
+        <div className="proof-body">
+          <p>
+            Chaque lancer utilise de nouveaux octets aléatoires générés par le
+            serveur Cloudflare. Chaque face a une chance sur six, avec la même
+            méthode pour les quatre joueurs. Aucun avantage payant ne modifie
+            les dés.
+          </p>
+          {proof && (
+            <p className="proof-result">
+              Dernier lancer : {proof.dice[0]} + {proof.dice[1]}
+            </p>
+          )}
+        </div>
+      </details>
+    );
+  }
   return (
     <details className="proof-panel" open={expanded}>
       <summary>
         <span
           className={`proof-indicator ${proof?.verified ? "verified" : ""}`}
         />
-        {proof?.verified
-          ? "Dernier lancer vérifié"
-          : mode === "drand"
-            ? "Dés vérifiables · drand"
-            : "Dés rapides · crypto"}
+        {proof?.verified ? "Dernier lancer vérifié" : "Dés vérifiables · drand"}
         <span>↗</span>
       </summary>
       <div className="proof-body">
         <p>
-          {mode === "drand"
-            ? "Un signal public futur est choisi avant de connaître son résultat. Le serveur vérifie sa signature, puis transforme les octets en deux dés sans biais de modulo."
-            : "Les deux dés proviennent de nouveaux octets cryptographiques générés par le serveur pour chaque lancer."}
+          Un signal public futur est choisi avant de connaître son résultat. Le
+          serveur vérifie sa signature, puis transforme les octets en deux dés
+          sans biais de modulo.
         </p>
         {commitment && (
           <dl>
@@ -1002,11 +1013,13 @@ function MatchView({
   const ownPlayer = game.players.find(
     (player) => player.seat === credentials.seat,
   );
+  const diceToolLabel =
+    config.randomnessMode === "drand" ? "Dés et preuve" : "À propos des dés";
   const toolsTitle =
     tool === "journal"
       ? "Carnet de voyage"
       : tool === "proof"
-        ? "Les dés et leur preuve"
+        ? diceToolLabel
         : tool === "view"
           ? "Vue et animations"
           : "Votre salle";
@@ -1128,12 +1141,15 @@ function MatchView({
         <button
           type="button"
           className={`game-tool-button ${room.randomness?.proof?.verified ? "proof-verified" : ""}`}
-          aria-label="Dés et preuve"
-          title="Dés et preuve"
+          aria-label={diceToolLabel}
+          title={diceToolLabel}
           aria-expanded={tool === "proof"}
           onClick={(event) => showTool("proof", event.currentTarget)}
         >
-          <Icon name="shield" size={18} />
+          <Icon
+            name={config.randomnessMode === "drand" ? "shield" : "dice"}
+            size={18}
+          />
         </button>
         <button
           type="button"
@@ -1604,7 +1620,7 @@ function App() {
     try {
       const entered = await enterRoom(
         cleanName,
-        config,
+        join ? config : { ...config, randomnessMode: "secure" },
         join ? code : undefined,
       );
       localStorage.setItem("polytour-name", cleanName);
@@ -1630,6 +1646,7 @@ function App() {
     forgetCredentials();
     setCredentials(null);
     setAutoStart(false);
+    setConfig((current) => ({ ...current, randomnessMode: "secure" }));
     director.reset(null);
     setSelected(null);
     window.history.replaceState(null, "", window.location.pathname);

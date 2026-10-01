@@ -25,6 +25,12 @@ The two dice settle to the server's exact values, the pawn traverses the visible
 
 ## Verification and unresolved work
 
+The user removed drand from normal new-room play on 1 October 2026 because the
+per-roll beacon wait was too slow. New rooms use fresh Worker Web Crypto bytes
+with rejection sampling. The closed dice-information tool explains equal chances
+without a public-proof claim; the source selector is removed. Saved drand rooms
+keep their committed source and proof UI. The PC board composition is unchanged.
+
 Local captures validate 1280×720, 1440×900 and 1920×1080 without scrolling or off-screen controls. Six browser scenarios passed in 38.6 seconds, covering real UI play and refresh, settings-preserving create/join, a full four-context match with reconnect and matching state, live future drand BLS verification/recomputation/UI export and two API/SPA smoke checks. Final independent visual review found no remaining material defects.
 
 Two UI scenarios also passed again in 20.5 seconds with an explicit skip during a real roll's event playback. Speed at 2×, the reduced-animation toggle, decreasing match time and skip disabled at rest are verified. Authored presentation fixtures separately show levels 1–5, six purchase choices at 1280×720 without HUD collisions and an off-turn debtor; they do not modify the Worker or substitute for the real match.

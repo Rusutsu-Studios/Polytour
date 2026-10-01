@@ -105,7 +105,6 @@ test("four isolated browser seats finish a real authoritative match and reconnec
         festivalCount: 3,
         lineMonopoly: true,
         tripleMonopoly: true,
-        randomnessMode: "secure",
       },
     },
   });
@@ -172,7 +171,7 @@ test("four isolated browser seats finish a real authoritative match and reconnec
   for (const actor of actors) await actor.page.context().close();
 });
 
-test("@live strict drand publishes a future commitment, verifies a live beacon, and restores its proof", async ({
+test("@live legacy drand publishes a future commitment, verifies a live beacon, and restores its proof", async ({
   browser,
   request,
 }) => {
@@ -283,5 +282,33 @@ test("@live strict drand publishes a future commitment, verifies a live beacon, 
     path: ".local/verification/live-drand-ui.png",
     fullPage: true,
   });
+  // Leaving a legacy room must not carry its hidden mode into a new UI room.
+  await actor.page.keyboard.press("Escape");
+  await actor.page.getByRole("button", { name: "Quitter la partie" }).click();
+  await actor.page.locator(".settings-disclosure summary").click();
+  await expect(actor.page.locator(".settings-fields")).not.toContainText(
+    "drand",
+  );
+  await actor.page.getByLabel("Votre nom de joueur").fill("Fast after legacy");
+  const createdResponse = actor.page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/rooms" &&
+      response.request().method() === "POST",
+  );
+  await actor.page
+    .getByRole("button", { name: "Créer une salle entre amis" })
+    .click();
+  const created = await createdResponse;
+  expect(created.status()).toBe(201);
+  expect(created.request().postDataJSON().config.randomnessMode).toBe("secure");
+  const fresh = await connect(
+    browser,
+    (await created.json()) as RoomCredentials,
+  );
+  const newRoom = fresh.messages.find((message) => message.type === "welcome");
+  expect(
+    newRoom?.type === "welcome" && newRoom.lobby.config.randomnessMode,
+  ).toBe("secure");
+  await fresh.page.context().close();
   for (const participant of actors) await participant.page.context().close();
 });

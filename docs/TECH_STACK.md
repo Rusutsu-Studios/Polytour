@@ -29,7 +29,8 @@ versions at scaffold time and record them in `package.json`; this doc records th
 | Tests | **Vitest 4** + **`@cloudflare/vitest-plugin`**, **fast-check**, **Playwright** | Engine unit + property tests, DO tests inside `workerd`, end-to-end multi-tab games. | Jest (not supported for Workers). |
 | Lint/format | **Biome** | One fast tool for lint + format. | ESLint + Prettier (slower, more config). |
 | Package manager | **pnpm** | Fast, strict. | npm/yarn. |
-| Verifiable entropy | **drand-client** | Official signature verification against pinned quicknet metadata; committed future rounds, uniform rejection sampling. | Trusting a relay's JSON or using an already known latest beacon. |
+| Live dice entropy | **Worker Web Crypto** | Fresh cryptographically secure bytes for every roll, uniform rejection sampling, no network wait. | `Math.random`, client-chosen dice, a public deterministic seed. |
+| Legacy beacon compatibility | **drand-client** | Retained signature verification for saved drand rooms and compatibility tools; absent from normal new-room settings. | Breaking saved commitments or mislabelling server draws as publicly verified. |
 | Simulator runner | **tsx** (development only) | Runs the same TypeScript engine with Node, without a separate emit/build step. | A second implementation of the rules in a simulator. |
 | PWA | **vite-plugin-pwa** | Installable, offline shell, precached assets. | Hand-written service worker. |
 
@@ -39,7 +40,7 @@ than adding unused dependencies. Original scene geometry is generated in Three.j
 and does not require external glTF/drei/postprocessing assets yet. The prototype
 connection uses a small reconnecting WebSocket client with no offline intent queue;
 the planned `partysocket` replacement must preserve that behavior. See
-[RANDOMNESS.md](RANDOMNESS.md) for drand's guarantees and limitations.
+[RANDOMNESS.md](RANDOMNESS.md) for the CSPRNG rationale and saved drand-room compatibility.
 
 ## Key decision: 3D (R3F) vs 2D (PixiJS)
 

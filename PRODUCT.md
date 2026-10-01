@@ -16,7 +16,7 @@ Create rooms, invite friends with a room code, and finish a real match: roll two
 
 ## Positioning
 
-The user explicitly asks for a property game without paid advantages and with honest randomness. In strict mode, the server commits to a future drand beacon round before the roll, verifies its signature, and supplies the roll proof. The fast alternative uses fresh cryptographic server randomness. Neither dice selection nor cash is controlled by the client.
+The user asks for a property game without paid advantages and with honest randomness. Each new match uses fresh cryptographic randomness on Cloudflare for every roll, without waiting for drand. Dice use uniform rejection sampling. Neither dice selection nor cash is controlled by the client. Saved drand matches keep their existing commitments and proof export for compatibility.
 
 ## Operating Context
 
@@ -25,11 +25,11 @@ The existing architecture specifies a Cloudflare Worker, one authoritative Durab
 ## Capabilities and Constraints
 
 - The first playable slice uses a 32-tile board, purchase and development choices, rent, island, travel, championship, cards, and bankruptcy rules implemented in the shared engine. A pending payment decision belongs to its actual debtor, even during another player's turn.
-- The user confirmed a default 2,000,000 starting cash, 400,000 start salary, three initial festivals, line and triple-collection victories enabled, and an adjustable 20/60/120-minute match duration. Cash, salary, festival count, decision duration, randomness mode, direct hotel purchase, doubles, bot building, and gift bankruptcy are room settings.
+- The user confirmed a default 2,000,000 starting cash, 400,000 start salary, three initial festivals, line and triple-collection victories enabled, and an adjustable 20/60/120-minute match duration. Cash, salary, festival count, decision duration, direct hotel purchase, doubles, bot building, and gift bankruptcy are room settings. New matches automatically use server Web Crypto.
 - Cheap-end captured costs are 60,000 land, three 50,000 houses, and a 150,000 hotel; Tokyo costs are 400,000 land, three 200,000 houses, and a 500,000 hotel. Intermediate cities, rents, taxes, and card effects are provisional tuning, not an exact-parity claim.
 - No payments, paid dice, paid boosts, or account progression belong in the first match.
 - Production publication, durable user accounts, trading, audio, advanced physical dice, and cosmetic purchases are separate work.
-- drand availability is a real dependency in strict mode: the match waits and retries its committed round rather than silently substituting another source.
+- New rolls require no external randomness service. Saved drand matches still honor their committed round, without silently changing their source mid-game.
 - Host settings remain a local draft until explicitly saved. A room cannot start with unsaved edits. The match toolbar counts down to the server-provided end time.
 
 ## Brand Commitments
@@ -45,7 +45,7 @@ The architecture and animation documentation live in `docs/`. Screenshots and ex
 - A complete playable match precedes breadth of features.
 - The same server rules govern humans and bots.
 - Player choices stay legible while animation catches up.
-- Randomness claims require visible, inspectable evidence.
+- Explain server randomness honestly; never claim a publicly verifiable proof for Web Crypto dice.
 - The room code and reconnect path make playing with friends practical.
 - The board leads the PC experience; the interface supports the match without occupying its play area.
 

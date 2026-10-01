@@ -13,13 +13,13 @@ a two-hour maximum. Room settings can be adjusted before starting.
 The current visual target is a viewport-filling isometric board with four compact
 player HUDs at its corners, a contextual action area and discreet menus. Play with
 a mouse and keyboard. The minimum desktop target is 1280×720; the main review
-sizes are 1440×900 and 1920×1080. Journal, dice proof, instructions and tile details
+sizes are 1440×900 and 1920×1080. Journal, dice information, instructions and tile details
 open on demand. Mobile is best effort and is not required for this checkpoint.
 
-Dice default to future public drand rounds with BLS signature verification and
-uniform rejection sampling. Each commitment precedes publication, survives
-reconnection, and exposes a downloadable proof. A separately labelled fast mode
-uses fresh server cryptographic entropy. There are no paid gameplay advantages.
+Each roll uses fresh server `crypto.getRandomValues` on Cloudflare, with uniform
+rejection sampling and no external beacon wait. Clients cannot choose the dice;
+there are no paid gameplay advantages. New-room settings no longer offer drand.
+Saved drand rooms retain their committed-round verification and proof export.
 
 ## Play locally
 
@@ -52,9 +52,10 @@ pnpm check:drand
 pnpm verify:dice path/to/downloaded-proof.json
 ```
 
-Browser tests use the local Worker and four isolated browser contexts; the drand
-integration requires its public relay to be reachable. `check:drand` waits for a
-real future round and writes evidence under the ignored `.local/` directory.
+Browser tests use the local Worker and four isolated browser contexts. New-room
+dice need no external randomness service. The optional legacy drand integration
+requires its public relay to be reachable; `check:drand` waits for a real future
+round and writes evidence under the ignored `.local/` directory.
 CI runs the deterministic/browser flows with `--grep-invert '@live'`; the tagged
 live integration is run explicitly during release verification.
 Set `POLYTOUR_BASE_URL` to a branch Preview URL to run
@@ -89,7 +90,7 @@ Feature branches have isolated Worker Preview storage. Production deploys from
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | WebSocket messages and game events |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Art direction, animation pipeline, signature moments, perf budgets |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased build plan |
-| [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Future commitments, uniform dice, verification and LavaRand comparison |
+| [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Server CSPRNG, uniform dice, seed rationale and legacy drand compatibility |
 | [docs/REFERENCE_PARITY.md](docs/REFERENCE_PARITY.md) | Captured reference values and provisional economy |
 | [docs/PLAYABLE_CHECKPOINT.md](docs/PLAYABLE_CHECKPOINT.md) | Verified features, simulator evidence and remaining work |
 | [PRODUCT.md](PRODUCT.md), [DESIGN.md](DESIGN.md) | Product and visual direction for the playable client |

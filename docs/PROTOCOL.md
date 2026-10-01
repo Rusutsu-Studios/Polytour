@@ -27,9 +27,11 @@ debug socket has been removed; `/api/health` remains.
   `legalActions` supplies the choices; tile indices are0..31 and levels0..5.
 - Each intent has an id and `atSeq`; duplicates, stale state, wrong seats, malformed
   actions, and actions during pending entropy are rejected.
-- `randomness {status,commitment?,proof?,message?}` carries future-round commitment,
-  waiting/error status, and resolved proof. Persist the commitment before broadcast,
-  fetch only its future round, and retain that round on relay failure.
+- `randomness {status,commitment?,proof?,message?}` carries the persisted roll
+  context and resolved receipt. New-room defaults use immediate server Web Crypto:
+  no beacon fetch, null round/chain/signature, `verified: false`. Saved drand rooms
+  retain their future-round commitment, waiting/error status and verified proof;
+  their committed round is unchanged on retry. The wire shapes remain compatible.
 - `events {fromSeq,toSeq,events,proofs?}` drives the shared reducer and Director.
   Snapshots expose no deck, seed, hidden resolution queue, or session token.
 - Presence derives from live hibernatable sockets. A disconnected human has a

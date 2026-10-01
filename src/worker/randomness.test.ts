@@ -25,7 +25,10 @@ const FIXTURE_COMMITMENT: DiceCommitment = {
   chainHash: QUICKNET.hash,
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("fair dice transport", () => {
   it("rejects biased tail bytes and gives every face exactly 42 byte inputs", () => {
@@ -88,18 +91,26 @@ describe("fair dice transport", () => {
   });
 
   it("marks fast dice as local crypto, without a public beacon proof", async () => {
+    const fetchMock = vi.fn(() => {
+      throw new Error("Secure dice must not fetch a beacon");
+    });
+    vi.stubGlobal("fetch", fetchMock);
     const commitment = prepareDice(
       "secure",
       { roomCode: "ROOM01", seq: 1, seat: 0 },
       0,
     );
     const result = await resolveDice(commitment);
+    expect(commitment.availableAt).toBe(commitment.committedAt);
     expect(result.dice.every((face) => face >= 1 && face <= 6)).toBe(true);
     expect(result.proof).toMatchObject({
       mode: "secure",
       verified: false,
       round: null,
+      chainHash: null,
+      randomness: null,
       signature: null,
     });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

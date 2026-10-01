@@ -13,8 +13,9 @@ one Durable Object per match runs the authoritative game. The visual bar is high
 a stylized 3D board with juicy, choreographed animations.
 
 > **Status: first playable prototype.** Shared rules, four-seat private rooms,
-> server bots, persistence/reconnection, a Three.js board, and verified drand dice
-> exist. The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
+> server bots, persistence/reconnection, a Three.js board, and immediate server
+> Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
+> The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
 > 120 minutes. Intermediate economy remains provisional. Keep these instructions
 > current when changing commands or paths.
 
@@ -95,7 +96,7 @@ verification commands exist; local browser/proof evidence stays gitignored.
    dice, positions, or turn order.
 2. **The engine is pure and deterministic.** `shared/engine` has no I/O, no
    `Date.now()`, no `Math.random()`. Live dice arrive through `EngineContext.dice`
-   after server verification. The private seeded PRNG handles shuffles and
+   from fresh server Web Crypto (or verified legacy drand). The private seeded PRNG handles shuffles and
    reproducible simulation. Time is passed in as input. Same inputs → same outputs.
 3. **The RNG seed never leaves the server.** Clients receive dice results and card
    draws as events, never the seed or the deck order. Public drand proofs after
