@@ -402,6 +402,8 @@ export default function DecisionPanel({
         : undefined;
   const property =
     decisionTile !== undefined ? getProperty(state, decisionTile) : undefined;
+  const resort =
+    decisionTile !== undefined && BOARD[decisionTile].kind === "resort";
   const owner =
     property?.owner != null
       ? state.players.find((player) => player.seat === property.owner)
@@ -444,6 +446,7 @@ export default function DecisionPanel({
   );
   const hotelNote =
     construction &&
+    !resort &&
     pending &&
     "maxLevel" in pending &&
     Math.min(
@@ -476,7 +479,12 @@ export default function DecisionPanel({
               ? "Choisissez votre ville qui recevra un niveau de construction offert."
               : "Choisissez la ville adverse qui perdra un niveau de construction.",
         ]
-      : COPY[pending?.kind ?? "roll"];
+      : pending?.kind === "buy" && resort
+        ? [
+            "Une escale au soleil",
+            "Achetez cette station pour agrandir votre réseau balnéaire.",
+          ]
+        : COPY[pending?.kind ?? "roll"];
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
@@ -675,10 +683,7 @@ export default function DecisionPanel({
             <CityIllustration
               level={selectedLevel}
               color={PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]}
-              resort={
-                decisionTile !== undefined &&
-                BOARD[decisionTile].kind === "resort"
-              }
+              resort={resort}
               symbol={
                 PLAYER_SYMBOLS[construction ? seat : (owner?.seat ?? seat)]
               }
@@ -703,7 +708,9 @@ export default function DecisionPanel({
               {bankruptcy
                 ? "Fin de votre voyage"
                 : selectedAction && "level" in selectedAction
-                  ? LEVEL_NAMES[selectedAction.level]
+                  ? resort
+                    ? "Station balnéaire"
+                    : LEVEL_NAMES[selectedAction.level]
                   : selectedAction
                     ? actionLabel(selectedAction, state)
                     : "Votre choix"}
@@ -772,9 +779,11 @@ export default function DecisionPanel({
             </dl>
             {construction && (
               <p className="construction-guide">
-                {pending?.kind === "buy"
-                  ? "Prix tout compris : terrain + constructions."
-                  : `Déjà construit : ${LEVEL_NAMES[property?.level ?? 0]}. Vous payez seulement la différence.`}
+                {resort
+                  ? "Aucune construction. Le loyer augmente avec le nombre de stations que vous possédez."
+                  : pending?.kind === "buy"
+                    ? "Prix tout compris : terrain + constructions."
+                    : `Déjà construit : ${LEVEL_NAMES[property?.level ?? 0]}. Vous payez seulement la différence.`}
               </p>
             )}
             {hotelNote && (

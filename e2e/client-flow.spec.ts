@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type {
   GameEvent,
   PublicState,
@@ -6,6 +6,48 @@ import type {
 } from "../src/shared/engine/index.js";
 
 test.use({ reducedMotion: "reduce" });
+
+async function minimizeOwnDecision(page: Page) {
+  // Director completion and React's native dialog opening are separate steps.
+  // Wait for the current decision to be represented before opening a board tool.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const modulePath =
+            performance
+              .getEntriesByType("resource")
+              .find((entry) =>
+                entry.name.includes("/src/client/director/director.ts"),
+              )?.name ?? "/src/client/director/director.ts";
+          const { director } = await import(modulePath);
+          const snapshot = director.getSnapshot();
+          if (snapshot.busy || !snapshot.viewState) return false;
+          const pending = (snapshot.viewState as PublicState).pending;
+          // A bot's quiet decision can be followed immediately by the human's
+          // popup. Menus are checked during a stable human decision instead.
+          if (pending?.seat !== 0) return false;
+          if (pending.kind === "roll")
+            return Boolean(
+              document.querySelector(
+                '.decision-compact[data-kind="roll"][data-own="true"][data-busy="false"]',
+              ),
+            );
+          const key = `${pending.kind}:${pending.seat}:${pending.deadline}:${"tile" in pending ? pending.tile : ""}`;
+          return (
+            document
+              .querySelector(".decision-popup[open]")
+              ?.getAttribute("data-decision") === key
+          );
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  if (await page.locator(".decision-popup[open]").count()) {
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".decision-popup[open]")).toHaveCount(0);
+  }
+}
 
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
@@ -452,11 +494,23 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect
     .poll(() => page.locator(".match-clock").innerText())
     .not.toBe(previousTime);
+  const previousDeadline = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    return director.getSnapshot().serverState?.pending?.deadline as
+      | number
+      | undefined;
+  });
   await roll.click();
   await expect
     .poll(
       async () =>
-        page.evaluate(async () => {
+        page.evaluate(async (deadline) => {
           const modulePath =
             performance
               .getEntriesByType("resource")
@@ -465,20 +519,23 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
               )?.name ?? "/src/client/director/director.ts";
           const { director } = await import(modulePath);
           const snapshot = director.getSnapshot();
+          const state = snapshot.viewState as PublicState | null;
           return (
             !snapshot.busy &&
+            state?.pending != null &&
+            state.pending.seat === 0 &&
+            state.pending.deadline !== deadline &&
             snapshot.history.some(
               (event: GameEvent) =>
                 event.type === "DiceRolled" && event.seat === 0,
             )
           );
-        }),
+        }, previousDeadline),
       { timeout: 30_000 },
     )
     .toBe(true);
   // Native decisions protect focus; minimize without sending a gameplay action.
-  if (await page.locator(".decision-popup").isVisible())
-    await page.keyboard.press("Escape");
+  await minimizeOwnDecision(page);
   await page
     .getByRole("button", { name: "Carnet de voyage", exact: true })
     .click();
@@ -546,8 +603,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Quitter la partie", exact: true }),
   ).toBeVisible();
-  if (await page.locator(".decision-popup").isVisible())
-    await page.keyboard.press("Escape");
+  await minimizeOwnDecision(page);
   await page.getByRole("button", { name: "Comment jouer" }).click();
   await expect(page.locator("dialog")).toBeVisible();
   await page.getByRole("button", { name: "C’est parti" }).click();

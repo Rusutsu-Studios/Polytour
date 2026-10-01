@@ -235,6 +235,8 @@ Review corrections preserve the free dice option during travel, show the exact
 payment after Guardian/Coupon protection (including odd-value rounding), and
 identify both cities before a land exchange. The rent preview and engine use the
 same pure calculation; game rules and the saved-state format are unchanged.
+Resort decisions explain their collection-based rent and lack of construction;
+hotel prerequisites appear only for cities.
 
 - 88 unit/Worker tests, TypeScript, Biome across 69 files, production build,
   bundle budgets, deployment-config checks and a deployment dry run pass.
