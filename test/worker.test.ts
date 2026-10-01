@@ -124,12 +124,541 @@ async function startFour(): Promise<{
   await Promise.all(inboxes.slice(1).map((inbox) => inbox.next("events")));
   return { credentials, inboxes, state, seq: events.toSeq };
 }
+async function closeInbox(inbox: Inbox): Promise<void> {
+  const closed = new Promise<void>((resolve) =>
+    inbox.socket.addEventListener("close", () => resolve(), { once: true }),
+  );
+  inbox.socket.close(1000);
+  await closed;
+}
 afterEach(() => {
   for (const socket of activeSockets.splice(0)) socket.close(1000);
   vi.restoreAllMocks();
 });
 
 describe("Authoritative private rooms", () => {
+  it("sleeps abandoned matches, retains their deadline and resumes after eviction", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    await Promise.all(game.inboxes.map(closeInbox));
+    const dormant = await runInDurableObject(
+      stub,
+      (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        return {
+          sockets: durableState.getWebSockets().length,
+          state: sql
+            .exec<{ seq: number; json: string }>(
+              "SELECT seq,json FROM state WHERE id=1",
+            )
+            .toArray()[0],
+          timers: sql
+            .exec<{ kind: string; fire_at: number }>(
+              "SELECT kind,fire_at FROM timers ORDER BY kind",
+            )
+            .toArray(),
+        };
+      },
+    );
+    expect(dormant.sockets).toBe(0);
+    expect(dormant.state.seq).toBe(game.seq);
+    expect(dormant.timers.map((timer) => timer.kind)).toEqual([
+      "grace:0",
+      "grace:1",
+      "grace:2",
+      "grace:3",
+      "match-end",
+    ]);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind LIKE 'grace:%'",
+        Date.now() - 1,
+      );
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const sleeping = await runInDurableObject(
+      stub,
+      async (_instance, durableState) => ({
+        timers: durableState.storage.sql
+          .exec<{ kind: string; fire_at: number }>(
+            "SELECT kind,fire_at FROM timers",
+          )
+          .toArray(),
+        alarm: await durableState.storage.getAlarm(),
+        seq: durableState.storage.sql
+          .exec<{ seq: number }>("SELECT seq FROM state WHERE id=1")
+          .toArray()[0].seq,
+      }),
+    );
+    expect(sleeping.timers).toEqual([
+      { kind: "match-end", fire_at: game.state.matchDeadline },
+    ]);
+    expect(sleeping.alarm).toBe(game.state.matchDeadline);
+    expect(sleeping.seq).toBe(game.seq);
+    // An old deployment may leave a due bot timer in an already abandoned room.
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "INSERT INTO timers(kind,fire_at) VALUES('bot',?)",
+        Date.now() - 1,
+      );
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(
+      await runInDurableObject(
+        stub,
+        (_instance, durableState) =>
+          durableState.storage.sql
+            .exec<{ seq: number }>("SELECT seq FROM state WHERE id=1")
+            .toArray()[0].seq,
+      ),
+    ).toBe(game.seq);
+    await evictDurableObject(stub);
+    const resumed = await connect(game.credentials[0]);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.seq).toBe(game.seq);
+    expect(welcome.snapshot?.matchDeadline).toBe(game.state.matchDeadline);
+    expect(welcome.snapshot?.pending?.deadline).toBe(
+      game.state.pending?.deadline,
+    );
+    expect(
+      await runInDurableObject(stub, (_instance, durableState) => ({
+        turnTimers: durableState.storage.sql
+          .exec("SELECT kind FROM timers WHERE kind IN ('decision','bot')")
+          .toArray().length,
+        takeover: durableState.storage.sql
+          .exec("SELECT v FROM meta WHERE k='takeover:0'")
+          .toArray().length,
+      })),
+    ).toEqual({ turnTimers: 1, takeover: 0 });
+  });
+
+  it("expires an abandoned match once without replaying two hours of bot moves", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    await Promise.all(game.inboxes.map(closeInbox));
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const sql = durableState.storage.sql;
+      const row = sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({ ...saved, matchDeadline: Date.now() - 1 }),
+      );
+      sql.exec(
+        "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('randomness',?)",
+        Date.now() - 1,
+      );
+      sql.exec(
+        "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('bot',?)",
+        Date.now() - 1,
+      );
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const ended = await runInDurableObject(stub, (_instance, durableState) => {
+      const sql = durableState.storage.sql;
+      const row = sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      return {
+        state: JSON.parse(row.json) as GameState,
+        events: sql
+          .exec<{ json: string }>(
+            "SELECT json FROM events WHERE seq>? ORDER BY seq",
+            game.seq,
+          )
+          .toArray()
+          .map((event) => JSON.parse(event.json) as { type: string }),
+        timers: sql
+          .exec<{ kind: string }>("SELECT kind FROM timers ORDER BY kind")
+          .toArray()
+          .map((timer) => timer.kind),
+      };
+    });
+    expect(ended.state.status).toBe("finished");
+    expect(
+      ended.events.filter((event) => event.type === "GameOver"),
+    ).toHaveLength(1);
+    expect(ended.events.some((event) => event.type === "DiceRolled")).toBe(
+      false,
+    );
+    expect(ended.timers).not.toContain("bot");
+    expect(ended.timers).not.toContain("decision");
+    expect(ended.timers).not.toContain("randomness");
+    const resumed = await connect(game.credentials[0]);
+    expect((await resumed.next("welcome")).snapshot?.result?.kind).toBe(
+      "time-limit",
+    );
+  });
+
+  it("leaves an empty schema after room cleanup and ignores close callbacks", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    const closed = new Promise<void>((resolve) =>
+      inbox.socket.addEventListener("close", () => resolve(), { once: true }),
+    );
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind='cleanup'",
+        Date.now() - 1,
+      );
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await closed;
+    const missing = await exports.default.fetch(
+      new Request(`${origin}/api/rooms/${host.roomCode}`),
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: "room-not-found" });
+    const missingJoin = await exports.default.fetch(
+      new Request(`${origin}/api/rooms/${host.roomCode}/join`, {
+        method: "POST",
+        body: JSON.stringify({ name: "Late" }),
+      }),
+    );
+    expect(missingJoin.status).toBe(404);
+    expect(await missingJoin.json()).toEqual({ error: "room-not-found" });
+    expect(
+      await runInDurableObject(stub, (_instance, durableState) => ({
+        meta: durableState.storage.sql.exec("SELECT k FROM meta").toArray()
+          .length,
+        timers: durableState.storage.sql
+          .exec("SELECT kind FROM timers")
+          .toArray().length,
+      })),
+    ).toEqual({ meta: 0, timers: 0 });
+  });
+
+  it("broadcasts lobby disconnects without adding grace timers or extending cleanup", async () => {
+    const host = await create();
+    const guest = await join(host.roomCode, "Bo");
+    const hostInbox = await connect(host);
+    await hostInbox.next("welcome");
+    const guestInbox = await connect(guest);
+    await guestInbox.next("welcome");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    const readTimers = () =>
+      runInDurableObject(stub, async (_instance, durableState) => ({
+        timers: durableState.storage.sql
+          .exec<{ kind: string; fire_at: number }>(
+            "SELECT kind,fire_at FROM timers ORDER BY kind",
+          )
+          .toArray(),
+        alarm: await durableState.storage.getAlarm(),
+      }));
+    const before = await readTimers();
+    expect(before.timers.map((timer) => timer.kind)).toEqual(["cleanup"]);
+    await closeInbox(guestInbox);
+    for (;;) {
+      const presence = await hostInbox.next("presence");
+      if (presence.seat === guest.seat && presence.status === "away") break;
+    }
+    expect(await readTimers()).toEqual(before);
+    const response = await exports.default.fetch(
+      new Request(`${origin}/api/rooms/${host.roomCode}`),
+    );
+    const body = await response.json<{
+      lobby: { seats: { online: boolean }[] };
+    }>();
+    expect(body.lobby.seats[host.seat].online).toBe(true);
+    expect(body.lobby.seats[guest.seat].online).toBe(false);
+  });
+
+  it("starts reconnect grace for humans who left the lobby and lets a bot take over", async () => {
+    const host = await create();
+    const guest = await join(host.roomCode, "Bo");
+    const hostInbox = await connect(host);
+    await hostInbox.next("welcome");
+    const guestInbox = await connect(guest);
+    await guestInbox.next("welcome");
+    await closeInbox(guestInbox);
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    expect(
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql
+          .exec("SELECT kind FROM timers WHERE kind LIKE 'grace:%'")
+          .toArray(),
+      ),
+    ).toEqual([]);
+    hostInbox.send({
+      type: "lobby",
+      id: "start",
+      op: { type: "start", fillBots: true },
+    });
+    const started = await hostInbox.next("events");
+    const created = started.events.find(
+      (event) => event.type === "GameCreated",
+    );
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    const grace = await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql
+        .exec<{ kind: string; fire_at: number }>(
+          "SELECT kind,fire_at FROM timers WHERE kind LIKE 'grace:%'",
+        )
+        .toArray(),
+    );
+    expect(grace).toEqual([
+      {
+        kind: `grace:${guest.seat}`,
+        fire_at: created.state.startedAt + 60_000,
+      },
+    ]);
+    await runInDurableObject(stub, async (instance, durableState) => {
+      const sql = durableState.storage.sql;
+      const row = sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      // Anchor this case on the absent guest's first roll, regardless of the
+      // shuffled starting order; the real connection/grace flow stays intact.
+      sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          activeSeat: guest.seat,
+          pending: {
+            kind: "roll",
+            seat: guest.seat,
+            deadline: saved.pending?.deadline,
+          },
+        }),
+      );
+      const room = instance as unknown as { updateTimers(): Promise<void> };
+      await room.updateTimers();
+      sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind=?",
+        Date.now() - 1,
+        `grace:${guest.seat}`,
+      );
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    for (;;) {
+      const presence = await hostInbox.next("presence");
+      if (presence.seat === guest.seat && presence.status === "bot") break;
+    }
+    const takeover = await runInDurableObject(
+      stub,
+      (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const row = sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        return {
+          meta: sql
+            .exec<{ v: string }>(
+              "SELECT v FROM meta WHERE k=?",
+              `takeover:${guest.seat}`,
+            )
+            .toArray()[0]?.v,
+          timers: sql
+            .exec<{ kind: string }>(
+              "SELECT kind FROM timers WHERE kind IN ('bot','decision')",
+            )
+            .toArray()
+            .map((timer) => timer.kind),
+          deadline: (JSON.parse(row.json) as GameState).matchDeadline,
+        };
+      },
+    );
+    expect(takeover).toEqual({
+      meta: "true",
+      timers: ["bot"],
+      deadline: created.state.matchDeadline,
+    });
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind='bot'",
+        Date.now() - 1,
+      ),
+    );
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const moved = await hostInbox.next("events");
+    expect(
+      moved.events.some(
+        (event) => event.type === "DiceRolled" && event.seat === guest.seat,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not rewrite unchanged timers or postpone a bot when another seat reconnects", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    inbox.send({
+      type: "lobby",
+      id: "start",
+      op: { type: "start", fillBots: true },
+    });
+    await inbox.next("events");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    const timers = await runInDurableObject(
+      stub,
+      async (instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const read = () =>
+          sql
+            .exec<{ kind: string; fire_at: number }>(
+              "SELECT kind,fire_at FROM timers ORDER BY kind",
+            )
+            .toArray();
+        const before = read();
+        const changesBefore = sql
+          .exec<{ changes: number }>("SELECT total_changes() AS changes")
+          .toArray()[0].changes;
+        const room = instance as unknown as { updateTimers(): Promise<void> };
+        await room.updateTimers();
+        await room.updateTimers();
+        return {
+          before,
+          after: read(),
+          changes:
+            sql
+              .exec<{ changes: number }>("SELECT total_changes() AS changes")
+              .toArray()[0].changes - changesBefore,
+        };
+      },
+    );
+    expect(timers.after).toEqual(timers.before);
+    expect(timers.changes).toBe(0);
+  });
+
+  it("measures zero SQL row writes for a timer refresh that previously rewrote five rows", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    const measured = await runInDurableObject(
+      stub,
+      async (instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const saved = JSON.parse(
+          sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState;
+        if (!saved.pending || saved.matchDeadline === null)
+          throw new Error("Timed human decision expected");
+        // Execute the exact previous timer write sequence against the same room.
+        // Cursor counters include primary-key index writes, not just total_changes().
+        const previous = [
+          sql.exec("DELETE FROM timers WHERE kind IN ('bot','decision')")
+            .rowsWritten,
+          sql.exec(
+            "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('match-end',?)",
+            saved.matchDeadline,
+          ).rowsWritten,
+          sql.exec(
+            "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('decision',?)",
+            saved.pending.deadline,
+          ).rowsWritten,
+        ].reduce((total, count) => total + count, 0);
+        const originalExec = sql.exec.bind(sql);
+        let current = 0;
+        const spy = vi
+          .spyOn(sql, "exec")
+          .mockImplementation(
+            <T extends Record<string, SqlStorageValue>>(
+              query: string,
+              ...bindings: SqlStorageValue[]
+            ) => {
+              const cursor = originalExec<T>(query, ...bindings);
+              current += cursor.rowsWritten;
+              return cursor;
+            },
+          );
+        const room = instance as unknown as { updateTimers(): Promise<void> };
+        try {
+          await room.updateTimers();
+        } finally {
+          spy.mockRestore();
+        }
+        return { previous, current };
+      },
+    );
+    expect(measured).toEqual({ previous: 5, current: 0 });
+  });
+
+  it("answers clock sync without reading or writing SQLite", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, async (instance, durableState) => {
+      const spy = vi.spyOn(durableState.storage.sql, "exec");
+      try {
+        const room = instance as unknown as {
+          webSocketMessage(socket: WebSocket, frame: string): Promise<void>;
+        };
+        await room.webSocketMessage(
+          durableState.getWebSockets()[0],
+          JSON.stringify({ type: "ping", t: 123 }),
+        );
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    expect(await inbox.next("pong")).toMatchObject({ t: 123 });
+  });
+
+  it("suspends legacy beacon retries while nobody is connected and keeps the committed round", async () => {
+    const host = await create("drand");
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    inbox.send({
+      type: "lobby",
+      id: "start",
+      op: { type: "start", fillBots: true },
+    });
+    await inbox.next("events");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, async (instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ seq: number; json: string }>(
+          "SELECT seq,json FROM state WHERE id=1",
+        )
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      const room = instance as unknown as {
+        beginDice(
+          seat: Seat,
+          action: { type: "Roll" },
+          intentId: null,
+          atSeq: number,
+        ): Promise<void>;
+      };
+      await room.beginDice(saved.activeSeat, { type: "Roll" }, null, row.seq);
+    });
+    const commitment = (await inbox.next("randomness")).commitment;
+    await closeInbox(inbox);
+    expect(
+      await runInDurableObject(
+        stub,
+        (_instance, durableState) =>
+          durableState.storage.sql
+            .exec("SELECT kind FROM timers WHERE kind='randomness'")
+            .toArray().length,
+      ),
+    ).toBe(0);
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    expect((await resumed.next("welcome")).randomness).toEqual({
+      status: "waiting",
+      commitment,
+    });
+    expect(
+      await runInDurableObject(
+        stub,
+        (_instance, durableState) =>
+          durableState.storage.sql
+            .exec("SELECT kind FROM timers WHERE kind='randomness'")
+            .toArray().length,
+      ),
+    ).toBe(1);
+  });
+
   it("defaults new rooms to immediate secure dice without external network calls", async () => {
     const externalFetch = vi
       .spyOn(globalThis, "fetch")

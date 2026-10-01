@@ -14,6 +14,12 @@ Persisted alarms drive bots, decision deadlines, disconnect grace, real-time mat
 expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
 survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
+When no player socket remains open, the room stops bot moves, decision alarms
+and entropy retries. It retains the real match deadline and each disconnect grace
+timer, then expires normally; reconnect restores the pending work without moving
+either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
+an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
+for the write-quota incident and measured regressions.
 State version 1 is retained. New rooms freeze rules version 3, while existing
 version-2 rooms retain their original hotel progression. Unknown saved versions
 are rejected before a lobby or active match can continue under different rules.

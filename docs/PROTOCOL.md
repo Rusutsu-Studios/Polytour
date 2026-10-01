@@ -41,6 +41,17 @@ debug socket has been removed; `/api/health` remains.
   Snapshots expose no deck, seed, hidden resolution queue, or session token.
 - Presence derives from live hibernatable sockets. A disconnected human has a
   60-second grace period before server bot takeover; reconnect restores control.
+- With no open player sockets, a room sleeps instead of simulating bots. The match
+  still ends at its original deadline. Reconnect restores the pending timers and
+  may therefore encounter an already expired decision or a finished match.
+- Create/join failures use JSON errors. `room-storage-limit` (503) identifies the
+  verified Cloudflare SQLite free-tier write-limit error; other internal failures
+  use `room-service-unavailable` (503). A platform response can still be text or
+  HTML, so the client validates all responses before storing seat credentials.
+- A WebSocket upgrade is not a successful reconnect: only a valid `welcome`
+  enables actions and resets the retry budget. Failed attempts stop after five
+  retries. Expired/refused sockets stop immediately; recovery requests coalesce
+  until the snapshot arrives and pending command timers clear on disconnect.
 
 The prototype client requests a fresh snapshot on reconnect rather than buffering
 offline actions. Chat, emotes, accounts, matchmaking and spectator messages in the

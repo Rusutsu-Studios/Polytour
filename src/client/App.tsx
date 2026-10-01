@@ -1185,6 +1185,7 @@ function App() {
   const [joinCode, setJoinCode] = useState(initialCode);
   const [config, setConfig] = useState<RoomConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
+  const entering = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [autoStart, setAutoStart] = useState(false);
   const [fillBots, setFillBots] = useState(true);
@@ -1217,6 +1218,7 @@ function App() {
   const settingsDirty =
     serverConfigKey !== null && JSON.stringify(config) !== serverConfigKey;
   async function enter(solo: boolean, join = false) {
+    if (entering.current) return;
     const cleanName = name.trim();
     const code = joinCode.trim().toUpperCase();
     if (!cleanName) {
@@ -1228,6 +1230,7 @@ function App() {
       setFormError("Le code de salle contient six lettres ou chiffres.");
       return;
     }
+    entering.current = true;
     setLoading(true);
     setFormError(null);
     try {
@@ -1252,6 +1255,7 @@ function App() {
           : "Impossible d’ouvrir la partie. Réessayez.",
       );
     } finally {
+      entering.current = false;
       setLoading(false);
     }
   }
