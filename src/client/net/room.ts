@@ -10,6 +10,7 @@ import type {
 } from "../../shared/protocol/index.js";
 import { PROTOCOL_VERSION } from "../../shared/protocol/index.js";
 import { director } from "../director/director.js";
+import { parseRoomResponse, RoomCredentialsSchema } from "./room-response.js";
 import { parseServerMessage } from "./server-message.js";
 
 const STORAGE_KEY = "polytour-room-v1";
@@ -19,24 +20,8 @@ export function readCredentials(): RoomCredentials | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const value: unknown = JSON.parse(raw);
-    if (
-      typeof value !== "object" ||
-      !value ||
-      !("roomCode" in value) ||
-      !("token" in value) ||
-      !("seat" in value)
-    )
-      return null;
-    if (
-      typeof value.roomCode !== "string" ||
-      typeof value.token !== "string" ||
-      typeof value.seat !== "number" ||
-      value.seat < 0 ||
-      value.seat > 3
-    )
-      return null;
-    return value as RoomCredentials;
+    const value = RoomCredentialsSchema.safeParse(JSON.parse(raw) as unknown);
+    return value.success ? value.data : null;
   } catch {
     return null;
   }
@@ -49,31 +34,19 @@ export async function enterRoom(
   config?: RoomConfig,
   code?: string,
 ): Promise<RoomCredentials> {
-  const response = await fetch(
-    code ? `/api/rooms/${code}/join` : "/api/rooms",
-    {
+  let response: Response;
+  try {
+    response = await fetch(code ? `/api/rooms/${code}/join` : "/api/rooms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(code ? { name } : { name, config }),
-    },
-  );
-  const body = (await response.json()) as RoomCredentials & {
-    error?: string;
-    message?: string;
-  };
-  if (!response.ok) {
-    const messages: Record<string, string> = {
-      "room-not-found":
-        "Cette salle n’existe pas. Vérifiez les six caractères du code.",
-      "room-full": "Cette salle est complète. Créez une nouvelle partie.",
-      "game-started": "La partie a déjà commencé. Rejoignez un autre salon.",
-    };
+    });
+  } catch {
     throw new Error(
-      messages[body.error ?? ""] ??
-        body.message ??
-        "Impossible d’ouvrir la salle. Réessayez.",
+      "Impossible de joindre le serveur de jeu. Vérifiez votre connexion puis réessayez.",
     );
   }
+  const body = await parseRoomResponse(response);
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(body));
   return body;
 }
@@ -88,6 +61,7 @@ export function useRoom(credentials: RoomCredentials | null) {
   const socket = useRef<WebSocket | null>(null);
   const sequence = useRef(0);
   const pendingId = useRef<string | null>(null);
+  const requestSync = useRef<(() => void) | null>(null);
   const requestTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -100,39 +74,58 @@ export function useRoom(credentials: RoomCredentials | null) {
     }
     let disposed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    let attempt = retry > 0 ? 1 : 0;
+    let attempt = 0;
     let incompatible = false;
     function connect() {
       if (disposed || !credentials) return;
-      setConnection(attempt ? "reconnecting" : "connecting");
+      setConnection(attempt || retry > 0 ? "reconnecting" : "connecting");
       const scheme = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(
         `${scheme}://${window.location.host}/ws/room/${credentials.roomCode}`,
         ["polytour", `seat.${credentials.token}`],
       );
       socket.current = ws;
-      ws.addEventListener("open", () => {
-        attempt = 0;
-        setConnection("online");
-        setError(null);
+      let welcomed = false;
+      let syncing = false;
+      let welcomeTimer: ReturnType<typeof setTimeout> | undefined;
+      function sync() {
+        if (syncing || ws.readyState !== WebSocket.OPEN) return;
+        syncing = true;
+        if (welcomed) setConnection("reconnecting");
         ws.send(
           JSON.stringify({
             type: "sync",
             lastSeq: null,
           } satisfies ClientMessage),
         );
+        if (welcomeTimer) clearTimeout(welcomeTimer);
+        welcomeTimer = setTimeout(() => {
+          if (!disposed && syncing && socket.current === ws)
+            ws.close(1000, "Room synchronization timed out");
+        }, 10_000);
+      }
+      requestSync.current = sync;
+      ws.addEventListener("open", () => {
+        if (disposed || socket.current !== ws) return;
+        // The upgrade alone does not mean the Durable Object loaded this room.
+        // Keep actions blocked and the retry budget intact until its welcome.
+        sync();
       });
       ws.addEventListener("message", (event: MessageEvent<unknown>) => {
-        if (disposed || typeof event.data !== "string") return;
+        if (disposed || socket.current !== ws || typeof event.data !== "string")
+          return;
         let message: ServerMessage;
         try {
           message = parseServerMessage(event.data);
         } catch {
+          incompatible = true;
           setError(
             "La salle a envoyé une réponse incompatible. Actualisez la page pour reprendre votre place.",
           );
+          ws.close(1002, "Invalid room response");
           return;
         }
+        if (!welcomed && message.type !== "welcome") return;
         switch (message.type) {
           case "welcome":
             if (message.protocolVersion !== PROTOCOL_VERSION) {
@@ -143,6 +136,12 @@ export function useRoom(credentials: RoomCredentials | null) {
               ws.close();
               return;
             }
+            welcomed = true;
+            syncing = false;
+            attempt = 0;
+            if (welcomeTimer) clearTimeout(welcomeTimer);
+            setConnection("online");
+            setError(null);
             sequence.current = message.seq;
             setLobby(message.lobby);
             setRandomness(
@@ -156,14 +155,10 @@ export function useRoom(credentials: RoomCredentials | null) {
             if (requestTimer.current) clearTimeout(requestTimer.current);
             break;
           case "events":
+            if (syncing) break;
             if (message.toSeq <= sequence.current) break;
             if (message.fromSeq !== sequence.current + 1) {
-              ws.send(
-                JSON.stringify({
-                  type: "sync",
-                  lastSeq: null,
-                } satisfies ClientMessage),
-              );
+              sync();
               break;
             }
             sequence.current = message.toSeq;
@@ -229,14 +224,26 @@ export function useRoom(credentials: RoomCredentials | null) {
             break;
         }
       });
-      ws.addEventListener("close", () => {
-        if (disposed) return;
+      ws.addEventListener("close", (event) => {
+        if (welcomeTimer) clearTimeout(welcomeTimer);
+        if (disposed || socket.current !== ws) return;
+        requestSync.current = null;
+        if (requestTimer.current) clearTimeout(requestTimer.current);
+        setPending(false);
+        pendingId.current = null;
         if (incompatible) {
           setConnection("offline");
           return;
         }
-        setPending(false);
-        pendingId.current = null;
+        if (event.code === 1008 || event.reason === "Room expired") {
+          setConnection("offline");
+          setError(
+            event.reason === "Room expired"
+              ? "Cette salle a expiré. Revenez à l’accueil pour créer une partie."
+              : "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
+          );
+          return;
+        }
         attempt += 1;
         setConnection(attempt > 5 ? "offline" : "reconnecting");
         if (attempt <= 5)
@@ -249,7 +256,9 @@ export function useRoom(credentials: RoomCredentials | null) {
             "La salle ne répond pas. Reconnectez-vous ou revenez à l’accueil.",
           );
       });
-      ws.addEventListener("error", () => setConnection("reconnecting"));
+      ws.addEventListener("error", () => {
+        if (!disposed && socket.current === ws) setConnection("reconnecting");
+      });
     }
     connect();
     return () => {
@@ -258,14 +267,21 @@ export function useRoom(credentials: RoomCredentials | null) {
       if (requestTimer.current) clearTimeout(requestTimer.current);
       socket.current?.close();
       socket.current = null;
+      requestSync.current = null;
     };
   }, [credentials, retry]);
 
   function send(message: ClientMessage) {
-    if (socket.current?.readyState !== WebSocket.OPEN) {
+    if (
+      connection !== "online" ||
+      socket.current?.readyState !== WebSocket.OPEN
+    ) {
       setError("Connexion en cours. Attendez le retour de la salle.");
       return;
     }
+    // React may not have rendered the disabled button yet after the first click.
+    // Never send a second command while its predecessor is awaiting confirmation.
+    if ("id" in message && pendingId.current) return;
     setError(null);
     if ("id" in message) {
       pendingId.current = message.id;
@@ -277,13 +293,7 @@ export function useRoom(credentials: RoomCredentials | null) {
         setError(
           "Votre choix n’a pas été confirmé. La salle est actualisée ; vérifiez le plateau avant de rejouer.",
         );
-        if (socket.current?.readyState === WebSocket.OPEN)
-          socket.current.send(
-            JSON.stringify({
-              type: "sync",
-              lastSeq: null,
-            } satisfies ClientMessage),
-          );
+        requestSync.current?.();
       }, 10_000);
     }
     socket.current.send(JSON.stringify(message));

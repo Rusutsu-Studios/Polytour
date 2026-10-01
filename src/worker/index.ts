@@ -14,6 +14,20 @@ export { GameRoom, Matchmaker };
 const app = new Hono<{ Bindings: Env }>();
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+app.onError((error, context) => {
+  // Keep the cause in Worker logs, but never send internal failures as plain text
+  // (or expose a storage error/stack to a player creating or joining a room).
+  console.error("Room service failed", error);
+  const code = error.message.includes(
+    "Exceeded allowed rows written in Durable Objects free tier",
+  )
+    ? "room-storage-limit"
+    : "room-service-unavailable";
+  return context.json({ error: code }, 503, {
+    "Cache-Control": "no-store",
+  });
+});
+
 function roomCode(): string {
   // 32-symbol alphabet divides 256 exactly, so this mapping has no modulo bias.
   return Array.from(

@@ -1,6 +1,6 @@
 ---
 name: Polytour
-description: A PC property-board game with a central toy diorama and compact corner HUDs.
+description: A PC property-board game with a clear shallow isometric board and compact corner HUDs.
 colors:
   ink: "#173b45"
   muted-ink: "#47666c"
@@ -54,7 +54,7 @@ components:
 
 The user confirmed the familiar PC property-board game composition on 1 October 2026: an original isometric toy board fills the play viewport, four compact player HUDs occupy the corners and discreet controls expose the current decision. The old dashboard composition with a persistent sidebar and stacked information panels is replaced. Local browser captures verify that composition at 1280×720, 1440×900 and 1920×1080 without page scroll or off-screen controls. Dated evidence, the verified Preview revision and the remaining hardware FPS check live in `docs/PLAYABLE_CHECKPOINT.md`; each later refinement requires its own browser verification.
 
-Retain the travel progression from French cities to Tokyo and the original toy geometry, rounded pawns, raised buildings, flags and dice. A sky-blue surround, grassy center and ivory track provide the setting. The board carries the story; interface tools open on demand rather than sharing equal visual weight with it.
+Retain the travel progression from French cities to Tokyo, rounded pawns, flags and dice. The latest user reference asks for less visual depth and clearer tiles: a shallow lilac-and-ivory track, small simple buildings and an unobstructed printed name and price on each city. A sky-blue surround and grassy center provide the setting. The board carries the story; interface tools open on demand rather than sharing equal visual weight with it.
 
 The user's later 1 October reference explicitly asks for centered illustrated
 decisions. Purchases, development, buyouts and other choices now temporarily dim
@@ -105,7 +105,7 @@ Mobile is best effort. A future touch adaptation may use its own layout; portrai
 
 ## Elevation & Depth
 
-The board has an extruded ivory base, a layered physical edge, soft shadows and original raised buildings. Instanced bases, cornices and entrances distinguish small houses, hotels and terraced landmarks at the fixed camera distance. The grassy center stays available to the dice and match action; it does not carry an oversized decorative sign or object that obscures play.
+The board has a thin physical edge and shallow rectangular tile faces. Each city reserves its outer band for small original buildings, leaving the printed name and amount clear toward the center. Gabled houses, a compact hotel and a restrained landmark distinguish development without tall towers or layered cornices. Reduce vegetation and corner scenery to recognizable small silhouettes. The grassy center stays available to dice and match action.
 
 Compact ivory controls use restrained structural shadows, and action buttons retain a darker lower edge for a physical press. Avoid permanent glass overlays across the board. Hover, ownership changes and festivals add local feedback, not general interface ornament.
 
@@ -113,7 +113,7 @@ Compact ivory controls use restrained structural shadows, and action buttons ret
 
 ## Shapes
 
-Softly curved controls belong to the toy-game language. Corner HUDs remain compact rather than becoming a repeated grid of large cards. Roofs, palms, flags and pawns retain chunky low-poly geometry. Building levels must remain distinguishable; festival markers show a star and multiplier, while ownership flags repeat the player's symbol.
+Softly curved controls belong to the toy-game language. Corner HUDs remain compact rather than becoming a repeated grid of large cards. Roofs, palms, flags and pawns retain simple low-poly geometry. Building levels must remain distinguishable; festival markers show a star and multiplier, while ownership flags repeat the player's symbol.
 
 ## Components
 

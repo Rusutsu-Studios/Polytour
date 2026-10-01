@@ -267,6 +267,50 @@ seat. Empty and out-of-range inputs still normalize safely.
 The existing balance reports still apply. Target-hardware FPS has not been
 measured; this presentation change does not establish the balance targets.
 
+## Durable Object incident and clearer board — 1 October 2026
+
+The user's reported Preview failure is confirmed in Cloudflare's GameRoom logs:
+`Exceeded allowed rows written in Durable Objects free tier.` The write allowance
+was exhausted; 9.21k requests in the billing-period screenshot were not evidence
+of reaching the request limit. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
+for the incident, limits and recovery time.
+
+Rooms without an open player socket now stop bot moves and retry work, retaining
+their original match deadline and one-shot disconnect grace. Clock sync performs
+no SQL operations. An unchanged timer refresh now writes zero rows versus five
+for the previous sequence, measured using actual SQLite cursor counters. Cleanup
+returns JSON404 to later requests without orphan timers. Lobby departures retain
+presence updates and offline humans get disconnect grace when the game starts.
+JSON503 errors identify the confirmed quota failure; clients safely handle text
+and HTML failures, suppress duplicate submissions and bound unsuccessful retries.
+
+The visual replacement uses thin board edges, flat long rectangular lilac/ivory
+tiles and small simple gabled buildings. Names and amounts follow the route on
+the clear portion of each tile. Pawns use an inner lane, with a tile marker joining
+their foot to their exact destination. Cash reserves, original cards, central
+illustrated decisions, slider settings and corner HUDs remain in place.
+
+- 112 unit/Worker tests pass, including quota/API response handling and abandoned,
+  expired, reconnecting and pre-game disconnected rooms. TypeScript and Biome pass.
+- 13 local browser scenarios pass, including a complete four-seat match,
+  reconnect, real UI play, settings/cards/decisions and five intercepted network
+  failure scenarios. No remote Durable Object is used by these regressions.
+- Nine local captures cover empty/developed fixtures and real server dice/movement
+  at 1280×720, 1440×900 and 1920×1080, without overflow or browser exceptions.
+  Developed boards are explicitly presentation fixtures, not a remote match.
+- A fresh manual detector scan retains the three previously explained CSS warnings
+  and 330 token advisories. Actual real/developed board renders have been inspected;
+  this is not a zero-findings detector claim.
+- Runtime/network review found the pre-game disconnect issue; its presence and
+  bot-grace fixes are covered by focused Worker regressions. No rules, state-format,
+  protocol-version, migration or billing-plan change is made.
+
+The Preview deployment cannot replenish the account's already consumed daily
+write allowance. Remote room creation remains blocked until Cloudflare resets it
+at 00:00 UTC; the first subsequent local-date reset is 2 October at 02:00 in Zurich.
+Localhost is usable during that interval. Do not interpret earlier successful
+remote matches as evidence that this incident has recovered.
+
 ## Simulator findings (earlier lap-only rules)
 
 The committed [baseline](../tools/sim/baseline.json) records 10,000 seeded games

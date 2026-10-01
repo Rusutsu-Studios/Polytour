@@ -31,87 +31,104 @@ type BoardProps = {
   zoom?: number;
 };
 
-// THESIS: A full-screen toy board; the player sits at the table, not beside a dashboard.
-// OWN-WORLD: a sky-blue table, ivory city tiles, green lawn and owner-colored toy roofs.
+// THESIS: A readable printed game board, with small low-poly pieces above its track.
+// OWN-WORLD: lilac paper tiles, a quiet lawn, clear dark amounts and colored gabled roofs.
 // STORY: roll, travel, buy, collect; the board shows events, the server owns rules.
 // FIRST VIEWPORT: a fixed diamond fills the screen, with four corner players and a small action below.
-// FORM: premium toy diorama explicitly pinned by project docs and the supplied reference.
+// FORM: the user's pinned tabletop reference; shallow edges, separated print and buildings.
 
-function roundedTile(radius = 0.08) {
-  const shape = new THREE.Shape();
-  const x = -0.5;
-  const y = -0.5;
-  const width = 1;
-  shape.moveTo(x + radius, y);
-  shape.lineTo(x + width - radius, y);
-  shape.quadraticCurveTo(x + width, y, x + width, y + radius);
-  shape.lineTo(x + width, y + width - radius);
-  shape.quadraticCurveTo(x + width, y + width, x + width - radius, y + width);
-  shape.lineTo(x + radius, y + width);
-  shape.quadraticCurveTo(x, y + width, x, y + width - radius);
-  shape.lineTo(x, y + radius);
-  shape.quadraticCurveTo(x, y, x + radius, y);
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.14,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    steps: 1,
-    bevelSize: 0.025,
-    bevelThickness: 0.025,
-  });
-  geometry.rotateX(-Math.PI / 2);
-  return geometry;
+function tileAngle(index: number) {
+  return (index > 8 && index < 16) || index > 24 ? Math.PI / 2 : 0;
+}
+
+function tileLocalPosition(index: number, localX: number, localZ: number) {
+  const [x, z] = tilePosition(index);
+  const angle = tileAngle(index);
+  return [
+    x + localX * Math.cos(angle) + localZ * Math.sin(angle),
+    z - localX * Math.sin(angle) + localZ * Math.cos(angle),
+  ] as const;
+}
+
+function tileDepth(index: number) {
+  return index % 8 === 0 ? 1.035 : 1.15;
 }
 
 function tileTexture(index: number, amount: number | null, rented: boolean) {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
-  canvas.height = 512;
+  canvas.height = 640;
   const context = canvas.getContext("2d");
   if (!context) return new THREE.CanvasTexture(canvas);
   const tile = BOARD[index];
-  context.clearRect(0, 0, 512, 512);
-  context.fillStyle = tileColor(index);
-  context.fillRect(8, 8, 496, 28);
+  context.clearRect(0, 0, 512, 640);
+  context.fillStyle = tile.kind === "resort" ? "#fff1d5" : "#f1eef2";
+  context.fillRect(0, 0, 512, 640);
   if (tile.kind === "city") {
-    context.fillStyle = "#e6edcc";
-    context.fillRect(60, 50, 390, 135);
-    context.fillStyle = "#c5d6a6";
-    context.fillRect(60, 177, 390, 8);
+    context.fillStyle = "#d9e7bb";
+    context.fillRect(14, 12, 484, 230);
+    context.fillStyle = tileColor(index);
+    context.fillRect(14, 12, 484, 15);
   }
-  context.fillStyle = "#173b45";
+  context.fillStyle = "#253641";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  // Lettering is printed on the tile, aligned with the fixed diagonal camera.
-  // It stays flat and cannot obscure neighboring destinations like a billboard.
+  // Each side reads along the track. The upper band belongs to the buildings;
+  // the city and its amount always keep their own unoccluded printed area.
   context.save();
-  context.translate(300, 300);
-  context.rotate(-Math.PI / 4);
-  context.scale(1, 2.15);
+  context.translate(256, 432);
+  context.scale(1, 1.7);
   const name = TILE_NAMES[index];
-  context.font = "900 72px Trebuchet MS, sans-serif";
-  context.fillText(name, 0, -35, 410);
-  context.font = "900 92px Trebuchet MS, sans-serif";
+  context.font = "900 68px Arial, sans-serif";
   context.fillText(
-    amount === null ? TILE_ICONS[tile.kind] : money(amount),
+    name.toLocaleUpperCase("fr"),
     0,
-    31,
-    300,
+    amount === null ? -15 : -75,
+    474,
   );
   if (amount !== null) {
-    context.font = "700 23px Segoe UI, sans-serif";
-    context.fillStyle = "#47666c";
-    context.fillText(rented ? "LOYER" : "ACHAT", 0, 77);
+    context.font = "900 130px Arial, sans-serif";
+    context.fillText(money(amount), 0, 35, 450);
+    context.font = "700 18px Segoe UI, sans-serif";
+    context.fillStyle = "#4b5c62";
+    context.fillText(rented ? "LOYER" : "ACHAT", 0, 109);
   }
   context.restore();
   if (tile.kind !== "city" && tile.kind !== "resort") {
-    context.fillStyle = tileColor(index);
-    context.beginPath();
-    context.arc(100, 100, 60, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#173b45";
-    context.font = "900 104px Segoe UI, sans-serif";
-    context.fillText(TILE_ICONS[tile.kind], 100, 105);
+    const colors = [
+      "#e95d75",
+      "#efb840",
+      "#55a881",
+      "#47a5c8",
+      "#9369bc",
+      "#f08945",
+    ];
+    if (tile.kind === "chance") {
+      for (let wedge = 0; wedge < 6; wedge++) {
+        context.fillStyle = colors[wedge];
+        context.beginPath();
+        context.moveTo(256, 178);
+        context.arc(
+          256,
+          178,
+          116,
+          (wedge * Math.PI) / 3,
+          ((wedge + 1) * Math.PI) / 3,
+        );
+        context.closePath();
+        context.fill();
+      }
+      context.fillStyle = "#fffaf0";
+      context.beginPath();
+      context.arc(256, 178, 34, 0, Math.PI * 2);
+      context.fill();
+    } else {
+      context.fillStyle = tile.kind === "tax" ? "#dbc7d7" : "#d7e6bd";
+      context.fillRect(14, 12, 484, 256);
+      context.fillStyle = "#36516a";
+      context.font = "900 138px Segoe UI, sans-serif";
+      context.fillText(TILE_ICONS[tile.kind], 256, 159);
+    }
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -141,29 +158,31 @@ function TileFace({
   return (
     <mesh
       position={[x, 0.317, z]}
-      rotation={[-Math.PI / 2, 0, 0]}
+      rotation={[-Math.PI / 2, 0, tileAngle(index)]}
       onPointerDown={(event) => {
         if (preview) return;
         event.stopPropagation();
         onSelect(index);
       }}
     >
-      <planeGeometry args={[0.99, 0.99]} />
-      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+      <planeGeometry args={[1.035, tileDepth(index)]} />
+      <meshBasicMaterial map={texture} />
     </mesh>
   );
 }
 
 function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
   const mesh = useRef<THREE.InstancedMesh>(null);
-  const geometry = useMemo(roundedTile, []);
+  const geometry = useMemo(() => new THREE.BoxGeometry(1.035, 0.075, 1), []);
   const transforms = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   useEffect(() => {
     if (!mesh.current) return;
     for (const tile of BOARD) {
       const [x, z] = tilePosition(tile.index);
-      transforms.position.set(x, 0.14, z);
+      transforms.position.set(x, 0.278, z);
+      transforms.rotation.set(0, tileAngle(tile.index), 0);
+      transforms.scale.set(1, 1, tileDepth(tile.index));
       transforms.updateMatrix();
       mesh.current.setMatrixAt(tile.index, transforms.matrix);
       const owner = state ? getProperty(state, tile.index)?.owner : null;
@@ -172,10 +191,10 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
           ? "#ffda72"
           : owner != null
             ? PLAYER_COLORS[owner]
-            : "#fff9e9",
+            : "#d3cbd7",
       );
       if (owner != null && tile.index !== selected)
-        color.lerp(new THREE.Color("#fff9e9"), 0.78);
+        color.lerp(new THREE.Color("#d3cbd7"), 0.82);
       mesh.current.setColorAt(tile.index, color);
     }
     mesh.current.instanceMatrix.needsUpdate = true;
@@ -202,7 +221,7 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
           onSelect(event.instanceId);
         }}
       >
-        <meshStandardMaterial roughness={0.7} />
+        <meshStandardMaterial roughness={1} />
       </instancedMesh>
       {BOARD.map((tile) => {
         const property = state ? getProperty(state, tile.index) : null;
@@ -257,7 +276,8 @@ function TileFocus({ state, selected, preview }: BoardProps) {
             key={index === 0 ? "decision" : "inspection"}
             geometry={outline}
             position={[x, 0.323, z]}
-            rotation={[-Math.PI / 2, 0, 0]}
+            rotation={[-Math.PI / 2, 0, tileAngle(tile)]}
+            scale={[1.045, tileDepth(tile), 1]}
           >
             <meshBasicMaterial
               color={
@@ -275,14 +295,21 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
   const walls = useRef<THREE.InstancedMesh>(null);
   const roofs = useRef<THREE.InstancedMesh>(null);
   const windows = useRef<THREE.InstancedMesh>(null);
-  const pole = useRef<THREE.InstancedMesh>(null);
-  const flags = useRef<THREE.InstancedMesh>(null);
   const details = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const roofGeometry = useMemo(() => {
-    const geometry = new THREE.ConeGeometry(0.25, 0.23, 4);
-    geometry.rotateY(Math.PI / 4);
+    const triangle = new THREE.Shape();
+    triangle.moveTo(-0.5, 0);
+    triangle.lineTo(0.5, 0);
+    triangle.lineTo(0, 1);
+    triangle.closePath();
+    const geometry = new THREE.ExtrudeGeometry(triangle, {
+      depth: 1,
+      bevelEnabled: false,
+      steps: 1,
+    });
+    geometry.translate(0, 0, -0.5);
     return geometry;
   }, []);
   useEffect(() => {
@@ -290,19 +317,14 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
       !walls.current ||
       !roofs.current ||
       !windows.current ||
-      !pole.current ||
-      !flags.current ||
       !details.current
     )
       return;
     let count = 0;
     let windowCount = 0;
-    let flagCount = 0;
     let detailCount = 0;
-    const angle = Math.PI / 4;
     for (const tile of BOARD) {
       if (tile.kind !== "city") continue;
-      const [x, z] = tilePosition(tile.index);
       const property = state ? getProperty(state, tile.index) : null;
       const owner = property?.owner;
       const level =
@@ -313,150 +335,79 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
             : 0;
       const roofColor =
         owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
-      const detail = (
-        centerX: number,
-        centerY: number,
-        centerZ: number,
-        width: number,
-        height: number,
-        depth: number,
-        tint: string,
-      ) => {
-        dummy.rotation.set(0, angle, 0);
-        dummy.position.set(centerX, centerY, centerZ);
-        dummy.scale.set(width, height, depth);
-        dummy.updateMatrix();
-        details.current?.setMatrixAt(detailCount, dummy.matrix);
-        details.current?.setColorAt(detailCount, color.set(tint));
-        detailCount += 1;
-      };
+      const angle = tileAngle(tile.index);
       const building = (
         localX: number,
-        localZ: number,
         width: number,
-        depth: number,
         height: number,
-        base = 0.34,
-        roofHeight = 0.16,
+        depth = 0.24,
       ) => {
-        localZ -= 0.24;
-        const centerX = x + localX * Math.cos(angle) + localZ * Math.sin(angle);
-        const centerZ = z - localX * Math.sin(angle) + localZ * Math.cos(angle);
+        const [x, z] = tileLocalPosition(tile.index, localX, -0.35);
+        const base = 0.324;
         dummy.rotation.set(0, angle, 0);
-        dummy.position.set(centerX, base + height / 2, centerZ);
+        dummy.position.set(x, base + height / 2, z);
         dummy.scale.set(width, height, depth);
         dummy.updateMatrix();
         walls.current?.setMatrixAt(count, dummy.matrix);
-        walls.current?.setColorAt(count, color.set("#fffaf0"));
-        dummy.position.y = base + height + roofHeight / 2;
-        dummy.scale.set(width / 0.35, roofHeight / 0.23, depth / 0.35);
+        walls.current?.setColorAt(count, color.set("#fffaf4"));
+        dummy.position.y = base + height;
+        dummy.scale.set(
+          width + 0.045,
+          level >= 4 ? 0.12 : 0.105,
+          depth + 0.045,
+        );
         dummy.updateMatrix();
         roofs.current?.setMatrixAt(count, dummy.matrix);
         roofs.current?.setColorAt(count, color.set(roofColor));
         count += 1;
-        // Physical foundations, cornices and doors finish the miniature without
-        // enlarging its footprint into the lettering reserved below it.
-        detail(
-          centerX,
-          base + 0.025,
-          centerZ,
-          width + 0.045,
-          0.05,
-          depth + 0.04,
-          "#dbceb5",
-        );
-        detail(
-          centerX,
-          base + height - 0.018,
-          centerZ,
-          width + 0.03,
-          0.045,
-          depth + 0.03,
-          level === 5 ? "#ecc36a" : "#efe5ce",
-        );
-        detail(
-          centerX + Math.sin(angle) * depth * 0.51,
-          base + 0.065,
-          centerZ + Math.cos(angle) * depth * 0.51,
-          width * 0.23,
-          0.13,
-          0.015,
-          "#244f61",
-        );
-        const rows = height > 0.45 ? 3 : height > 0.3 ? 2 : 1;
+        // One owner-colored footing and simple front windows: the roof silhouette
+        // identifies a house, while the body height identifies hotels/monuments.
+        dummy.position.y = base + 0.018;
+        dummy.scale.set(width + 0.025, 0.036, depth + 0.025);
+        dummy.updateMatrix();
+        details.current?.setMatrixAt(detailCount, dummy.matrix);
+        details.current?.setColorAt(detailCount, color.set(roofColor));
+        detailCount += 1;
+        const rows = height > 0.35 ? 3 : 1;
         for (let row = 0; row < rows; row++) {
-          for (const front of [0, 1]) {
-            const faceAngle = angle + (front * Math.PI) / 2;
-            dummy.rotation.set(0, faceAngle, 0);
+          for (const column of [-1, 1]) {
+            const [windowX, windowZ] = tileLocalPosition(
+              tile.index,
+              localX + column * width * 0.22,
+              -0.35 + depth * 0.505,
+            );
             dummy.position.set(
-              centerX + Math.sin(faceAngle) * (front ? width : depth) * 0.505,
+              windowX,
               base + (height * (row + 0.5)) / rows,
-              centerZ + Math.cos(faceAngle) * (front ? width : depth) * 0.505,
+              windowZ,
             );
-            dummy.scale.set(
-              width * 0.56,
-              Math.min(0.075, height * 0.28),
-              0.009,
-            );
+            dummy.scale.set(width * 0.22, Math.min(0.07, height * 0.34), 0.009);
             dummy.updateMatrix();
-            windows.current?.setMatrixAt(windowCount, dummy.matrix);
-            windowCount += 1;
+            windows.current?.setMatrixAt(windowCount++, dummy.matrix);
           }
         }
       };
-      // A bare plot, one/two/three separate houses, a hotel and a tiered monument.
-      // These are geometry stages, so development is readable without a tooltip.
       if (level >= 1 && level <= 3) {
         const offsets =
-          level === 1
-            ? [[0, -0.22]]
-            : level === 2
-              ? [
-                  [-0.15, -0.23],
-                  [0.15, -0.23],
-                ]
-              : [
-                  [-0.17, -0.28],
-                  [0.17, -0.28],
-                  [0, -0.05],
-                ];
-        for (const [localX, localZ] of offsets)
-          building(localX, localZ, level === 1 ? 0.31 : 0.24, 0.25, 0.27);
+          level === 1 ? [0] : level === 2 ? [-0.18, 0.18] : [-0.3, 0, 0.3];
+        for (const x of offsets) building(x, level === 1 ? 0.27 : 0.235, 0.2);
       } else if (level === 4) {
-        building(0, -0.22, 0.47, 0.32, 0.57, 0.34, 0.12);
-        building(-0.25, -0.18, 0.17, 0.27, 0.24, 0.34, 0.1);
-        building(0.25, -0.18, 0.17, 0.27, 0.24, 0.34, 0.1);
+        building(0, 0.44, 0.41, 0.27);
+        building(-0.31, 0.14, 0.18);
+        building(0.31, 0.14, 0.18);
       } else if (level === 5) {
-        building(0, -0.22, 0.49, 0.38, 0.28, 0.34, 0.14);
-        building(0, -0.22, 0.34, 0.28, 0.26, 0.74, 0.14);
-        building(0, -0.22, 0.19, 0.19, 0.24, 1.12, 0.2);
-      }
-      if (owner != null) {
-        dummy.position.set(x - 0.31, 0.54, z - 0.2);
-        dummy.rotation.set(0, angle, 0);
-        dummy.scale.set(0.018, 0.43, 0.018);
-        dummy.updateMatrix();
-        pole.current.setMatrixAt(flagCount, dummy.matrix);
-        dummy.position.set(x - 0.24, 0.69, z - 0.2);
-        dummy.scale.set(0.2, 0.15, 0.025);
-        dummy.updateMatrix();
-        flags.current.setMatrixAt(flagCount, dummy.matrix);
-        flags.current.setColorAt(flagCount, color.set(PLAYER_COLORS[owner]));
-        flagCount += 1;
+        building(0, 0.53, 0.53, 0.29);
+        building(-0.32, 0.12, 0.28);
+        building(0.32, 0.12, 0.28);
       }
     }
-    walls.current.count = count;
-    roofs.current.count = count;
+    walls.current.count = roofs.current.count = count;
     windows.current.count = windowCount;
-    pole.current.count = flagCount;
-    flags.current.count = flagCount;
     details.current.count = detailCount;
     for (const object of [
       walls.current,
       roofs.current,
       windows.current,
-      pole.current,
-      flags.current,
       details.current,
     ]) {
       object.instanceMatrix.needsUpdate = true;
@@ -469,35 +420,22 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
     <>
       <instancedMesh ref={walls} args={[undefined, undefined, 96]} castShadow>
         <boxGeometry />
-        <meshStandardMaterial roughness={0.8} />
+        <meshStandardMaterial roughness={1} />
       </instancedMesh>
       <instancedMesh
         ref={roofs}
         args={[roofGeometry, undefined, 96]}
         castShadow
       >
-        <meshStandardMaterial roughness={0.65} />
+        <meshStandardMaterial roughness={1} />
       </instancedMesh>
       <instancedMesh ref={windows} args={[undefined, undefined, 320]}>
         <boxGeometry />
-        <meshStandardMaterial color="#2b637a" roughness={0.4} />
+        <meshBasicMaterial color="#334759" />
       </instancedMesh>
-      <instancedMesh
-        ref={details}
-        args={[undefined, undefined, 288]}
-        castShadow
-        receiveShadow
-      >
+      <instancedMesh ref={details} args={[undefined, undefined, 96]} castShadow>
         <boxGeometry />
-        <meshStandardMaterial roughness={0.65} />
-      </instancedMesh>
-      <instancedMesh ref={pole} args={[undefined, undefined, 24]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#e6c79a" />
-      </instancedMesh>
-      <instancedMesh ref={flags} args={[undefined, undefined, 24]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial />
+        <meshStandardMaterial roughness={1} />
       </instancedMesh>
     </>
   );
@@ -566,16 +504,10 @@ function BoardMarkers({ state }: { state: PublicState | null }) {
       let count = 0;
       for (const property of state?.properties ?? []) {
         if (property.owner !== seat) continue;
-        const [x, z] = tilePosition(property.tile);
-        if (BOARD[property.tile].kind === "city") {
-          transform.position.set(x - 0.24, 0.691, z - 0.188);
-          transform.rotation.set(0, Math.PI / 4, 0);
-          transform.scale.set(0.18, 0.14, 1);
-        } else {
-          transform.position.set(x - 0.26, 0.337, z + 0.1);
-          transform.rotation.set(-Math.PI / 2, 0, 0);
-          transform.scale.set(0.26, 0.2, 1);
-        }
+        const [x, z] = tileLocalPosition(property.tile, -0.4, 0.44);
+        transform.position.set(x, 0.322, z);
+        transform.rotation.set(-Math.PI / 2, 0, tileAngle(property.tile));
+        transform.scale.set(0.14, 0.105, 1);
         transform.updateMatrix();
         mesh.setMatrixAt(count, transform.matrix);
         count += 1;
@@ -607,7 +539,7 @@ function BoardMarkers({ state }: { state: PublicState | null }) {
         </instancedMesh>
       ))}
       {festivals.map((index) => {
-        const [x, z] = tilePosition(index);
+        const [x, z] = tileLocalPosition(index, 0.41, -0.45);
         const multiplier = Math.max(
           state?.festivalTiles.includes(index) ? 2 : 1,
           state?.championshipHost?.tile === index
@@ -615,16 +547,13 @@ function BoardMarkers({ state }: { state: PublicState | null }) {
             : 1,
         );
         return (
-          <group key={index} position={[x + 0.24, 0.39, z - 0.33]}>
-            <mesh position={[0, 0.17, 0]} castShadow>
-              <cylinderGeometry args={[0.018, 0.018, 0.35, 6]} />
+          <group key={index} position={[x, 0.325, z]}>
+            <mesh position={[0, 0.15, 0]} castShadow>
+              <cylinderGeometry args={[0.009, 0.009, 0.3, 6]} />
               <meshStandardMaterial color="#bc8b30" />
             </mesh>
-            <mesh
-              position={[0, 0.38, 0]}
-              rotation={[-Math.PI / 5, Math.PI / 4, 0]}
-            >
-              <planeGeometry args={[0.38, 0.28]} />
+            <mesh position={[0, 0.31, 0]} rotation={[0, Math.PI / 4, 0]}>
+              <planeGeometry args={[0.25, 0.16]} />
               <meshBasicMaterial
                 map={festivalBadges[Math.min(10, multiplier)]}
                 side={THREE.DoubleSide}
@@ -632,8 +561,9 @@ function BoardMarkers({ state }: { state: PublicState | null }) {
             </mesh>
             <mesh
               geometry={starGeometry}
-              position={[0, 0.59, 0]}
-              rotation={[-Math.PI / 5, Math.PI / 4, 0]}
+              position={[0, 0.45, 0]}
+              rotation={[0, Math.PI / 4, 0]}
+              scale={0.55}
             >
               <meshStandardMaterial
                 color="#ffdc6e"
@@ -688,120 +618,154 @@ function CenterIsland() {
     canvas.height = 1024;
     const context = canvas.getContext("2d");
     if (context) {
-      context.fillStyle = "#a5c957";
+      context.fillStyle = "#b5cf72";
       context.fillRect(0, 0, 1024, 1024);
-      // Broad cuts in the grass give the empty play area a tactile toy-board finish.
-      for (let strip = -2; strip < 8; strip++) {
-        context.fillStyle = strip % 2 ? "#badb72" : "#95b949";
+      // Soft, broad lawn patches leave the center quiet for dice and money.
+      for (let patch = 0; patch < 6; patch++) {
+        context.fillStyle = patch % 2 ? "#c0d780" : "#afc969";
         context.beginPath();
-        context.moveTo(strip * 210, 0);
-        context.lineTo(strip * 210 + 130, 0);
-        context.lineTo(strip * 210 + 650, 1024);
-        context.lineTo(strip * 210 + 520, 1024);
+        context.moveTo(patch * 240 - 250, 0);
+        context.lineTo(patch * 240 - 90, 0);
+        context.lineTo(patch * 240 + 420, 1024);
+        context.lineTo(patch * 240 + 260, 1024);
         context.closePath();
         context.fill();
       }
-      for (let flower = 0; flower < 62; flower++) {
-        const x = 55 + ((flower * 179) % 914);
-        const y = 55 + ((flower * 293) % 914);
-        context.fillStyle = flower % 3 ? "#d5e698" : "#f3efbc";
+      for (let flower = 0; flower < 18; flower++) {
+        const x = 80 + ((flower * 179) % 864);
+        const y = 80 + ((flower * 293) % 864);
+        context.fillStyle = "#d6e5a1";
         context.beginPath();
-        context.ellipse(x, y, flower % 3 ? 3.5 : 5, 2.7, 0, 0, Math.PI * 2);
+        context.ellipse(x, y, 4, 2.6, 0, 0, Math.PI * 2);
         context.fill();
       }
-      context.save();
-      context.translate(430, 230);
-      context.rotate(-Math.PI / 4);
-      context.fillStyle = "#6b903e";
-      context.textAlign = "center";
-      context.font = "900 43px Trebuchet MS, sans-serif";
-      context.fillText("POLYTOUR", 0, 0);
-      context.font = "700 17px Segoe UI, sans-serif";
-      context.fillText("LE GRAND TOUR", 0, 30);
-      context.restore();
     }
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
     return texture;
   }, []);
-  useEffect(() => () => lawn.dispose(), [lawn]);
+  const road = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.fillStyle = "#83908e";
+      context.fillRect(0, 0, 512, 512);
+      context.strokeStyle = "#dce1cf";
+      context.lineWidth = 2;
+      context.setLineDash([8, 8]);
+      context.strokeRect(6, 6, 500, 500);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }, []);
+  useEffect(
+    () => () => {
+      lawn.dispose();
+      road.dispose();
+    },
+    [lawn, road],
+  );
   return (
     <group>
-      <mesh position={[0, 0.2, 0]} receiveShadow>
-        <boxGeometry args={[7.6, 0.08, 7.6]} />
-        <meshStandardMaterial color="#7f979a" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 0.235, 0]} receiveShadow>
-        <boxGeometry args={[7.22, 0.05, 7.22]} />
-        <meshStandardMaterial color="#dce7b5" />
-      </mesh>
       <mesh
-        position={[0, 0.264, 0]}
+        position={[0, 0.308, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow
       >
-        <planeGeometry args={[7.13, 7.13]} />
+        <planeGeometry args={[7.52, 7.52]} />
+        <meshBasicMaterial map={road} />
+      </mesh>
+      <mesh
+        position={[0, 0.311, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[7.2, 7.2]} />
         <meshStandardMaterial map={lawn} roughness={1} />
       </mesh>
       {[5, 12, 21, 28].map((index) => {
-        const [x, z] = tilePosition(index);
+        const [x, z] = tileLocalPosition(index, 0, -0.35);
         return (
-          <group key={index} position={[x - 0.32, 0.34, z - 0.32]} scale={0.65}>
-            <mesh position={[0, -0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[0.32, 20]} />
-              <meshBasicMaterial color="#67cbe3" />
+          <group
+            key={index}
+            position={[x, 0.325, z]}
+            scale={0.48}
+            rotation={[0, tileAngle(index), 0]}
+          >
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.37, 16]} />
+              <meshBasicMaterial color="#eedca6" />
             </mesh>
-            <mesh
-              position={[-0.08, 0.007, 0.06]}
-              rotation={[-Math.PI / 2, 0, 0]}
-            >
-              <circleGeometry args={[0.22, 16]} />
-              <meshBasicMaterial color="#ffe4a3" />
+            <Palm position={[-0.12, 0.01, -0.04]} scale={0.66} />
+            <mesh position={[0.16, 0.12, 0.05]} castShadow>
+              <cylinderGeometry args={[0.2, 0.025, 0.1, 6]} />
+              <meshStandardMaterial color="#f3ba4b" roughness={1} />
             </mesh>
-            <Palm position={[-0.07, 0.01, -0.05]} scale={0.84} />
-            <Palm position={[0.15, 0.01, -0.13]} scale={0.54} />
-            <mesh position={[0.13, 0.09, 0.09]} castShadow>
-              <cylinderGeometry args={[0.13, 0.01, 0.07, 8]} />
-              <meshStandardMaterial color="#ffcb55" />
-            </mesh>
-            <mesh position={[0.13, 0.041, 0.09]}>
-              <cylinderGeometry args={[0.007, 0.007, 0.11, 6]} />
+            <mesh position={[0.16, 0.065, 0.05]}>
+              <cylinderGeometry args={[0.012, 0.012, 0.13, 5]} />
               <meshStandardMaterial color="#fffaf0" />
             </mesh>
           </group>
         );
       })}
-      {/* Original stadium and aircraft make the special corners readable as toys. */}
-      <group position={[4.01, 0.33, -4.64]} rotation={[0, Math.PI / 4, 0]}>
-        <mesh scale={[1, 0.38, 0.7]} rotation={[-Math.PI / 2, 0, 0]} castShadow>
-          <torusGeometry args={[0.27, 0.085, 5, 14]} />
-          <meshStandardMaterial color="#f3efe6" />
+      <group position={[4.32, 0.325, -4.65]}>
+        <mesh
+          scale={[1.15, 0.38, 0.72]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          castShadow
+        >
+          <torusGeometry args={[0.28, 0.09, 4, 12]} />
+          <meshStandardMaterial color="#eadde9" roughness={1} />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.026, 0]}>
-          <circleGeometry args={[0.2, 14]} />
-          <meshStandardMaterial color="#80ac49" />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.018, 0]}>
+          <circleGeometry args={[0.2, 12]} />
+          <meshStandardMaterial color="#88b456" roughness={1} />
         </mesh>
       </group>
       <group
-        position={[-4.62, 0.41, -4.62]}
+        position={[-4.32, 0.365, -4.65]}
         rotation={[Math.PI / 2, 0, Math.PI / 4]}
       >
         <mesh castShadow>
-          <capsuleGeometry args={[0.055, 0.37, 3, 8]} />
-          <meshStandardMaterial color="#fffaf0" />
+          <capsuleGeometry args={[0.05, 0.36, 2, 6]} />
+          <meshStandardMaterial color="#fffaf0" roughness={1} />
         </mesh>
         <mesh
           rotation={[0, 0, Math.PI / 2]}
           position={[0, 0.025, 0]}
           castShadow
         >
-          <boxGeometry args={[0.05, 0.44, 0.1]} />
-          <meshStandardMaterial color="#236cce" />
+          <boxGeometry args={[0.055, 0.42, 0.08]} />
+          <meshStandardMaterial color="#3481c3" roughness={1} />
         </mesh>
         <mesh position={[0, -0.15, 0]}>
-          <boxGeometry args={[0.21, 0.06, 0.045]} />
-          <meshStandardMaterial color="#236cce" />
+          <boxGeometry args={[0.19, 0.05, 0.04]} />
+          <meshStandardMaterial color="#3481c3" roughness={1} />
+        </mesh>
+      </group>
+      <group position={[4.32, 0.325, 4.04]} scale={0.54}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.48, 16]} />
+          <meshBasicMaterial color="#68b7cb" />
+        </mesh>
+        <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.3, 12]} />
+          <meshBasicMaterial color="#f1dba3" />
+        </mesh>
+        <Palm position={[0, 0.01, 0]} scale={0.62} />
+      </group>
+      <group position={[-4.32, 0.325, 3.98]}>
+        <mesh position={[-0.12, 0.17, 0]}>
+          <cylinderGeometry args={[0.011, 0.011, 0.34, 5]} />
+          <meshStandardMaterial color="#fffaf0" />
+        </mesh>
+        <mesh position={[0.01, 0.29, 0]} rotation={[0, Math.PI / 4, 0]}>
+          <planeGeometry args={[0.24, 0.14]} />
+          <meshBasicMaterial color="#639247" side={THREE.DoubleSide} />
         </mesh>
       </group>
     </group>
@@ -893,9 +857,75 @@ function Die({
 
 // A small rear lane keeps the pawn's base off the printed name and amount.
 // Every hop and snapshot uses this same visual offset; the board index stays authoritative.
-function scenePawnOffset(seat: Seat): [number, number] {
+function scenePawnOffset(seat: Seat, tile = 0): [number, number] {
   const [x, z] = pawnOffset(seat);
-  return [x * 0.65 + 0.02, z * 0.65 - 0.36];
+  // Walk on the inner edge of the track. Pawns never stand on printed amounts
+  // or inside a house, including when several players share a destination.
+  if (tile % 8 === 0) {
+    const [tileX, tileZ] = tilePosition(tile);
+    return [
+      -Math.sign(tileX) * 0.88 + x * 0.65,
+      -Math.sign(tileZ) * 0.88 + z * 0.65,
+    ];
+  }
+  if (tile < 8) return [x * 0.65, -1.26 + z * 0.35];
+  if (tile < 16) return [-1.26 + x * 0.35, z * 0.65];
+  if (tile < 24) return [x * 0.65, 1.26 + z * 0.35];
+  return [1.26 + x * 0.35, z * 0.65];
+}
+
+function PawnPositions({ state }: { state: PublicState | null }) {
+  const paths = useRef<THREE.InstancedMesh>(null);
+  const pins = useRef<THREE.InstancedMesh>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+  useEffect(() => {
+    if (!paths.current || !pins.current) return;
+    let count = 0;
+    for (const player of state?.players ?? []) {
+      if (player.bankrupt) continue;
+      const [x, z] = tilePosition(player.position);
+      const [dx, dz] = scenePawnOffset(player.seat, player.position);
+      const start = player.position % 8 === 0 ? 0.75 : 0.55;
+      const length = Math.hypot(dx, dz) * (1 - start);
+      color.set(PLAYER_COLORS[player.seat]);
+      transform.position.set(
+        x + (dx * (1 + start)) / 2,
+        0.328,
+        z + (dz * (1 + start)) / 2,
+      );
+      transform.rotation.set(0, Math.atan2(dx, dz), 0);
+      transform.scale.set(1, 1, length);
+      transform.updateMatrix();
+      paths.current.setMatrixAt(count, transform.matrix);
+      paths.current.setColorAt(count, color);
+      transform.position.set(x + dx * start, 0.333, z + dz * start);
+      transform.rotation.set(0, 0, 0);
+      transform.scale.set(1, 1, 1);
+      transform.updateMatrix();
+      pins.current.setMatrixAt(count, transform.matrix);
+      pins.current.setColorAt(count, color);
+      count += 1;
+    }
+    for (const mesh of [paths.current, pins.current]) {
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+  }, [state, transform, color]);
+  return (
+    <>
+      <instancedMesh ref={paths} args={[undefined, undefined, 4]}>
+        <boxGeometry args={[0.015, 0.008, 1]} />
+        <meshBasicMaterial transparent opacity={0.6} depthWrite={false} />
+      </instancedMesh>
+      <instancedMesh ref={pins} args={[undefined, undefined, 4]}>
+        <cylinderGeometry args={[0.048, 0.048, 0.012, 8]} />
+        <meshBasicMaterial />
+      </instancedMesh>
+    </>
+  );
 }
 
 function Pawn({
@@ -918,7 +948,7 @@ function Pawn({
           <meshBasicMaterial color="#ffcf59" />
         </mesh>
       )}
-      <group rotation={[0, Math.PI / 4, 0]}>
+      <group rotation={[0, Math.PI / 4, 0]} scale={0.82}>
         <mesh position={[0, 0.005, 0]} castShadow>
           <cylinderGeometry args={[0.19, 0.2, 0.07, 16]} />
           <meshStandardMaterial color={color} />
@@ -1271,15 +1301,13 @@ function SceneContent(props: BoardProps) {
   const cashProgress = useMemo(() => ({ value: 0 }), []);
   const cashColor = useMemo(() => new THREE.Color(), []);
   const cashTexture = useMemo(noteTexture, []);
-  const rimGeometry = useMemo(() => roundedTile(0.018), []);
   const rendered = useRef(false);
-  useEffect(() => () => rimGeometry.dispose(), [rimGeometry]);
   useEffect(() => () => cashTexture.dispose(), [cashTexture]);
 
   useEffect(() => {
     const aspect = size.width / size.height;
     const narrow = aspect < 1;
-    const pitch = narrow ? 0.7 : aspect > 1.7 ? 0.52 : 0.6;
+    const pitch = narrow ? 0.75 : 0.66;
     camera.position.set(13, Math.hypot(13, 13) * pitch, 13);
     camera.lookAt(0, 0.28, 0);
     camera.updateMatrixWorld();
@@ -1287,7 +1315,7 @@ function SceneContent(props: BoardProps) {
       const bounds = new THREE.Box3();
       for (const x of [-5.03, 5.03])
         for (const z of [-5.03, 5.03])
-          for (const y of [-0.3, 0.65]) {
+          for (const y of [0.05, 0.65]) {
             bounds.expandByPoint(
               new THREE.Vector3(x, y, z).applyMatrix4(
                 camera.matrixWorldInverse,
@@ -1299,7 +1327,7 @@ function SceneContent(props: BoardProps) {
         bounds.expandByPoint(
           new THREE.Vector3(
             x,
-            tile.kind === "city" ? 1.82 : 0.95,
+            tile.kind === "city" ? 1.08 : 0.95,
             z,
           ).applyMatrix4(camera.matrixWorldInverse),
         );
@@ -1332,7 +1360,10 @@ function SceneContent(props: BoardProps) {
         const pawn = pawns.current[player.seat];
         if (!pawn) continue;
         const [x, z] = tilePosition(player.position);
-        const [offsetX, offsetZ] = scenePawnOffset(player.seat);
+        const [offsetX, offsetZ] = scenePawnOffset(
+          player.seat,
+          player.position,
+        );
         pawn.position.set(x + offsetX, 0.38, z + offsetZ);
         pawn.scale.set(1, 1, 1);
         pawn.visible = !player.bankrupt;
@@ -1505,10 +1536,13 @@ function SceneContent(props: BoardProps) {
           );
           const from = event.from ?? before?.position ?? 0;
           const steps = event.steps ?? (event.position - from + 32) % 32;
-          const [offsetX, offsetZ] = scenePawnOffset(event.seat);
           await play((timeline) => {
             if (Math.abs(steps) > 16 || steps === 0) {
               const [x, z] = tilePosition(event.position);
+              const [offsetX, offsetZ] = scenePawnOffset(
+                event.seat,
+                event.position,
+              );
               timeline.to(pawn.position, {
                 x: x + offsetX,
                 z: z + offsetZ,
@@ -1524,9 +1558,10 @@ function SceneContent(props: BoardProps) {
             } else {
               const duration = DECISION_TIMING.stepAnimation / 1000;
               for (let step = 1; step <= Math.abs(steps); step++) {
-                const [x, z] = tilePosition(
-                  (((from + step * Math.sign(steps)) % 32) + 32) % 32,
-                );
+                const tile =
+                  (((from + step * Math.sign(steps)) % 32) + 32) % 32;
+                const [x, z] = tilePosition(tile);
+                const [offsetX, offsetZ] = scenePawnOffset(event.seat, tile);
                 const at = (step - 1) * duration;
                 timeline.to(
                   pawn.position,
@@ -1657,11 +1692,11 @@ function SceneContent(props: BoardProps) {
   }, [gl]);
   return (
     <>
-      <ambientLight intensity={0.8} />
-      <hemisphereLight args={["#e9fbff", "#a4a474", 1.25]} />
+      <ambientLight intensity={1.1} />
+      <hemisphereLight args={["#edf8ff", "#a9ad8a", 0.7]} />
       <directionalLight
         position={[-5, 10, 5]}
-        intensity={2.2}
+        intensity={1.1}
         color="#fff1d5"
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -1672,12 +1707,12 @@ function SceneContent(props: BoardProps) {
         shadow-normalBias={0.035}
         shadow-radius={3}
       />
-      <mesh position={[0, -0.37, 0]} receiveShadow>
-        <boxGeometry args={[200, 0.2, 200]} />
-        <shadowMaterial opacity={0.12} />
+      <mesh position={[0, -0.085, 0]} receiveShadow>
+        <boxGeometry args={[200, 0.1, 200]} />
+        <shadowMaterial opacity={0.11} />
       </mesh>
       <mesh
-        position={[0, -0.055, 0]}
+        position={[0, 0.14, 0]}
         receiveShadow
         castShadow
         onAfterRender={() => {
@@ -1689,29 +1724,12 @@ function SceneContent(props: BoardProps) {
             ?.setAttribute("data-scene-ready", "true");
         }}
       >
-        <boxGeometry args={[9.96, 0.46, 9.96]} />
-        <meshStandardMaterial color="#c6b394" roughness={0.8} />
+        <boxGeometry args={[9.91, 0.2, 9.91]} />
+        <meshStandardMaterial color="#b6aeba" roughness={1} />
       </mesh>
-      <mesh position={[0, 0.1, 0]} receiveShadow>
-        <boxGeometry args={[9.8, 0.18, 9.8]} />
-        <meshStandardMaterial color="#fffaf0" roughness={0.75} />
-      </mesh>
-      <mesh
-        geometry={rimGeometry}
-        position={[0, -0.28, 0]}
-        scale={[10.04, 0.36, 10.04]}
-        receiveShadow
-        castShadow
-      >
-        <meshStandardMaterial color="#a08861" roughness={0.7} />
-      </mesh>
-      <mesh
-        geometry={rimGeometry}
-        position={[0, 0.065, 0]}
-        scale={[10.02, 0.26, 10.02]}
-        receiveShadow
-      >
-        <meshStandardMaterial color="#ebddba" roughness={0.65} />
+      <mesh position={[0, 0.251, 0]} receiveShadow>
+        <boxGeometry args={[9.86, 0.025, 9.86]} />
+        <meshStandardMaterial color="#e6e0e9" roughness={1} />
       </mesh>
       <CenterIsland />
       {!preview && state && <CashReserves state={state} />}
@@ -1719,6 +1737,7 @@ function SceneContent(props: BoardProps) {
       <TileFocus {...props} />
       <Towns state={state} preview={preview} />
       <BoardMarkers state={state} />
+      {!preview && <PawnPositions state={state} />}
       {([0, 1, 2, 3] as const).map((seat) => (
         <Pawn
           key={seat}
