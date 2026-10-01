@@ -1,87 +1,1450 @@
+import type { BuildLevel } from "../board/index.js";
 import {
+  BOARD,
   BOARD_SIZE,
+  CHANCE_AMOUNTS,
+  COUNTRY_IDS,
+  DECISION_TIMING,
   ECONOMY,
-  getInvestedValue,
+  getCountryCityTiles,
+  getResortRent,
   getTile,
-  ISLAND_TILE_INDEX,
+  getTileBaseRent,
+  getTileInvestedValue,
+  getTileLandPrice,
   isCityTile,
   isResortTile,
 } from "../board/index.js";
+import { applyEvent, toPublic } from "./reducer.js";
 import { nextRandom, shuffle } from "./rng.js";
 import type {
   Action,
   ApplyActionResult,
+  BotDifficulty,
   CreateGameResult,
   EngineContext,
   GameConfig,
   GameEvent,
   GameState,
+  KeepCard,
+  PendingDecision,
   PlayerState,
+  PropertyState,
   PublicState,
+  ResolutionTask,
   Seat,
   SeatInfo,
   Standing,
+  WinKind,
 } from "./types.js";
+import { CHANCE_CARDS } from "./types.js";
 
+export { applyEvent, toPublic } from "./reducer.js";
 export const DEFAULT_GAME_CONFIG = {
   gameId: "local-game",
   startingCash: ECONOMY.startingCash,
   startSalary: ECONOMY.startSalary,
-  roundLimit: ECONOMY.roundLimit,
+  roundLimit: 10_000,
+  timeLimitMinutes: 120,
+  festivalCount: 3,
+  lineMonopoly: true,
+  tripleMonopoly: true,
+  hotelsDirectly: false,
+  hotelPurchaseRule: "staged-hotels",
+  extraRollOnDouble: true,
+  botCanBuild: true,
+  giftCanBankrupt: true,
 } as const satisfies GameConfig;
-
-function validateGameConfig(config: GameConfig): void {
-  if (config.gameId.length === 0) {
-    throw new RangeError("A game ID is required");
+export function getPlayer(state: PublicState, seat: Seat): PlayerState {
+  const player = state.players.find((candidate) => candidate.seat === seat);
+  if (!player) throw new RangeError(`Unknown seat ${seat}`);
+  return player;
+}
+export function getProperty(
+  state: PublicState,
+  tile: number,
+): PropertyState | undefined {
+  return state.properties.find((property) => property.tile === tile);
+}
+export function propertyOwner(state: PublicState, tile: number): Seat | null {
+  return getProperty(state, tile)?.owner ?? null;
+}
+export function propertyInvestedValue(
+  state: PublicState,
+  tileIndex: number,
+): number {
+  const tile = getTile(tileIndex);
+  if (tile && isCityTile(tile))
+    return getTileInvestedValue(
+      tileIndex,
+      getProperty(state, tileIndex)?.level ?? 0,
+    );
+  if (tile && isResortTile(tile)) return ECONOMY.resortPrice;
+  return 0;
+}
+export function netWorth(state: PublicState, seat: Seat | PlayerState): number {
+  const player = typeof seat === "number" ? getPlayer(state, seat) : seat;
+  return (
+    player.cash +
+    player.properties.reduce(
+      (value, tile) => value + propertyInvestedValue(state, tile),
+      0,
+    )
+  );
+}
+function resortCount(state: PublicState, seat: Seat): number {
+  return state.properties.filter(
+    (property) =>
+      property.owner === seat && getTile(property.tile)?.kind === "resort",
+  ).length;
+}
+function ownsCountry(
+  state: PublicState,
+  seat: Seat,
+  country: (typeof COUNTRY_IDS)[number],
+): boolean {
+  return getCountryCityTiles(country).every(
+    (tile) => propertyOwner(state, tile.index) === seat,
+  );
+}
+export function propertyRent(state: PublicState, tileIndex: number): number {
+  const tile = getTile(tileIndex);
+  const property = getProperty(state, tileIndex);
+  if (tile && isResortTile(tile)) {
+    const count =
+      property?.owner !== null && property?.owner !== undefined
+        ? resortCount(state, property.owner)
+        : 1;
+    return getResortRent(Math.min(3, Math.max(1, count)) as 1 | 2 | 3);
   }
-
-  if (!Number.isInteger(config.startingCash) || config.startingCash < 0) {
-    throw new RangeError("Starting cash must be a non-negative integer");
-  }
-
-  if (!Number.isInteger(config.startSalary) || config.startSalary < 0) {
-    throw new RangeError("Start salary must be a non-negative integer");
-  }
-
-  if (!Number.isInteger(config.roundLimit) || config.roundLimit < 1) {
-    throw new RangeError("Round limit must be a positive integer");
-  }
+  if (!tile || !isCityTile(tile) || !property) return 0;
+  const rent = getTileBaseRent(tileIndex, property.level);
+  if (property.level === 5) return rent;
+  const country =
+    property.owner !== null && ownsCountry(state, property.owner, tile.country)
+      ? CHANCE_AMOUNTS.countryMultiplier
+      : 1;
+  const host =
+    state.championshipHost?.tile === tileIndex
+      ? state.championshipHost.multiplier
+      : 1;
+  const festival = state.festivalTiles.includes(tileIndex)
+    ? CHANCE_AMOUNTS.initialHostMultiplier
+    : 1;
+  return rent * Math.max(country, host, festival);
+}
+/** Projects a single purchase or upgrade through the same rent rules as live play. */
+export function previewPropertyRent(
+  state: PublicState,
+  tile: number,
+  seat: Seat,
+  level: BuildLevel,
+): number {
+  const property = getProperty(state, tile);
+  if (!property) return 0;
+  const hostChangesOwner =
+    property.owner !== seat && state.championshipHost?.tile === tile;
+  return propertyRent(
+    {
+      ...state,
+      properties: state.properties.map((candidate) =>
+        candidate.tile === tile
+          ? { ...candidate, owner: seat, level }
+          : candidate,
+      ),
+      championshipHost: hostChangesOwner ? null : state.championshipHost,
+    },
+    tile,
+  );
 }
 
-function validateSeats(seats: readonly SeatInfo[]): void {
+/** Construction cap before checking the player's budget or stored decision cap. */
+export function maxBuildLevel(
+  state: PublicState,
+  seat: Seat,
+  tileIndex: number,
+  purchasing: boolean,
+): BuildLevel {
+  if (getTile(tileIndex)?.kind === "resort") return 0;
+  const level = getProperty(state, tileIndex)?.level ?? 0;
+  if (!purchasing && level === 4) return 5;
+  if (state.config.hotelsDirectly === true) return 4;
+  if (
+    state.config.hotelPurchaseRule === "staged-hotels" &&
+    (purchasing || level < 3)
+  )
+    return 3;
+  return getPlayer(state, seat).laps > 0 ? 4 : 3;
+}
+export function propertyRefund(state: PublicState, tile: number): number {
+  return Math.floor(
+    (propertyInvestedValue(state, tile) * ECONOMY.sellBackPercent) / 100,
+  );
+}
+function purchaseCost(tileIndex: number, level: BuildLevel): number {
+  const tile = getTile(tileIndex);
+  return tile && isCityTile(tile)
+    ? getTileInvestedValue(tileIndex, level)
+    : ECONOMY.resortPrice;
+}
+/** The rent owed after choosing at most one protection; null pays it in full. */
+export function rentCardPayment(amount: number, card: KeepCard | null): number {
+  return card === "Guardian Angel"
+    ? 0
+    : card === "Coupon"
+      ? Math.ceil(amount / 2)
+      : amount;
+}
+export function actionCost(state: PublicState, action: Action): number {
+  const pending = state.pending;
+  if (!pending) return 0;
+  switch (action.type) {
+    case "Buy":
+      return pending.kind === "buy"
+        ? purchaseCost(pending.tile, action.level)
+        : 0;
+    case "Build":
+      return pending.kind === "build"
+        ? purchaseCost(pending.tile, action.level) -
+            propertyInvestedValue(state, pending.tile)
+        : 0;
+    case "Buyout":
+      return pending.kind === "buyout" ? pending.price : 0;
+    case "PayIsland":
+      return ECONOMY.islandReleaseFee;
+    case "Travel":
+      return ECONOMY.worldTourFee;
+    default:
+      return 0;
+  }
+}
+export function legalActions(state: PublicState, seat: Seat): Action[] {
+  const pending = state.pending;
+  if (
+    state.status !== "active" ||
+    !pending ||
+    pending.seat !== seat ||
+    getPlayer(state, seat).bankrupt
+  )
+    return [];
+  const player = getPlayer(state, seat);
+  switch (pending.kind) {
+    case "roll":
+      return [{ type: "Roll" }];
+    case "island":
+      return player.cash >= pending.fee
+        ? [{ type: "Roll" }, { type: "PayIsland" }]
+        : [{ type: "Roll" }];
+    case "travel":
+      return player.cash >= pending.fee
+        ? [
+            { type: "Roll" },
+            ...pending.targets.map((tile) => ({
+              type: "Travel" as const,
+              tile,
+            })),
+          ]
+        : [{ type: "Roll" }];
+    case "buy": {
+      const actions: Action[] = [{ type: "Decline" }];
+      const purchaseCap =
+        state.config.hotelPurchaseRule === "staged-hotels"
+          ? Math.min(
+              pending.maxLevel,
+              maxBuildLevel(state, seat, pending.tile, true),
+            )
+          : pending.maxLevel;
+      const maxLevel =
+        player.control === "bot" && state.config.botCanBuild === false
+          ? 0
+          : purchaseCap;
+      for (let level = 0; level <= maxLevel; level++)
+        if (purchaseCost(pending.tile, level as BuildLevel) <= player.cash)
+          actions.push({ type: "Buy", level: level as BuildLevel });
+      return actions;
+    }
+    case "build": {
+      const actions: Action[] = [{ type: "Decline" }];
+      if (player.control === "bot" && state.config.botCanBuild === false)
+        return actions;
+      const current = getProperty(state, pending.tile)?.level ?? 0;
+      const upgradeCap =
+        state.config.hotelPurchaseRule === "staged-hotels"
+          ? Math.min(
+              pending.maxLevel,
+              maxBuildLevel(state, seat, pending.tile, false),
+            )
+          : pending.maxLevel;
+      for (let level = current + 1; level <= upgradeCap; level++) {
+        const action: Action = { type: "Build", level: level as BuildLevel };
+        if (actionCost(state, action) <= player.cash) actions.push(action);
+      }
+      return actions;
+    }
+    case "buyout":
+      return player.cash >= pending.price
+        ? [{ type: "Decline" }, { type: "Buyout" }]
+        : [{ type: "Decline" }];
+    case "rent-card":
+      return [
+        { type: "Decline" },
+        ...pending.cards.map((card) => ({
+          type: "UseRentCard" as const,
+          card,
+        })),
+      ];
+    case "host":
+      return pending.targets.map((tile) => ({
+        type: "ChooseHost" as const,
+        tile,
+      }));
+    case "card-target":
+      return [
+        ...(pending.card === "Land Swap" ? [{ type: "Decline" as const }] : []),
+        ...pending.targets.map((tile) => ({
+          type: "ChooseTarget" as const,
+          tile,
+        })),
+      ];
+    case "sell":
+      return pending.targets.map((tile) => ({ type: "Sell" as const, tile }));
+  }
+}
+function sameAction(a: Action, b: Action): boolean {
+  return (
+    a.type === b.type &&
+    (!("tile" in a) || ("tile" in b && a.tile === b.tile)) &&
+    (!("level" in a) || ("level" in b && a.level === b.level)) &&
+    (!("card" in a) || ("card" in b && a.card === b.card))
+  );
+}
+function rankStandings(state: PublicState, winner?: Seat): Standing[] {
+  const rank = (seat: Seat) => state.startingTurnOrder.indexOf(seat);
+  const living = state.players
+    .filter((player) => !player.bankrupt)
+    .sort(
+      (a, b) =>
+        netWorth(state, b) - netWorth(state, a) ||
+        b.cash - a.cash ||
+        resortCount(state, b.seat) - resortCount(state, a.seat) ||
+        rank(a.seat) - rank(b.seat),
+    );
+  const eliminated = [...state.eliminated]
+    .reverse()
+    .map((seat) => getPlayer(state, seat));
+  const players = [...living, ...eliminated];
+  if (winner !== undefined)
+    players.sort((a, b) =>
+      a.seat === winner ? -1 : b.seat === winner ? 1 : 0,
+    );
+  return players.map((player) => ({
+    seat: player.seat,
+    netWorth: netWorth(state, player),
+  }));
+}
+function instantWin(state: PublicState, seat: Seat): WinKind | null {
+  if (getPlayer(state, seat).bankrupt) return null;
+  if (state.players.filter((player) => !player.bankrupt).length === 1)
+    return "last-standing";
+  if (
+    state.config.tripleMonopoly !== false &&
+    COUNTRY_IDS.filter((country) => ownsCountry(state, seat, country)).length >=
+      3
+  )
+    return "triple-monopoly";
+  for (let side = 1; state.config.lineMonopoly !== false && side <= 4; side++) {
+    const tiles = BOARD.filter(
+      (tile) => (isCityTile(tile) || isResortTile(tile)) && tile.side === side,
+    );
+    if (tiles.every((tile) => propertyOwner(state, tile.index) === seat))
+      return "line-monopoly";
+  }
+  if (resortCount(state, seat) === 4) return "resort-monopoly";
+  return null;
+}
+function animationBudget(events: readonly GameEvent[]): number {
+  return events.reduce((total, event) => {
+    switch (event.type) {
+      case "DiceRolled":
+        return total + DECISION_TIMING.diceAnimation;
+      case "PlayerMoved":
+        return (
+          total + Math.abs(event.steps ?? 0) * DECISION_TIMING.stepAnimation
+        );
+      case "CardDrawn":
+        return total + DECISION_TIMING.cardAnimation;
+      case "SalaryPaid":
+      case "RentPaid":
+      case "MoneyTransferred":
+        return total + DECISION_TIMING.moneyAnimation;
+      case "BoughtOut":
+      case "PropertyBought":
+      case "PropertySold":
+      case "PropertyUpgraded":
+        return (
+          total +
+          DECISION_TIMING.moneyAnimation +
+          DECISION_TIMING.propertyAnimation
+        );
+      case "PropertyDowngraded":
+      case "PropertiesSwapped":
+        return total + DECISION_TIMING.propertyAnimation;
+      default:
+        return total;
+    }
+  }, 0);
+}
+type DecisionInput = PendingDecision extends infer T
+  ? T extends PendingDecision
+    ? Omit<T, "deadline">
+    : never
+  : never;
+
+/** An action-local resolver: all public writes go through emit/applyEvent. */
+function resolver(initial: GameState, context: EngineContext) {
+  let state = initial;
+  const events: GameEvent[] = [];
+  const emit = (event: GameEvent) => {
+    state = { ...state, ...applyEvent(toPublic(state), event) };
+    events.push(event);
+  };
+  const secrets = (
+    changes: Partial<
+      Pick<
+        GameState,
+        | "rngState"
+        | "deck"
+        | "discard"
+        | "resolutionQueue"
+        | "extraRoll"
+        | "turnEnded"
+      >
+    >,
+  ) => {
+    state = { ...state, ...changes };
+  };
+  const prepend = (...tasks: ResolutionTask[]) =>
+    secrets({ resolutionQueue: [...tasks, ...state.resolutionQueue] });
+  const open = (decision: DecisionInput) => {
+    const base =
+      state.config.decisionSeconds !== undefined
+        ? state.config.decisionSeconds * 1_000
+        : decision.kind === "sell"
+          ? DECISION_TIMING.sell
+          : ["roll", "island", "travel"].includes(decision.kind)
+            ? DECISION_TIMING.roll
+            : DECISION_TIMING.choice;
+    emit({
+      type: "DecisionOpened",
+      pending: {
+        ...decision,
+        deadline: context.now + base + animationBudget(events),
+      } as PendingDecision,
+    });
+  };
+  const clearHost = (tiles: readonly number[]) => {
+    if (state.championshipHost && tiles.includes(state.championshipHost.tile))
+      emit({ type: "ChampionshipChanged", host: null });
+  };
+  const checkWins = (): boolean => {
+    const order = [
+      state.activeSeat,
+      ...state.startingTurnOrder.slice(
+        state.startingTurnOrder.indexOf(state.activeSeat) + 1,
+      ),
+      ...state.startingTurnOrder.slice(
+        0,
+        state.startingTurnOrder.indexOf(state.activeSeat),
+      ),
+    ];
+    for (const seat of order) {
+      const kind = instantWin(state, seat);
+      if (kind) {
+        emit({
+          type: "GameOver",
+          winner: seat,
+          kind,
+          standings: rankStandings(state, seat),
+        });
+        secrets({ resolutionQueue: [], extraRoll: false });
+        return true;
+      }
+    }
+    return false;
+  };
+  const bankrupt = (seat: Seat, creditor: Seat | null) => {
+    const player = getPlayer(state, seat);
+    clearHost(player.properties);
+    secrets({ discard: [...state.discard, ...player.heldCards] });
+    emit({
+      type: "PlayerBankrupt",
+      seat,
+      creditor,
+      writtenOff: -Math.min(0, player.cash),
+      turnOrder: state.turnOrder.filter((candidate) => candidate !== seat),
+      roundSeatsRemaining: state.roundSeatsRemaining.filter(
+        (candidate) => candidate !== seat,
+      ),
+    });
+  };
+  const insolvency = (seat: Seat, creditor: Seat | null) => {
+    const player = getPlayer(state, seat);
+    if (player.bankrupt || player.cash >= 0) return;
+    const refund = player.properties.reduce(
+      (sum, tile) => sum + propertyRefund(state, tile),
+      0,
+    );
+    if (player.cash + refund < 0 || player.properties.length === 0)
+      bankrupt(seat, creditor);
+    else open({ kind: "sell", seat, targets: player.properties, creditor });
+  };
+  const payment = (
+    from: Seat,
+    to: Seat | null,
+    amount: number,
+    reason: string,
+    tile?: number,
+  ) => {
+    if (getPlayer(state, from).bankrupt || amount === 0) return;
+    if (to !== null && getPlayer(state, to).bankrupt) to = null;
+    if (
+      state.config.giftCanBankrupt === false &&
+      ["Birthday", "Charity"].includes(reason)
+    )
+      amount = Math.min(amount, Math.max(0, getPlayer(state, from).cash));
+    if (tile !== undefined && to !== null)
+      emit({ type: "RentPaid", seat: from, owner: to, tile, amount });
+    else emit({ type: "MoneyTransferred", from, to, amount, reason });
+    insolvency(from, to);
+  };
+  const startDecision = () => {
+    const player = getPlayer(state, state.activeSeat);
+    if (player.onIsland)
+      open({
+        kind: "island",
+        seat: player.seat,
+        fee: ECONOMY.islandReleaseFee,
+      });
+    else if (player.travelPending)
+      open({
+        kind: "travel",
+        seat: player.seat,
+        fee: ECONOMY.worldTourFee,
+        targets: BOARD.filter((tile) => tile.index !== player.position).map(
+          (tile) => tile.index,
+        ),
+      });
+    else open({ kind: "roll", seat: player.seat });
+  };
+  const endTurn = () => {
+    if (checkWins()) return;
+    if (
+      state.extraRoll &&
+      !state.turnEnded &&
+      !getPlayer(state, state.activeSeat).bankrupt
+    ) {
+      secrets({ extraRoll: false });
+      emit({ type: "TurnPhaseChanged", phase: "roll" });
+      startDecision();
+      return;
+    }
+    let remaining = state.roundSeatsRemaining.filter(
+      (seat) => seat !== state.activeSeat && !getPlayer(state, seat).bankrupt,
+    );
+    const completedRound = remaining.length === 0;
+    if (completedRound && state.round >= state.config.roundLimit) {
+      const standings = rankStandings(state);
+      emit({
+        type: "GameOver",
+        winner: standings[0].seat,
+        kind: "round-limit",
+        standings,
+      });
+      return;
+    }
+    if (completedRound) remaining = [...state.turnOrder];
+    const index = state.startingTurnOrder.indexOf(state.activeSeat);
+    const clockwise = [
+      ...state.startingTurnOrder.slice(index + 1),
+      ...state.startingTurnOrder.slice(0, index + 1),
+    ];
+    const activeSeat = clockwise.find((seat) => remaining.includes(seat));
+    if (activeSeat === undefined)
+      throw new Error("No next player in an active game");
+    emit({
+      type: "TurnAdvanced",
+      activeSeat,
+      round: state.round + Number(completedRound),
+      roundSeatsRemaining: remaining,
+    });
+    secrets({ extraRoll: false, turnEnded: false });
+    startDecision();
+  };
+  const move = (seat: Seat, steps: number) => {
+    const player = getPlayer(state, seat);
+    const absolute = player.position + steps;
+    const crossings = steps > 0 ? Math.floor(absolute / BOARD_SIZE) : 0;
+    const position = ((absolute % BOARD_SIZE) + BOARD_SIZE) % BOARD_SIZE;
+    emit({
+      type: "PlayerMoved",
+      seat,
+      from: player.position,
+      position,
+      steps,
+      laps: player.laps + crossings,
+    });
+    if (crossings > 0)
+      emit({
+        type: "SalaryPaid",
+        seat,
+        amount: state.config.startSalary * crossings,
+        cash: player.cash + state.config.startSalary * crossings,
+      });
+  };
+  const moveTo = (seat: Seat, target: number) => {
+    const current = getPlayer(state, seat).position;
+    move(seat, (target - current + BOARD_SIZE) % BOARD_SIZE || BOARD_SIZE);
+  };
+  const roll = (seat: Seat) => {
+    const player = getPlayer(state, seat);
+    let dice = context.dice;
+    if (!dice) {
+      const a = nextRandom(state.rngState);
+      const b = nextRandom(a.state);
+      secrets({ rngState: b.state });
+      dice = [Math.floor(a.value * 6) + 1, Math.floor(b.value * 6) + 1];
+    }
+    const isDouble = dice[0] === dice[1];
+    const isEscapeRoll = player.onIsland;
+    emit({
+      type: "DiceRolled",
+      seat,
+      dice,
+      isDouble,
+      purpose: isEscapeRoll ? "escape" : "move",
+    });
+    emit({ type: "TurnPhaseChanged", phase: "resolve" });
+    if (isEscapeRoll && !isDouble) {
+      const islandTurns = player.islandTurns + 1;
+      emit({ type: "IslandEscapeFailed", seat, islandTurns });
+      if (islandTurns >= ECONOMY.islandMaxFailedEscapes)
+        emit({ type: "LeftIsland", seat, method: "released" });
+      secrets({ extraRoll: false, turnEnded: true });
+      prepend({ kind: "finish" });
+    } else if (
+      !isEscapeRoll &&
+      isDouble &&
+      state.doublesInTurn >= ECONOMY.doublesToIsland
+    ) {
+      emit({ type: "SentToIsland", seat, reason: "triple-double" });
+      secrets({ extraRoll: false, turnEnded: true });
+      prepend({ kind: "finish" });
+    } else {
+      if (isEscapeRoll) emit({ type: "LeftIsland", seat, method: "doubles" });
+      secrets({
+        extraRoll:
+          !isEscapeRoll && isDouble && state.config.extraRollOnDouble !== false,
+        turnEnded: false,
+      });
+      move(seat, dice[0] + dice[1]);
+      prepend({ kind: "landing", seat }, { kind: "finish" });
+    }
+  };
+  const eligibleOwnCities = (seat: Seat) =>
+    state.properties.filter(
+      (property) =>
+        property.owner === seat &&
+        getTile(property.tile)?.kind === "city" &&
+        property.level < 5,
+    );
+  const chance = (seat: Seat) => {
+    if (state.deck.length === 0) {
+      const reshuffled = shuffle(state.discard, state.rngState);
+      secrets({
+        deck: reshuffled.items,
+        discard: [],
+        rngState: reshuffled.state,
+      });
+    }
+    const card = state.deck[0];
+    if (!card) return;
+    secrets({ deck: state.deck.slice(1) });
+    const keep = card === "Guardian Angel" || card === "Coupon";
+    const kept =
+      keep && !getPlayer(state, seat).heldCards.includes(card as KeepCard);
+    emit({ type: "CardDrawn", seat, card, kept });
+    if (kept) return;
+    secrets({ discard: [...state.discard, card] });
+    const relocate = (target: number) => {
+      secrets({ extraRoll: false });
+      moveTo(seat, target);
+      prepend({ kind: "landing", seat });
+    };
+    switch (card) {
+      case "Grand Tour":
+        relocate(0);
+        break;
+      case "Stranded":
+        emit({ type: "SentToIsland", seat, reason: "card" });
+        secrets({ turnEnded: true, extraRoll: false });
+        break;
+      case "Jet Set":
+        relocate(24);
+        break;
+      case "Stadium Call":
+        relocate(16);
+        break;
+      case "Windfall":
+        emit({
+          type: "MoneyTransferred",
+          from: null,
+          to: seat,
+          amount: CHANCE_AMOUNTS.windfall,
+          reason: card,
+        });
+        break;
+      case "Parking Fine":
+        prepend({
+          kind: "payment",
+          from: seat,
+          to: null,
+          amount: CHANCE_AMOUNTS.fine,
+          reason: card,
+        });
+        break;
+      case "Birthday":
+        prepend(
+          ...state.turnOrder
+            .filter((other) => other !== seat)
+            .map((from) => ({
+              kind: "payment" as const,
+              from,
+              to: seat,
+              amount: CHANCE_AMOUNTS.birthday,
+              reason: card,
+            })),
+        );
+        break;
+      case "Audit":
+        prepend({
+          kind: "payment",
+          from: seat,
+          to: null,
+          amount: Math.ceil(
+            (Math.max(0, getPlayer(state, seat).cash) *
+              CHANCE_AMOUNTS.auditPercent) /
+              100,
+          ),
+          reason: card,
+        });
+        break;
+      case "Earthquake": {
+        const targets = state.properties
+          .filter(
+            (property) =>
+              property.owner !== null &&
+              property.owner !== seat &&
+              property.level > 0 &&
+              property.level < 5 &&
+              getTile(property.tile)?.kind === "city",
+          )
+          .map((property) => property.tile);
+        if (targets.length) open({ kind: "card-target", seat, card, targets });
+        break;
+      }
+      case "Land Swap": {
+        const own = eligibleOwnCities(seat).sort(
+          (a, b) => landPrice(a.tile) - landPrice(b.tile) || a.tile - b.tile,
+        )[0];
+        if (!own) break;
+        const targets = state.properties
+          .filter(
+            (property) =>
+              property.owner !== null &&
+              property.owner !== seat &&
+              property.level < 5 &&
+              getTile(property.tile)?.kind === "city" &&
+              landPrice(property.tile) <= landPrice(own.tile),
+          )
+          .map((property) => property.tile);
+        if (targets.length)
+          open({
+            kind: "card-target",
+            seat,
+            card,
+            targets,
+            sourceTile: own.tile,
+          });
+        break;
+      }
+      case "Detour":
+        secrets({ extraRoll: false });
+        move(seat, -CHANCE_AMOUNTS.detourSteps);
+        prepend({ kind: "landing", seat });
+        break;
+      case "Contractor": {
+        const cap =
+          getPlayer(state, seat).laps > 0 ||
+          state.config.hotelsDirectly === true
+            ? 4
+            : 3;
+        const targets = eligibleOwnCities(seat)
+          .filter((property) => property.level < cap)
+          .map((property) => property.tile);
+        if (targets.length) open({ kind: "card-target", seat, card, targets });
+        break;
+      }
+      case "Jailbreak":
+        for (const player of state.players)
+          if (player.onIsland)
+            emit({ type: "LeftIsland", seat: player.seat, method: "card" });
+        break;
+      case "Charity": {
+        const poorest = state.turnOrder
+          .filter((other) => other !== seat)
+          .map((other) => getPlayer(state, other))
+          .sort(
+            (a, b) =>
+              a.cash - b.cash ||
+              state.turnOrder.indexOf(a.seat) - state.turnOrder.indexOf(b.seat),
+          )[0];
+        if (poorest)
+          prepend({
+            kind: "payment",
+            from: seat,
+            to: poorest.seat,
+            amount: CHANCE_AMOUNTS.charity,
+            reason: card,
+          });
+        break;
+      }
+      case "Guardian Angel":
+      case "Coupon":
+        break;
+    }
+  };
+  const landing = (seat: Seat) => {
+    const player = getPlayer(state, seat);
+    if (player.bankrupt) return;
+    const tile = getTile(player.position);
+    if (!tile) throw new Error("Invalid board tile");
+    switch (tile.kind) {
+      case "city":
+      case "resort": {
+        const property = getProperty(state, tile.index);
+        if (!property) throw new Error("Missing property state");
+        if (property.owner === null) {
+          const maxLevel = maxBuildLevel(state, seat, tile.index, true);
+          open({ kind: "buy", seat, tile: tile.index, maxLevel });
+        } else if (property.owner === seat) {
+          if (tile.kind === "city" && property.level < 5) {
+            const maxLevel = maxBuildLevel(state, seat, tile.index, false);
+            if (property.level < maxLevel)
+              open({ kind: "build", seat, tile: tile.index, maxLevel });
+          }
+        } else {
+          const amount = propertyRent(state, tile.index);
+          prepend({ kind: "buyout", seat, tile: tile.index });
+          if (player.heldCards.length > 0 && amount > 0)
+            open({
+              kind: "rent-card",
+              seat,
+              tile: tile.index,
+              owner: property.owner,
+              amount,
+              cards: player.heldCards,
+            });
+          else
+            prepend({
+              kind: "rent",
+              from: seat,
+              to: property.owner,
+              amount,
+              tile: tile.index,
+            });
+        }
+        break;
+      }
+      case "island":
+        emit({ type: "SentToIsland", seat, reason: "tile" });
+        secrets({ extraRoll: false, turnEnded: true });
+        break;
+      case "world-tour":
+        emit({ type: "TravelOptionChanged", seat, available: true });
+        secrets({ extraRoll: false, turnEnded: true });
+        break;
+      case "championship": {
+        const targets = eligibleOwnCities(seat).map(
+          (property) => property.tile,
+        );
+        if (targets.length) open({ kind: "host", seat, targets });
+        break;
+      }
+      case "tax":
+        prepend({
+          kind: "payment",
+          from: seat,
+          to: null,
+          amount: Math.max(
+            ECONOMY.minimumTax,
+            Math.ceil(
+              (player.properties.reduce(
+                (sum, index) => sum + propertyInvestedValue(state, index),
+                0,
+              ) *
+                ECONOMY.taxPercent) /
+                100,
+            ),
+          ),
+          reason: "Tax",
+        });
+        break;
+      case "chance":
+        chance(seat);
+        break;
+      case "start":
+        break;
+    }
+  };
+  const drain = () => {
+    let count = 0;
+    while (
+      state.status === "active" &&
+      state.pending === null &&
+      state.resolutionQueue.length > 0
+    ) {
+      if (++count > 100)
+        throw new Error("Resolution task loop exceeded safety bound");
+      const task = state.resolutionQueue[0];
+      secrets({ resolutionQueue: state.resolutionQueue.slice(1) });
+      switch (task.kind) {
+        case "landing":
+          landing(task.seat);
+          break;
+        case "payment":
+          payment(task.from, task.to, task.amount, task.reason);
+          break;
+        case "rent":
+          payment(task.from, task.to, task.amount, "Rent", task.tile);
+          break;
+        case "buyout": {
+          const property = getProperty(state, task.tile);
+          if (
+            !getPlayer(state, task.seat).bankrupt &&
+            property &&
+            property.owner !== null &&
+            property.owner !== task.seat &&
+            property.level < 5 &&
+            getTile(task.tile)?.kind === "city"
+          ) {
+            const price =
+              propertyInvestedValue(state, task.tile) *
+              ECONOMY.buyoutMultiplier;
+            if (getPlayer(state, task.seat).cash >= price)
+              open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
+          }
+          break;
+        }
+        case "wins":
+          checkWins();
+          break;
+        case "finish":
+          endTurn();
+          break;
+      }
+    }
+  };
+  const act = (seat: Seat, action: Action) => {
+    const pending = state.pending;
+    if (!pending) throw new Error("Action requires a decision");
+    emit({ type: "DecisionClosed" });
+    switch (action.type) {
+      case "Roll":
+        if (getPlayer(state, seat).travelPending)
+          emit({ type: "TravelOptionChanged", seat, available: false });
+        roll(seat);
+        break;
+      case "PayIsland":
+        payment(seat, null, ECONOMY.islandReleaseFee, "Island release");
+        emit({ type: "LeftIsland", seat, method: "paid" });
+        startDecision();
+        break;
+      case "Travel":
+        payment(seat, null, ECONOMY.worldTourFee, "World Tour");
+        emit({ type: "TravelOptionChanged", seat, available: false });
+        emit({ type: "TurnPhaseChanged", phase: "resolve" });
+        secrets({ extraRoll: false, turnEnded: false });
+        moveTo(seat, action.tile);
+        prepend({ kind: "landing", seat }, { kind: "finish" });
+        break;
+      case "Buy":
+        if (pending.kind === "buy") {
+          emit({
+            type: "PropertyBought",
+            seat,
+            tile: pending.tile,
+            level: action.level,
+            amount: purchaseCost(pending.tile, action.level),
+          });
+          prepend({ kind: "wins" });
+        }
+        break;
+      case "Build":
+        if (pending.kind === "build") {
+          const amount =
+            purchaseCost(pending.tile, action.level) -
+            propertyInvestedValue(state, pending.tile);
+          if (action.level === 5) clearHost([pending.tile]);
+          emit({
+            type: "PropertyUpgraded",
+            seat,
+            tile: pending.tile,
+            level: action.level,
+            amount,
+            free: false,
+          });
+        }
+        break;
+      case "Buyout":
+        if (pending.kind === "buyout") {
+          const owner = propertyOwner(state, pending.tile);
+          if (owner === null) throw new Error("Buyout requires owner");
+          clearHost([pending.tile]);
+          emit({
+            type: "BoughtOut",
+            seat,
+            previousOwner: owner,
+            tile: pending.tile,
+            amount: pending.price,
+          });
+          prepend({ kind: "wins" });
+        }
+        break;
+      case "Sell":
+        if (pending.kind === "sell") {
+          const amount = propertyRefund(state, action.tile);
+          clearHost([action.tile]);
+          emit({ type: "PropertySold", seat, tile: action.tile, amount });
+          insolvency(seat, pending.creditor);
+          if (state.pending === null) prepend({ kind: "wins" });
+        }
+        break;
+      case "ChooseHost": {
+        const multiplier =
+          state.championshipHost?.tile === action.tile
+            ? Math.min(
+                CHANCE_AMOUNTS.maxHostMultiplier,
+                state.championshipHost.multiplier + 1,
+              )
+            : CHANCE_AMOUNTS.initialHostMultiplier;
+        emit({
+          type: "ChampionshipChanged",
+          host: { tile: action.tile, multiplier },
+        });
+        break;
+      }
+      case "ChooseTarget":
+        if (pending.kind === "card-target") {
+          const property = getProperty(state, action.tile);
+          if (!property) throw new Error("Card target requires property");
+          if (pending.card === "Earthquake")
+            emit({
+              type: "PropertyDowngraded",
+              tile: action.tile,
+              level: (property.level - 1) as BuildLevel,
+            });
+          else if (pending.card === "Contractor")
+            emit({
+              type: "PropertyUpgraded",
+              seat,
+              tile: action.tile,
+              level: (property.level + 1) as BuildLevel,
+              amount: 0,
+              free: true,
+            });
+          else if (
+            pending.sourceTile !== undefined &&
+            property.owner !== null
+          ) {
+            clearHost([action.tile, pending.sourceTile]);
+            emit({
+              type: "PropertiesSwapped",
+              seat,
+              otherSeat: property.owner,
+              tile: pending.sourceTile,
+              otherTile: action.tile,
+            });
+            prepend({ kind: "wins" });
+          }
+        }
+        break;
+      case "UseRentCard":
+        if (pending.kind === "rent-card") {
+          emit({ type: "CardUsed", seat, card: action.card });
+          secrets({ discard: [...state.discard, action.card] });
+          prepend({
+            kind: "rent",
+            from: seat,
+            to: pending.owner,
+            amount: rentCardPayment(pending.amount, action.card),
+            tile: pending.tile,
+          });
+        }
+        break;
+      case "Decline":
+        if (pending.kind === "rent-card")
+          prepend({
+            kind: "rent",
+            from: seat,
+            to: pending.owner,
+            amount: rentCardPayment(pending.amount, null),
+            tile: pending.tile,
+          });
+        break;
+    }
+    drain();
+  };
+  return { act, startDecision, result: () => ({ state, events }) };
+}
+function landPrice(tileIndex: number): number {
+  const tile = getTile(tileIndex);
+  return tile && isCityTile(tile)
+    ? getTileLandPrice(tileIndex)
+    : ECONOMY.resortPrice;
+}
+
+export function applyAction(
+  state: GameState,
+  seat: Seat,
+  action: Action,
+  context: EngineContext,
+): ApplyActionResult {
+  if (state.status !== "active")
+    return {
+      ok: false,
+      error: { code: "game-over", message: "The game is over" },
+    };
+  if (state.pending?.seat !== seat)
+    return {
+      ok: false,
+      error: {
+        code: "not-active-seat",
+        message: "It is not this seat's decision",
+      },
+    };
+  if (!Number.isFinite(context.now))
+    return {
+      ok: false,
+      error: { code: "illegal-action", message: "Invalid action time" },
+    };
+  if (state.matchDeadline !== null && context.now >= state.matchDeadline)
+    return { ok: true, ...finishOnTime(state) };
+  if (
+    action.type === "Roll" &&
+    context.dice !== undefined &&
+    (context.dice.length !== 2 ||
+      context.dice.some((die) => !Number.isInteger(die) || die < 1 || die > 6))
+  )
+    return {
+      ok: false,
+      error: {
+        code: "invalid-dice",
+        message: "Dice must be two integers from 1 to 6",
+      },
+    };
+  if (
+    !legalActions(state, seat).some((candidate) =>
+      sameAction(candidate, action),
+    )
+  )
+    return {
+      ok: false,
+      error: {
+        code: "illegal-action",
+        message: "This action is not legal for the current decision",
+      },
+    };
+  const resolved = resolver(state, context);
+  resolved.act(seat, action);
+  return { ok: true, ...resolved.result() };
+}
+function bestRentTarget(
+  state: PublicState,
+  targets: readonly number[],
+): number {
+  return [...targets].sort(
+    (a, b) => propertyRent(state, b) - propertyRent(state, a) || a - b,
+  )[0];
+}
+function nextRentIncrease(state: PublicState, tileIndex: number): number {
+  const property = getProperty(state, tileIndex);
+  return getTile(tileIndex)?.kind === "city" && property && property.level < 4
+    ? getTileBaseRent(tileIndex, (property.level + 1) as BuildLevel) -
+        getTileBaseRent(tileIndex, property.level)
+    : 0;
+}
+function timeoutAction(state: PublicState): Action {
+  const pending = state.pending;
+  if (!pending) return { type: "Roll" };
+  switch (pending.kind) {
+    case "roll":
+    case "island":
+    case "travel":
+      return { type: "Roll" };
+    case "buy":
+    case "build":
+    case "buyout":
+    case "rent-card":
+      return { type: "Decline" };
+    case "host":
+      return {
+        type: "ChooseHost",
+        tile: bestRentTarget(state, pending.targets),
+      };
+    case "card-target":
+      return pending.card === "Land Swap"
+        ? { type: "Decline" }
+        : {
+            type: "ChooseTarget",
+            tile:
+              pending.card === "Earthquake"
+                ? bestRentTarget(state, pending.targets)
+                : [...pending.targets].sort(
+                    (a, b) =>
+                      nextRentIncrease(state, b) - nextRentIncrease(state, a) ||
+                      a - b,
+                  )[0],
+          };
+    case "sell":
+      return {
+        type: "Sell",
+        tile: [...pending.targets].sort(
+          (a, b) =>
+            propertyRefund(state, a) - propertyRefund(state, b) || a - b,
+        )[0],
+      };
+  }
+}
+function finishOnTime(state: GameState): CreateGameResult {
+  // Complete the already-earned landing before ranking; never start a fresh roll.
+  let settled = state;
+  const events: GameEvent[] = [];
+  for (
+    let count = 0;
+    settled.status === "active" &&
+    settled.pending &&
+    !["roll", "island", "travel"].includes(settled.pending.kind);
+    count++
+  ) {
+    if (count > 100)
+      throw new Error("Deadline settlement exceeded safety bound");
+    const result = applyAction(
+      settled,
+      settled.pending.seat,
+      timeoutAction(settled),
+      { now: (state.matchDeadline ?? state.startedAt) - 1 },
+    );
+    if (!result.ok)
+      throw new Error(`Deadline settlement failed: ${result.error.message}`);
+    settled = result.state;
+    events.push(...result.events);
+  }
+  if (settled.status === "finished") return { state: settled, events };
+  const standings = rankStandings(settled);
+  const event: GameEvent = {
+    type: "GameOver",
+    winner: standings[0].seat,
+    kind: "time-limit",
+    standings,
+  };
+  return {
+    state: {
+      ...settled,
+      ...applyEvent(toPublic(settled), event),
+      resolutionQueue: [],
+      extraRoll: false,
+    },
+    events: [...events, event],
+  };
+}
+export function applyTimeout(
+  state: GameState,
+  context: EngineContext,
+): CreateGameResult {
+  if (state.status !== "active") return { state, events: [] };
+  if (state.matchDeadline !== null && context.now >= state.matchDeadline)
+    return finishOnTime(state);
+  if (!state.pending || context.now < state.pending.deadline)
+    return { state, events: [] };
+  const events: GameEvent[] = [];
+  let next = state;
+  const forcedSell = state.pending.kind === "sell";
+  do {
+    const pending = next.pending;
+    if (!pending) break;
+    const applied = applyAction(
+      next,
+      pending.seat,
+      timeoutAction(next),
+      context,
+    );
+    if (!applied.ok)
+      throw new Error(`Invalid timeout action: ${applied.error.message}`);
+    next = applied.state;
+    events.push(...applied.events);
+  } while (
+    forcedSell &&
+    next.pending?.kind === "sell" &&
+    next.pending.seat === state.pending.seat
+  );
+  return { state: next, events };
+}
+export function botAction(
+  state: PublicState,
+  seat: Seat,
+  difficulty: BotDifficulty = "medium",
+): Action {
+  const actions = legalActions(state, seat);
+  if (actions.length === 0) throw new RangeError("Bot has no legal decision");
+  const pending = state.pending;
+  if (!pending) return actions[0];
+  const cash = getPlayer(state, seat).cash;
+  switch (pending.kind) {
+    case "island":
+      return (
+        actions.find(
+          (action) =>
+            action.type === "PayIsland" && cash > ECONOMY.islandReleaseFee * 3,
+        ) ?? actions[0]
+      );
+    case "travel": {
+      const travel = actions
+        .filter(
+          (action): action is Extract<Action, { type: "Travel" }> =>
+            action.type === "Travel",
+        )
+        .sort((a, b) => {
+          const score = (tile: number) =>
+            propertyOwner(state, tile) === null && getProperty(state, tile)
+              ? landPrice(tile) +
+                (getTile(tile)?.kind === "resort" ? ECONOMY.resortPrice : 0)
+              : propertyOwner(state, tile) === seat
+                ? nextRentIncrease(state, tile)
+                : -propertyRent(state, tile);
+          return score(b.tile) - score(a.tile) || a.tile - b.tile;
+        });
+      return cash > ECONOMY.worldTourFee * 4 && travel.length
+        ? travel[0]
+        : actions[0];
+    }
+    case "buy":
+    case "build": {
+      if (state.config.botCanBuild === false)
+        return pending.kind === "buy"
+          ? (actions.find(
+              (action) => action.type === "Buy" && action.level === 0,
+            ) ?? { type: "Decline" })
+          : { type: "Decline" };
+      const builds = actions.filter(
+        (action) => action.type === "Buy" || action.type === "Build",
+      );
+      const reserve =
+        difficulty === "easy"
+          ? 0
+          : difficulty === "hard"
+            ? Math.max(ECONOMY.minimumTax, Math.floor(cash / 4))
+            : ECONOMY.islandReleaseFee;
+      const affordable = builds.filter(
+        (action) => cash - actionCost(state, action) >= reserve,
+      );
+      const selected = [...affordable]
+        .reverse()
+        .find(
+          (action) =>
+            action.type !== "Build" ||
+            action.level < 5 ||
+            cash >= actionCost(state, action) * 3,
+        );
+      return selected ?? { type: "Decline" };
+    }
+    case "buyout":
+      return cash - pending.price >= ECONOMY.islandReleaseFee &&
+        (difficulty === "hard" || pending.price <= cash / 2)
+        ? { type: "Buyout" }
+        : { type: "Decline" };
+    case "rent-card":
+      return {
+        type: "UseRentCard",
+        card: pending.cards.includes("Guardian Angel")
+          ? "Guardian Angel"
+          : "Coupon",
+      };
+    case "host":
+    case "sell":
+      return timeoutAction(state);
+    case "card-target":
+      return pending.card === "Land Swap"
+        ? (actions.find((action) => action.type === "ChooseTarget") ??
+            actions[0])
+        : timeoutAction(state);
+    case "roll":
+      return actions[0];
+  }
+}
+export function createGame(
+  config: GameConfig,
+  seats: readonly SeatInfo[],
+  seed: number,
+  context: EngineContext,
+): CreateGameResult {
+  if (config.gameId.length === 0) throw new RangeError("A game ID is required");
+  if (!Number.isSafeInteger(config.startingCash) || config.startingCash < 0)
+    throw new RangeError("Starting cash must be a non-negative integer");
+  if (!Number.isSafeInteger(config.startSalary) || config.startSalary < 0)
+    throw new RangeError("Start salary must be a non-negative integer");
+  if (!Number.isInteger(config.roundLimit) || config.roundLimit < 1)
+    throw new RangeError("Round limit must be a positive integer");
+  if (
+    config.decisionSeconds !== undefined &&
+    (!Number.isInteger(config.decisionSeconds) || config.decisionSeconds < 1)
+  )
+    throw new RangeError("Decision time must be a positive integer");
+  if (
+    config.timeLimitMinutes !== undefined &&
+    (!Number.isFinite(config.timeLimitMinutes) || config.timeLimitMinutes <= 0)
+  )
+    throw new RangeError("Time limit must be positive");
+  if (
+    config.festivalCount !== undefined &&
+    (!Number.isInteger(config.festivalCount) ||
+      config.festivalCount < 0 ||
+      config.festivalCount > 20)
+  )
+    throw new RangeError("Festival count must be from 0 to 20");
+  if (
+    config.hotelPurchaseRule !== undefined &&
+    !["staged-hotels", "legacy-lap"].includes(config.hotelPurchaseRule)
+  )
+    throw new RangeError("Unsupported hotel purchase rule");
+  if (!Number.isFinite(context.now))
+    throw new RangeError("Game time must be finite");
   if (
     seats.length < ECONOMY.minimumPlayers ||
     seats.length > ECONOMY.maximumPlayers
-  ) {
+  )
     throw new RangeError(
       `A game requires ${ECONOMY.minimumPlayers} to ${ECONOMY.maximumPlayers} seats`,
     );
-  }
-
-  const playerIds = new Set(seats.map((seat) => seat.playerId));
-
-  if (playerIds.size !== seats.length) {
+  if (new Set(seats.map((seat) => seat.playerId)).size !== seats.length)
     throw new RangeError("Every seat must have a unique player ID");
-  }
-
   if (
     seats.some((seat) => seat.playerId.length === 0 || seat.name.length === 0)
-  ) {
+  )
     throw new RangeError("Every seat must have a player ID and name");
-  }
-}
-
-function createPlayer(
-  seatInfo: SeatInfo,
-  seat: Seat,
-  cash: number,
-): PlayerState {
-  return {
-    playerId: seatInfo.playerId,
-    name: seatInfo.name,
-    control: seatInfo.control,
-    seat,
-    cash,
+  const players: PlayerState[] = seats.map((seat, index) => ({
+    ...seat,
+    seat: index as Seat,
+    cash: config.startingCash,
     position: 0,
     laps: 0,
     onIsland: false,
@@ -89,439 +1452,63 @@ function createPlayer(
     bankrupt: false,
     properties: [],
     heldCards: [],
-  };
-}
-
-export function toPublic(state: GameState): PublicState {
-  const { rngState: _rngState, ...publicState } = state;
-  return publicState;
-}
-
-function updatePlayer(
-  state: PublicState,
-  seat: Seat,
-  update: (player: PlayerState) => PlayerState,
-): PublicState {
-  return {
-    ...state,
-    players: state.players.map((player) =>
-      player.seat === seat ? update(player) : player,
-    ),
-  };
-}
-
-export function applyEvent(_state: PublicState, event: GameEvent): PublicState {
-  switch (event.type) {
-    case "GameCreated":
-      return event.state;
-    case "DiceRolled":
-      return {
-        ..._state,
-        lastRoll: { seat: event.seat, dice: event.dice },
-        doublesInTurn:
-          event.isDouble && event.purpose === "move"
-            ? _state.doublesInTurn + 1
-            : _state.doublesInTurn,
-      };
-    case "PlayerMoved":
-      return updatePlayer(_state, event.seat, (player) => ({
-        ...player,
-        position: event.position,
-        laps: event.laps,
-      }));
-    case "SalaryPaid":
-      return updatePlayer(_state, event.seat, (player) => ({
-        ...player,
-        cash: event.cash,
-      }));
-    case "TurnPhaseChanged":
-      return { ..._state, phase: event.phase };
-    case "TurnAdvanced":
-      return {
-        ..._state,
-        activeSeat: event.activeSeat,
-        round: event.round,
-        phase: "roll",
-        doublesInTurn: 0,
-      };
-    case "SentToIsland":
-      return updatePlayer(_state, event.seat, (player) => ({
-        ...player,
-        position: ISLAND_TILE_INDEX,
-        onIsland: true,
-        islandTurns: 0,
-      }));
-    case "IslandEscapeFailed":
-      return updatePlayer(_state, event.seat, (player) => ({
-        ...player,
-        islandTurns: event.islandTurns,
-      }));
-    case "LeftIsland":
-      return updatePlayer(_state, event.seat, (player) => ({
-        ...player,
-        onIsland: false,
-        islandTurns: 0,
-      }));
-    case "GameOver":
-      return {
-        ..._state,
-        status: "finished",
-        result: {
-          winner: event.winner,
-          kind: event.kind,
-          standings: event.standings,
-        },
-      };
-  }
-}
-
-function rollDie(rngState: number): {
-  readonly rngState: number;
-  readonly die: number;
-} {
-  const result = nextRandom(rngState);
-
-  return { rngState: result.state, die: Math.floor(result.value * 6) + 1 };
-}
-
-function propertyValue(tileIndex: number): number {
-  const tile = getTile(tileIndex);
-
-  if (tile && isResortTile(tile)) {
-    return ECONOMY.resortPrice;
-  }
-
-  if (tile && isCityTile(tile)) {
-    // Owned cities are bare tile indices until build levels are tracked, so
-    // each one counts at its Land value.
-    return getInvestedValue(tile.country, 0);
-  }
-
-  throw new Error(`Tile ${tileIndex} cannot be owned`);
-}
-
-function netWorth(player: PlayerState): number {
-  return player.properties.reduce(
-    (total, tileIndex) => total + propertyValue(tileIndex),
-    player.cash,
-  );
-}
-
-function resortCount(player: PlayerState): number {
-  return player.properties.filter((tileIndex) => {
-    const tile = getTile(tileIndex);
-    return tile !== undefined && isResortTile(tile);
-  }).length;
-}
-
-function rankStandings(state: PublicState): readonly Standing[] {
-  const turnPosition = (seat: Seat) => state.turnOrder.indexOf(seat);
-  const solvent = state.players
-    .filter((player) => !player.bankrupt)
-    .sort(
-      (a, b) =>
-        netWorth(b) - netWorth(a) ||
-        b.cash - a.cash ||
-        resortCount(b) - resortCount(a) ||
-        turnPosition(a.seat) - turnPosition(b.seat),
-    );
-  // Bankruptcy is not implemented yet, so there is no elimination order to
-  // rank bankrupt players by; they keep seat order after every solvent player.
-  const bankrupt = state.players.filter((player) => player.bankrupt);
-
-  return [...solvent, ...bankrupt].map((player) => ({
-    seat: player.seat,
-    netWorth: netWorth(player),
+    travelPending: false,
   }));
-}
-
-/** Hands the turn to the next seat, or ends the game when the last round completes. */
-function endTurn(state: PublicState): GameEvent {
-  const activeIndex = state.turnOrder.indexOf(state.activeSeat);
-
-  if (activeIndex < 0) {
-    throw new Error(`The active seat ${state.activeSeat} is not in turn order`);
-  }
-
-  const nextIndex = (activeIndex + 1) % state.turnOrder.length;
-  const activeSeat = state.turnOrder[nextIndex];
-
-  if (activeSeat === undefined) {
-    throw new Error("A game requires a next active seat");
-  }
-
-  const round = state.round + Number(nextIndex === 0);
-
-  if (round > state.config.roundLimit) {
-    const standings = rankStandings(state);
-    const winner = standings[0];
-
-    if (!winner) {
-      throw new Error("A finished game requires a winner");
-    }
-
-    return {
-      type: "GameOver",
-      winner: winner.seat,
-      kind: "round-limit",
-      standings,
-    };
-  }
-
-  return { type: "TurnAdvanced", activeSeat, round };
-}
-
-type Dice = readonly [number, number];
-
-type TurnOutcome = {
-  readonly events: readonly GameEvent[];
-  readonly endsTurn: boolean;
-};
-
-function moveEvents(
-  player: PlayerState,
-  steps: number,
-  config: GameConfig,
-): { readonly events: readonly GameEvent[]; readonly position: number } {
-  const absolutePosition = player.position + steps;
-  const passedStart = absolutePosition >= BOARD_SIZE;
-  const position = absolutePosition % BOARD_SIZE;
-  const events: GameEvent[] = [
-    {
-      type: "PlayerMoved",
-      seat: player.seat,
-      position,
-      laps: player.laps + Number(passedStart),
-    },
-  ];
-
-  if (passedStart) {
-    events.push({
-      type: "SalaryPaid",
-      seat: player.seat,
-      amount: config.startSalary,
-      cash: player.cash + config.startSalary,
-    });
-  }
-
-  return { events, position };
-}
-
-/** Resolves the tile a pawn landed on; Island and World Tour end the turn. */
-function landingEvents(seat: Seat, position: number): TurnOutcome {
-  switch (getTile(position)?.kind) {
-    case "island":
-      return {
-        events: [{ type: "SentToIsland", seat, reason: "tile" }],
-        endsTurn: true,
-      };
-    case "world-tour":
-      // The next-turn travel option is not implemented yet; landing still
-      // ends the turn and forfeits any doubles roll.
-      return { events: [], endsTurn: true };
-    default:
-      return { events: [], endsTurn: false };
-  }
-}
-
-function moveRoll(
-  player: PlayerState,
-  dice: Dice,
-  doublesInTurn: number,
-  config: GameConfig,
-): TurnOutcome {
-  const seat = player.seat;
-  const isDouble = dice[0] === dice[1];
-  const rolled: GameEvent = {
-    type: "DiceRolled",
-    seat,
-    dice,
-    isDouble,
-    purpose: "move",
-  };
-
-  if (isDouble && doublesInTurn + 1 >= ECONOMY.doublesToIsland) {
-    return {
-      events: [rolled, { type: "SentToIsland", seat, reason: "triple-double" }],
-      endsTurn: true,
-    };
-  }
-
-  const move = moveEvents(player, dice[0] + dice[1], config);
-  const landing = landingEvents(seat, move.position);
-  const events: readonly GameEvent[] = [
-    rolled,
-    ...move.events,
-    { type: "TurnPhaseChanged", phase: "resolve" },
-    ...landing.events,
-  ];
-
-  if (isDouble && !landing.endsTurn) {
-    // A double earns another roll once the landing is resolved.
-    return {
-      events: [...events, { type: "TurnPhaseChanged", phase: "roll" }],
-      endsTurn: false,
-    };
-  }
-
-  // Landing resolution has no decisions yet, so the turn ends automatically:
-  // no decision is pending and no extra roll is due.
-  return { events, endsTurn: true };
-}
-
-function escapeRoll(
-  player: PlayerState,
-  dice: Dice,
-  config: GameConfig,
-): TurnOutcome {
-  const seat = player.seat;
-  const isDouble = dice[0] === dice[1];
-  const rolled: GameEvent = {
-    type: "DiceRolled",
-    seat,
-    dice,
-    isDouble,
-    purpose: "escape",
-  };
-
-  if (isDouble) {
-    // The double releases the pawn and those same dice move it. An escape
-    // roll never earns another roll.
-    const move = moveEvents(player, dice[0] + dice[1], config);
-    const landing = landingEvents(seat, move.position);
-
-    return {
-      events: [
-        rolled,
-        { type: "LeftIsland", seat, method: "doubles" },
-        ...move.events,
-        { type: "TurnPhaseChanged", phase: "resolve" },
-        ...landing.events,
-      ],
-      endsTurn: true,
-    };
-  }
-
-  const islandTurns = player.islandTurns + 1;
-  const events: GameEvent[] = [
-    rolled,
-    { type: "IslandEscapeFailed", seat, islandTurns },
-  ];
-
-  if (islandTurns >= ECONOMY.islandMaxFailedEscapes) {
-    events.push({ type: "LeftIsland", seat, method: "released" });
-  }
-
-  return { events, endsTurn: true };
-}
-
-export function applyAction(
-  state: GameState,
-  seat: Seat,
-  action: Action,
-  _context: EngineContext,
-): ApplyActionResult {
-  if (state.status !== "active") {
-    return {
-      ok: false,
-      error: { code: "game-over", message: "The game is over" },
-    };
-  }
-
-  if (state.activeSeat !== seat) {
-    return {
-      ok: false,
-      error: { code: "not-active-seat", message: "It is not this seat's turn" },
-    };
-  }
-
-  if (state.phase !== "roll" || state.pending !== null) {
-    return {
-      ok: false,
-      error: {
-        code: "invalid-phase",
-        message: "A normal roll is not legal now",
-      },
-    };
-  }
-
-  switch (action.type) {
-    case "Roll": {
-      const firstRoll = rollDie(state.rngState);
-      const secondRoll = rollDie(firstRoll.rngState);
-      const dice: Dice = [firstRoll.die, secondRoll.die];
-      const activePlayer = state.players.find((player) => player.seat === seat);
-
-      if (!activePlayer) {
-        throw new Error(`The active seat ${seat} has no player`);
-      }
-
-      const turn = activePlayer.onIsland
-        ? escapeRoll(activePlayer, dice, state.config)
-        : moveRoll(activePlayer, dice, state.doublesInTurn, state.config);
-      const turnState = turn.events.reduce(applyEvent, toPublic(state));
-      const endEvents = turn.endsTurn ? [endTurn(turnState)] : [];
-      const publicState = endEvents.reduce(applyEvent, turnState);
-      const nextState: GameState = {
-        ...publicState,
-        rngState: secondRoll.rngState,
-      };
-
-      return {
-        ok: true,
-        state: nextState,
-        events: [...turn.events, ...endEvents],
-      };
-    }
-  }
-}
-
-export function createGame(
-  config: GameConfig,
-  seats: readonly SeatInfo[],
-  seed: number,
-  context: EngineContext,
-): CreateGameResult {
-  validateGameConfig(config);
-  validateSeats(seats);
-
-  const players = seats.map((seat, index) =>
-    createPlayer(seat, index as Seat, config.startingCash),
-  );
-  const turnOrderResult = shuffle(
+  const order = shuffle(
     players.map((player) => player.seat),
     seed,
   );
-  const activeSeat = turnOrderResult.items[0];
-
-  if (activeSeat === undefined) {
-    throw new Error("A game requires an active seat");
-  }
-
+  const deck = shuffle(CHANCE_CARDS, order.state);
+  const festivals = shuffle(
+    BOARD.filter(isCityTile).map((tile) => tile.index),
+    deck.state,
+  );
   const publicState: PublicState = {
     gameId: config.gameId,
-    config,
+    config: {
+      ...config,
+      hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
+    },
     players,
-    turnOrder: turnOrderResult.items,
-    activeSeat,
+    properties: BOARD.filter(
+      (tile) => isCityTile(tile) || isResortTile(tile),
+    ).map((tile) => ({ tile: tile.index, owner: null, level: 0 })),
+    turnOrder: order.items,
+    startingTurnOrder: order.items,
+    roundSeatsRemaining: order.items,
+    eliminated: [],
+    activeSeat: order.items[0],
     round: 1,
     phase: "roll",
     doublesInTurn: 0,
     pending: null,
     lastRoll: null,
+    lastCard: null,
     bankLedger: 0,
     championshipHost: null,
     status: "active",
     result: null,
     startedAt: context.now,
+    matchDeadline:
+      config.timeLimitMinutes !== undefined
+        ? context.now + config.timeLimitMinutes * 60_000
+        : null,
+    festivalTiles: festivals.items.slice(0, config.festivalCount ?? 0),
   };
   const state: GameState = {
     ...publicState,
-    rngState: turnOrderResult.state,
+    rngState: festivals.state,
+    deck: deck.items,
+    discard: [],
+    resolutionQueue: [],
+    extraRoll: false,
+    turnEnded: false,
   };
-  const events: readonly GameEvent[] = [
-    { type: "GameCreated", state: publicState },
-  ];
-
-  return { state, events };
+  const resolved = resolver(state, context);
+  resolved.startDecision();
+  const result = resolved.result();
+  return {
+    state: result.state,
+    events: [{ type: "GameCreated", state: toPublic(result.state) }],
+  };
 }

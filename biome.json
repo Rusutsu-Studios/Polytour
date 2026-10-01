@@ -3,6 +3,10 @@
   "files": {
     "includes": [
       "**",
+      "!!.claude",
+      "!!.local",
+      "!!playwright-report",
+      "!!test-results",
       "!.wrangler",
       "!dist",
       "!docs",

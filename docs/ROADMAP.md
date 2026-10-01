@@ -5,6 +5,32 @@ multiplayer is solid → it looks amazing → people can find games → launch**
 blocks gameplay; the 3D scene is a consumer of events and can be built in parallel
 once the protocol is stable.
 
+## First playable checkpoint — October 2026
+
+A vertical slice now joins the rules engine, authoritative private rooms and the
+Three.js client. Four friends can join by room code; empty seats can become bots.
+The user preset is 2 M / 400 k / 3 festivals / 120 minutes with line and triple
+wins, and fresh server Web Crypto provides uniform dice without a beacon wait. Costs at the
+first city and Tokyo match supplied captures; the remaining economy is provisional.
+New rooms now require staged hotel development: three houses already built, a
+completed lap and a return to the city, unless the direct-hotel setting is enabled.
+Existing rooms keep their frozen earlier rule. Dated Steam evidence and its limits
+are recorded in REFERENCE_PARITY.md. The new-rule 1,000-game simulation also misses
+the short-cap and turn-position balance targets; this remains separate work.
+
+The checklist below records implemented parts, not completion of every phase's
+acceptance criteria. The user clarified on 1 October 2026 that PC is the priority:
+the board fills the desktop viewport, player HUDs sit at its corners and details
+open only when requested. Minimum layout target: 1280×720; main review sizes:
+1440×900 and 1920×1080. Mobile is best effort, with a dedicated adaptation optional
+later. The replacement desktop layout is locally verified at all three sizes,
+including a full four-context match, real drand proof export and an independent
+visual review with no remaining material defects. The deployed Preview passes
+the four production browser scenarios. Target-PC FPS, human group playtest,
+exact economy comparison and balance pass
+remain to verify. See [PLAYABLE_CHECKPOINT.md](PLAYABLE_CHECKPOINT.md) for dated
+results and the distinction between live gameplay and presentation fixtures.
+
 ## Phase 0 — Scaffold (½ week)
 
 - [x] `pnpm create cloudflare` React + Vite template, restructure into `src/{shared,worker,client}`
@@ -23,24 +49,25 @@ once the protocol is stable.
 
 ## Phase 1 — Rules engine (1–2 weeks)
 
-- [ ] Board + economy config (`shared/board`)
-- [ ] `createGame`, `applyAction`, `applyTimeout`, `applyEvent`, `legalActions` with seeded PRNG
-- [ ] All tiles, Chance deck, buyouts, forced selling, bankruptcy, all 5 win conditions
-- [ ] Easy/medium heuristic bots
-- [ ] fast-check invariants: money conservation (player cash + bank ledger), no stuck states,
+- [x] Board + economy config (`shared/board`)
+- [x] `createGame`, `applyAction`, `applyTimeout`, `applyEvent`, `legalActions` with seeded PRNG
+- [x] All tiles, Chance deck, buyouts, forced selling, bankruptcy, five original win conditions plus real-time expiry
+- [x] Easy/medium heuristic bots
+- [x] fast-check invariants: money conservation (player cash + bank ledger), no stuck states,
       always terminates, `reduce(applyEvent)` over emitted events reproduces the public state
-- [ ] `tools/sim` with stats output; first balance pass
+- [x] `tools/sim` with stats output and a recorded 10,000-game baseline
+- [ ] First balance pass (baseline misses round-limit and turn-position targets)
 
 **Done when:** 10,000 simulated games finish with sane length and win-condition mix.
 
 ## Phase 2 — Multiplayer backbone (1–2 weeks)
 
-- [ ] Zod protocol package
-- [ ] GameRoom DO: hibernatable sockets, attachments, SQLite state + event log, timers table + alarm
-- [ ] Reconnect with `lastSeq`; bot takeover after grace period
-- [ ] Private rooms: `POST /api/rooms`, join by code, lobby (seats, bots, start)
-- [ ] **Debug 2D board** (plain SVG/DOM) to play full games in 4 browser tabs
-- [ ] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
+- [x] Zod protocol package
+- [x] GameRoom DO: hibernatable sockets, attachments, SQLite state + event log, timers table + alarm
+- [x] Reconnect with `lastSeq`; bot takeover after grace period
+- [x] Private rooms: `POST /api/rooms`, join by code, lobby (seats, bots, start)
+- [x] Accessible DOM board fallback alongside the 3D client; full four-browser game test
+- [x] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
       connect to an uninitialized room rejected, alarm-driven timeout
 - [ ] Deploy safety: `stateVersion` migration on load, `rulesVersion` in game state, and a test
       that restarts a DO mid-game and checks every client resumes (see
@@ -52,13 +79,25 @@ once the protocol is stable.
 
 - [ ] Art direction spike: 1 country + 1 pawn + dice + tile in Blender → glTF pipeline
 - [ ] R3F scene: board, tiles (instanced), pawns, buildings per level, camera rig
-- [ ] Director queue + `viewState`/`serverState` stores, speed control, catch-up
+- [x] Director queue + `viewState`/`serverState` stores, speed control, catch-up
 - [ ] Handlers for every event in [PROTOCOL.md](PROTOCOL.md) (placeholder-quality where needed)
-- [ ] Keyframed dice
-- [ ] HUD: player cards, money counters, decision cards, countdown rings (Motion)
-- [ ] Decide 3D vs 2D for good based on a mid-range phone test (see TECH_STACK.md)
+- [x] Keyframed dice
+- [x] Initial HUD, money, decision and countdown implementation (before the PC layout replacement)
+- [x] PC match composition: viewport-filling board, four compact corner HUDs,
+      contextual decisions and closed-by-default journal/proof/help/inspection tools
+- [x] Verify mouse/keyboard UI, overlay dismissal, reduced-animation toggle and whole-board
+      visibility at 1280×720, 1440×900 and 1920×1080
+- [x] Verify 2× speed, real match countdown and active-event skip through a real roll
+- [x] Presentation fixtures: building levels 1–5, six purchase choices at 1280×720
+      without HUD collisions, and an off-turn debtor's decision (Worker unmodified)
+- [x] Confirm the PC replacement against the remote Worker Preview
+- [ ] Measure active-animation FPS on a documented desktop PC/GPU; retain Three.js
+      without making optional phone support determine the renderer
 
-**Done when:** a full game is playable in the 3D client at 60 fps on a mid-range phone.
+**Done when:** a full four-seat match is playable in the desktop 3D client at all
+three layout targets, essential choices are visible without opening unrelated
+tools, and measured performance on the documented target PC meets the chosen
+budget. Aiming for 60 fps is a PC target, not an unverified claim or a phone gate.
 
 ## Phase 4 — Accounts & matchmaking (1–2 weeks)
 
@@ -78,7 +117,7 @@ once the protocol is stable.
 - [ ] Physics dice with face remapping (Rapier)
 - [ ] Particles, post-processing, quality tiers, reduced-motion mode
 - [ ] PWA: manifest, icons, precaching, "update available" flow
-- [ ] Experimental dice power gauge (playtest-gated)
+- [ ] Cosmetic dice throw controls only (uniform outcomes; weighted power gauge removed by user requirement)
 - [ ] Emotes
 
 ## Phase 6 — Launch readiness (1 week)
@@ -93,4 +132,5 @@ once the protocol is stable.
 ## Phase 7 — Post-launch
 
 - Ranked mode + seasons, 2v2 teams, spectating, replay viewer (from R2 logs),
-  cosmetics (pawn skins, dice skins, board themes), friends & invites, Capacitor app-store build.
+  cosmetics (pawn skins, dice skins, board themes), friends & invites; optional
+  mobile/touch adaptation, PWA installation and Capacitor app-store build.

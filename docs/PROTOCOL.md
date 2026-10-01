@@ -5,13 +5,57 @@ a discriminated union on `type`, defined once with Zod in `src/shared/protocol/`
 imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
-## Phase 0 verification socket
+## Implemented playable protocol
 
-During local development only, the scaffold page connects to `/ws/debug/hello`.
-That route addresses a `GameRoom` Durable Object and receives exactly one frame:
-`{ type: "phase0.hello", status: "ok" }`. It is a temporary health check, not a
-match room: it has no player identity, game state, or action handling, and must be
-removed before Phase 2 adds the real `/ws/room/:code` flow below.
+`src/shared/protocol/index.ts` is the current executable contract. It supersedes
+the older illustrative launch sketches below wherever they differ. The scaffold
+debug socket has been removed; `/api/health` remains.
+
+- `POST /api/rooms {name, config?}` returns201 and `{roomCode, seat, token}`.
+- `POST /api/rooms/:code/join {name}` returns200 and another seat capability.
+- The WebSocket uses `Sec-WebSocket-Protocol: polytour, seat.<token>`, selects
+  `polytour` in the response, and checks the same Origin before entering the room.
+  Capability tokens never appear in public state, lobby, events, or URLs.
+- First send `sync {lastSeq:null}` for a snapshot, or a known sequence for replay.
+  `welcome {protocolVersion,you,seq,snapshot,lobby,randomness}` always comes first.
+  Replay then sends the contiguous events and any persisted dice proof receipts.
+- Host lobby operations are `start {fillBots}` and `settings {config}`. All rooms
+  start with exactly four seats. Empty seats can become server bots. Settings are
+  validated and freeze when the match starts.
+- New-room hotel progression is frozen by the server in the optional public config
+  marker `hotelPurchaseRule: "staged-hotels"`. Older saves may omit it or use
+  `"legacy-lap"`. This is not an accepted room-setting input; clients must derive
+  legal construction choices from the engine. Action/event shapes and the protocol
+  version remain compatible.
+- Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
+  `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
+  `legalActions` supplies the choices; tile indices are0..31 and levels0..5.
+- Each intent has an id and `atSeq`; duplicates, stale state, wrong seats, malformed
+  actions, and actions during pending entropy are rejected.
+- `randomness {status,commitment?,proof?,message?}` carries the persisted roll
+  context and resolved receipt. New-room defaults use immediate server Web Crypto:
+  no beacon fetch, null round/chain/signature, `verified: false`. Saved drand rooms
+  retain their future-round commitment, waiting/error status and verified proof;
+  their committed round is unchanged on retry. The wire shapes remain compatible.
+- `events {fromSeq,toSeq,events,proofs?}` drives the shared reducer and Director.
+  Snapshots expose no deck, seed, hidden resolution queue, or session token.
+- Presence derives from live hibernatable sockets. A disconnected human has a
+  60-second grace period before server bot takeover; reconnect restores control.
+- With no open player sockets, a room sleeps instead of simulating bots. The match
+  still ends at its original deadline. Reconnect restores the pending timers and
+  may therefore encounter an already expired decision or a finished match.
+- Create/join failures use JSON errors. `room-storage-limit` (503) identifies the
+  verified Cloudflare SQLite free-tier write-limit error; other internal failures
+  use `room-service-unavailable` (503). A platform response can still be text or
+  HTML, so the client validates all responses before storing seat credentials.
+- A WebSocket upgrade is not a successful reconnect: only a valid `welcome`
+  enables actions and resets the retry budget. Failed attempts stop after five
+  retries. Expired/refused sockets stop immediately; recovery requests coalesce
+  until the snapshot arrives and pending command timers clear on disconnect.
+
+The prototype client requests a fresh snapshot on reconnect rather than buffering
+offline actions. Chat, emotes, accounts, matchmaking and spectator messages in the
+launch sketches below remain unimplemented.
 
 ## Principles
 
@@ -44,7 +88,7 @@ type ClientMessage =
   | { type: "ping"; t: number };
 
 type Action =
-  | { type: "roll"; gauge?: "low" | "mid" | "high" }
+  | { type: "roll" } // historical sketch; executable prototype uses PascalCase Roll
   | { type: "buy"; tile: TileId; level: 0 | 1 | 2 | 3 }
   | { type: "build"; tile: TileId; level: 1 | 2 | 3 | 4 }
   | { type: "buyout"; tile: TileId }
@@ -93,6 +137,12 @@ appears in exactly one event, and `MoneyTransferred` is only for movements witho
 a dedicated event (tax, card effects, Island and World Tour fees). This list is the
 v0.1 draft; it grows with the engine, and the reducer property test decides when it
 is complete.
+
+The current prototype also emits a legacy absolute `cash` field on `SalaryPaid`
+for compatibility with previously opened clients. The shared reducer uses only
+`amount` to credit player cash and debit the bank; it does not trust that redundant
+balance. Existing valid events replay identically, so this calculation correction
+requires no protocol, state or rules version change.
 
 ```ts
 type InstantWinKind = "triple-monopoly" | "line-monopoly" | "resort-monopoly";

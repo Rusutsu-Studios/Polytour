@@ -1,5 +1,34 @@
 # Architecture
 
+## Implemented prototype boundary
+
+The first playable slice uses a Worker and one SQLite-backed GameRoom per private
+four-seat match. It stores state, events, proof receipts, commands and timers in
+that room. Create/join issues a cryptographically random seat capability; only its
+hash is stored. The WebSocket sends the token in `Sec-WebSocket-Protocol`, never
+the URL. The client keeps it in sessionStorage, so refresh restores its seat in
+that browser session. Accounts, Turnstile, signed cookies, D1 results and R2 replay
+archives below remain the planned launch architecture rather than implemented auth.
+
+Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
+expiry. New-room rolls resolve immediately through server Web Crypto, without a
+network fetch. Legacy drand-round alarms remain supported: a saved commitment
+survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
+When no player socket remains open, the room stops bot moves, decision alarms
+and entropy retries. It retains the real match deadline and each disconnect grace
+timer, then expires normally; reconnect restores the pending work without moving
+either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
+an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
+for the write-quota incident and measured regressions.
+State version 1 is retained. New rooms freeze rules version 3, while existing
+version-2 rooms retain their original hotel progression. Unknown saved versions
+are rejected before a lobby or active match can continue under different rules.
+
+The React client lazy-loads the Three.js/R3F board and uses a Director to advance
+the rendered state separately from authoritative state. Original procedural
+geometry avoids an external asset dependency. No production deploy is implied by
+local verification.
+
 Polytour is one Cloudflare Worker that serves the web client, an HTTP API, and
 WebSocket upgrades. Each live match is a `GameRoom` Durable Object: a single-threaded,
 strongly consistent actor that owns the game state, the players' sockets, and the
@@ -209,9 +238,14 @@ game:
   `stateVersion`; on load the DO migrates older state JSON step by step before
   handing it to the engine. Never ship a state shape change without its migration
   and a test that loads the previous shape.
-- **Rule and balance changes never rewrite a match in progress.** The game state
-  records the `rulesVersion` it was created with and the engine honors it until the
-  game ends (matches last ~20 minutes, so old rules only need to survive briefly).
+- **Rule and balance changes never rewrite a match in progress.** Room metadata
+  records the `rulesVersion` it was created with and the engine honors the frozen
+  config until the game ends (the current maximum is 120 minutes). New rooms use
+  version 3 and `hotelPurchaseRule: "staged-hotels"`. Version-2 active saves without
+  that marker retain the old lap-only hotel rule; existing version-2 lobbies pass
+  `"legacy-lap"` when they start. Loading accepts both rule versions and rejects a
+  contradictory marker. State JSON remains `stateVersion: 1`; no schema or class
+  migration is introduced for this optional config field.
 - A DO class lifecycle change (new, renamed, or deleted class in `migrations`) cannot
   be rolled back or deployed gradually: ship it on its own.
 

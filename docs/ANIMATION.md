@@ -1,24 +1,34 @@
 # Visual direction & animation
 
-The game should feel like a **premium toy diorama**: a chunky, softly lit 3D board
-on a table, pieces with weight and bounce, money that *flies*. Every event the
+The PC game should feel like a **premium toy diorama**: a chunky, softly lit 3D board
+filling the play viewport, pieces with weight and bounce, money that *flies*. A
+sky-blue surround, grassy center and ivory track support the original geometry.
+Four compact player HUDs sit at the corners; only the current decision opens a
+contextual action panel. Journal, proof, instructions and inspection tools stay
+closed until requested. Every event the
 server sends should have a satisfying, readable, skippable animation.
+
+This document defines direction and planned animation budgets. Implemented and
+verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CHECKPOINT.md).
 
 ## Art direction
 
 - **Style:** stylized low-poly with soft gradients, baked ambient occlusion, rounded
   bevels. Think "collectible toy", not realism. Each country gets a distinct color
   and a signature landmark model.
-- **Camera:** perspective, ~45° tilt, slightly low FOV (30–35°) for a miniature feel.
-  Default view frames the whole board; action shots dolly toward the active pawn.
+- **Camera:** fixed diagonal isometric framing with an orthographic camera for
+  the PC board. Default view keeps all corners visible; any future action shot
+  must return to that frame and preserve access to the current decision.
 - **Lighting:** one warm key light with soft shadows (or baked + `ContactShadows`),
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),
   light vignette, SMAA. Bloom and shadows are the first things to drop on low tiers.
 - **Player identity:** 4 colors chosen to be color-blind distinguishable, each with a
-  pattern/icon too, used on pawns, ownership flags, tile borders, and HUD cards.
-- **UI:** big rounded cards, bold numerals (tabular figures), glassy panels over the
-  3D scene, one accent gradient. All HUD money values count up/down, never jump.
+  pattern/icon too, used on pawns, ownership flags, tile borders, and corner HUDs.
+- **UI:** compact ivory corner HUDs with bold tabular numerals and a discreet
+  action area near the bottom center. Avoid permanent sidebars, oversized card
+  grids and glass overlays that cover the board. Details open as dismissible
+  popovers or dialogs. Money changes remain readable without growing the HUD.
 
 ## The Director (event → animation pipeline)
 
@@ -36,9 +46,11 @@ flowchart LR
 - `serverState` is always the truth; `viewState` lags behind it until animations finish.
   Both are advanced with the engine's shared reducer `applyEvent`: `serverState` as
   soon as an event arrives, `viewState` when its animation finishes.
-- Each handler is `async (event, ctx) => void` and must resolve within its budget.
-  Budgets live in `shared/board/timing.ts`, the same config the server uses for
-  `animationBudget`, so decision deadlines always cover the animation.
+- Scene handlers are `async (event, ctx) => void` and resolve within their shared
+  `shared/board/timing.ts` budgets. The server includes those motion budgets in
+  decision deadlines. The current DOM card-reading hold is a bounded prototype
+  exception: up to two additional seconds come from the existing choice window,
+  without pausing or extending the server clock. Continue/skip can end it early.
 - **Speed:** a Director `speed` (1×, 1.5×, 2×) is applied to GSAP's global timeline
   (`gsap.globalTimeline.timeScale(speed)`) **and** to DOM animation: Motion has no
   global clock, so HUD transitions and money counters read `speed` from the Director
@@ -47,7 +59,9 @@ flowchart LR
   play at 3× and skip camera moves; if > 30, snap straight to `serverState`.
 - **Tab hidden:** `document.visibilitychange` → snap on return, don't queue minutes of animation.
 - **Decision UI** appears only when the Director has drained the events that led to
-  the decision — so the "Buy?" card never pops up before the pawn lands.
+  the decision — so the purchase panel never appears before the pawn lands.
+  Identify the actual `pending.seat`, including off-turn forced payments, and
+  keep tile name, owner, price and rent beside the available actions.
 
 ## Signature moments
 
@@ -55,22 +69,55 @@ flowchart LR
 | --- | --- | --- |
 | `DiceRolled` | Dice thrown from the player's side, tumble, bounce, settle on the server's values; camera micro-shake on impact; values pop above dice. Doubles: gold flash + "DOUBLE!" stamp. | 1.2 s |
 | `PawnMoved` | Pawn hops tile-to-tile on an arc with squash & stretch (anticipation → hop → land squash). Each tile gives a small "press" and a soft tick sound whose pitch climbs. Camera follows with damped lerp. Teleports: pawn spins up into a light beam, lands with a ring shockwave. | 0.28 s / tile |
-| `SalaryPaid` | Start tile flares; coins arc into the player's HUD card; counter rolls up. | 0.8 s |
+| `SalaryPaid` | Start tile flares; coins arc into the player's corner HUD; counter rolls up. | 0.8 s |
 | `PropertyBought` | Ownership flag/tile border sweeps in the player's color; land plot "unfolds". | 0.7 s |
 | `PropertyUpgraded` | Building rises out of the tile with overshoot (elastic ease), dust puff particles, a thunk + sparkle sound. | 0.9 s |
 | Landmark | Slow-mo: camera pushes in, landmark rises, beam of light, confetti in owner color, choir hit. The most expensive moment — earn it. | 2.0 s |
-| `RentPaid` | Coins burst from the payer's pawn, stream along a bezier to the owner's HUD card. Coin count scales (log) with amount. Big rents: screen-edge red flash, heavier coin sound, both counters tick. | 1.0–1.6 s |
-| `BoughtOut` | Owner's flag tears away, buyer's color floods in from the tile edges; "SOLD!" stamp; the old owner's HUD card shakes. | 1.2 s |
+| `RentPaid` | Coins burst from the payer's pawn, stream along a bezier to the owner's corner HUD. Coin count scales (log) with amount. Big rents: screen-edge red flash, heavier coin sound, both counters tick. | 1.0–1.6 s |
+| `BoughtOut` | Owner's flag tears away, buyer's color and symbol sweep into the tile; "SOLD!" stamp; the old owner's corner HUD reacts. | 1.2 s |
 | `ChampionshipHosted` | Stadium lights sweep the board, spotlight locks on the host city, multiplier badge (×2, ×3…) slams onto it and stays floating. | 1.5 s |
 | `CardDrawn` | Card flies out of the Chance deck, flips in 3D in front of the camera, holds for reading, then flies to its effect. | 1.4 s |
 | `SentToIsland` | Pawn launched in an arc onto the Island corner; waves ripple; pawn gets a small life-ring. | 1.0 s |
 | `MonopolyThreat` | Missing tiles pulse with a warning glow + a tense sting. | 1.0 s |
-| `PlayerBankrupt` | Player's buildings crumble into particles, tiles fade to neutral, HUD card greys out and slides away. | 1.8 s |
-| `GameOver` | Board-orbit camera, winner's pawn on a pedestal, confetti, stat cards slide in (net worth graph over time, biggest rent, most buyouts). | 4–6 s |
+| `PlayerBankrupt` | Player's buildings crumble into particles, tiles fade to neutral, corner HUD marks bankruptcy while preserving player identity. | 1.8 s |
+| `GameOver` | Winner's pawn and board remain visible; a compact standings overlay opens after the celebration. Expanded statistics are a separate optional view. | 4–6 s |
 
 Rule of thumb: an ordinary turn (roll → move 7 tiles → pay rent) should read in
 **≈ 4–5 s** at 1× (1.2 s dice + 7 × 0.28 s hops + 1.0–1.6 s rent ≈ 4.2–4.8 s).
 Anything longer gets boring by round 10.
+
+## Current construction feedback
+
+The procedural prototype uses an owner-coloured ring and eight pooled geometric
+sparks for purchase, upgrade and buyout events (0.45 seconds at 1×). The Director
+owns the GSAP timeline; skip, reset and reduced motion cancel it and hide its
+effects. A generation guard prevents a cancelled older handler from hiding a
+newly started construction effect. Building bases, cornices and entrances are
+instanced; hotels and terraced landmarks stay visually distinct. These are the
+implemented construction accents, not the full sound/particle specification in
+the signature-moment table above.
+
+## Current illustrated moments
+
+Purchase, development and buyout dialogs use original isometric previews,
+selectable stages and a comparison slider. They preserve the authoritative
+decision deadline and submit only the confirmed legal action. Native dialogs
+protect keyboard focus; Escape minimizes a choice without spending money.
+
+The Director now has a separate DOM presenter alongside its scene animator.
+`CardDrawn` waits for a bounded illustrated reading moment (2.6 seconds, or
+850 ms when catching up) before the subsequent effects play. Continue and Escape
+resolve that moment; skip, snapshot replacement and reconnect cancel it. This
+reading hold uses the existing decision clock and does not extend a server
+deadline. Reduced motion keeps a static card and its instructions. Card art and
+prompts are documented in [CARD_ART.md](CARD_ART.md).
+
+Four capped banknote reserves and coin piles sit just outside the track. Repeated
+note faces, straps and coin details are instanced. Salary, rent, transfers,
+purchases, building, buyouts and sales animate a pooled bundle along the actual
+payer/recipient path, using the existing 200 ms money or 450 ms property budget.
+Cancelled timelines cannot hide a later effect. Static reserves follow view
+state; the DOM HUD remains the exact cash display.
 
 ## Dice: deterministic result, physical feel
 
@@ -111,14 +158,15 @@ Consistency matters more than any single animation: reuse these presets from
   coins (small/medium/huge variants), building thunks, stingers (double, monopoly
   threat, landmark, bankrupt, victory), and a looping music bed that ducks under stingers.
 - Mix bus: master / music / SFX sliders, persisted in `localStorage`.
-- Mobile: unlock the AudioContext on the first tap (Howler handles this).
+- A future mobile adaptation must unlock the AudioContext on its first touch;
+  this is not a PC prototype gate.
 
 ## Performance rules for the scene
 
 - Tiles, houses, coins, and particles are **instanced**. Target < 150 draw calls.
 - Never allocate in `useFrame`; keep temp `Vector3`/`Quaternion` objects module-level.
 - `frameloop="demand"` when nothing is animating (Director idle + no camera input);
-  call `invalidate()` from GSAP's `onUpdate`. Saves battery on phones.
+  call `invalidate()` from GSAP's `onUpdate`. Avoids rendering idle PC scenes.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated
   SDF font, or HTML overlays via drei `<Html>` sparingly (they're DOM nodes).
@@ -135,8 +183,11 @@ Consistency matters more than any single animation: reuse these presets from
 - `prefers-reduced-motion`: no camera shake, no slow-mo, camera cuts instead of
   sweeps, particles at 30%, but keep money flow animations (they carry information).
 - Every color-coded thing also has an icon or pattern.
-- All decisions reachable by keyboard; HUD text ≥ 14 px on phones; numbers have
+- All decisions reachable by keyboard; essential HUD text ≥ 14 px at 1280×720; numbers have
   sufficient contrast over the 3D scene (panel backgrounds, not raw text on the board).
+- Validate the whole board, corner HUDs, contextual choices and dismissible tools
+  at 1280×720, 1440×900 and 1920×1080. Preserve reduced motion and keyboard focus.
+  Mobile remains best effort; physical phone FPS is not an acceptance criterion.
 
 ## References to study (for feel, not assets)
 
