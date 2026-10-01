@@ -219,6 +219,10 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - Names: `PascalCase` components/classes, `camelCase` functions, `SCREAMING_SNAKE`
   constants, kebab-case filenames except React components (`PascalCase.tsx`).
 - Game tuning numbers live in `shared/board/*.ts` config, never inline in logic.
+- Commits are authored by a person, never by an agent. An agent records itself
+  with a `Co-Authored-By` trailer, so the repository's contributor list stays
+  human. Never override `user.name` or `user.email`; the repo config pins them,
+  and the `Commit authorship` CI job rejects a pull request that breaks this.
 
 ## Verification before calling something done
 
