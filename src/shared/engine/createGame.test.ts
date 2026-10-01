@@ -33,6 +33,7 @@ describe("createGame", () => {
       result: null,
       startedAt: 100,
       matchDeadline: 7_200_100,
+      config: { hotelPurchaseRule: "staged-hotels" },
     });
     expect(state.pending).toEqual({
       kind: "roll",
@@ -73,6 +74,23 @@ describe("createGame", () => {
     expect(first.state.festivalTiles).not.toEqual(third.state.festivalTiles);
     expect(toPublic(first.state)).not.toHaveProperty("rngState");
     expect(first.events[0]).not.toHaveProperty("state.deck");
+  });
+  it("freezes the staged hotel rule for new games even when no marker is supplied", () => {
+    const game = createGame(
+      { ...DEFAULT_GAME_CONFIG, hotelPurchaseRule: undefined },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
+    expect(toPublic(game.state).config.hotelPurchaseRule).toBe("staged-hotels");
+    const legacy = createGame(
+      { ...DEFAULT_GAME_CONFIG, hotelPurchaseRule: "legacy-lap" },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(legacy.state.config.hotelPurchaseRule).toBe("legacy-lap");
   });
   it("validates identities, counts, integer money, positive deadlines and supported festivals", () => {
     expect(() =>

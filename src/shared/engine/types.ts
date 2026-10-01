@@ -17,6 +17,8 @@ export type GameConfig = {
   readonly lineMonopoly?: boolean;
   readonly tripleMonopoly?: boolean;
   readonly hotelsDirectly?: boolean;
+  /** Missing on existing saves: preserve the original lap-only hotel rule. */
+  readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";
   readonly extraRollOnDouble?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;

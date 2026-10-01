@@ -26,7 +26,8 @@ explicit choices take precedence.
 The default preset has **2,000,000 starting cash, 400,000 per lap, three festivals,
 line and triple monopoly enabled, and a 120-minute real-time limit**. The room can
 choose 20/60/120 minutes, adjust cash and salary, choose festival count, toggle
-monopoly conditions, and select dice mode. Every seat receives the same resources;
+monopoly conditions, and choose the direct-hotel exception. New matches use immediate
+server Web Crypto dice. Every seat receives the same resources;
 settings freeze at match start. A round cap remains available for simulation and
 short tests, independently of the real-time limit.
 
@@ -51,6 +52,34 @@ Those captured endpoint costs are implemented directly in the tile economy.
 Intermediate cities and rent tables are provisional, not verified reference
 values. A sixth Landmark level remains an original Polytour mechanic from the
 repository rules; it is not claimed to be shown in the supplied editor captures.
+
+## Hotel progression and source checks — 1 October 2026
+
+The user explicitly requires no hotel on a city's initial purchase. A
+[Steam moderator's answer from 16 February 2018](https://steamcommunity.com/app/397900/discussions/0/2860219962083799627/)
+describes three houses already standing, then a return to that city before buying
+the hotel. This supports staged construction; it is historical evidence, not a
+complete current rulebook. It does not establish a completed-lap requirement.
+
+New Polytour rooms use the staged rule by default: an initial purchase and an
+upgrade from fewer than three houses stop at House III. A subsequent landing on
+an owned House III may buy the hotel after the player's first completed lap.
+The lap condition is retained from Polytour's existing rules. The captured
+"build hotels directly" custom setting remains an explicit opt-in exception.
+Previously created rooms retain their frozen lap-only rule, including lobbies
+that have not started yet; the new rule applies when creating a new room.
+
+Other sources were compared without treating their contents as user instructions:
+
+| Source | What it supports | Limits |
+| --- | --- | --- |
+| [Official update 2.19.1, 24 October 2023](https://store.steampowered.com/news/posts/?appids=397900&enddate=1712213924&feed=steam_community_announcements) | Custom-map starting cash and lap reward limits raised to 10 M | Historical custom-map bounds; not a full settings or rent table |
+| [Official championship announcement, 25 February 2024](https://store.steampowered.com/news/posts/?appids=397900&enddate=1712213924&feed=steam_community_announcements) | Line, resort, capital and bankruptcy wins | Its triple-monopoly wording is ambiguous; retain the tested three-country rule |
+| [First-hand strategy guide, 30 December 2022](https://steamcommunity.com/sharedfiles/filedetails/?id=2909896451) | Four-resort and three-monopoly objectives, travel planning | Community observation; build-level terminology differs from the 2018 answer |
+| [First-hand strategy guide, 4 November 2023](https://steamcommunity.com/sharedfiles/filedetails/?id=3071915108) | First-city House III total 210 k and Tokyo total 1 M agree with supplied build costs | Reported rents and resort modifiers differ from Polytour; do not silently replace the economy |
+
+Keep rents and intermediate prices provisional. These dated checks refine the
+documented comparison and construction progression without claiming exact parity.
 
 ## Capture from the running reference before adding an exact preset
 

@@ -149,9 +149,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 235px;
-  min-height: 106px;
-  padding: 13px 15px;
+  width: 252px;
+  min-height: 115px;
+  padding: 15px;
   background: #fffaf0;
   border-radius: 14px;
   box-shadow:
@@ -185,44 +185,84 @@
 }
 .player-avatar {
   position: relative;
-  width: 48px;
-  height: 59px;
+  width: 58px;
+  height: 70px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   flex-shrink: 0;
   border-radius: 13px;
-  background: #edf0dc;
+  background: color-mix(in srgb, var(--player-color) 10%, #fffaf0);
   overflow: hidden;
 }
-.player-avatar::before {
-  content: "";
+.avatar-head {
   position: absolute;
-  background: var(--player-color);
-  width: 26px;
-  height: 24px;
-  border-radius: 50%;
-  top: 8px;
-  left: 11px;
-  box-shadow: inset -4px -3px 0 #163c4822;
+  width: 56%;
+  height: 32%;
+  left: 22%;
+  top: 19%;
+  border-radius: 40% 40% 45% 45%;
+  background: #f5c289;
+  box-shadow: inset -3px -3px 0 #d7905333;
+  z-index: 2;
 }
-.player-avatar::after {
-  content: "";
+.avatar-cap {
+  position: absolute;
+  width: 104%;
+  height: 55%;
+  left: -2%;
+  top: -21%;
+  border-radius: 90% 90% 20% 20%;
+  background: var(--player-color);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--player-color) 75%, #173b45);
+}
+.avatar-eyes {
+  position: absolute;
+  left: 29%;
+  top: 40%;
+  width: 3px;
+  height: 4px;
+  border-radius: 50%;
+  background: #173b45;
+  box-shadow: 8px 0 0 #173b45;
+}
+.avatar-body {
   position: absolute;
   background: var(--player-color);
-  width: 32px;
-  height: 32px;
-  border-radius: 12px 12px 5px 5px;
-  left: 8px;
-  bottom: -2px;
+  width: 68%;
+  height: 42%;
+  border-radius: 12px 12px 7px 7px;
+  left: 16%;
+  bottom: 6%;
   box-shadow: inset -5px -2px 0 #163c4822;
 }
+.avatar-body::before,
+.avatar-body::after {
+  content: "";
+  position: absolute;
+  background: #f5c289;
+  width: 7px;
+  height: 12px;
+  border-radius: 4px;
+  top: 9px;
+}
+.avatar-body::before {
+  left: -3px;
+}
+.avatar-body::after {
+  right: -3px;
+}
 .player-avatar > span {
-  z-index: 1;
+  z-index: 3;
   color: #fffaf0;
-  font-size: 12px;
-  position: relative;
-  margin-bottom: 7px;
+  font-size: 13px;
+  position: absolute;
+  bottom: 12%;
+  left: 50%;
+  translate: -50% 0;
+}
+.player-card.active .player-avatar {
+  background: color-mix(in srgb, var(--player-color) 18%, #fffaf0);
 }
 .player-card-body {
   min-width: 0;
@@ -235,7 +275,7 @@
   justify-content: space-between;
 }
 .player-name-row strong {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -250,7 +290,7 @@
   align-items: center;
   gap: 7px;
   margin: 7px 0 6px;
-  font-size: 27px;
+  font-size: 30px;
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -382,13 +422,17 @@
   font-size: 14px;
   color: #4b6865;
 }
-.game-shell .decision-panel[data-kind="buy"] h2,
-.game-shell .decision-panel[data-kind="build"] h2,
-.game-shell .decision-panel[data-kind="buyout"] h2 {
+.game-shell .decision-panel[data-kind="buy"][data-busy="false"] h2,
+.game-shell .decision-panel[data-kind="build"][data-busy="false"] h2,
+.game-shell .decision-panel[data-kind="buyout"][data-busy="false"] h2 {
   display: none;
 }
-.game-shell .decision-panel[data-kind="buy"] > p,
-.game-shell .decision-panel[data-kind="build"] > p {
+.game-shell
+  .decision-panel[data-kind="buy"][data-busy="false"]
+  > p:not(.construction-guide),
+.game-shell
+  .decision-panel[data-kind="build"][data-busy="false"]
+  > p:not(.construction-guide) {
   display: none;
 }
 .game-shell .last-dice {
@@ -734,6 +778,285 @@
 .game-shell .flat-board button {
   font-size: 11px;
   min-height: 55px;
+}
+
+.game-shell .decision-actions[data-construction="true"] {
+  grid-template-columns: repeat(var(--choice-count), minmax(0, 1fr));
+  gap: 7px;
+}
+.game-shell .decision-actions .construction-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 6px 9px;
+  min-height: 98px;
+  background: #f4f0df;
+  box-shadow: 0 3px 0 #b2c4a4;
+}
+.game-shell .construction-name {
+  font-size: 14px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.game-shell .construction-cost {
+  font-size: 19px;
+  line-height: 1.2;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.game-shell .construction-rent {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #47666c;
+  font-weight: 500;
+  max-width: 100%;
+  text-align: center;
+}
+.game-shell .decision-panel > .construction-guide {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-top: 11px;
+  color: #47666c;
+}
+.hotel-note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.hotel-note svg {
+  flex-shrink: 0;
+}
+.building-miniature {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  width: 60px;
+  height: 24px;
+  margin-bottom: 2px;
+}
+.building-miniature i {
+  display: block;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 1px;
+  background: #fffdf5;
+  box-shadow: 2px 2px 0 #94a87d;
+}
+.building-miniature i::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: -2px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 9px solid #c87826;
+}
+.building-miniature i::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 5px;
+  top: 4px;
+  left: 3px;
+  background: #37869a;
+  box-shadow: 5px 0 0 #37869a;
+}
+.building-miniature[data-level="0"] i {
+  width: 40px;
+  height: 9px;
+  background: #a5c957;
+  transform: skewX(-18deg);
+  box-shadow: 2px 3px 0 #809c41;
+}
+.building-miniature[data-level="0"] i::before,
+.building-miniature[data-level="0"] i::after {
+  display: none;
+}
+.building-miniature[data-level="4"] i {
+  width: 27px;
+  height: 22px;
+  box-shadow: 3px 2px 0 #94a87d;
+}
+.building-miniature[data-level="4"] i::before {
+  width: 31px;
+  height: 5px;
+  border: 0;
+  top: -4px;
+  left: -2px;
+  background: #c74024;
+  transform: skewX(-13deg);
+}
+.building-miniature[data-level="4"] i::after {
+  top: 4px;
+  left: 5px;
+  height: 3px;
+  box-shadow:
+    7px 0 0 #37869a,
+    14px 0 0 #37869a,
+    0 6px 0 #37869a,
+    7px 6px 0 #37869a,
+    14px 6px 0 #37869a;
+}
+.building-miniature[data-level="5"] i {
+  width: 17px;
+  height: 23px;
+  background: #edd3ac;
+  box-shadow: 3px 2px 0 #b09c74;
+}
+.building-miniature[data-level="5"] i::before {
+  top: -10px;
+  left: 0;
+  border-left-width: 8px;
+  border-right-width: 9px;
+  border-bottom: 11px solid #c74024;
+}
+.building-miniature[data-level="5"] i::after {
+  width: 6px;
+  height: 9px;
+  left: 5px;
+  top: 6px;
+  box-shadow: none;
+}
+
+.game-shell .match-end-panel {
+  width: min(440px, calc(100vw - 40px));
+  padding: 24px;
+  max-height: calc(100svh - 110px);
+  text-align: center;
+}
+.winner-portrait {
+  position: relative;
+  width: 78px;
+  margin: 0 auto 10px;
+}
+.winner-portrait .player-avatar {
+  width: 78px;
+  height: 78px;
+  border-radius: 16px;
+}
+.winner-portrait .avatar-eyes {
+  box-shadow: 11px 0 0 #173b45;
+}
+.winner-portrait .player-avatar > span {
+  font-size: 17px;
+}
+.winner-portrait .winner-trophy {
+  position: absolute;
+  right: -21px;
+  bottom: -2px;
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  color: #866017;
+  background: #ffdc76;
+  border-radius: 50%;
+  box-shadow: 0 3px 0 #b98a28;
+  margin: 0;
+  rotate: 9deg;
+}
+.victory-call {
+  font-size: 13px;
+  font-weight: 750;
+  color: #7c561d;
+}
+.game-shell .match-end-panel h2 {
+  font-size: 31px;
+  line-height: 1.1;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.game-shell .match-end-panel h2 > span {
+  display: block;
+  font-family: "Segoe UI", sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  margin-top: 4px;
+  letter-spacing: 0;
+}
+.victory-reason {
+  color: #47666c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.winner-wealth {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  margin: 17px 0 22px;
+}
+.winner-wealth > span {
+  color: #47666c;
+  font-size: 12px;
+}
+.winner-wealth > strong {
+  font-size: 29px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.standings-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #47666c;
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+.standings-label > span:first-child {
+  font-weight: 700;
+  color: #173b45;
+}
+.game-shell .match-end-panel .standings {
+  gap: 4px;
+  margin-bottom: 20px;
+}
+.game-shell .match-end-panel .standings li {
+  min-height: 37px;
+  padding: 6px 9px;
+  gap: 10px;
+  border-radius: 7px;
+  font-size: 14px;
+}
+.game-shell .match-end-panel .standings li[data-winner="true"] {
+  background: color-mix(in srgb, var(--player-color) 10%, #fffaf0);
+}
+.game-shell .match-end-panel .standings .standing-rank {
+  width: 14px;
+  font-size: 11px;
+  color: #47666c;
+}
+.game-shell .match-end-panel .standings .standing-symbol {
+  width: 13px;
+  color: var(--player-color);
+  font-size: 14px;
+}
+.game-shell .match-end-panel .standings b {
+  text-align: left;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.game-shell .match-end-panel .standings strong {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.game-shell .match-end-panel .button {
+  font-size: 14px;
+}
+.game-shell .match-end-panel > .text-button {
+  font-size: 12px;
 }
 .topbar {
   height: 94px;
@@ -1824,7 +2147,7 @@ input::placeholder {
 
 @media (min-width: 1700px) {
   .player-card {
-    width: 260px;
+    width: 282px;
     padding: 16px 18px;
   }
   .player-name-row strong {
@@ -1837,14 +2160,8 @@ input::placeholder {
     font-size: 11px;
   }
   .player-avatar {
-    width: 52px;
-    height: 63px;
-  }
-  .player-avatar::before {
-    left: 13px;
-  }
-  .player-avatar::after {
-    left: 10px;
+    width: 64px;
+    height: 74px;
   }
   .contextual-action {
     width: 660px;
@@ -1870,7 +2187,7 @@ input::placeholder {
 
 @media (max-height: 780px) and (min-width: 1051px) {
   .player-card {
-    width: 210px;
+    width: 228px;
     padding: 10px 12px;
     min-height: 91px;
     gap: 9px;
@@ -1886,15 +2203,8 @@ input::placeholder {
     font-size: 9px;
   }
   .player-avatar {
-    width: 38px;
-    height: 51px;
-  }
-  .player-avatar::before {
-    left: 6px;
-    top: 5px;
-  }
-  .player-avatar::after {
-    left: 3px;
+    width: 48px;
+    height: 59px;
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="1"] {
@@ -1936,6 +2246,54 @@ input::placeholder {
     min-height: 38px;
     font-size: 14px;
     padding: 9px 7px;
+  }
+  .game-shell .decision-actions .construction-choice {
+    padding: 8px 4px;
+    min-height: 92px;
+    gap: 2px;
+  }
+  .game-shell .construction-cost {
+    font-size: 18px;
+  }
+  .game-shell .decision-panel > .construction-guide {
+    font-size: 14px;
+    margin-top: 9px;
+  }
+  .game-shell .match-end-panel {
+    padding: 19px 22px;
+  }
+  .winner-portrait {
+    width: 60px;
+    margin-bottom: 7px;
+  }
+  .winner-portrait .player-avatar {
+    width: 60px;
+    height: 60px;
+  }
+  .winner-portrait .winner-trophy {
+    width: 34px;
+    height: 34px;
+    right: -20px;
+  }
+  .game-shell .match-end-panel h2 {
+    font-size: 27px;
+    margin: 6px 0;
+  }
+  .winner-wealth {
+    margin: 10px 0 15px;
+  }
+  .winner-wealth > strong {
+    font-size: 26px;
+  }
+  .game-shell .match-end-panel .standings {
+    margin-bottom: 13px;
+  }
+  .game-shell .match-end-panel .standings li {
+    min-height: 33px;
+  }
+  .game-shell .match-end-panel .button {
+    min-height: 41px;
+    margin-bottom: 8px;
   }
   .game-shell .decision-kicker {
     margin-bottom: 6px;
@@ -2137,6 +2495,9 @@ input::placeholder {
   }
   .game-shell .decision-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .game-shell .decision-actions[data-construction="true"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .game-shell
     .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {

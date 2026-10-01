@@ -84,6 +84,17 @@ Rule of thumb: an ordinary turn (roll → move 7 tiles → pay rent) should read
 **≈ 4–5 s** at 1× (1.2 s dice + 7 × 0.28 s hops + 1.0–1.6 s rent ≈ 4.2–4.8 s).
 Anything longer gets boring by round 10.
 
+## Current construction feedback
+
+The procedural prototype uses an owner-coloured ring and eight pooled geometric
+sparks for purchase, upgrade and buyout events (0.45 seconds at 1×). The Director
+owns the GSAP timeline; skip, reset and reduced motion cancel it and hide its
+effects. A generation guard prevents a cancelled older handler from hiding a
+newly started construction effect. Building bases, cornices and entrances are
+instanced; hotels and terraced landmarks stay visually distinct. These are the
+implemented construction accents, not the full sound/particle specification in
+the signature-moment table above.
+
 ## Dice: deterministic result, physical feel
 
 The server decides the dice. The client must *show* those exact values.

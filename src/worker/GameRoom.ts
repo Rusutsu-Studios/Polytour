@@ -111,18 +111,30 @@ export class GameRoom extends DurableObject<Env> {
         "SELECT seq,json FROM state WHERE id=1",
       )
       .toArray()[0];
+    const rulesVersion = this.readMeta<number>("rulesVersion");
     if (
-      row &&
+      (row || this.readMeta("room") !== null) &&
       (this.readMeta<number>("stateVersion") !== 1 ||
-        this.readMeta<number>("rulesVersion") !== 2)
+        (rulesVersion !== 2 && rulesVersion !== 3))
     ) {
       throw new Error(
         "Unsupported saved match version; this room cannot use different rules silently",
       );
     }
-    return row
-      ? { seq: row.seq, state: JSON.parse(row.json) as GameState }
-      : null;
+    if (!row) return null;
+    const state = JSON.parse(row.json) as GameState;
+    const hotelRule = state.config.hotelPurchaseRule;
+    if (
+      (rulesVersion === 3 && hotelRule !== "staged-hotels") ||
+      (rulesVersion === 2 &&
+        hotelRule !== undefined &&
+        hotelRule !== "legacy-lap")
+    ) {
+      throw new Error(
+        "Saved match hotel rule does not match its frozen rules version",
+      );
+    }
+    return { seq: row.seq, state };
   }
   private seats(): StoredSeat[] {
     return this.ctx.storage.sql
@@ -147,7 +159,7 @@ export class GameRoom extends DurableObject<Env> {
         createdAt: Date.now(),
       } satisfies RoomMeta);
       this.writeMeta("stateVersion", 1);
-      this.writeMeta("rulesVersion", 2);
+      this.writeMeta("rulesVersion", 3);
       this.ctx.storage.sql.exec(
         "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
         name,
@@ -319,8 +331,19 @@ export class GameRoom extends DurableObject<Env> {
       else if (attachment.synced) this.reject(socket, "invalid", "malformed");
       return;
     }
-    socket.serializeAttachment(attachment);
     const message = parsed.data as ClientMessage;
+    let saved: { state: GameState; seq: number } | null;
+    try {
+      // A lobby has frozen versions before its first game state is written.
+      saved = this.readState();
+    } catch {
+      return this.reject(
+        socket,
+        "id" in message ? message.id : message.type,
+        "incompatible-saved-match",
+      );
+    }
+    socket.serializeAttachment(attachment);
     if (message.type === "sync") {
       this.sync(socket, attachment, message.lastSeq);
       return;
@@ -330,7 +353,6 @@ export class GameRoom extends DurableObject<Env> {
       return this.send(socket, { type: "pong", t: message.t, serverNow: now });
     if (message.type === "lobby")
       return this.handleLobby(socket, attachment.seat, message);
-    const saved = this.readState();
     if (!saved) return this.reject(socket, message.id, "game-not-started");
     if (message.atSeq !== saved.seq)
       return this.reject(socket, message.id, "stale");
@@ -505,7 +527,14 @@ export class GameRoom extends DurableObject<Env> {
     });
     const seed = crypto.getRandomValues(new Uint32Array(1))[0];
     const result = createGame(
-      { ...room.config, gameId: room.roomCode },
+      {
+        ...room.config,
+        gameId: room.roomCode,
+        hotelPurchaseRule:
+          this.readMeta<number>("rulesVersion") === 2
+            ? "legacy-lap"
+            : "staged-hotels",
+      },
       allSeats,
       seed,
       { now: Date.now() },
