@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useId, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { money } from "./board-display.js";
 import "./RoomSettings.css";
@@ -41,19 +41,21 @@ function NumberSetting({
 }) {
   const id = useId();
   const [draft, setDraft] = useState(String(value));
-  const [editing, setEditing] = useState(false);
-  useEffect(() => {
-    if (!editing || disabled) setDraft(String(value));
-  }, [value, editing, disabled]);
-  const commit = () => {
+  const editing = useRef(false);
+  useLayoutEffect(() => {
+    if (disabled) editing.current = false;
+    // Sync before the next input event; focused text belongs to the player.
+    if (!editing.current) setDraft(String(value));
+  }, [value, disabled]);
+  const commit = (text: string) => {
+    editing.current = false;
     if (disabled) return;
-    const entered = Number(draft);
+    const entered = Number(text);
     const next =
-      draft.trim() !== "" && Number.isFinite(entered)
+      text.trim() !== "" && Number.isFinite(entered)
         ? Math.max(0, Math.min(max, Math.round(entered)))
         : value;
     setDraft(String(next));
-    setEditing(false);
     if (next !== value) onChange(next);
   };
   return (
@@ -98,8 +100,10 @@ function NumberSetting({
           value={draft}
           disabled={disabled}
           aria-label={`${label} : valeur exacte`}
-          onFocus={() => setEditing(true)}
-          onBlur={commit}
+          onFocus={() => {
+            editing.current = true;
+          }}
+          onBlur={(event) => commit(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
