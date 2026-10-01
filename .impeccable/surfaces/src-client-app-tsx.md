@@ -32,6 +32,15 @@ The dice settle to server values, the pawn walks the visible route, a city opens
 with construction stages and prices, and only confirmation changes the game.
 Illustrated card moments and small cash reserves keep money and events tangible.
 
+## Welcome and languages
+
+The welcome view is a compact ivory setup sheet beside the board, with a blue
+play button, create/join actions and a separate row of three native sliders for
+starting cash, salary and festivals. Full settings retain precise number inputs,
+rule toggles and discrete duration/decision sliders. Remove promotional slogans
+and decorative captions. French/English switching is a local display preference;
+it updates board labels, cards, decisions and tools without reconnecting the room.
+
 ## Verification and unresolved work
 
 Check 1280x720, 1440x900 and 1920x1080; use both a real local match and authored

@@ -1059,7 +1059,7 @@
   font-size: 12px;
 }
 .topbar {
-  height: 94px;
+  height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1107,7 +1107,21 @@
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 18px;
+}
+.language-picker select {
+  min-height: 36px;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid #648b99;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+.language-picker select:focus-visible {
+  outline: 3px solid #236cce;
+  outline-offset: 3px;
 }
 .prototype-tag {
   background: #b9eadd;
@@ -1138,17 +1152,23 @@
 }
 .welcome-grid {
   display: grid;
-  grid-template-columns: minmax(340px, 0.78fr) minmax(0, 1.22fr);
-  min-height: calc(100svh - 155px);
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 28px;
+  min-height: calc(100svh - 122px);
   max-width: 1510px;
   margin: auto;
-  padding: 45px 48px 38px;
+  padding: 8px 48px 24px;
   align-items: center;
 }
 .welcome-copy {
   position: relative;
   z-index: 1;
-  max-width: 475px;
+  width: 100%;
+  padding: 24px;
+  border: 2px solid #fffdf4;
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: 0 6px 0 #5e89954d;
 }
 .travel-stamp {
   display: inline-flex;
@@ -1157,13 +1177,13 @@
   color: #245e55;
   font-size: 13px;
   font-weight: 750;
-  margin-bottom: 23px;
+  margin-bottom: 12px;
 }
 .welcome-copy h1,
 .room-lobby h1 {
   font-family: "Trebuchet MS", sans-serif;
-  font-size: clamp(3rem, 5.7vw, 5.6rem);
-  line-height: 0.98;
+  font-size: clamp(30px, 3vw, 42px);
+  line-height: 1.05;
   letter-spacing: -0.04em;
   font-weight: 900;
   text-wrap: balance;
@@ -1174,9 +1194,9 @@
 .welcome-intro {
   color: #315e61;
   max-width: 365px;
-  margin: 23px 0 28px;
-  font-size: 16px;
-  line-height: 1.6;
+  margin: 14px 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
 }
 .welcome-form {
   max-width: 378px;
@@ -1186,7 +1206,7 @@
 .settings-fields label,
 .destination-choice label {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
   margin-bottom: 8px;
 }
@@ -1268,7 +1288,7 @@ input::placeholder {
   width: 100%;
   justify-content: flex-start;
   font-size: 16px;
-  min-height: 57px;
+  min-height: 52px;
   margin: 0 0 13px;
 }
 .welcome-play svg:last-child {
@@ -1278,8 +1298,8 @@ input::placeholder {
   width: 100%;
 }
 .join-form {
-  padding-top: 23px;
-  margin-top: 23px;
+  padding-top: 18px;
+  margin-top: 18px;
   border-top: 1px solid #73bab0;
 }
 .join-form > div {
@@ -1367,87 +1387,70 @@ input::placeholder {
   font-size: 12px;
   line-height: 1.6;
 }
-.fair-play {
-  margin-top: 27px;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  color: #325d54;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.fair-play > svg {
-  margin-top: 2px;
-}
-.fair-play strong {
-  font-weight: 700;
-}
 .welcome-world {
-  height: min(690px, 78vw);
-  min-height: 570px;
+  height: clamp(530px, calc(100svh - 154px), 780px);
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.welcome-board-preview {
+  min-height: 0;
+  min-width: 0;
   position: relative;
-  width: calc(100% + 48px);
-  margin: 0 -20px;
 }
-.welcome-world
-  > div:not(.world-note, .world-caption, .scene-loading, .flat-board) {
-  position: absolute;
-  inset: 0;
+.welcome-board-preview > div:not(.flat-board) {
+  height: 100%;
 }
-.world-note {
-  position: absolute;
-  top: 0;
-  right: 52px;
-  z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  font-size: 16px;
-  line-height: 1.4;
-  transform: rotate(5deg);
-  color: #315e61;
+.welcome-quick-settings {
+  min-width: 0;
+  padding: 18px 24px;
+  border: 2px solid #fffdf4;
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 5px 0 #5e89954d;
 }
-.world-note b {
-  font-weight: 750;
+.welcome-setup-title {
+  display: block;
+  margin-bottom: 14px;
+  color: #47666c;
+  font-size: 14px;
+  font-weight: 650;
 }
-.note-arrow {
-  font-size: 50px;
-  line-height: 1;
-  font-weight: 300;
-  margin-top: 26px;
+.welcome-quick-settings .room-settings-main {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
 }
-.world-caption {
-  position: absolute;
-  bottom: 5px;
-  left: 10%;
-  right: 5%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
+.welcome-quick-settings .room-setting--wide {
+  grid-column: auto;
 }
-.world-caption p {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #345f63;
-  margin-left: 14px;
+.welcome-quick-settings .room-setting-heading {
+  display: block;
 }
-.world-caption p b {
-  color: var(--ink);
+.welcome-quick-settings .room-setting-heading label {
+  display: block;
+  margin-bottom: 4px;
 }
-.mini-pawn {
-  color: #d84929;
-  font-size: 28px;
-  text-shadow: 0 2px 0 #ab725a;
+.welcome-quick-settings .room-setting-heading output {
+  font-size: 24px;
 }
-.mini-pawn.blue {
-  color: #236cce;
+.welcome-copy .welcome-play {
+  background: #236cce;
+  box-shadow: 0 4px 0 #174986;
 }
-.mini-pawn.purple {
-  color: #8151b5;
+.welcome-copy .welcome-play:hover:not(:disabled) {
+  background: #185bb8;
+  box-shadow: 0 5px 0 #174986;
 }
-.mini-pawn.green {
-  color: #26764c;
+.welcome-copy .button.secondary {
+  background: #e8ece6;
+}
+.welcome-copy .settings-trigger {
+  margin-top: 18px;
+  border-top: 1px solid #bfd0cf;
+}
+.welcome-copy .settings-trigger-hint {
+  display: none;
 }
 .lobby-footer {
   display: flex;

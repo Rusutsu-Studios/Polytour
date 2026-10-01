@@ -18,14 +18,15 @@ import {
 } from "../../shared/engine/index.js";
 import type { RandomnessStatus } from "../../shared/protocol/index.js";
 import { useDirector } from "../director/director.js";
+import { translate as t, useLocale } from "../i18n.js";
 import {
-  LEVEL_NAMES,
+  levelName,
   money,
   PLAYER_COLORS,
   PLAYER_SYMBOLS,
-  TILE_NAMES,
+  tileName,
 } from "./board-display.js";
-import { CARD_NAMES } from "./chance-display.js";
+import { cardName } from "./chance-display.js";
 import Icon from "./Icon.js";
 import "./DecisionPanel.css";
 
@@ -43,45 +44,69 @@ type DestinationAction = Extract<Action, { tile: number }>;
 const COPY = {
   roll: [
     "À vous de jouer !",
-    "Lancez les dés et voyez où le voyage vous mène.",
+    "Lancez les deux dés pour avancer.",
+    "Your turn",
+    "Roll both dice to move.",
   ],
   buy: [
-    "Une nouvelle adresse",
-    "Choisissez votre construction, puis confirmez l’achat.",
+    "Acheter cette ville",
+    "Choisissez une construction, puis confirmez l’achat.",
+    "Buy this city",
+    "Choose a building level, then confirm the purchase.",
   ],
   build: [
-    "Votre ville grandit",
-    "Comparez les travaux et le nouveau loyer, puis confirmez.",
+    "Construire",
+    "Comparez le prix des travaux et le nouveau loyer.",
+    "Build",
+    "Compare the building cost and the new rent.",
   ],
   buyout: [
-    "À vous de reprendre la ville",
-    "Cette propriété peut changer de mains. À vous de décider.",
+    "Racheter cette ville",
+    "Le prix du rachat est versé au propriétaire.",
+    "Buy out this city",
+    "The buyout price is paid to the owner.",
   ],
   sell: [
     "Une dette à régler",
-    "Choisissez une propriété à vendre pour retrouver de la trésorerie.",
+    "Choisissez une propriété à vendre pour payer votre dette.",
+    "Settle your debt",
+    "Choose a property to sell and raise cash for your debt.",
   ],
   island: [
-    "Une pause sur l’île",
-    "Tentez un double pour repartir, ou payez votre traversée.",
+    "Quitter l’île",
+    "Tentez un double pour repartir, ou payez la traversée.",
+    "Leave the Island",
+    "Roll doubles to leave, or pay the fare.",
   ],
   travel: [
-    "Le monde vous attend",
-    "Choisissez votre prochaine destination sur le plateau.",
+    "Choisissez votre destination",
+    "Sélectionnez une case sur le plateau.",
+    "Choose a destination",
+    "Select a space on the board.",
   ],
   host: [
-    "Votre ville en fête",
+    "Accueillir un festival",
     "Choisissez la ville qui accueillera le festival.",
+    "Host a festival",
+    "Choose the city that will host the festival.",
   ],
   "card-target": [
-    "À vous de choisir",
+    "Choisir une ville",
     "Choisissez la ville qui recevra l’effet de votre carte.",
+    "Choose a city",
+    "Choose the city to receive your card’s effect.",
   ],
   "rent-card": [
-    "Une carte dans votre manche",
-    "Utilisez votre protection ou réglez le loyer.",
+    "Régler le loyer",
+    "Utilisez une carte de protection ou payez le loyer.",
+    "Pay rent",
+    "Use a protection card or pay the rent.",
   ],
 } as const;
+function decisionCopy(kind: keyof typeof COPY): readonly [string, string] {
+  const [frTitle, frDescription, enTitle, enDescription] = COPY[kind];
+  return [t(frTitle, enTitle), t(frDescription, enDescription)];
+}
 function actionKey(action: Action): string {
   return `${action.type}:${"level" in action ? action.level : "tile" in action ? action.tile : "card" in action ? action.card : ""}`;
 }
@@ -89,54 +114,87 @@ function actionLabel(action: Action, state: PublicState): string {
   switch (action.type) {
     case "Buy":
     case "Build":
-      return `${LEVEL_NAMES[action.level]} · ${money(actionCost(state, action))}`;
+      return `${levelName(action.level)} · ${money(actionCost(state, action))}`;
     case "Roll":
-      return "Lancer les dés";
+      return t("Lancer les dés", "Roll the dice");
     case "PayIsland":
-      return `Payer la traversée · ${money(actionCost(state, action))}`;
+      return t(
+        `Payer la traversée · ${money(actionCost(state, action))}`,
+        `Pay the fare · ${money(actionCost(state, action))}`,
+      );
     case "Buyout":
-      return `Racheter · ${money(actionCost(state, action))}`;
+      return t(
+        `Racheter · ${money(actionCost(state, action))}`,
+        `Buy out · ${money(actionCost(state, action))}`,
+      );
     case "Travel":
-      return "Voyager ici";
+      return t("Voyager ici", "Travel here");
     case "ChooseHost":
-      return "Accueillir le festival";
+      return t("Accueillir le festival", "Host the festival");
     case "ChooseTarget":
       if (state.pending?.kind === "card-target") {
         const pending = state.pending;
         if (pending.card === "Land Swap" && pending.sourceTile !== undefined)
-          return `Échanger ${TILE_NAMES[pending.sourceTile]} contre ${TILE_NAMES[action.tile]}`;
+          return t(
+            `Échanger ${tileName(pending.sourceTile)} contre ${tileName(action.tile)}`,
+            `Swap ${tileName(pending.sourceTile)} for ${tileName(action.tile)}`,
+          );
         if (pending.card === "Contractor")
-          return `Offrir un niveau à ${TILE_NAMES[action.tile]}`;
+          return t(
+            `Offrir un niveau à ${tileName(action.tile)}`,
+            `Add a level to ${tileName(action.tile)}`,
+          );
         if (pending.card === "Earthquake")
-          return `Retirer un niveau à ${TILE_NAMES[action.tile]}`;
+          return t(
+            `Retirer un niveau à ${tileName(action.tile)}`,
+            `Remove a level from ${tileName(action.tile)}`,
+          );
       }
-      return "Choisir cette ville";
+      return t("Choisir cette ville", "Choose this city");
     case "Sell":
-      return "Vendre cette propriété";
+      return t("Vendre cette propriété", "Sell this property");
     case "UseRentCard":
-      return CARD_NAMES[action.card];
+      return cardName(action.card);
     case "Decline":
       return state.pending?.kind === "sell"
-        ? "Déclarer faillite"
+        ? t("Déclarer faillite", "Declare bankruptcy")
         : state.pending?.kind === "rent-card"
-          ? `Payer le loyer · ${money(rentCardPayment(state.pending.amount, null))}`
-          : "Passer";
+          ? t(
+              `Payer le loyer · ${money(rentCardPayment(state.pending.amount, null))}`,
+              `Pay rent · ${money(rentCardPayment(state.pending.amount, null))}`,
+            )
+          : t("Passer", "Pass");
   }
 }
 function confirmLabel(action: Action, state: PublicState): string {
   switch (action.type) {
     case "Buy":
-      return `Acheter · ${money(actionCost(state, action))}`;
+      return t(
+        `Acheter · ${money(actionCost(state, action))}`,
+        `Buy · ${money(actionCost(state, action))}`,
+      );
     case "Build":
-      return `Construire · ${money(actionCost(state, action))}`;
+      return t(
+        `Construire · ${money(actionCost(state, action))}`,
+        `Build · ${money(actionCost(state, action))}`,
+      );
     case "Buyout":
-      return `Confirmer le rachat · ${money(actionCost(state, action))}`;
+      return t(
+        `Confirmer le rachat · ${money(actionCost(state, action))}`,
+        `Confirm buyout · ${money(actionCost(state, action))}`,
+      );
     case "Sell":
-      return `Vendre · ${money(propertyRefund(state, action.tile))}`;
+      return t(
+        `Vendre · ${money(propertyRefund(state, action.tile))}`,
+        `Sell · ${money(propertyRefund(state, action.tile))}`,
+      );
     case "Travel":
-      return `Voyager ici · ${money(actionCost(state, action))}`;
+      return t(
+        `Voyager ici · ${money(actionCost(state, action))}`,
+        `Travel here · ${money(actionCost(state, action))}`,
+      );
     case "Decline":
-      return "Confirmer la faillite";
+      return t("Confirmer la faillite", "Confirm bankruptcy");
     default:
       return actionLabel(action, state);
   }
@@ -350,6 +408,7 @@ export default function DecisionPanel({
   selected,
   onSelect,
 }: DecisionPanelProps) {
+  const { t } = useLocale();
   const { busy, reducedMotion, speed } = useDirector();
   const [now, setNow] = useState(Date.now());
   const [selection, setSelection] = useState<{
@@ -455,8 +514,14 @@ export default function DecisionPanel({
     ) < 4 &&
     !state.config.hotelsDirectly
       ? state.config.hotelPurchaseRule === "staged-hotels"
-        ? "Hôtel : 3 maisons, un tour complet, puis revenir ici."
-        : "L’hôtel se débloque après votre premier tour complet du plateau."
+        ? t(
+            "Hôtel : 3 maisons, un tour complet, puis revenir ici.",
+            "Hotel: three houses, one complete lap, then land here again.",
+          )
+        : t(
+            "L’hôtel se débloque après votre premier tour complet du plateau.",
+            "Hotels unlock after your first complete lap of the board.",
+          )
       : null;
   const modalOpen = Boolean(
     ownTurn &&
@@ -472,19 +537,31 @@ export default function DecisionPanel({
   const copy: readonly [string, string] =
     pending?.kind === "card-target"
       ? [
-          CARD_NAMES[pending.card],
+          cardName(pending.card),
           pending.card === "Land Swap" && pending.sourceTile !== undefined
-            ? `Votre ville de ${TILE_NAMES[pending.sourceTile]} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`
+            ? t(
+                `Votre ville de ${tileName(pending.sourceTile)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
+                `Your city of ${tileName(pending.sourceTile)} will be swapped for the selected city. Buildings stay on each property.`,
+              )
             : pending.card === "Contractor"
-              ? "Choisissez votre ville qui recevra un niveau de construction offert."
-              : "Choisissez la ville adverse qui perdra un niveau de construction.",
+              ? t(
+                  "Choisissez votre ville qui recevra un niveau de construction offert.",
+                  "Choose one of your cities to receive a free building level.",
+                )
+              : t(
+                  "Choisissez la ville adverse qui perdra un niveau de construction.",
+                  "Choose the opponent’s city that will lose a building level.",
+                ),
         ]
       : pending?.kind === "buy" && resort
         ? [
-            "Une escale au soleil",
-            "Achetez cette station pour agrandir votre réseau balnéaire.",
+            t("Acheter une station", "Buy a resort"),
+            t(
+              "Achetez cette station. Le loyer augmente avec le nombre de stations possédées.",
+              "Buy this resort. Owning more resorts increases their rent.",
+            ),
           ]
-        : COPY[pending?.kind ?? "roll"];
+        : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
@@ -535,15 +612,21 @@ export default function DecisionPanel({
       <span>
         {ownTurn
           ? pending?.kind === "sell"
-            ? "Votre dette à régler"
-            : "À vous de décider"
-          : `Décision de ${active?.name ?? "…"}`}
+            ? t("Votre dette à régler", "Settle your debt")
+            : t("À vous de décider", "Your decision")
+          : t(
+              `Décision de ${active?.name ?? "…"}`,
+              `${active?.name ?? "…"}’s decision`,
+            )}
       </span>
       {pending && !rngBusy && (
         <span
           className="decision-timer"
           role="timer"
-          aria-label={`${countdown} secondes restantes`}
+          aria-label={t(
+            `${countdown} secondes restantes`,
+            `${countdown} seconds remaining`,
+          )}
         >
           {countdown}s
         </span>
@@ -563,32 +646,47 @@ export default function DecisionPanel({
         {kicker}
         <h2 id="decision-heading">
           {busy
-            ? "Le voyage continue…"
+            ? t("Dernières actions…", "Playing the latest actions…")
             : rngBusy
               ? randomness?.status === "error"
-                ? "Le lancer se fait attendre"
-                : "Les dés se préparent"
+                ? t("Le lancer se fait attendre", "Waiting for the dice")
+                : t("Les dés se préparent", "Preparing the dice")
               : ownTurn
                 ? copy[0]
-                : `${active?.name ?? "Votre adversaire"} joue`}
+                : t(
+                    `${active?.name ?? t("Votre adversaire", "Your opponent")} joue`,
+                    `${active?.name ?? t("Votre adversaire", "Your opponent")} is playing`,
+                  )}
         </h2>
         <p>
           {busy
-            ? "Le plateau vous montre les dernières actions."
+            ? t(
+                "Le plateau vous montre les dernières actions.",
+                "The board is showing the latest actions.",
+              )
             : rngBusy
               ? randomness?.commitment?.mode === "drand"
-                ? "Le serveur attend le signal drand annoncé et vérifie sa signature."
-                : "Le serveur prépare votre lancer."
+                ? t(
+                    "Le serveur attend le signal drand annoncé et vérifie sa signature.",
+                    "Waiting for the announced drand beacon and verifying its signature.",
+                  )
+                : t("Le serveur prépare votre lancer.", "Preparing your roll.")
               : ownTurn
                 ? copy[1]
-                : "Vous pouvez explorer les villes pendant son tour."}
+                : t(
+                    "Vous pouvez explorer les villes pendant son tour.",
+                    "You can inspect cities while they play.",
+                  )}
         </p>
         {rngBusy && (
           <div className="rng-wait" role="status">
             <span className="spinner" />
             {randomness?.commitment?.round
-              ? `Signal drand #${randomness.commitment.round}`
-              : "Tirage serveur…"}
+              ? t(
+                  `Signal drand #${randomness.commitment.round}`,
+                  `Drand beacon #${randomness.commitment.round}`,
+                )
+              : t("Tirage serveur…", "Rolling dice…")}
           </div>
         )}
         {ownTurn && !busy && !rngBusy && (
@@ -600,7 +698,8 @@ export default function DecisionPanel({
                 className="button primary decision-resume"
                 onClick={() => setDismissed(null)}
               >
-                Reprendre le choix <Icon name="arrow" />
+                {t("Reprendre le choix", "Resume decision")}{" "}
+                <Icon name="arrow" />
               </button>
             ) : (
               actions.map((action) => (
@@ -659,7 +758,7 @@ export default function DecisionPanel({
           <button
             type="button"
             className="icon-button decision-minimize"
-            aria-label="Réduire le choix"
+            aria-label={t("Réduire le choix", "Minimize the decision")}
             onClick={dismiss}
           >
             <Icon name="close" size={17} />
@@ -667,14 +766,17 @@ export default function DecisionPanel({
         </div>
         <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
           {bankruptcy
-            ? "Déclarer faillite ?"
+            ? t("Déclarer faillite ?", "Declare bankruptcy?")
             : decisionTile !== undefined
-              ? TILE_NAMES[decisionTile]
+              ? tileName(decisionTile)
               : copy[0]}
         </h2>
         <p id="decision-description">
           {bankruptcy
-            ? "Cette décision est définitive. Vos propriétés seront remises à la banque."
+            ? t(
+                "Cette décision est définitive. Vos propriétés seront remises à la banque.",
+                "This decision is final. Your properties will return to the bank.",
+              )
             : copy[1]}
         </p>
 
@@ -694,58 +796,60 @@ export default function DecisionPanel({
                   <span style={{ color: PLAYER_COLORS[owner.seat] }}>
                     {PLAYER_SYMBOLS[owner.seat]}
                   </span>{" "}
-                  {owner.name} · {LEVEL_NAMES[property?.level ?? 0]}
+                  {owner.name} · {levelName(property?.level ?? 0)}
                 </>
               ) : decisionTile !== undefined ? (
-                "Cette adresse est disponible"
+                t("Cette adresse est disponible", "This property is available")
               ) : (
-                "Votre prochaine étape"
+                t("Votre prochaine étape", "Your next move")
               )}
             </span>
           </div>
           <div className="decision-preview">
             <span className="decision-preview-name">
               {bankruptcy
-                ? "Fin de votre voyage"
+                ? t("Fin de votre partie", "End of your game")
                 : selectedAction && "level" in selectedAction
                   ? resort
-                    ? "Station balnéaire"
-                    : LEVEL_NAMES[selectedAction.level]
+                    ? t("Station balnéaire", "Resort")
+                    : levelName(selectedAction.level)
                   : selectedAction
                     ? actionLabel(selectedAction, state)
-                    : "Votre choix"}
+                    : t("Votre choix", "Your choice")}
             </span>
             <dl className="decision-ledger">
               {pending?.kind === "rent-card" ? (
                 <>
                   <div>
-                    <dt>Loyer avant protection</dt>
+                    <dt>
+                      {t("Loyer avant protection", "Rent before protection")}
+                    </dt>
                     <dd>{money(pending.amount)}</dd>
                   </div>
                   <div className="ledger-main">
-                    <dt>À payer</dt>
+                    <dt>{t("À payer", "Amount due")}</dt>
                     <dd>{money(cost)}</dd>
                   </div>
                 </>
               ) : refund !== null ? (
                 <div className="ledger-main">
-                  <dt>Revente à la banque</dt>
+                  <dt>{t("Revente à la banque", "Sell back to the bank")}</dt>
                   <dd>+{money(refund)}</dd>
                 </div>
               ) : selectedAction && cost > 0 ? (
                 <div className="ledger-main">
                   <dt>
                     {pending?.kind === "buy"
-                      ? "Prix total"
+                      ? t("Prix total", "Total price")
                       : pending?.kind === "build"
-                        ? "Coût des travaux"
-                        : "À payer"}
+                        ? t("Coût des travaux", "Building cost")
+                        : t("À payer", "Amount due")}
                   </dt>
                   <dd>{money(cost)}</dd>
                 </div>
               ) : (
                 <div className="ledger-main">
-                  <dt>Votre argent</dt>
+                  <dt>{t("Votre argent", "Your cash")}</dt>
                   <dd>{money(active?.cash ?? 0)}</dd>
                 </div>
               )}
@@ -755,8 +859,8 @@ export default function DecisionPanel({
                   <div>
                     <dt>
                       {construction || pending?.kind === "buyout"
-                        ? "Nouveau loyer"
-                        : "Loyer actuel"}
+                        ? t("Nouveau loyer", "New rent")
+                        : t("Loyer actuel", "Current rent")}
                     </dt>
                     <dd>{money(rent)}</dd>
                   </div>
@@ -768,10 +872,13 @@ export default function DecisionPanel({
                 >
                   <dt>
                     {refund !== null
-                      ? "Disponible pour la dette"
+                      ? t(
+                          "Disponible pour la dette",
+                          "Available to settle the debt",
+                        )
                       : pending?.kind === "travel"
-                        ? "Après frais de voyage"
-                        : "Argent restant"}
+                        ? t("Après frais de voyage", "After travel costs")
+                        : t("Argent restant", "Cash remaining")}
                   </dt>
                   <dd>{money(projectedCash)}</dd>
                 </div>
@@ -780,10 +887,19 @@ export default function DecisionPanel({
             {construction && (
               <p className="construction-guide">
                 {resort
-                  ? "Aucune construction. Le loyer augmente avec le nombre de stations que vous possédez."
+                  ? t(
+                      "Aucune construction. Le loyer augmente avec le nombre de stations que vous possédez.",
+                      "No buildings. Rent rises with the number of resorts you own.",
+                    )
                   : pending?.kind === "buy"
-                    ? "Prix tout compris : terrain + constructions."
-                    : `Déjà construit : ${LEVEL_NAMES[property?.level ?? 0]}. Vous payez seulement la différence.`}
+                    ? t(
+                        "Prix tout compris : terrain + constructions.",
+                        "Total price includes land and buildings.",
+                      )
+                    : t(
+                        `Déjà construit : ${levelName(property?.level ?? 0)}. Vous payez seulement la différence.`,
+                        `Already built: ${levelName(property?.level ?? 0)}. Pay only the difference.`,
+                      )}
               </p>
             )}
             {hotelNote && (
@@ -801,7 +917,10 @@ export default function DecisionPanel({
               <fieldset
                 className="decision-construction-steps"
                 style={{ "--steps": constructions.length } as CSSProperties}
-                aria-label="Choisir une construction"
+                aria-label={t(
+                  "Choisir une construction",
+                  "Choose a building level",
+                )}
               >
                 {constructions.map((action) => (
                   <button
@@ -812,7 +931,10 @@ export default function DecisionPanel({
                       selectedAction &&
                       actionKey(selectedAction) === actionKey(action)
                     }
-                    aria-label={`${actionLabel(action, state)} · loyer futur ${money(decisionTile !== undefined ? previewPropertyRent(state, decisionTile, seat, action.level) : 0)}`}
+                    aria-label={t(
+                      `${actionLabel(action, state)} · loyer futur ${money(decisionTile !== undefined ? previewPropertyRent(state, decisionTile, seat, action.level) : 0)}`,
+                      `${actionLabel(action, state)} · future rent ${money(decisionTile !== undefined ? previewPropertyRent(state, decisionTile, seat, action.level) : 0)}`,
+                    )}
                     disabled={blocked}
                     onClick={() => choose(action)}
                   >
@@ -821,13 +943,13 @@ export default function DecisionPanel({
                       color={PLAYER_COLORS[seat]}
                     />
                     <span className="construction-name">
-                      {LEVEL_NAMES[action.level]}
+                      {levelName(action.level)}
                     </span>
                     <strong className="construction-cost">
                       {money(actionCost(state, action))}
                     </strong>
                     <span className="construction-rent">
-                      Loyer{" "}
+                      {t("Loyer", "Rent")}{" "}
                       {money(
                         decisionTile !== undefined
                           ? previewPropertyRent(
@@ -850,10 +972,10 @@ export default function DecisionPanel({
               </fieldset>
               {constructions.length > 1 && (
                 <label className="decision-level-slider">
-                  <span>Glisser pour comparer</span>
+                  <span>{t("Glisser pour comparer", "Slide to compare")}</span>
                   <input
                     type="range"
-                    aria-label="Niveau de construction"
+                    aria-label={t("Niveau de construction", "Building level")}
                     aria-valuetext={
                       selectedAction ? actionLabel(selectedAction, state) : ""
                     }
@@ -879,8 +1001,8 @@ export default function DecisionPanel({
             <div className="destination-choice">
               <label htmlFor="destination">
                 {pending?.kind === "sell"
-                  ? "Propriété à vendre"
-                  : "Destination"}
+                  ? t("Propriété à vendre", "Property to sell")
+                  : t("Destination", "Destination")}
               </label>
               <select
                 id="destination"
@@ -899,7 +1021,7 @@ export default function DecisionPanel({
               >
                 {destinations.map((action) => (
                   <option key={actionKey(action)} value={action.tile}>
-                    {TILE_NAMES[action.tile]}
+                    {tileName(action.tile)}
                     {action.type === "Sell"
                       ? ` · ${money(propertyRefund(state, action.tile))}`
                       : ""}
@@ -909,28 +1031,37 @@ export default function DecisionPanel({
               {pending?.kind === "travel" && freeRoll && (
                 <fieldset
                   className="decision-other-choices"
-                  aria-label="Choisir le lancer ou le voyage"
+                  aria-label={t(
+                    "Choisir le lancer ou le voyage",
+                    "Choose rolling or travel",
+                  )}
                 >
                   <button
                     type="button"
                     className="button secondary"
-                    aria-label="Choisir le lancer gratuit"
+                    aria-label={t(
+                      "Choisir le lancer gratuit",
+                      "Choose a free roll",
+                    )}
                     aria-pressed={selectedAction?.type === "Roll"}
                     disabled={blocked}
                     onClick={() => choose(freeRoll)}
                   >
-                    Lancer gratuitement
+                    {t("Lancer gratuitement", "Roll for free")}
                   </button>
                   {destinationChoice && (
                     <button
                       type="button"
                       className="button secondary"
-                      aria-label={`Choisir le voyage vers ${TILE_NAMES[destinationChoice.tile]}`}
+                      aria-label={t(
+                        `Choisir le voyage vers ${tileName(destinationChoice.tile)}`,
+                        `Choose travel to ${tileName(destinationChoice.tile)}`,
+                      )}
                       aria-pressed={selectedAction?.type === "Travel"}
                       disabled={blocked}
                       onClick={() => choose(destinationChoice)}
                     >
-                      Voyager ici ·{" "}
+                      {t("Voyager ici", "Travel here")} ·{" "}
                       {money(actionCost(state, destinationChoice))}
                     </button>
                   )}
@@ -940,7 +1071,7 @@ export default function DecisionPanel({
           ) : choices.length > 1 && !bankruptcy ? (
             <fieldset
               className="decision-other-choices"
-              aria-label="Choisir une action"
+              aria-label={t("Choisir une action", "Choose an action")}
             >
               {choices.map((action) => (
                 <button
@@ -973,7 +1104,9 @@ export default function DecisionPanel({
                 } else act(decline);
               }}
             >
-              {bankruptcy ? "Revenir aux ventes" : actionLabel(decline, state)}
+              {bankruptcy
+                ? t("Revenir aux ventes", "Back to property sales")
+                : actionLabel(decline, state)}
             </button>
           )}
           <button
@@ -983,17 +1116,23 @@ export default function DecisionPanel({
             onClick={confirm}
           >
             {blocked
-              ? "Veuillez patienter…"
+              ? t("Veuillez patienter…", "Please wait…")
               : selectedAction
                 ? confirmLabel(selectedAction, state)
-                : "Choisir une option"}
+                : t("Choisir une option", "Choose an option")}
             <Icon name="arrow" size={20} />
           </button>
         </div>
         <p className="decision-confirm-hint">
           {blocked
-            ? "Votre choix sera disponible dès que la salle répond."
-            : "Comparer ne dépense rien. Seule la confirmation engage votre choix."}
+            ? t(
+                "Votre choix sera disponible dès que la salle répond.",
+                "You can choose once the room responds.",
+              )
+            : t(
+                "Comparer ne dépense rien. Seule la confirmation engage votre choix.",
+                "Browsing does not spend cash. Confirm to commit your choice.",
+              )}
         </p>
       </motion.div>
     </dialog>,

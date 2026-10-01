@@ -21,7 +21,11 @@ export default defineConfig({
   projects: [
     {
       name: "desktop-ui",
-      testMatch: ["client-flow.spec.ts", "network-flow.spec.ts"],
+      testMatch: [
+        "client-flow.spec.ts",
+        "network-flow.spec.ts",
+        "language-flow.spec.ts",
+      ],
       use: { baseURL: remoteBaseURL ?? devURL },
     },
     {

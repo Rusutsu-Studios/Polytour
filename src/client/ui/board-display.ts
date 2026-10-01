@@ -1,5 +1,6 @@
 import { BOARD, ECONOMY, getTileLandPrice } from "../../shared/board/index.js";
 import type { Seat } from "../../shared/engine/index.js";
+import { getLocale, translate } from "../i18n.js";
 
 export const PLAYER_COLORS = [
   "#be3d24",
@@ -61,6 +62,54 @@ export const LEVEL_NAMES = [
   "Hôtel",
   "Monument",
 ] as const;
+const ENGLISH_TILE_NAMES = [
+  "Start",
+  "Roubaix",
+  "Saint-Étienne",
+  "Chance",
+  "Granada",
+  "French Riviera",
+  "Valencia",
+  "Seville",
+  "Island",
+  "Porto",
+  "Lisbon",
+  "Rome",
+  "Cyprus",
+  "Milan",
+  "Chance",
+  "Berlin",
+  "Festival",
+  "Prague",
+  "Vienna",
+  "Chance",
+  "London",
+  "Dubai",
+  "Montréal",
+  "New York",
+  "World tour",
+  "Sydney",
+  "Singapore",
+  "Seoul",
+  "Bali",
+  "Local tax",
+  "Osaka",
+  "Tokyo",
+] as const;
+const ENGLISH_LEVEL_NAMES = [
+  "Land",
+  "1 house",
+  "2 houses",
+  "3 houses",
+  "Hotel",
+  "Landmark",
+] as const;
+export function tileName(index: number): string {
+  return translate(TILE_NAMES[index] ?? "", ENGLISH_TILE_NAMES[index] ?? "");
+}
+export function levelName(level: number): string {
+  return translate(LEVEL_NAMES[level] ?? "", ENGLISH_LEVEL_NAMES[level] ?? "");
+}
 export const TILE_ICONS: Record<string, string> = {
   start: "↗",
   island: "☀",
@@ -100,9 +149,10 @@ export function pawnOffset(seat: Seat): [number, number] {
   return [seat % 2 === 0 ? -0.19 : 0.19, seat < 2 ? -0.18 : 0.18];
 }
 export function money(value: number) {
+  const locale = getLocale() === "fr" ? "fr-CH" : "en-GB";
   if (Math.abs(value) >= 1_000_000)
-    return `${new Intl.NumberFormat("fr-CH", { maximumFractionDigits: 2 }).format(value / 1_000_000)} M`;
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value / 1_000_000)} M`;
   if (Math.abs(value) >= 1000)
-    return `${new Intl.NumberFormat("fr-CH", { maximumFractionDigits: 1 }).format(value / 1000)} k`;
-  return new Intl.NumberFormat("fr-CH").format(value);
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value / 1000)} k`;
+  return new Intl.NumberFormat(locale).format(value);
 }
