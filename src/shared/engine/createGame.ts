@@ -50,6 +50,7 @@ export const DEFAULT_GAME_CONFIG = {
   lineMonopoly: true,
   tripleMonopoly: true,
   hotelsDirectly: false,
+  hotelPurchaseRule: "staged-hotels",
   extraRollOnDouble: true,
   botCanBuild: true,
   giftCanBankrupt: true,
@@ -132,6 +133,49 @@ export function propertyRent(state: PublicState, tileIndex: number): number {
     : 1;
   return rent * Math.max(country, host, festival);
 }
+/** Projects a single purchase or upgrade through the same rent rules as live play. */
+export function previewPropertyRent(
+  state: PublicState,
+  tile: number,
+  seat: Seat,
+  level: BuildLevel,
+): number {
+  const property = getProperty(state, tile);
+  if (!property) return 0;
+  const hostChangesOwner =
+    property.owner !== seat && state.championshipHost?.tile === tile;
+  return propertyRent(
+    {
+      ...state,
+      properties: state.properties.map((candidate) =>
+        candidate.tile === tile
+          ? { ...candidate, owner: seat, level }
+          : candidate,
+      ),
+      championshipHost: hostChangesOwner ? null : state.championshipHost,
+    },
+    tile,
+  );
+}
+
+/** Construction cap before checking the player's budget or stored decision cap. */
+export function maxBuildLevel(
+  state: PublicState,
+  seat: Seat,
+  tileIndex: number,
+  purchasing: boolean,
+): BuildLevel {
+  if (getTile(tileIndex)?.kind === "resort") return 0;
+  const level = getProperty(state, tileIndex)?.level ?? 0;
+  if (!purchasing && level === 4) return 5;
+  if (state.config.hotelsDirectly === true) return 4;
+  if (
+    state.config.hotelPurchaseRule === "staged-hotels" &&
+    (purchasing || level < 3)
+  )
+    return 3;
+  return getPlayer(state, seat).laps > 0 ? 4 : 3;
+}
 function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
     (propertyInvestedValue(state, tile) * ECONOMY.sellBackPercent) / 100,
@@ -195,10 +239,17 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
         : [{ type: "Roll" }];
     case "buy": {
       const actions: Action[] = [{ type: "Decline" }];
+      const purchaseCap =
+        state.config.hotelPurchaseRule === "staged-hotels"
+          ? Math.min(
+              pending.maxLevel,
+              maxBuildLevel(state, seat, pending.tile, true),
+            )
+          : pending.maxLevel;
       const maxLevel =
         player.control === "bot" && state.config.botCanBuild === false
           ? 0
-          : pending.maxLevel;
+          : purchaseCap;
       for (let level = 0; level <= maxLevel; level++)
         if (purchaseCost(pending.tile, level as BuildLevel) <= player.cash)
           actions.push({ type: "Buy", level: level as BuildLevel });
@@ -209,7 +260,14 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
       if (player.control === "bot" && state.config.botCanBuild === false)
         return actions;
       const current = getProperty(state, pending.tile)?.level ?? 0;
-      for (let level = current + 1; level <= pending.maxLevel; level++) {
+      const upgradeCap =
+        state.config.hotelPurchaseRule === "staged-hotels"
+          ? Math.min(
+              pending.maxLevel,
+              maxBuildLevel(state, seat, pending.tile, false),
+            )
+          : pending.maxLevel;
+      for (let level = current + 1; level <= upgradeCap; level++) {
         const action: Action = { type: "Build", level: level as BuildLevel };
         if (actionCost(state, action) <= player.cash) actions.push(action);
       }
@@ -768,21 +826,11 @@ function resolver(initial: GameState, context: EngineContext) {
         const property = getProperty(state, tile.index);
         if (!property) throw new Error("Missing property state");
         if (property.owner === null) {
-          const maxLevel =
-            tile.kind === "resort"
-              ? 0
-              : player.laps > 0 || state.config.hotelsDirectly === true
-                ? 4
-                : 3;
+          const maxLevel = maxBuildLevel(state, seat, tile.index, true);
           open({ kind: "buy", seat, tile: tile.index, maxLevel });
         } else if (property.owner === seat) {
           if (tile.kind === "city" && property.level < 5) {
-            const maxLevel =
-              property.level === 4
-                ? 5
-                : player.laps > 0 || state.config.hotelsDirectly === true
-                  ? 4
-                  : 3;
+            const maxLevel = maxBuildLevel(state, seat, tile.index, false);
             if (property.level < maxLevel)
               open({ kind: "build", seat, tile: tile.index, maxLevel });
           }
@@ -1368,6 +1416,11 @@ export function createGame(
       config.festivalCount > 20)
   )
     throw new RangeError("Festival count must be from 0 to 20");
+  if (
+    config.hotelPurchaseRule !== undefined &&
+    !["staged-hotels", "legacy-lap"].includes(config.hotelPurchaseRule)
+  )
+    throw new RangeError("Unsupported hotel purchase rule");
   if (!Number.isFinite(context.now))
     throw new RangeError("Game time must be finite");
   if (
@@ -1407,7 +1460,10 @@ export function createGame(
   );
   const publicState: PublicState = {
     gameId: config.gameId,
-    config: { ...config },
+    config: {
+      ...config,
+      hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
+    },
     players,
     properties: BOARD.filter(
       (tile) => isCityTile(tile) || isResortTile(tile),

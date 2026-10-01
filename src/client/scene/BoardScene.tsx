@@ -33,12 +33,11 @@ type BoardProps = {
 // FIRST VIEWPORT: a fixed diamond fills the screen, with four corner players and a small action below.
 // FORM: premium toy diorama explicitly pinned by project docs and the supplied reference.
 
-function roundedTile() {
+function roundedTile(radius = 0.08) {
   const shape = new THREE.Shape();
   const x = -0.5;
   const y = -0.5;
   const width = 1;
-  const radius = 0.08;
   shape.moveTo(x + radius, y);
   shape.lineTo(x + width - radius, y);
   shape.quadraticCurveTo(x + width, y, x + width, y + radius);
@@ -223,12 +222,58 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
   );
 }
 
+function TileFocus({ state, selected, preview }: BoardProps) {
+  const outline = useMemo(() => {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.5, -0.5);
+    shape.lineTo(0.5, -0.5);
+    shape.lineTo(0.5, 0.5);
+    shape.lineTo(-0.5, 0.5);
+    shape.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(-0.455, -0.455);
+    hole.lineTo(-0.455, 0.455);
+    hole.lineTo(0.455, 0.455);
+    hole.lineTo(0.455, -0.455);
+    hole.closePath();
+    shape.holes.push(hole);
+    return new THREE.ShapeGeometry(shape);
+  }, []);
+  useEffect(() => () => outline.dispose(), [outline]);
+  if (preview) return null;
+  const pending = state?.pending;
+  const decisionTile = pending && "tile" in pending ? pending.tile : null;
+  return (
+    <>
+      {[decisionTile, selected].map((tile, index) => {
+        if (tile == null || (index === 1 && tile === decisionTile)) return null;
+        const [x, z] = tilePosition(tile);
+        return (
+          <mesh
+            key={index === 0 ? "decision" : "inspection"}
+            geometry={outline}
+            position={[x, 0.323, z]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <meshBasicMaterial
+              color={
+                index === 0 && pending ? PLAYER_COLORS[pending.seat] : "#db9e25"
+              }
+            />
+          </mesh>
+        );
+      })}
+    </>
+  );
+}
+
 function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
   const walls = useRef<THREE.InstancedMesh>(null);
   const roofs = useRef<THREE.InstancedMesh>(null);
   const windows = useRef<THREE.InstancedMesh>(null);
   const pole = useRef<THREE.InstancedMesh>(null);
   const flags = useRef<THREE.InstancedMesh>(null);
+  const details = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const roofGeometry = useMemo(() => {
@@ -242,12 +287,14 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
       !roofs.current ||
       !windows.current ||
       !pole.current ||
-      !flags.current
+      !flags.current ||
+      !details.current
     )
       return;
     let count = 0;
     let windowCount = 0;
     let flagCount = 0;
+    let detailCount = 0;
     const angle = Math.PI / 4;
     for (const tile of BOARD) {
       if (tile.kind !== "city") continue;
@@ -262,6 +309,23 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
             : 0;
       const roofColor =
         owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
+      const detail = (
+        centerX: number,
+        centerY: number,
+        centerZ: number,
+        width: number,
+        height: number,
+        depth: number,
+        tint: string,
+      ) => {
+        dummy.rotation.set(0, angle, 0);
+        dummy.position.set(centerX, centerY, centerZ);
+        dummy.scale.set(width, height, depth);
+        dummy.updateMatrix();
+        details.current?.setMatrixAt(detailCount, dummy.matrix);
+        details.current?.setColorAt(detailCount, color.set(tint));
+        detailCount += 1;
+      };
       const building = (
         localX: number,
         localZ: number,
@@ -286,6 +350,35 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
         roofs.current?.setMatrixAt(count, dummy.matrix);
         roofs.current?.setColorAt(count, color.set(roofColor));
         count += 1;
+        // Physical foundations, cornices and doors finish the miniature without
+        // enlarging its footprint into the lettering reserved below it.
+        detail(
+          centerX,
+          base + 0.025,
+          centerZ,
+          width + 0.045,
+          0.05,
+          depth + 0.04,
+          "#dbceb5",
+        );
+        detail(
+          centerX,
+          base + height - 0.018,
+          centerZ,
+          width + 0.03,
+          0.045,
+          depth + 0.03,
+          level === 5 ? "#ecc36a" : "#efe5ce",
+        );
+        detail(
+          centerX + Math.sin(angle) * depth * 0.51,
+          base + 0.065,
+          centerZ + Math.cos(angle) * depth * 0.51,
+          width * 0.23,
+          0.13,
+          0.015,
+          "#244f61",
+        );
         const rows = height > 0.45 ? 3 : height > 0.3 ? 2 : 1;
         for (let row = 0; row < rows; row++) {
           for (const front of [0, 1]) {
@@ -326,12 +419,13 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
         for (const [localX, localZ] of offsets)
           building(localX, localZ, level === 1 ? 0.31 : 0.24, 0.25, 0.27);
       } else if (level === 4) {
-        building(0, -0.22, 0.48, 0.33, 0.61, 0.34, 0.11);
-        building(-0.23, -0.14, 0.19, 0.24, 0.24, 0.34, 0.1);
+        building(0, -0.22, 0.47, 0.32, 0.57, 0.34, 0.12);
+        building(-0.25, -0.18, 0.17, 0.27, 0.24, 0.34, 0.1);
+        building(0.25, -0.18, 0.17, 0.27, 0.24, 0.34, 0.1);
       } else if (level === 5) {
-        building(0, -0.22, 0.47, 0.38, 0.37, 0.34, 0.05);
-        building(0, -0.22, 0.32, 0.27, 0.43, 0.75, 0.18);
-        building(0, -0.22, 0.13, 0.13, 0.3, 1.22, 0.21);
+        building(0, -0.22, 0.49, 0.38, 0.28, 0.34, 0.14);
+        building(0, -0.22, 0.34, 0.28, 0.26, 0.74, 0.14);
+        building(0, -0.22, 0.19, 0.19, 0.24, 1.12, 0.2);
       }
       if (owner != null) {
         dummy.position.set(x - 0.31, 0.54, z - 0.2);
@@ -352,12 +446,14 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
     windows.current.count = windowCount;
     pole.current.count = flagCount;
     flags.current.count = flagCount;
+    details.current.count = detailCount;
     for (const object of [
       walls.current,
       roofs.current,
       windows.current,
       pole.current,
       flags.current,
+      details.current,
     ]) {
       object.instanceMatrix.needsUpdate = true;
       if (object.instanceColor) object.instanceColor.needsUpdate = true;
@@ -381,6 +477,15 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
       <instancedMesh ref={windows} args={[undefined, undefined, 320]}>
         <boxGeometry />
         <meshStandardMaterial color="#2b637a" roughness={0.4} />
+      </instancedMesh>
+      <instancedMesh
+        ref={details}
+        args={[undefined, undefined, 288]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry />
+        <meshStandardMaterial roughness={0.65} />
       </instancedMesh>
       <instancedMesh ref={pole} args={[undefined, undefined, 24]} castShadow>
         <boxGeometry />
@@ -791,9 +896,11 @@ function scenePawnOffset(seat: Seat): [number, number] {
 
 function Pawn({
   seat,
+  active,
   groupRef,
 }: {
   seat: Seat;
+  active: boolean;
   groupRef: (group: THREE.Group | null) => void;
 }) {
   const [x, z] = tilePosition(0);
@@ -801,6 +908,12 @@ function Pawn({
   const color = PLAYER_COLORS[seat];
   return (
     <group ref={groupRef} position={[x + offsetX, 0.38, z + offsetZ]}>
+      {active && (
+        <mesh position={[0, 0.048, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.225, 0.265, 24]} />
+          <meshBasicMaterial color="#ffcf59" />
+        </mesh>
+      )}
       <group rotation={[0, Math.PI / 4, 0]}>
         <mesh position={[0, 0.005, 0]} castShadow>
           <cylinderGeometry args={[0.19, 0.2, 0.07, 16]} />
@@ -872,7 +985,10 @@ function Pawn({
             <meshStandardMaterial color="#fffaf0" />
           </mesh>
         )}
-        <mesh position={[0, 0.3, 0.137]}>
+        <mesh
+          position={[0, 0.3, 0.137]}
+          rotation={[0, 0, seat === 1 ? Math.PI / 4 : 0]}
+        >
           {seat === 0 ? (
             <circleGeometry args={[0.036, 10]} />
           ) : seat === 2 ? (
@@ -893,7 +1009,12 @@ function SceneContent(props: BoardProps) {
   const dice = useRef<(THREE.Group | null)[]>([]);
   const timelines = useRef(new Map<gsap.core.Timeline, () => void>());
   const pulse = useRef<THREE.Mesh>(null);
+  const sparks = useRef<THREE.InstancedMesh>(null);
+  const sparkTransform = useMemo(() => new THREE.Object3D(), []);
+  const sparkProgress = useMemo(() => ({ value: 0 }), []);
+  const rimGeometry = useMemo(() => roundedTile(0.018), []);
   const rendered = useRef(false);
+  useEffect(() => () => rimGeometry.dispose(), [rimGeometry]);
 
   useEffect(() => {
     const aspect = size.width / size.height;
@@ -943,6 +1064,7 @@ function SceneContent(props: BoardProps) {
   }, [camera, size.width, size.height, zoom, preview, invalidate]);
   useEffect(() => {
     if (preview) return;
+    let propertyEffectGeneration = 0;
     function snap(next: PublicState | null) {
       for (const player of next?.players ?? []) {
         const pawn = pawns.current[player.seat];
@@ -963,11 +1085,14 @@ function SceneContent(props: BoardProps) {
       invalidate();
     }
     function cancel() {
+      propertyEffectGeneration += 1;
       for (const [timeline, done] of timelines.current) {
         timeline.kill();
         done();
       }
       timelines.current.clear();
+      if (pulse.current) pulse.current.visible = false;
+      if (sparks.current) sparks.current.visible = false;
     }
     function play(
       build: (timeline: gsap.core.Timeline) => void,
@@ -1107,21 +1232,67 @@ function SceneContent(props: BoardProps) {
         ) {
           const ring = pulse.current;
           if (!ring) return;
+          const effectGeneration = ++propertyEffectGeneration;
           const [x, z] = tilePosition(event.tile);
           ring.position.set(x, 0.34, z);
+          const owner = getProperty(context.next, event.tile)?.owner;
+          if (ring.material instanceof THREE.MeshBasicMaterial)
+            ring.material.color.set(
+              owner == null ? "#ffda72" : PLAYER_COLORS[owner],
+            );
           ring.visible = true;
+          const burst = sparks.current;
+          if (burst) burst.visible = true;
+          const updateSparks = () => {
+            if (!burst) return;
+            const progress = sparkProgress.value;
+            for (let index = 0; index < 8; index++) {
+              const angle = (index * Math.PI) / 4;
+              const radius = 0.16 + progress * 0.4;
+              sparkTransform.position.set(
+                x + Math.cos(angle) * radius,
+                0.42 + Math.sin(progress * Math.PI) * 0.55,
+                z + Math.sin(angle) * radius,
+              );
+              sparkTransform.rotation.set(
+                progress * Math.PI,
+                angle,
+                Math.PI / 4,
+              );
+              sparkTransform.scale.setScalar(0.075 * (1 - progress));
+              sparkTransform.updateMatrix();
+              burst.setMatrixAt(index, sparkTransform.matrix);
+            }
+            burst.instanceMatrix.needsUpdate = true;
+          };
           await play((timeline) => {
             timeline.fromTo(
               ring.scale,
               { x: 0.1, y: 0.1, z: 0.1 },
               { x: 1.25, y: 1.25, z: 1.25, duration: 0.4, ease: "power2.out" },
             );
+            timeline.fromTo(
+              sparkProgress,
+              { value: 0 },
+              {
+                value: 1,
+                duration: 0.45,
+                ease: "power2.out",
+                onUpdate: updateSparks,
+              },
+              0,
+            );
           }, context);
-          ring.visible = false;
+          // A cancelled handler may resume after the next effect has started.
+          if (effectGeneration === propertyEffectGeneration) {
+            ring.visible = false;
+            if (burst) burst.visible = false;
+            invalidate();
+          }
         }
       },
     });
-  }, [preview, invalidate]);
+  }, [preview, invalidate, sparkProgress, sparkTransform]);
 
   useEffect(() => {
     if (state || preview) invalidate();
@@ -1170,14 +1341,37 @@ function SceneContent(props: BoardProps) {
         <boxGeometry args={[9.8, 0.18, 9.8]} />
         <meshStandardMaterial color="#fffaf0" roughness={0.75} />
       </mesh>
+      <mesh
+        geometry={rimGeometry}
+        position={[0, -0.28, 0]}
+        scale={[10.04, 0.36, 10.04]}
+        receiveShadow
+        castShadow
+      >
+        <meshStandardMaterial color="#a08861" roughness={0.7} />
+      </mesh>
+      <mesh
+        geometry={rimGeometry}
+        position={[0, 0.065, 0]}
+        scale={[10.02, 0.26, 10.02]}
+        receiveShadow
+      >
+        <meshStandardMaterial color="#ebddba" roughness={0.65} />
+      </mesh>
       <CenterIsland />
       <BoardTiles {...props} />
+      <TileFocus {...props} />
       <Towns state={state} preview={preview} />
       <BoardMarkers state={state} />
       {([0, 1, 2, 3] as const).map((seat) => (
         <Pawn
           key={seat}
           seat={seat}
+          active={
+            !preview &&
+            state?.status === "active" &&
+            (state.pending?.seat ?? state.activeSeat) === seat
+          }
           groupRef={(group) => {
             pawns.current[seat] = group;
           }}
@@ -1204,6 +1398,15 @@ function SceneContent(props: BoardProps) {
           depthWrite={false}
         />
       </mesh>
+      <instancedMesh
+        ref={sparks}
+        visible={false}
+        args={[undefined, undefined, 8]}
+        frustumCulled={false}
+      >
+        <boxGeometry />
+        <meshBasicMaterial color="#ffcf59" />
+      </instancedMesh>
       <FrameMonitor />
     </>
   );
@@ -1229,7 +1432,7 @@ export default function BoardScene(props: BoardProps) {
     <div className="canvas-layer" data-scene-ready="false">
       <Canvas
         orthographic
-        shadows
+        shadows={{ type: THREE.PCFShadowMap }}
         frameloop="demand"
         dpr={[1, 1.5]}
         camera={{ position: [13, 11, 13], near: 0.1, far: 100, zoom: 1 }}

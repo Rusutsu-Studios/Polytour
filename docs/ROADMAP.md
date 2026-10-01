@@ -12,6 +12,11 @@ Three.js client. Four friends can join by room code; empty seats can become bots
 The user preset is 2 M / 400 k / 3 festivals / 120 minutes with line and triple
 wins, and fresh server Web Crypto provides uniform dice without a beacon wait. Costs at the
 first city and Tokyo match supplied captures; the remaining economy is provisional.
+New rooms now require staged hotel development: three houses already built, a
+completed lap and a return to the city, unless the direct-hotel setting is enabled.
+Existing rooms keep their frozen earlier rule. Dated Steam evidence and its limits
+are recorded in REFERENCE_PARITY.md. The new-rule 1,000-game simulation also misses
+the short-cap and turn-position balance targets; this remains separate work.
 
 The checklist below records implemented parts, not completion of every phase's
 acceptance criteria. The user clarified on 1 October 2026 that PC is the priority:

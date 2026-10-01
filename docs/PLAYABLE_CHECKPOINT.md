@@ -149,7 +149,59 @@ real roll, verifies the button is the pointer target and clicks it normally.
 Three consecutive full executions of that UI scenario pass in **43.6 seconds**.
 No presentation or CSS change was needed.
 
-## Simulator findings
+## Staged hotels and presentation refinement — 1 October 2026
+
+New rooms freeze rules version 3: an initial purchase or an upgrade from fewer
+than three houses stops at House III. Hotel purchase requires a later landing on
+an owned three-house city after a completed lap. The explicit direct-hotel setting
+remains an exception. Previously saved version-2 active matches and unstarted
+lobbies keep their lap-only progression. No protocol or state-schema migration is
+introduced; contradictory markers and attempts to set the internal marker through
+the public settings API are rejected.
+
+The 86 unit/Worker tests, TypeScript, Biome across 60 files and production build pass, including
+stale pending caps, the same legal choices for bots, zero-lap restrictions, direct
+hotel exceptions, version-2 cold loads/lobby starts and non-mutating rent previews.
+Unknown lobby state/rule versions reject connection, settings and start before
+any durable table changes; the two regressions failed before the correction.
+Lobby JavaScript is 158.9 kB gzip, the scene asset 1005.4 kB and the Worker 588.8 kB;
+all enforced bundle and deployment-config checks pass.
+
+Construction choices show building silhouettes, cost and candidate-state rent
+from the shared engine. The hotel explanation uses the rule cap before checking
+cash, so lack of funds is not confused with a construction prerequisite. Four
+corner HUDs have clearer pawn identities. Instanced bases, cornices, entrances,
+hotel shapes and landmark terraces refine the original board. The Director's
+0.45-second ownership accent respects skip/reset/reduced motion; a fresh effect
+remains visible when an older cancelled handler resumes.
+
+Six local browser scenarios pass in **43.4 seconds**: a full four-context game
+with reconnection, actual UI play and controls, settings-preserving create/join,
+both API/SPA routing checks, and the explicit legacy drand proof scenario. The
+two UI cases also pass separately in **30.8 seconds** after the review corrections.
+The skip regression checks a real pointer target and normal click, then observes
+the public Director immediately after that click; subsequent bot events can
+legitimately begin another animation. A prior overlapping pair of test runs
+conflicted over artifacts and server lifetime; the final full run was serial.
+
+Authored presentation fixtures have been visually examined at 1280×720,
+1440×900 and 1920×1080. They cover staged purchases, festival rent, the custom
+hotel option, all building levels, and a victory where the actual winner differs
+from the wealth leader. The result overlay fits without internal scrolling at
+all three sizes. These fixtures change only their isolated client view; gameplay
+evidence comes from the real Worker/browser match above. Target-hardware FPS is
+still unmeasured. Manual Impeccable detector findings and the narrow roof/fallback
+exceptions are recorded in DESIGN.md.
+
+The [new-rule simulation report](../tools/sim/staged-hotels.json) records 1,000
+seeds with four medium bots and a **20-round cap**, separate from the live two-hour
+deadline. Every game terminates and preserves money, replay, cards, ownership and
+legal decisions. Median/p90 rounds are 20/20; 928 matches reach the cap, 55 end by
+resort collection, 12 by triple collection, four by last standing and one by line.
+First/last turn win rates are 34.8%/14.9%. This strengthens the need for a separate
+balance pass; the construction correction does not claim to resolve that issue.
+
+## Simulator findings (earlier lap-only rules)
 
 The committed [baseline](../tools/sim/baseline.json) records 10,000 seeded games
 with four medium bots and a **20-round simulation cap**, separate from the live

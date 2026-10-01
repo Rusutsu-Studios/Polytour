@@ -1,4 +1,4 @@
-# Game design (playable rules v0.2)
+# Game design (new-room rules v0.3; v0.2 saved rooms retained)
 
 Polytour is a fast, aggressive property game. This prototype uses four seats,
 with server bots filling empty places. Compared to classic
@@ -104,7 +104,7 @@ that tile's land price `L`):
 | 1 | House I | Tile house price | 0.6 × L | |
 | 2 | House II | Tile house price | 1.0 × L | |
 | 3 | House III | Tile house price | 1.4 × L | |
-| 4 | Hotel | Tile hotel price | 2.8 × L | Unlocked after your first lap unless direct hotels enabled |
+| 4 | Hotel | Tile hotel price | 2.8 × L | Return to owned House III after a completed lap; direct-hotel setting is an exception |
 | 5 | Landmark | Tile landmark price | 4.0 × L | Only on your own Hotel; **cannot be bought out** |
 
 `invested value` is a pure function of a tile and current level: the sum
@@ -122,11 +122,23 @@ and payouts to a player round **down** (sell-back refunds).
 
 On an unowned city, the active player may decline or buy it at any level from Land
 through their current unlock cap, paying every intervening cost in one transaction.
-On their own city, they may decline or raise it to any higher unlocked level in one
-transaction. The three Houses are unlocked from the start; Hotel unlocks after that
-player completes their first lap. Landmark is only available when that player lands
-on their own Hotel. An action is legal only when its full cost leaves the buyer with
+On their own city, they may decline or raise it to a higher unlocked level in one
+transaction. The three Houses are unlocked from the start. In new rooms, an initial
+purchase stops at House III even if the player has completed a lap. An owned city
+with fewer than three houses also stops at House III for that landing. Hotel is
+available on a later landing when the city already has three houses and the player
+has completed at least one lap. The explicit `hotelsDirectly` custom setting bypasses
+these hotel prerequisites. Landmark is only available when that player lands on
+their own Hotel. An action is legal only when its full cost leaves the buyer with
 cash of at least zero.
+
+This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
+Existing version-2 rooms keep `"legacy-lap"` (or an absent marker on older active
+saves), so their hotel still unlocks after a lap, including on initial purchase.
+The server loads both versions and cannot accept an internal rule marker through
+room settings. A stale pending choice cannot bypass the new cap. See
+[REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
+for the historical reference evidence and the retained Polytour lap condition.
 
 Owning every city of a country doubles the base rent of that country's Land through
 Hotel properties. It does not affect Landmark rent. Championship is a separate

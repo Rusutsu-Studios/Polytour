@@ -16,7 +16,10 @@ a stylized 3D board with juicy, choreographed animations.
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
-> 120 minutes. Intermediate economy remains provisional. Keep these instructions
+> 120 minutes. New rooms use staged hotels: buy up to three houses, then return
+> after a completed lap to upgrade an owned three-house city. Direct hotels are
+> an explicit custom exception; saved version-2 rooms retain their earlier rule.
+> Intermediate economy remains provisional. Keep these instructions
 > current when changing commands or paths.
 
 ## Read before working

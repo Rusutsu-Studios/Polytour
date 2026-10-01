@@ -528,28 +528,242 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("rejects saved games with an unsupported rules version", async () => {
+  it("freezes new rooms on staged hotel rules version 3", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    await runInDurableObject(stub, (_instance, durableState) =>
+    expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
+    const rules = await runInDurableObject(
+      stub,
+      (_instance, durableState) =>
+        durableState.storage.sql
+          .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
+          .toArray()[0]?.v,
+    );
+    expect(rules).toBe("3");
+  });
+
+  it("rejects client-supplied internal hotel rule markers at room creation", async () => {
+    for (const hotelPurchaseRule of ["staged-hotels", "legacy-lap"]) {
+      const response = await exports.default.fetch(
+        new Request(`${origin}/api/rooms`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: origin },
+          body: JSON.stringify({ name: "Alex", config: { hotelPurchaseRule } }),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it("loads an existing version-2 active save without changing its legal Hotel purchase", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      const { hotelPurchaseRule: _marker, ...oldConfig } = saved.config;
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='999' WHERE k='rulesVersion'",
-      ),
-    );
-    const response = await exports.default.fetch(
-      new Request(`${origin}/api/rooms/${game.credentials[0].roomCode}`),
-    );
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
-      error: "incompatible-saved-match",
+        "UPDATE meta SET v='2' WHERE k='rulesVersion'",
+      );
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          config: oldConfig,
+          players: saved.players.map((player) =>
+            player.seat === saved.activeSeat
+              ? { ...player, laps: 1, position: 6 }
+              : player,
+          ),
+          pending: {
+            kind: "buy",
+            seat: saved.activeSeat,
+            tile: 6,
+            maxLevel: 4,
+            deadline: Date.now() + 30_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
+      );
     });
-    // Restore to let normal socket close callbacks finish under the supported rules.
+    await evictDurableObject(stub);
+    const resumed = await connect(game.credentials[game.state.activeSeat]);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.snapshot?.config).not.toHaveProperty("hotelPurchaseRule");
+    resumed.send({
+      type: "intent",
+      id: "legacy-hotel-purchase",
+      atSeq: welcome.seq,
+      action: { type: "Buy", level: 4 },
+    });
+    const events = await resumed.next("events");
+    expect(
+      events.events.some(
+        (event) =>
+          event.type === "PropertyBought" &&
+          event.tile === 6 &&
+          event.level === 4,
+      ),
+    ).toBe(true);
+    const persisted = await runInDurableObject(
+      stub,
+      (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        return JSON.parse(row.json) as GameState;
+      },
+    );
+    expect(persisted.config).not.toHaveProperty("hotelPurchaseRule");
+    expect(
+      persisted.properties.find((property) => property.tile === 6),
+    ).toMatchObject({ owner: game.state.activeSeat, level: 4 });
+  });
+
+  it("starts preexisting version-2 lobbies with their original lap-only hotel rule", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
         "UPDATE meta SET v='2' WHERE k='rulesVersion'",
       ),
     );
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    inbox.send({
+      type: "lobby",
+      id: "legacy-lobby-start",
+      op: { type: "start", fillBots: true },
+    });
+    const events = await inbox.next("events");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    expect(
+      created?.type === "GameCreated" && created.state.config.hotelPurchaseRule,
+    ).toBe("legacy-lap");
+    const rules = await runInDurableObject(
+      stub,
+      (_instance, durableState) =>
+        durableState.storage.sql
+          .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
+          .toArray()[0]?.v,
+    );
+    expect(rules).toBe("2");
   });
+
+  it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    for (const rulesVersion of [2, 999]) {
+      // Version 2 cannot use this new match's frozen staged marker; 999 is unknown.
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(rulesVersion),
+        ),
+      );
+      const response = await exports.default.fetch(
+        new Request(`${origin}/api/rooms/${game.credentials[0].roomCode}`),
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: "incompatible-saved-match",
+      });
+    }
+    // Restore to let normal socket close callbacks finish under the supported rules.
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='3' WHERE k='rulesVersion'",
+      ),
+    );
+  });
+
+  it.each(["stateVersion", "rulesVersion"])(
+    "refuses unknown lobby %s before connections, settings or start can mutate it",
+    async (versionKey) => {
+      const host = await create();
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      const inbox = await connect(host);
+      const welcome = await inbox.next("welcome");
+      const readPersisted = () =>
+        runInDurableObject(stub, (_instance, durableState) => {
+          const sql = durableState.storage.sql;
+          return {
+            meta: sql.exec("SELECT k,v FROM meta ORDER BY k").toArray(),
+            seats: sql
+              .exec("SELECT seat,name,control FROM seats ORDER BY seat")
+              .toArray(),
+            state: sql.exec("SELECT id,seq FROM state").toArray(),
+            events: sql.exec("SELECT seq FROM events").toArray(),
+            commands: sql
+              .exec("SELECT seat,id FROM commands ORDER BY seat,id")
+              .toArray(),
+            timers: sql
+              .exec("SELECT kind,fire_at FROM timers ORDER BY kind")
+              .toArray(),
+          };
+        });
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v='999' WHERE k=?",
+          versionKey,
+        ),
+      );
+      try {
+        const before = await readPersisted();
+        expect(before.state).toHaveLength(0);
+        const response = await exports.default.fetch(
+          new Request(`${origin}/ws/room/${host.roomCode}`, {
+            headers: {
+              Upgrade: "websocket",
+              Origin: origin,
+              "Sec-WebSocket-Protocol": `polytour, seat.${host.token}`,
+            },
+          }),
+        );
+        if (response.webSocket) {
+          response.webSocket.accept();
+          activeSockets.push(response.webSocket);
+        }
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({
+          error: "incompatible-saved-match",
+        });
+        inbox.send({
+          type: "lobby",
+          id: "incompatible-settings",
+          op: {
+            type: "settings",
+            config: { ...welcome.lobby.config, startingCash: 3_000_000 },
+          },
+        });
+        expect(await inbox.next("reject")).toMatchObject({
+          id: "incompatible-settings",
+          reason: "incompatible-saved-match",
+        });
+        expect(await readPersisted()).toEqual(before);
+        inbox.send({
+          type: "lobby",
+          id: "incompatible-start",
+          op: { type: "start", fillBots: true },
+        });
+        expect(await inbox.next("reject")).toMatchObject({
+          id: "incompatible-start",
+          reason: "incompatible-saved-match",
+        });
+        expect(await readPersisted()).toEqual(before);
+      } finally {
+        await runInDurableObject(stub, (_instance, durableState) =>
+          durableState.storage.sql.exec(
+            "UPDATE meta SET v=? WHERE k=?",
+            versionKey === "stateVersion" ? "1" : "3",
+            versionKey,
+          ),
+        );
+      }
+    },
+  );
 
   it("persists a future drand commitment, blocks actions and retries the identical round", async () => {
     const host = await create("drand");

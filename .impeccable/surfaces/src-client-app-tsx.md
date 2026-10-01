@@ -23,6 +23,14 @@ The user pinned the conventional property-board game composition on 1 October 20
 
 The two dice settle to the server's exact values, the pawn traverses the visible track and the destination's choice appears after arrival, without replacing the board with interface panels.
 
+The 1 October refinement keeps that composition: layered board edges, distinct
+building entrances and terraces, a local purchase accent, larger pawn identities
+in corner HUDs, and illustrated construction choices with engine-derived rent.
+The winner's name, victory condition and final fortune lead the finished state.
+The default staged hotel rule is explicit in the relevant decision; new-room
+construction cannot offer an initial hotel. These refinements need a fresh full
+browser pass; the results below describe the earlier verified revision.
+
 ## Verification and unresolved work
 
 The user removed drand from normal new-room play on 1 October 2026 because the

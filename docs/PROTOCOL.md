@@ -22,6 +22,11 @@ debug socket has been removed; `/api/health` remains.
 - Host lobby operations are `start {fillBots}` and `settings {config}`. All rooms
   start with exactly four seats. Empty seats can become server bots. Settings are
   validated and freeze when the match starts.
+- New-room hotel progression is frozen by the server in the optional public config
+  marker `hotelPurchaseRule: "staged-hotels"`. Older saves may omit it or use
+  `"legacy-lap"`. This is not an accepted room-setting input; clients must derive
+  legal construction choices from the engine. Action/event shapes and the protocol
+  version remain compatible.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
   `legalActions` supplies the choices; tile indices are0..31 and levels0..5.

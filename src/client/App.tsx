@@ -5,14 +5,18 @@ import { BOARD, ECONOMY } from "../shared/board/index.js";
 import type {
   Action,
   GameEvent,
+  PlayerState,
   PublicState,
   Seat,
+  WinKind,
 } from "../shared/engine/index.js";
 import {
   actionCost,
   getProperty,
   legalActions,
+  maxBuildLevel,
   netWorth,
+  previewPropertyRent,
   propertyRent,
 } from "../shared/engine/index.js";
 import type {
@@ -109,6 +113,127 @@ function MoneyCounter({ value }: { value: number }) {
     return () => controls.stop();
   }, [value, speed, reducedMotion]);
   return <>{money(display)}</>;
+}
+
+function PlayerAvatar({ seat }: { seat: Seat }) {
+  return (
+    <div
+      className="player-avatar"
+      aria-hidden="true"
+      style={{ "--player-color": PLAYER_COLORS[seat] } as CSSProperties}
+    >
+      <i className="avatar-head">
+        <i className="avatar-cap" />
+        <i className="avatar-eyes" />
+      </i>
+      <i className="avatar-body" />
+      <span>{PLAYER_SYMBOLS[seat]}</span>
+    </div>
+  );
+}
+
+function BuildingMiniature({ level }: { level: number }) {
+  return (
+    <span className="building-miniature" data-level={level} aria-hidden="true">
+      {["front", "middle", "back"]
+        .slice(0, level > 0 && level < 4 ? level : 1)
+        .map((part) => (
+          <i key={part} />
+        ))}
+    </span>
+  );
+}
+
+const VICTORY_REASONS: Record<WinKind, string> = {
+  "last-standing": "Le dernier empire encore debout.",
+  "triple-monopoly": "Trois collections complètes. Le monde est à vous.",
+  "line-monopoly": "Une ligne entière du plateau à votre nom.",
+  "resort-monopoly": "Toutes les destinations de vacances réunies.",
+  "round-limit": "La plus grande fortune à la fin des manches.",
+  "time-limit": "La plus grande fortune au coup de sifflet final.",
+};
+
+function MatchResults({
+  players,
+  result,
+  onReplay,
+  onLeave,
+  onJournal,
+}: {
+  players: readonly PlayerState[];
+  result: NonNullable<PublicState["result"]>;
+  onReplay: () => void;
+  onLeave: () => void;
+  onJournal: (button: HTMLButtonElement) => void;
+}) {
+  const winner = players.find((player) => player.seat === result.winner);
+  const winnerWealth =
+    result.standings.find((standing) => standing.seat === result.winner)
+      ?.netWorth ?? 0;
+  return (
+    <>
+      <div
+        className="winner-portrait"
+        style={
+          { "--player-color": PLAYER_COLORS[result.winner] } as CSSProperties
+        }
+      >
+        <PlayerAvatar seat={result.winner} />
+        <span className="winner-trophy" aria-hidden="true">
+          <Icon name="trophy" size={31} />
+        </span>
+      </div>
+      <p className="victory-call">Le monde est à vous !</p>
+      <h2 id="winner-heading">
+        {winner?.name}
+        <span>remporte la partie</span>
+      </h2>
+      <p className="victory-reason">{VICTORY_REASONS[result.kind]}</p>
+      <div className="winner-wealth">
+        <span>Fortune finale</span>
+        <strong>{money(winnerWealth)}</strong>
+      </div>
+      <div className="standings-label">
+        <span>Classement final</span>
+        <span>Argent + propriétés</span>
+      </div>
+      <ol className="standings">
+        {result.standings.map((standing, index) => (
+          <li
+            key={standing.seat}
+            data-winner={standing.seat === result.winner}
+            style={
+              {
+                "--player-color": PLAYER_COLORS[standing.seat],
+              } as CSSProperties
+            }
+          >
+            <span className="standing-rank">{index + 1}</span>
+            <span className="standing-symbol" aria-hidden="true">
+              {PLAYER_SYMBOLS[standing.seat]}
+            </span>
+            <b>
+              {players.find((player) => player.seat === standing.seat)?.name}
+            </b>
+            <strong>{money(standing.netWorth)}</strong>
+          </li>
+        ))}
+      </ol>
+      <button type="button" className="button primary" onClick={onReplay}>
+        Rejouer avec des bots <Icon name="arrow" />
+      </button>
+      <button type="button" className="button secondary" onClick={onLeave}>
+        Nouvelle salle entre amis
+      </button>
+      <button
+        type="button"
+        className="text-button"
+        onClick={(event) => onJournal(event.currentTarget)}
+      >
+        Revoir le carnet de voyage <Icon name="journal" size={16} />
+      </button>
+    </>
+  );
 }
 
 function RoomSettings({
@@ -474,6 +599,23 @@ function DecisionPanel({
     decisionProperty && decisionTile !== undefined
       ? propertyRent(state, decisionTile)
       : null;
+  const construction =
+    decisionTile !== undefined &&
+    BOARD[decisionTile].kind === "city" &&
+    (pending?.kind === "buy" || pending?.kind === "build");
+  const hotelNote =
+    construction &&
+    pending &&
+    "maxLevel" in pending &&
+    Math.min(
+      pending.maxLevel,
+      maxBuildLevel(state, decisionSeat, pending.tile, pending.kind === "buy"),
+    ) < 4 &&
+    !state.config.hotelsDirectly
+      ? state.config.hotelPurchaseRule === "staged-hotels"
+        ? "Hôtel : 3 maisons, un tour complet, puis revenir ici."
+        : "L’hôtel se débloque après votre premier tour complet du plateau."
+      : null;
   return (
     <section
       className={`decision-panel ${ownTurn ? "your-turn" : ""}`}
@@ -555,7 +697,13 @@ function DecisionPanel({
         </div>
       )}
       {ownTurn && !busy && !rngBusy && (
-        <div className="decision-actions">
+        <div
+          className="decision-actions"
+          data-construction={construction}
+          style={
+            { "--choice-count": Math.max(1, others.length) } as CSSProperties
+          }
+        >
           {destinations.length > 0 && (
             <div className="destination-choice">
               <label htmlFor="destination">
@@ -594,12 +742,51 @@ function DecisionPanel({
             <button
               type="button"
               key={`${action.type}-${"level" in action ? action.level : index}`}
-              className={`button ${action.type === "Decline" ? "quiet" : action.type === "Roll" || others.length < 3 ? "primary" : "secondary"} ${action.type === "Roll" ? "roll-button" : ""}`}
+              className={`button ${action.type === "Decline" ? "quiet" : action.type === "Roll" || others.length < 3 ? "primary" : "secondary"} ${action.type === "Roll" ? "roll-button" : ""} ${construction && (action.type === "Buy" || action.type === "Build") ? "construction-choice" : ""}`}
+              aria-label={
+                construction &&
+                decisionTile !== undefined &&
+                (action.type === "Buy" || action.type === "Build")
+                  ? `${actionLabel(action, state)} · loyer futur ${money(previewPropertyRent(state, decisionTile, seat, action.level))}`
+                  : actionLabel(action, state)
+              }
               disabled={blocked}
               onClick={() => act(action)}
             >
               {action.type === "Roll" && <Icon name="dice" size={24} />}
-              {actionLabel(action, state)}
+              {construction &&
+              decisionTile !== undefined &&
+              (action.type === "Buy" || action.type === "Build") ? (
+                <>
+                  <BuildingMiniature level={action.level} />
+                  <span className="construction-name">
+                    {LEVEL_NAMES[action.level]}
+                  </span>
+                  <strong
+                    className="construction-cost"
+                    title={
+                      action.type === "Buy"
+                        ? "Prix total, terrain et constructions inclus"
+                        : "Coût des nouvelles constructions"
+                    }
+                  >
+                    {money(actionCost(state, action))}
+                  </strong>
+                  <span className="construction-rent">
+                    Loyer{" "}
+                    {money(
+                      previewPropertyRent(
+                        state,
+                        decisionTile,
+                        seat,
+                        action.level,
+                      ),
+                    )}
+                  </span>
+                </>
+              ) : (
+                actionLabel(action, state)
+              )}
               {action.type === "Roll" && <Icon name="arrow" />}
             </button>
           ))}
@@ -609,6 +796,21 @@ function DecisionPanel({
             </p>
           )}
         </div>
+      )}
+      {ownTurn && construction && !busy && !rngBusy && (
+        <p className="construction-guide">
+          <span>
+            {pending?.kind === "buy"
+              ? "Prix tout compris : terrain + constructions."
+              : `Déjà construit : ${LEVEL_NAMES[decisionProperty?.level ?? 0]}. Vous payez seulement la différence.`}
+          </span>
+          {hotelNote && (
+            <span className="hotel-note">
+              <Icon name="help" size={13} />
+              {hotelNote}
+            </span>
+          )}
+        </p>
       )}
       {state.lastRoll && (
         <div className="last-dice">
@@ -1234,9 +1436,7 @@ function MatchView({
               animate={{ opacity: player.bankrupt ? 0.7 : 1 }}
               transition={{ duration: reducedMotion ? 0 : 0.2 / speed }}
             >
-              <div className="player-avatar" aria-hidden="true">
-                <span>{PLAYER_SYMBOLS[player.seat]}</span>
-              </div>
+              <PlayerAvatar seat={player.seat} />
               <div className="player-card-body">
                 <div className="player-name-row">
                   <strong>{player.name}</strong>
@@ -1295,55 +1495,18 @@ function MatchView({
           <motion.section
             key="finished"
             className="end-panel match-end-panel"
+            aria-labelledby="winner-heading"
             initial={reducedMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 / speed }}
           >
-            <span className="winner-trophy">
-              <Icon name="trophy" size={44} />
-            </span>
-            <p className="small-label">Le voyage est terminé</p>
-            <h2>
-              {
-                game.players.find(
-                  (player) => player.seat === game.result?.winner,
-                )?.name
-              }{" "}
-              remporte la partie !
-            </h2>
-            <ol className="standings">
-              {game.result.standings.map((standing, index) => (
-                <li key={standing.seat}>
-                  <span>{index + 1}</span>
-                  <b>
-                    {PLAYER_SYMBOLS[standing.seat]}{" "}
-                    {
-                      game.players.find(
-                        (player) => player.seat === standing.seat,
-                      )?.name
-                    }
-                  </b>
-                  <strong>{money(standing.netWorth)}</strong>
-                </li>
-              ))}
-            </ol>
-            <button type="button" className="button primary" onClick={onReplay}>
-              Rejouer avec des bots <Icon name="arrow" />
-            </button>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={onLeave}
-            >
-              Nouvelle salle entre amis
-            </button>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => showTool("journal")}
-            >
-              Revoir le carnet de voyage <Icon name="journal" size={16} />
-            </button>
+            <MatchResults
+              players={game.players}
+              result={game.result}
+              onReplay={onReplay}
+              onLeave={onLeave}
+              onJournal={(button) => showTool("journal", button)}
+            />
           </motion.section>
         ) : (
           <motion.div

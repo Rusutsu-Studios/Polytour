@@ -171,6 +171,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     }));
     director.reset({
       ...snapshot,
+      config: { ...snapshot.config, hotelPurchaseRule: "legacy-lap" },
       activeSeat: 0,
       pending: {
         kind: "buy",
@@ -180,6 +181,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
         deadline: Date.now() + 60_000,
       },
       properties,
+      festivalTiles: [1, 17, 23],
       players: snapshot.players.map((player) => ({
         ...player,
         cash: 2_000_000,
@@ -195,6 +197,13 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.locator(".decision-actions button")).toHaveCount(6);
   await expect(page.locator(".decision-panel")).toContainText("Roubaix");
+  await expect(page.locator(".construction-choice")).toHaveCount(5);
+  await expect(
+    page.getByRole("button", { name: /^Terrain · 60 k/ }),
+  ).toContainText("Loyer 24 k");
+  await expect(page.locator(".construction-guide")).toContainText(
+    "Prix tout compris",
+  );
   const overlap = await page.evaluate(() => {
     const action = document
       .querySelector(".decision-panel")
@@ -214,6 +223,129 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.screenshot({
     path: ".local/verification/desktop-developed-fixture.png",
   });
+  // Current staged construction: even after a lap, an unowned city stops at
+  // three houses. A stale permissive decision must not hide the explanation.
+  await page.evaluate(async () => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (snapshot?.pending?.kind !== "buy")
+      throw new Error("Expected the purchase fixture");
+    director.reset({
+      ...snapshot,
+      config: { ...snapshot.config, hotelPurchaseRule: "staged-hotels" },
+      pending: { ...snapshot.pending, maxLevel: 4 },
+    });
+  });
+  await expect(page.locator(".construction-choice")).toHaveCount(4);
+  await expect(page.locator(".hotel-note")).toContainText(
+    "3 maisons, un tour complet, puis revenir ici",
+  );
+  await expect(
+    page.locator(".decision-actions").getByRole("button", { name: /^Hôtel/ }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: ".local/verification/desktop-staged-purchase.png",
+  });
+  // The explicit custom rule can unlock Hotel immediately; no misleading lock
+  // explanation remains. These are only presentation snapshots, never intents.
+  await page.evaluate(async () => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (snapshot?.pending?.kind !== "buy")
+      throw new Error("Expected the purchase fixture");
+    director.reset({
+      ...snapshot,
+      config: { ...snapshot.config, hotelsDirectly: true },
+      pending: { ...snapshot.pending, tile: 31, maxLevel: 4 },
+      properties: snapshot.properties.map((property) =>
+        property.tile === 31
+          ? { ...property, owner: null, level: 0 }
+          : property,
+      ),
+      players: snapshot.players.map((player) => ({
+        ...player,
+        properties: player.properties.filter((tile) => tile !== 31),
+      })),
+    });
+  });
+  await expect(
+    page.locator(".decision-actions").getByRole("button", { name: /^Hôtel/ }),
+  ).toHaveCount(1);
+  await expect(page.locator(".hotel-note")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /^Hôtel · 1,5 M/ }),
+  ).toContainText("Loyer 1,12 M");
+  const constructionOverflow = await page
+    .locator(".construction-choice")
+    .evaluateAll((buttons) =>
+      buttons.some((button) => button.scrollWidth > button.clientWidth),
+    );
+  expect(constructionOverflow).toBe(false);
+  await page.screenshot({
+    path: ".local/verification/desktop-custom-hotel-tokyo.png",
+  });
+  // A collection winner may not have the largest wealth. Preserve the server's
+  // winner and its final standings rather than deriving a winner from wealth.
+  const winnerName = await page.evaluate(async () => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (!snapshot) throw new Error("Expected the current match");
+    director.reset({
+      ...snapshot,
+      status: "finished",
+      pending: null,
+      result: {
+        winner: 2,
+        kind: "line-monopoly",
+        standings: [
+          { seat: 2, netWorth: 2_000_000 },
+          { seat: 0, netWorth: 3_000_000 },
+          { seat: 1, netWorth: 1_000_000 },
+          { seat: 3, netWorth: 0 },
+        ],
+      },
+    });
+    return snapshot.players.find((player) => player.seat === 2)?.name;
+  });
+  await expect(page.locator("#winner-heading")).toContainText(winnerName ?? "");
+  await expect(page.locator(".winner-wealth")).toContainText("2 M");
+  await expect(page.locator(".standings li").first()).toContainText(
+    winnerName ?? "",
+  );
+  await expect(page.locator(".standings li").nth(1)).toContainText("Raimundo");
+  await expect(page.locator(".standings-label")).toContainText(
+    "Classement final",
+  );
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(size);
+    const resultBounds = await page
+      .locator(".match-end-panel")
+      .evaluate((panel) => {
+        const rect = panel.getBoundingClientRect();
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          overflow: panel.scrollHeight > panel.clientHeight,
+        };
+      });
+    expect(resultBounds.top).toBeGreaterThanOrEqual(0);
+    expect(resultBounds.bottom).toBeLessThanOrEqual(size.height);
+    expect(resultBounds.left).toBeGreaterThanOrEqual(0);
+    expect(resultBounds.right).toBeLessThanOrEqual(size.width);
+    expect(resultBounds.overflow).toBe(false);
+    await page.screenshot({
+      path: `.local/verification/desktop-result-${size.width}.png`,
+    });
+  }
   await page.evaluate(async (snapshot) => {
     const modulePath = "/src/client/director/director.ts";
     const { director } = await import(modulePath);
@@ -252,7 +384,23 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     exact: true,
   });
   await expect(skip).toBeEnabled();
-  const receivesPointer = await skip.evaluate((button) => {
+  const receivesPointer = await skip.evaluate(async (button) => {
+    const modulePath = "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    // Observe after React's delegated click handler, within the same task.
+    // A later bot event can legitimately make the Director busy again.
+    window.addEventListener(
+      "click",
+      (event) => {
+        if (!(event.target instanceof Node) || !button.contains(event.target))
+          return;
+        const snapshot = director.getSnapshot();
+        document.documentElement.dataset.skipSynced = String(
+          !snapshot.busy && snapshot.viewState === snapshot.serverState,
+        );
+      },
+      { once: true },
+    );
     const rect = button.getBoundingClientRect();
     const hit = document.elementFromPoint(
       rect.left + rect.width / 2,
@@ -262,7 +410,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   });
   expect(receivesPointer).toBe(true);
   await skip.click();
-  await expect(skip).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-skip-synced",
+    "true",
+  );
   await page
     .getByRole("button", { name: "Carnet de voyage", exact: true })
     .click();

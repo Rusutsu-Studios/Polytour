@@ -10,6 +10,11 @@ friends, or immediately play against three server bots. The default preset is
 2 M starting cash, 400 k per lap, three festivals, line/triple collection wins and
 a two-hour maximum. Room settings can be adjusted before starting.
 
+In newly created rooms, the first purchase is limited to land and three houses.
+Return to your own three-house city after a completed lap to build its hotel.
+The direct-hotel custom option is an explicit exception. Existing rooms preserve
+their earlier construction rule; create a fresh room to try the new progression.
+
 The current visual target is a viewport-filling isometric board with four compact
 player HUDs at its corners, a contextual action area and discreet menus. Play with
 a mouse and keyboard. The minimum desktop target is 1280×720; the main review
@@ -86,7 +91,7 @@ Feature branches have isolated Worker Preview storage. Production deploys from
 | [AGENTS.md](AGENTS.md) | Working rules for AI coding agents (Codex reads it; [CLAUDE.md](CLAUDE.md) imports it for Claude Code) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Cloudflare system design, Durable Objects, storage, auth |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Libraries picked, the reasons, and what we rejected |
-| [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | Playable rules v0.2, board, economy, win conditions, engine contract |
+| [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | New-room rules v0.3, saved-room compatibility, economy, win conditions, engine contract |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | WebSocket messages and game events |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Art direction, animation pipeline, signature moments, perf budgets |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased build plan |

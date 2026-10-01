@@ -22,6 +22,7 @@ import {
   getTileInvestedValue,
   legalActions,
   netWorth,
+  previewPropertyRent,
   propertyOwner,
   propertyRent,
   toPublic,
@@ -267,7 +268,11 @@ describe("property economy and build unlocking", () => {
     let state = newGame();
     const seat = state.activeSeat;
     state = setPlayer(state, seat, { laps: 1 });
-    const hotel = act(land(state, 1).state, { type: "Buy", level: 4 }).state;
+    const houses = act(land(state, 1).state, { type: "Buy", level: 3 }).state;
+    const hotel = act(land(withActive(houses, seat), 1).state, {
+      type: "Build",
+      level: 4,
+    }).state;
     const revisit = land(withActive(hotel, seat), 1).state;
     expect(legalActions(revisit, seat)).toContainEqual({
       type: "Build",
@@ -874,5 +879,171 @@ describe("rounding and simultaneous win edges", () => {
       seat,
       rival,
     ]);
+  });
+});
+
+describe("frozen staged hotel construction", () => {
+  it("caps the first purchase at three houses even after a completed lap and rejects a direct Hotel intent", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = setPlayer(state, seat, { laps: 2 });
+    const landed = land(state, 6).state;
+    expect(landed.pending).toMatchObject({ kind: "buy", maxLevel: 3 });
+    expect(legalActions(landed, seat)).not.toContainEqual({
+      type: "Buy",
+      level: 4,
+    });
+    expect(
+      applyAction(landed, seat, { type: "Buy", level: 4 }, { now: 1 }),
+    ).toMatchObject({ ok: false, error: { code: "illegal-action" } });
+    expect(getProperty(landed, 6)?.owner).toBeNull();
+    const stale = {
+      ...landed,
+      pending: {
+        kind: "buy" as const,
+        seat,
+        tile: 6,
+        maxLevel: 4 as const,
+        deadline: 1_000,
+      },
+    };
+    expect(legalActions(stale, seat)).not.toContainEqual({
+      type: "Buy",
+      level: 4,
+    });
+    expect(
+      applyAction(stale, seat, { type: "Buy", level: 4 }, { now: 1 }),
+    ).toMatchObject({ ok: false, error: { code: "illegal-action" } });
+  });
+  it("requires three houses already present on the previous visit before offering a Hotel", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = setPlayer(grant(state, 6, seat), seat, { laps: 1 });
+    const firstReturn = land(state, 6).state;
+    expect(firstReturn.pending).toMatchObject({ kind: "build", maxLevel: 3 });
+    expect(legalActions(firstReturn, seat)).not.toContainEqual({
+      type: "Build",
+      level: 4,
+    });
+    const stale = {
+      ...firstReturn,
+      pending: {
+        kind: "build" as const,
+        seat,
+        tile: 6,
+        maxLevel: 4 as const,
+        deadline: 1_000,
+      },
+    };
+    expect(
+      applyAction(stale, seat, { type: "Build", level: 4 }, { now: 1 }),
+    ).toMatchObject({ ok: false, error: { code: "illegal-action" } });
+    const houses = act(firstReturn, { type: "Build", level: 3 }).state;
+    expect(getProperty(houses, 6)?.level).toBe(3);
+    const nextReturn = land(withActive(houses, seat), 6).state;
+    expect(legalActions(nextReturn, seat)).toContainEqual({
+      type: "Build",
+      level: 4,
+    });
+    expect(
+      getProperty(act(nextReturn, { type: "Build", level: 4 }).state, 6)?.level,
+    ).toBe(4);
+  });
+  it("retains the lap requirement even for an already-owned three-house city", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(state, 6, seat, 3);
+    const landed = land(state, 6).state;
+    expect(getPlayer(landed, seat).laps).toBe(0);
+    expect(getProperty(landed, 6)?.level).toBe(3);
+    expect(landed.activeSeat).not.toBe(seat);
+    const stale = {
+      ...state,
+      pending: {
+        kind: "build" as const,
+        seat,
+        tile: 6,
+        maxLevel: 4 as const,
+        deadline: 1_000,
+      },
+    };
+    expect(legalActions(stale, seat)).toEqual([{ type: "Decline" }]);
+    expect(
+      applyAction(stale, seat, { type: "Build", level: 4 }, { now: 1 }),
+    ).toMatchObject({ ok: false, error: { code: "illegal-action" } });
+  });
+  it("preserves explicit direct-Hotel custom settings for purchases and upgrades", () => {
+    let state = newGame(4, { ...CONFIG, hotelsDirectly: true });
+    const seat = state.activeSeat;
+    const purchase = land(state, 6).state;
+    expect(legalActions(purchase, seat)).toContainEqual({
+      type: "Buy",
+      level: 4,
+    });
+    expect(
+      getProperty(act(purchase, { type: "Buy", level: 4 }).state, 6)?.level,
+    ).toBe(4);
+    state = grant(state, 6, seat);
+    const upgrade = land(state, 6).state;
+    expect(legalActions(upgrade, seat)).toContainEqual({
+      type: "Build",
+      level: 4,
+    });
+    expect(
+      getProperty(act(upgrade, { type: "Build", level: 4 }).state, 6)?.level,
+    ).toBe(4);
+  });
+  it("keeps old active snapshots without a marker on their original lap-only rules", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    const { hotelPurchaseRule: _marker, ...oldConfig } = state.config;
+    state = setPlayer({ ...state, config: oldConfig }, seat, { laps: 1 });
+    const oldPurchase = land(state, 6).state;
+    expect(oldPurchase.config).not.toHaveProperty("hotelPurchaseRule");
+    expect(legalActions(oldPurchase, seat)).toContainEqual({
+      type: "Buy",
+      level: 4,
+    });
+    const bought = act(oldPurchase, { type: "Buy", level: 4 }).state;
+    expect(getProperty(bought, 6)?.level).toBe(4);
+    expect(bought.config).not.toHaveProperty("hotelPurchaseRule");
+    const oldLand = land(grant(state, 6, seat), 6).state;
+    expect(legalActions(oldLand, seat)).toContainEqual({
+      type: "Build",
+      level: 4,
+    });
+  });
+  it("uses the same staged legal choices for bots", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = setPlayer(state, seat, { laps: 2, control: "bot" });
+    const landed = land(state, 6).state;
+    const action = botAction(landed, seat, "hard");
+    expect(legalActions(landed, seat)).toContainEqual(action);
+    expect(action).toEqual({ type: "Buy", level: 3 });
+    expect(getProperty(act(landed, action).state, 6)?.level).toBe(3);
+  });
+});
+
+describe("property rent previews", () => {
+  it("projects purchase ownership and country/festival modifiers without mutating live state", () => {
+    const state = grant(newGame(), 1, 0);
+    const before = JSON.stringify(state);
+    expect(previewPropertyRent(state, 2, 0, 1)).toBe(84_000);
+    expect(previewPropertyRent({ ...state, festivalTiles: [2] }, 2, 1, 1)).toBe(
+      84_000,
+    );
+    expect(JSON.stringify(state)).toBe(before);
+    expect(getProperty(state, 2)?.owner).toBeNull();
+  });
+  it("retains an owned host for upgrades but clears transfer hosts and excludes Landmark multipliers", () => {
+    let state = grant(grant(newGame(), 1, 0, 3), 2, 0);
+    state = { ...state, championshipHost: { tile: 1, multiplier: 5 } };
+    expect(previewPropertyRent(state, 1, 0, 4)).toBe(840_000);
+    expect(previewPropertyRent(state, 1, 0, 5)).toBe(240_000);
+    expect(previewPropertyRent(state, 1, 1, 4)).toBe(168_000);
+    expect(previewPropertyRent(state, 0, 0, 0)).toBe(0);
+    expect(state.championshipHost).toEqual({ tile: 1, multiplier: 5 });
+    expect(getProperty(state, 1)).toMatchObject({ owner: 0, level: 3 });
   });
 });

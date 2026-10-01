@@ -52,7 +52,7 @@ components:
 
 **Creative North Star: “The board is the game.”**
 
-The user confirmed the familiar PC property-board game composition on 1 October 2026: an original isometric toy board fills the play viewport, four compact player HUDs occupy the corners and discreet controls expose the current decision. The old dashboard composition with a persistent sidebar and stacked information panels is replaced. Local browser captures verify the replacement at 1280×720, 1440×900 and 1920×1080 without page scroll or off-screen controls. The final independent visual review found no remaining material defects; dated evidence and the still-pending remote Preview and hardware FPS checks live in `docs/PLAYABLE_CHECKPOINT.md`.
+The user confirmed the familiar PC property-board game composition on 1 October 2026: an original isometric toy board fills the play viewport, four compact player HUDs occupy the corners and discreet controls expose the current decision. The old dashboard composition with a persistent sidebar and stacked information panels is replaced. Local browser captures verify that composition at 1280×720, 1440×900 and 1920×1080 without page scroll or off-screen controls. Dated evidence, the verified Preview revision and the remaining hardware FPS check live in `docs/PLAYABLE_CHECKPOINT.md`; each later refinement requires its own browser verification.
 
 Retain the travel progression from French cities to Tokyo and the original toy geometry, rounded pawns, raised buildings, flags and dice. A sky-blue surround, grassy center and ivory track provide the setting. The board carries the story; interface tools open on demand rather than sharing equal visual weight with it.
 
@@ -71,6 +71,8 @@ Keep system fonts and avoid a network font requirement. Trebuchet supplies the c
 Primary player names, decision prompts, deadlines and choices use at least 14 px.
 Supporting portfolio counts and connection/seat captions may use 9–12 px; money
 uses 24–31 px, contextual titles 21–24 px, and the lobby alone uses display sizes.
+Construction-choice prices use 19 px at the main target and 17 px at 1280×720;
+their rent and hotel prerequisites use at least 14 px.
 Solid coral actions use a darker tone so ivory button text exceeds 4.5:1 contrast.
 
 Board lettering is part of the track: town names and prices sit on their tiles. Selected and decision-related destinations receive a readable DOM label with their price, owner and rent; small perspective labels never become the only way to understand a choice.
@@ -87,7 +89,7 @@ Mobile is best effort. A future touch adaptation may use its own layout; portrai
 
 ## Elevation & Depth
 
-The board has an extruded ivory base, soft shadows and original raised buildings. The grassy center stays available to the dice and match action; it does not carry an oversized decorative sign or object that obscures play.
+The board has an extruded ivory base, a layered physical edge, soft shadows and original raised buildings. Instanced bases, cornices and entrances distinguish small houses, hotels and terraced landmarks at the fixed camera distance. The grassy center stays available to the dice and match action; it does not carry an oversized decorative sign or object that obscures play.
 
 Compact ivory controls use restrained structural shadows, and action buttons retain a darker lower edge for a physical press. Avoid permanent glass overlays across the board. Hover, ownership changes and festivals add local feedback, not general interface ornament.
 
@@ -99,21 +101,34 @@ Softly curved controls belong to the toy-game language. Corner HUDs remain compa
 
 ## Components
 
-The contextual decision names its actual decision-maker using `pending.seat`, including off-turn debts. Purchase, development, rent protection and buyout decisions show the destination and relevant cost/owner/rent beside their legal choices. A roll has one strong action. Multi-destination choices use a labeled select and confirm control. Legal actions come from the shared engine.
+The contextual decision names its actual decision-maker using `pending.seat`, including off-turn debts. Purchase and development options pair a building silhouette with the total cost or additional payment and the resulting rent computed by the shared engine. They expose only legal levels and explain the staged hotel requirement when locked. Rent protection and buyout decisions show the destination and relevant cost/owner/rent beside their legal choices. A roll has one strong action. Multi-destination choices use a labeled select and confirm control. Legal actions come from the shared engine.
 
 Host settings remain a visible local draft until explicitly saved; starting with unsaved changes is blocked. Room-code copy and sharing support invitation. The match timer counts down to the server-provided deadline. Busy, reconnecting, rejected, waiting and finished states stay explicit without exposing engine implementation details in the main play flow.
 
-The closed dice tool explains the server's fresh cryptographic draws and equal face probabilities. New-room settings have no randomness-mode selector. It must not suggest a public signature or exportable beacon proof for server Web Crypto. Saved drand rooms retain their honest waiting/error state and proof export. Game-end standings name the actual winner in a contextual overlay while preserving the board behind it.
+The closed dice tool explains the server's fresh cryptographic draws and equal face probabilities. New-room settings have no randomness-mode selector. It must not suggest a public signature or exportable beacon proof for server Web Crypto. Saved drand rooms retain their honest waiting/error state and proof export. Game-end standings emphasize the actual winner, victory condition and final fortune, then show the final ranking supplied by the server. The winner leads that ranking even when a collection victory leaves another player richer. Preserve the board behind the overlay.
 
 Menus restore keyboard focus on dismissal, support Escape where appropriate and retain a visible focus indicator. Reduced motion keeps informative changes without camera spectacle.
 
 **The Timing Rule.** The Director shows the events leading to a decision before the choice opens. Speed and skip apply consistently.
 
-Local browser verification covers 2× speed, the reduced-animation toggle, a decreasing match countdown and skip during a real roll's event playback. Skip is disabled at rest. Separate presentation fixtures demonstrate levels 1–5, all six purchase choices at 1280×720 without HUD collisions and off-turn debt presentation; the Worker remains unmodified for these fixtures. The deployed Preview passes a complete four-context match, live drand proof export and API/SPA smoke checks. Hardware frame rate remains unmeasured.
+Browser verification covers 2× speed, the reduced-animation toggle, a decreasing match countdown and skip during a real roll's event playback. Skip is disabled at rest; a real click is checked against the public Director's synchronous state so later bot events cannot invalidate that observation. Separate presentation fixtures demonstrate levels 1–5, staged purchases, the direct-hotel exception and off-turn debt presentation; the Worker remains unmodified for these fixtures. Dated complete-match, legacy drand and routing results for each local/Preview revision live in PLAYABLE_CHECKPOINT.md. Hardware frame rate remains unmeasured.
 
 An explicitly inspected city stays selected while pawns move. Until the user
 selects a city, the highlight follows the active pawn automatically. The city
 heading, selection and price are verified through a change of active position.
+
+### Detector review of the refinement
+
+The manual Impeccable detector was run for App.tsx, App.css and BoardScene.tsx on
+1 October. Its two side-border warnings identify the transparent CSS triangle
+forming the landmark miniature's roof (`.building-miniature[data-level="5"]
+i::before`), not a card accent. Keep that geometric construction. The rounded
+accent warning identifies the accessible flat-board tile's country-colour strip,
+which communicates the board grouping alongside its text; keep it for WebGL
+fallback. Palette/type/radius advisories span the existing toy materials and
+compact HUD styles; the prose above records their purpose and minimum essential
+label size. This detector output is not a clean machine verdict; browser captures
+and interaction checks remain the visual acceptance evidence.
 
 ## Do's and Don'ts
 
