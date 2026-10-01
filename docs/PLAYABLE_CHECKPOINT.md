@@ -126,6 +126,21 @@ verifies and exports its proof, then checks that leaving it and creating a new
 room uses `secure` rather than inheriting the hidden legacy mode. Creation also
 forces the new default when “Rejouer” uses the previous render's settings.
 
+## Focused adoption from PR #12 — 1 October 2026
+
+PR #15 adopts only PR #12's amount-based salary calculation. `SalaryPaid.amount`
+credits the player's current cash and debits the bank by the same value. The
+existing complete engine already has a numeric bank ledger, exhaustive event and
+action handling, and replay/conservation tests; merging the older engine would
+duplicate those parts. The legacy absolute `cash` event field remains for stored
+events and previously opened clients, while the current reducer ignores it.
+Valid saved games keep the same balances and rules without a version migration.
+
+The 71 unit/Worker tests, TypeScript, Biome, production build and bundle budgets
+pass. Two focused regressions cover a conflicting legacy `cash` value, immutable
+input, and successive or zero salaries. A fresh 100-game simulation also passes
+the per-event money, replay, ownership, card and termination invariants.
+
 ## Simulator findings
 
 The committed [baseline](../tools/sim/baseline.json) records 10,000 seeded games

@@ -122,6 +122,12 @@ a dedicated event (tax, card effects, Island and World Tour fees). This list is 
 v0.1 draft; it grows with the engine, and the reducer property test decides when it
 is complete.
 
+The current prototype also emits a legacy absolute `cash` field on `SalaryPaid`
+for compatibility with previously opened clients. The shared reducer uses only
+`amount` to credit player cash and debit the bank; it does not trust that redundant
+balance. Existing valid events replay identically, so this calculation correction
+requires no protocol, state or rules version change.
+
 ```ts
 type InstantWinKind = "triple-monopoly" | "line-monopoly" | "resort-monopoly";
 type WinKind = "last-standing" | InstantWinKind | "round-limit";
