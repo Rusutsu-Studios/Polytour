@@ -51,14 +51,15 @@ class Inbox {
     }
   }
 }
-async function create(
-  mode: "secure" | "drand" = "secure",
-): Promise<RoomCredentials> {
+async function create(mode?: "secure" | "drand"): Promise<RoomCredentials> {
   const response = await exports.default.fetch(
     new Request(`${origin}/api/rooms`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: origin },
-      body: JSON.stringify({ name: "Alex", config: { randomnessMode: mode } }),
+      body: JSON.stringify({
+        name: "Alex",
+        ...(mode === undefined ? {} : { config: { randomnessMode: mode } }),
+      }),
     }),
   );
   expect(response.status).toBe(201);
@@ -129,6 +130,62 @@ afterEach(() => {
 });
 
 describe("Authoritative private rooms", () => {
+  it("defaults new rooms to immediate secure dice without external network calls", async () => {
+    const externalFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("External network must not be needed"));
+    const { credentials, inboxes, state, seq } = await startFour();
+    const reconnect = await connect(credentials[0]);
+    const welcome = await reconnect.next("welcome");
+    expect(welcome.lobby.config.randomnessMode).toBe("secure");
+
+    const current = inboxes[state.activeSeat];
+    current.send({
+      type: "intent",
+      id: "secure-default-roll",
+      atSeq: seq,
+      action: { type: "Roll" },
+    });
+    const committed = await current.next("randomness");
+    expect(committed.status).toBe("committed");
+    expect(committed.commitment).toMatchObject({
+      mode: "secure",
+      round: null,
+      chainHash: null,
+    });
+    expect(committed.commitment?.availableAt).toBe(
+      committed.commitment?.committedAt,
+    );
+    const events = await current.next("events");
+    const rolled = events.events.find((event) => event.type === "DiceRolled");
+    if (rolled?.type !== "DiceRolled") throw new Error("DiceRolled expected");
+    expect(rolled.dice.every((die) => die >= 1 && die <= 6)).toBe(true);
+    expect(events.proofs?.[0].proof).toMatchObject({
+      mode: "secure",
+      dice: rolled.dice,
+      round: null,
+      chainHash: null,
+      randomness: null,
+      signature: null,
+      verified: false,
+      source: "Web Crypto / server CSPRNG",
+    });
+    const resolved = await current.next("randomness");
+    expect(resolved.status).toBe("resolved");
+    expect(resolved.proof).toEqual(events.proofs?.[0].proof);
+    expect(externalFetch).not.toHaveBeenCalled();
+    const stub = env.GAME_ROOM.getByName(credentials[0].roomCode);
+    expect(
+      await runInDurableObject(
+        stub,
+        (_instance, durableState) =>
+          durableState.storage.sql
+            .exec("SELECT v FROM meta WHERE k='pendingDice'")
+            .toArray().length,
+      ),
+    ).toBe(0);
+  });
+
   it("keeps scaffold health checks and rejects the removed debug handshake", async () => {
     const response = await exports.default.fetch(
       new Request(`${origin}/api/health`),

@@ -24,7 +24,7 @@ export const RoomConfigSchema = z
     botCanBuild: z.boolean().default(true),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),
-    randomnessMode: z.enum(["secure", "drand"]).default("drand"),
+    randomnessMode: z.enum(["secure", "drand"]).default("secure"),
   })
   .strict();
 export type RoomConfig = z.infer<typeof RoomConfigSchema>;

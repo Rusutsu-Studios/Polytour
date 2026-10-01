@@ -11,8 +11,9 @@ that browser session. Accounts, Turnstile, signed cookies, D1 results and R2 rep
 archives below remain the planned launch architecture rather than implemented auth.
 
 Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
-expiry, and future drand-round resolution. A drand commitment survives retry and
-reconnect; strict mode has no crypto fallback. See [RANDOMNESS.md](RANDOMNESS.md).
+expiry. New-room rolls resolve immediately through server Web Crypto, without a
+network fetch. Legacy drand-round alarms remain supported: a saved commitment
+survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
 State version1 and rules version2 are pinned for this first playable schema;
 unknown saved versions are rejected rather than loaded under changed rules.
 

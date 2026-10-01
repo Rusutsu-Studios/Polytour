@@ -106,6 +106,26 @@ on target PC hardware.
 No new main-branch production deployment is established by these checks. Mobile
 remains best effort; a dedicated touch adaptation is optional future work.
 
+## Immediate server dice — 1 October 2026
+
+The subsequent 1 October dice change makes new-room rolls immediate with fresh
+Worker Web Crypto. Drand is absent from normal new-room settings; its resolver
+and proof UI remain for saved-room compatibility. The historical drand results
+above establish that legacy path, not a requirement for new gameplay. See
+[RANDOMNESS.md](RANDOMNESS.md) for why an initial public drand seed is unnecessary.
+
+The 69 unit/Worker tests, TypeScript, Biome, production build and bundle budgets
+pass. A regression starts a default room with network fetch disabled, resolves
+the roll immediately and confirms the stored result uses Web Crypto without a
+drand round or signature.
+
+Six local browser scenarios pass in **46.7 seconds**, including the full
+four-seat match using the default source, UI settings and last-roll information,
+refresh and both routing smoke checks. The explicit legacy drand scenario still
+verifies and exports its proof, then checks that leaving it and creating a new
+room uses `secure` rather than inheriting the hidden legacy mode. Creation also
+forces the new default when “Rejouer” uses the previous render's settings.
+
 ## Simulator findings
 
 The committed [baseline](../tools/sim/baseline.json) records 10,000 seeded games
@@ -130,7 +150,8 @@ values after the remaining reference prices and rents are captured.
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,
-human group playtests, independent browser BLS verification, accounts,
+human group playtests, optional independent browser BLS verification for legacy
+drand rooms, accounts,
 matchmaking, audio and advanced artwork remain future work. Current geometry and
 graphics are original; no competitor art or purchasable gameplay boosts are used.
 Mobile/touch adaptation and physical phone performance are optional later work,

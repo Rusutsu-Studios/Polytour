@@ -26,8 +26,8 @@ to reproduce the requested reference values and room settings accurately.
   make bots much weaker. Buyouts are the fast, public property-transfer mechanic.
 
 The server owns turn order, deck order, and all random draws. Live dice come from
-verified future drand rounds by default, or fresh server Web Crypto in an explicitly
-selected fast mode. The private seeded PRNG is used for deck/turn-order shuffles
+fresh server Web Crypto for each new match, without an external beacon wait.
+Saved drand matches retain their committed-round mode. The private seeded PRNG is used for deck/turn-order shuffles
 and repeatable simulations. See [RANDOMNESS.md](RANDOMNESS.md). The rules below are
 written to be deterministic: when several legal targets are otherwise equivalent,
 the lowest tile index wins the tie.

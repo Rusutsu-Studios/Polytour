@@ -18,9 +18,16 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.getByLabel("Salaire au départ")).toHaveValue("400000");
   await expect(page.getByLabel("Durée de partie")).toHaveValue("120");
   await expect(page.getByLabel("Festivals initiaux")).toHaveValue("3");
+  await expect(page.getByLabel("Temps de décision")).toHaveValue("30");
+  // Give the screenshot-heavy regression enough time on software-rendered CI.
+  await page.getByLabel("Temps de décision").selectOption("60");
   await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
   await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
-  await page.getByLabel("Lancers de dés").selectOption("secure");
+  await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
+  await expect(page.locator(".settings-fields")).not.toContainText("drand");
+  await expect(page.locator(".settings-fields")).toContainText(
+    "aléa cryptographique généré directement sur Cloudflare",
+  );
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator("canvas")).toBeVisible();
@@ -33,6 +40,21 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     exact: true,
   });
   await expect(roll).toBeEnabled({ timeout: 60_000 });
+  await page
+    .getByRole("button", { name: "À propos des dés", exact: true })
+    .click();
+  await expect(page.locator(".proof-panel")).toContainText(
+    "Chaque face a une chance sur six",
+  );
+  await expect(page.locator(".proof-panel")).not.toContainText("drand");
+  await expect(
+    page.getByRole("button", { name: "Télécharger la preuve" }),
+  ).toHaveCount(0);
+  await page.screenshot({ path: ".local/verification/server-dice-panel.png" });
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "À propos des dés", exact: true }),
+  ).toBeFocused();
   // UI regression fixture: a Birthday debtor can act during another seat's
   // turn. This only changes this tab's presentation, never Worker state.
   const original = await page.evaluate(async () => {
@@ -230,6 +252,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     timeout: 20_000,
   });
   await page
+    .getByRole("button", { name: "À propos des dés", exact: true })
+    .click();
+  await expect(page.locator(".proof-result")).toContainText("Dernier lancer :");
+  await page
     .getByRole("button", { name: "Explorer le plateau", exact: true })
     .click();
   await page.getByLabel("Explorer une case").selectOption("31");
@@ -291,7 +317,8 @@ test("desktop room controls fit, create and join preserve the host settings", as
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
   await page.locator(".settings-disclosure summary").click();
-  await page.getByLabel("Lancers de dés").selectOption("secure");
+  await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
+  await expect(page.locator(".settings-fields")).not.toContainText("drand");
   await page.getByLabel("Durée de partie").selectOption("20");
   await page
     .getByRole("button", { name: "Créer une salle entre amis" })

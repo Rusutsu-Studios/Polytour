@@ -103,7 +103,7 @@ The contextual decision names its actual decision-maker using `pending.seat`, in
 
 Host settings remain a visible local draft until explicitly saved; starting with unsaved changes is blocked. Room-code copy and sharing support invitation. The match timer counts down to the server-provided deadline. Busy, reconnecting, rejected, waiting and finished states stay explicit without exposing engine implementation details in the main play flow.
 
-The closed proof tool exposes the committed drand round, the honest waiting/error state and the server-verified proof when available. Fast crypto remains separately labelled. Game-end standings name the actual winner in a contextual overlay while preserving the board behind it.
+The closed dice tool explains the server's fresh cryptographic draws and equal face probabilities. New-room settings have no randomness-mode selector. It must not suggest a public signature or exportable beacon proof for server Web Crypto. Saved drand rooms retain their honest waiting/error state and proof export. Game-end standings name the actual winner in a contextual overlay while preserving the board behind it.
 
 Menus restore keyboard focus on dismissal, support Escape where appropriate and retain a visible focus indicator. Reduced motion keeps informative changes without camera spectacle.
 

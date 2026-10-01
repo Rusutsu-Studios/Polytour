@@ -669,7 +669,9 @@ export class GameRoom extends DurableObject<Env> {
         status: "error",
         commitment: pending.commitment,
         message:
-          "Le tirage vérifiable est indisponible. La même balise sera réessayée, sans modifier les dés.",
+          pending.commitment.mode === "drand"
+            ? "Le tirage vérifiable est indisponible. La même balise sera réessayée, sans modifier les dés."
+            : "Le tirage serveur est indisponible. Le serveur réessaie automatiquement.",
       });
       await this.scheduleAlarm();
     }
