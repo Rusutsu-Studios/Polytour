@@ -17,6 +17,7 @@ import type {
 } from "../shared/protocol/index.js";
 import { RoomConfigSchema } from "../shared/protocol/index.js";
 import { director, useDirector } from "./director/director.js";
+import { translate as t, useLocale } from "./i18n.js";
 import {
   enterRoom,
   forgetCredentials,
@@ -24,24 +25,42 @@ import {
   useRoom,
 } from "./net/room.js";
 import {
-  LEVEL_NAMES,
+  levelName,
   money,
   PLAYER_COLORS,
   PLAYER_SYMBOLS,
   TILE_ICONS,
-  TILE_NAMES,
   tileColor,
+  tileName,
   tilePrice,
 } from "./ui/board-display.js";
 import CardMoment from "./ui/CardMoment.js";
-import { CARD_NAMES } from "./ui/chance-display.js";
+import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import Icon from "./ui/Icon.js";
+import { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
 import "./App.css";
 
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
 const DEFAULT_CONFIG = RoomConfigSchema.parse({});
+function LanguagePicker() {
+  const { locale, setLocale } = useLocale();
+  return (
+    <label className="language-picker">
+      <span className="sr-only">Langue / Language</span>
+      <select
+        value={locale}
+        onChange={(event) =>
+          setLocale(event.currentTarget.value === "en" ? "en" : "fr")
+        }
+      >
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+  );
+}
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -108,14 +127,35 @@ function PlayerAvatar({ seat }: { seat: Seat }) {
   );
 }
 
-const VICTORY_REASONS: Record<WinKind, string> = {
-  "last-standing": "Le dernier empire encore debout.",
-  "triple-monopoly": "Trois collections complètes. Le monde est à vous.",
-  "line-monopoly": "Une ligne entière du plateau à votre nom.",
-  "resort-monopoly": "Toutes les destinations de vacances réunies.",
-  "round-limit": "La plus grande fortune à la fin des manches.",
-  "time-limit": "La plus grande fortune au coup de sifflet final.",
-};
+function victoryReason(kind: WinKind) {
+  const reasons: Record<WinKind, string> = {
+    "last-standing": t(
+      "Tous les autres joueurs ont fait faillite.",
+      "All other players went bankrupt.",
+    ),
+    "triple-monopoly": t(
+      "Trois collections complètes.",
+      "Three complete city groups.",
+    ),
+    "line-monopoly": t(
+      "Une ligne entière du plateau à votre nom.",
+      "You own every property on one side of the board.",
+    ),
+    "resort-monopoly": t(
+      "Toutes les destinations de vacances réunies.",
+      "You own all four resorts.",
+    ),
+    "round-limit": t(
+      "La plus grande fortune à la fin des manches.",
+      "Highest net worth at the round limit.",
+    ),
+    "time-limit": t(
+      "La plus grande fortune à la fin du temps imparti.",
+      "Highest net worth when time runs out.",
+    ),
+  };
+  return reasons[kind];
+}
 
 function MatchResults({
   players,
@@ -147,19 +187,19 @@ function MatchResults({
           <Icon name="trophy" size={31} />
         </span>
       </div>
-      <p className="victory-call">Le monde est à vous !</p>
+      <p className="victory-call">{t("Victoire !", "Victory!")}</p>
       <h2 id="winner-heading">
         {winner?.name}
-        <span>remporte la partie</span>
+        <span>{t("remporte la partie", "wins the game")}</span>
       </h2>
-      <p className="victory-reason">{VICTORY_REASONS[result.kind]}</p>
+      <p className="victory-reason">{victoryReason(result.kind)}</p>
       <div className="winner-wealth">
-        <span>Fortune finale</span>
+        <span>{t("Fortune finale", "Final net worth")}</span>
         <strong>{money(winnerWealth)}</strong>
       </div>
       <div className="standings-label">
-        <span>Classement final</span>
-        <span>Argent + propriétés</span>
+        <span>{t("Classement final", "Final standings")}</span>
+        <span>{t("Argent + propriétés", "Cash + properties")}</span>
       </div>
       <ol className="standings">
         {result.standings.map((standing, index) => (
@@ -184,17 +224,19 @@ function MatchResults({
         ))}
       </ol>
       <button type="button" className="button primary" onClick={onReplay}>
-        Rejouer avec des bots <Icon name="arrow" />
+        {t("Rejouer avec des bots", "Play again with bots")}
+        <Icon name="arrow" />
       </button>
       <button type="button" className="button secondary" onClick={onLeave}>
-        Nouvelle salle entre amis
+        {t("Nouvelle salle entre amis", "New room with friends")}
       </button>
       <button
         type="button"
         className="text-button"
         onClick={(event) => onJournal(event.currentTarget)}
       >
-        Revoir le carnet de voyage <Icon name="journal" size={16} />
+        {t("Voir le journal de la partie", "View game log")}
+        <Icon name="journal" size={16} />
       </button>
     </>
   );
@@ -208,8 +250,13 @@ function BoardFallback({
   onSelect: (tile: number) => void;
 }) {
   return (
-    <section className="flat-board" aria-label="Plateau accessible">
-      <p className="flat-board-note">Vue légère du plateau</p>
+    <section
+      className="flat-board"
+      aria-label={t("Plateau accessible", "Accessible board")}
+    >
+      <p className="flat-board-note">
+        {t("Vue légère du plateau", "Simple board view")}
+      </p>
       {BOARD.map((tile) => (
         <button
           type="button"
@@ -217,7 +264,7 @@ function BoardFallback({
           style={{ "--tile-color": tileColor(tile.index) } as CSSProperties}
           onClick={() => onSelect(tile.index)}
         >
-          <span>{TILE_NAMES[tile.index]}</span>
+          <span>{tileName(tile.index)}</span>
           <b>
             {state && getProperty(state, tile.index)?.owner != null
               ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
@@ -235,41 +282,77 @@ function eventText(event: GameEvent, state: PublicState): string | null {
   const name =
     "seat" in event
       ? (state.players.find((player) => player.seat === event.seat)?.name ??
-        "Un joueur")
+        t("Un joueur", "A player"))
       : "";
   switch (event.type) {
     case "DiceRolled":
-      return `${name} lance ${event.dice[0]} + ${event.dice[1]}${event.isDouble ? " · double !" : ""}`;
+      return t(
+        `${name} lance ${event.dice[0]} + ${event.dice[1]}${event.isDouble ? " · double !" : ""}`,
+        `${name} rolls ${event.dice[0]} + ${event.dice[1]}${event.isDouble ? " · doubles!" : ""}`,
+      );
     case "PropertyBought":
-      return `${name} achète ${TILE_NAMES[event.tile]} · ${money(event.amount)}`;
+      return t(
+        `${name} achète ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} buys ${tileName(event.tile)} · ${money(event.amount)}`,
+      );
     case "PropertyUpgraded":
-      return `${name} construit à ${TILE_NAMES[event.tile]} · ${LEVEL_NAMES[event.level]}`;
+      return t(
+        `${name} construit à ${tileName(event.tile)} · ${levelName(event.level)}`,
+        `${name} builds in ${tileName(event.tile)} · ${levelName(event.level)}`,
+      );
     case "BoughtOut":
-      return `${name} rachète ${TILE_NAMES[event.tile]} · ${money(event.amount)}`;
+      return t(
+        `${name} rachète ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} buys out ${tileName(event.tile)} · ${money(event.amount)}`,
+      );
     case "PropertySold":
-      return `${name} vend ${TILE_NAMES[event.tile]} · ${money(event.amount)}`;
+      return t(
+        `${name} vend ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} sells ${tileName(event.tile)} · ${money(event.amount)}`,
+      );
     case "RentPaid":
-      return `${name} paie ${money(event.amount)} à ${state.players.find((player) => player.seat === event.owner)?.name}`;
+      return t(
+        `${name} paie ${money(event.amount)} à ${state.players.find((player) => player.seat === event.owner)?.name}`,
+        `${name} pays ${money(event.amount)} to ${state.players.find((player) => player.seat === event.owner)?.name}`,
+      );
     case "SalaryPaid":
-      return `${name} reçoit ${money(event.amount)} au départ`;
+      return t(
+        `${name} reçoit ${money(event.amount)} au départ`,
+        `${name} receives ${money(event.amount)} at Start`,
+      );
     case "CardDrawn":
-      return `${name} tire « ${CARD_NAMES[event.card] ?? event.card} »`;
+      return t(
+        `${name} tire « ${cardName(event.card)} »`,
+        `${name} draws “${cardName(event.card)}”`,
+      );
     case "CardUsed":
-      return `${name} joue « ${CARD_NAMES[event.card] ?? event.card} »`;
+      return t(
+        `${name} joue « ${cardName(event.card)} »`,
+        `${name} plays “${cardName(event.card)}”`,
+      );
     case "PlayerBankrupt":
-      return `${name} fait faillite`;
+      return t(`${name} fait faillite`, `${name} goes bankrupt`);
     case "SentToIsland":
-      return `${name} séjourne sur l’île`;
+      return t(`${name} séjourne sur l’île`, `${name} arrives on the island`);
     case "LeftIsland":
-      return `${name} quitte l’île`;
+      return t(`${name} quitte l’île`, `${name} leaves the island`);
     case "ChampionshipChanged":
       return event.host
-        ? `Festival à ${TILE_NAMES[event.host.tile]} · loyers ×${event.host.multiplier}`
+        ? t(
+            `Festival à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
+            `Festival in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
+          )
         : null;
     case "MoneyTransferred":
-      return `${event.from === null ? "La banque" : state.players.find((player) => player.seat === event.from)?.name} verse ${money(event.amount)} à ${event.to === null ? "la banque" : state.players.find((player) => player.seat === event.to)?.name}`;
+      return t(
+        `${event.from === null ? "La banque" : state.players.find((player) => player.seat === event.from)?.name} verse ${money(event.amount)} à ${event.to === null ? "la banque" : state.players.find((player) => player.seat === event.to)?.name}`,
+        `${event.from === null ? "The bank" : state.players.find((player) => player.seat === event.from)?.name} pays ${money(event.amount)} to ${event.to === null ? "the bank" : state.players.find((player) => player.seat === event.to)?.name}`,
+      );
     case "GameOver":
-      return `${state.players.find((player) => player.seat === event.winner)?.name} remporte la partie`;
+      return t(
+        `${state.players.find((player) => player.seat === event.winner)?.name} remporte la partie`,
+        `${state.players.find((player) => player.seat === event.winner)?.name} wins the game`,
+      );
     default:
       return null;
   }
@@ -305,12 +388,14 @@ function TileInspector({
           {TILE_ICONS[tile.kind]}
         </span>
         <div>
-          <span className="small-label">Case {index + 1} / 32</span>
-          <h3 id="inspector-title">{TILE_NAMES[index]}</h3>
+          <span className="small-label">
+            {t(`Case ${index + 1} / 32`, `Space ${index + 1} / 32`)}
+          </span>
+          <h3 id="inspector-title">{tileName(index)}</h3>
         </div>
       </div>
       <label className="sr-only" htmlFor="tile-inspection">
-        Explorer une case
+        {t("Explorer une case", "Inspect a space")}
       </label>
       <select
         id="tile-inspection"
@@ -320,7 +405,7 @@ function TileInspector({
       >
         {BOARD.map((item) => (
           <option key={item.index} value={item.index}>
-            {item.index + 1}. {TILE_NAMES[item.index]}
+            {item.index + 1}. {tileName(item.index)}
           </option>
         ))}
       </select>
@@ -332,26 +417,30 @@ function TileInspector({
                 <span style={{ color: PLAYER_COLORS[owner.seat] }}>
                   {PLAYER_SYMBOLS[owner.seat]}
                 </span>{" "}
-                {owner.name} · {LEVEL_NAMES[property.level]}
+                {owner.name} · {levelName(property.level)}
               </>
             ) : (
-              "Disponible à l’achat"
+              t("Disponible à l’achat", "Available to buy")
             )}
           </div>
           <dl className="property-numbers">
             <div>
-              <dt>Terrain</dt>
+              <dt>{t("Terrain", "Land")}</dt>
               <dd>{money(tilePrice(index) ?? 0)}</dd>
             </div>
             <div>
-              <dt>{owner ? "Loyer actuel" : "Loyer terrain"}</dt>
+              <dt>
+                {owner
+                  ? t("Loyer actuel", "Current rent")
+                  : t("Loyer terrain", "Base rent")}
+              </dt>
               <dd>{money(rent ?? 0)}</dd>
             </div>
           </dl>
           {(state.championshipHost?.tile === index ||
             state.festivalTiles.includes(index)) && (
             <p className="festival-badge">
-              ★ Festival · loyer ×
+              {t("★ Festival · loyer ×", "★ Festival · rent ×")}
               {state.championshipHost?.tile === index
                 ? state.championshipHost.multiplier
                 : 2}
@@ -361,16 +450,34 @@ function TileInspector({
       ) : (
         <p className="tile-rule">
           {tile.kind === "start"
-            ? `Recevez ${money(state.config.startSalary)} en passant par le départ.`
+            ? t(
+                `Recevez ${money(state.config.startSalary)} en passant par le départ.`,
+                `Receive ${money(state.config.startSalary)} when passing Start.`,
+              )
             : tile.kind === "island"
-              ? "Un double ou le paiement de la traversée vous permet de repartir."
+              ? t(
+                  "Un double ou le paiement de la traversée vous permet de repartir.",
+                  "Roll doubles or pay the fare to leave.",
+                )
               : tile.kind === "championship"
-                ? "Installez un festival dans l’une de vos villes pour multiplier ses loyers."
+                ? t(
+                    "Installez un festival dans l’une de vos villes pour multiplier ses loyers.",
+                    "Host a festival in one of your cities to multiply its rent.",
+                  )
                 : tile.kind === "world-tour"
-                  ? "Au prochain tour, choisissez une destination plutôt que de lancer les dés."
+                  ? t(
+                      "Au prochain tour, choisissez une destination plutôt que de lancer les dés.",
+                      "On your next turn, choose a destination instead of rolling.",
+                    )
                   : tile.kind === "chance"
-                    ? "Piochez une carte. Fortune, voyage ou surprise au programme."
-                    : "La taxe est calculée selon votre fortune."}
+                    ? t(
+                        "Piochez une carte. Fortune, voyage ou surprise au programme.",
+                        "Draw a card and follow its instructions.",
+                      )
+                    : t(
+                        "La taxe est calculée selon votre fortune.",
+                        "Tax is based on your net worth.",
+                      )}
         </p>
       )}
     </section>
@@ -404,19 +511,22 @@ function RandomnessPanel({
       <details className="proof-panel" open={expanded}>
         <summary>
           <span className="proof-indicator" />
-          Dés cryptographiques serveur
+          {t("Dés cryptographiques serveur", "Server-generated dice")}
           <span>↗</span>
         </summary>
         <div className="proof-body">
           <p>
-            Chaque lancer utilise de nouveaux octets aléatoires générés par le
-            serveur Cloudflare. Chaque face a une chance sur six, avec la même
-            méthode pour les quatre joueurs. Aucun avantage payant ne modifie
-            les dés.
+            {t(
+              "Chaque lancer utilise de nouveaux octets aléatoires générés par le serveur Cloudflare. Chaque face a une chance sur six, avec la même méthode pour les quatre joueurs. Aucun avantage payant ne modifie les dés.",
+              "Each roll uses fresh random bytes generated by the Cloudflare server. Each face has a one-in-six chance, using the same method for all four players. Paid bonuses cannot change the dice.",
+            )}
           </p>
           {proof && (
             <p className="proof-result">
-              Dernier lancer : {proof.dice[0]} + {proof.dice[1]}
+              {t(
+                `Dernier lancer : ${proof.dice[0]} + ${proof.dice[1]}`,
+                `Last roll: ${proof.dice[0]} + ${proof.dice[1]}`,
+              )}
             </p>
           )}
         </div>
@@ -429,23 +539,28 @@ function RandomnessPanel({
         <span
           className={`proof-indicator ${proof?.verified ? "verified" : ""}`}
         />
-        {proof?.verified ? "Dernier lancer vérifié" : "Dés vérifiables · drand"}
+        {proof?.verified
+          ? t("Dernier lancer vérifié", "Last roll verified")
+          : t("Dés vérifiables · drand", "Verifiable dice · drand")}
         <span>↗</span>
       </summary>
       <div className="proof-body">
         <p>
-          Un signal public futur est choisi avant de connaître son résultat. Le
-          serveur vérifie sa signature, puis transforme les octets en deux dés
-          sans biais de modulo.
+          {t(
+            "Un signal public futur est choisi avant de connaître son résultat. Le serveur vérifie sa signature, puis transforme les octets en deux dés sans biais de modulo.",
+            "A future public beacon round is chosen before its result is known. The server verifies the signature and derives two dice without modulo bias.",
+          )}
         </p>
         {commitment && (
           <dl>
             <div>
-              <dt>Tour fixé</dt>
-              <dd>{commitment.round ?? "Crypto serveur"}</dd>
+              <dt>{t("Tour fixé", "Committed round")}</dt>
+              <dd>
+                {commitment.round ?? t("Crypto serveur", "Server randomness")}
+              </dd>
             </div>
             <div>
-              <dt>Contexte</dt>
+              <dt>{t("Contexte", "Context")}</dt>
               <dd className="proof-value">{commitment.context}</dd>
             </div>
           </dl>
@@ -453,18 +568,28 @@ function RandomnessPanel({
         {proof && (
           <>
             <p className="proof-result">
-              Dés : {proof.dice[0]} + {proof.dice[1]} ·{" "}
+              {t(
+                `Dés : ${proof.dice[0]} + ${proof.dice[1]}`,
+                `Dice: ${proof.dice[0]} + ${proof.dice[1]}`,
+              )}{" "}
+              ·{" "}
               {proof.verified
-                ? "Signature vérifiée par le serveur"
-                : "Source cryptographique serveur"}
+                ? t(
+                    "Signature vérifiée par le serveur",
+                    "Signature verified by the server",
+                  )
+                : t(
+                    "Source cryptographique serveur",
+                    "Server cryptographic source",
+                  )}
             </p>
             {proof.randomness && (
               <label>
-                Aléa public
+                {t("Aléa public", "Public randomness")}
                 <input
                   readOnly
                   value={proof.randomness}
-                  aria-label="Aléa public drand"
+                  aria-label={t("Aléa public drand", "Public drand randomness")}
                 />
               </label>
             )}
@@ -474,7 +599,10 @@ function RandomnessPanel({
                 <input
                   readOnly
                   value={proof.signature}
-                  aria-label="Signature du signal drand"
+                  aria-label={t(
+                    "Signature du signal drand",
+                    "drand beacon signature",
+                  )}
                 />
               </label>
             )}
@@ -487,20 +615,24 @@ function RandomnessPanel({
                 )
               }
             >
-              Copier la preuve <Icon name="copy" size={15} />
+              {t("Copier la preuve", "Copy proof")}
+              <Icon name="copy" size={15} />
             </button>
             <button
               type="button"
               className="text-button proof-download"
               onClick={downloadProof}
             >
-              Télécharger la preuve ↓
+              {t("Télécharger la preuve ↓", "Download proof ↓")}
             </button>
           </>
         )}
         {!commitment && (
           <p className="field-note">
-            La preuve apparaîtra après le premier lancer.
+            {t(
+              "La preuve apparaîtra après le premier lancer.",
+              "The proof appears after the first roll.",
+            )}
           </p>
         )}
         <a
@@ -508,7 +640,7 @@ function RandomnessPanel({
           target="_blank"
           rel="noreferrer"
         >
-          Comprendre drand ↗
+          {t("Comprendre drand ↗", "About drand ↗")}
         </a>
       </div>
     </details>
@@ -528,56 +660,69 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
       onClose={onClose}
     >
       <div className="help-top">
-        <h2>Votre premier tour</h2>
+        <h2>{t("Votre premier tour", "How to play")}</h2>
         <button
           type="button"
           className="icon-button"
-          aria-label="Fermer les règles"
+          aria-label={t("Fermer les règles", "Close rules")}
           onClick={onClose}
         >
           <Icon name="close" />
         </button>
       </div>
-      <p>La fortune se construit une adresse après l’autre.</p>
+      <p>
+        {t(
+          "Une partie à quatre, avec des amis ou des bots.",
+          "Four players, with friends or bots.",
+        )}
+      </p>
       <ol className="rules-list">
         <li>
-          <b>Lancez et voyagez</b>
+          <b>{t("Lancez et voyagez", "Roll and move")}</b>
           <span>
-            Deux dés vous déplacent. Un double vous offre un nouveau lancer si
-            cette option est activée ; trois doubles vous envoient sur l’île.
+            {t(
+              "Deux dés vous déplacent. Un double vous offre un nouveau lancer si cette option est activée ; trois doubles vous envoient sur l’île.",
+              "Move using two dice. Doubles grant another roll when that rule is enabled; three doubles send you to the island.",
+            )}
           </span>
         </li>
         <li>
-          <b>Achetez et construisez</b>
+          <b>{t("Achetez et construisez", "Buy and build")}</b>
           <span>
-            Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer
-            ; les collections de villes et les festivals l’augmentent.
+            {t(
+              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes et les festivals l’augmentent.",
+              "Choose land or a building. Other players pay rent when they land there; complete city groups and festivals increase the rent.",
+            )}
           </span>
         </li>
         <li>
-          <b>Gardez une réserve</b>
+          <b>{t("Gardez une réserve", "Keep cash in reserve")}</b>
           <span>
-            Un rachat peut renverser la partie. Vendez des propriétés si vous
-            devez payer plus que votre trésorerie.
+            {t(
+              "Un rachat peut renverser la partie. Vendez des propriétés si vous devez payer plus que votre trésorerie.",
+              "A buyout can change ownership. Sell properties if a payment exceeds your cash.",
+            )}
           </span>
         </li>
         <li>
-          <b>Visez la victoire</b>
+          <b>{t("Visez la victoire", "Winning the game")}</b>
           <span>
-            Dernier joueur debout, trois collections complètes, une ligne
-            complète ou les quatre stations : plusieurs routes mènent à la
-            victoire selon les réglages. À la fin du temps, la fortune totale
-            départage les joueurs.
+            {t(
+              "Dernier joueur debout, trois collections complètes, une ligne complète ou les quatre stations : plusieurs routes mènent à la victoire selon les réglages. À la fin du temps, la fortune totale départage les joueurs.",
+              "Win by being the last player standing, completing three city groups, owning a whole side or all four resorts, depending on the room settings. When time runs out, highest net worth wins.",
+            )}
           </span>
         </li>
       </ol>
       <p className="field-note">
-        Tous les joueurs ont les mêmes règles. Aucun bonus payant. Les valeurs
-        de départ sont celles fournies ; cette première version conserve une
-        économie de loyers à ajuster.
+        {t(
+          "Tous les joueurs ont les mêmes règles. Aucun bonus payant. Les valeurs de départ sont celles fournies ; cette première version conserve une économie de loyers à ajuster.",
+          "The same rules apply to every player, with no paid bonuses. Starting values follow the selected settings; prototype rents are still being tuned.",
+        )}
       </p>
       <button type="button" className="button primary" onClick={onClose}>
-        C’est parti <Icon name="arrow" />
+        {t("C’est parti", "Got it")}
+        <Icon name="arrow" />
       </button>
     </dialog>
   );
@@ -607,7 +752,7 @@ function MatchClock({
     <time
       className="match-clock"
       dateTime={`PT${seconds}S`}
-      title="Temps de partie restant"
+      title={t("Temps de partie restant", "Time remaining")}
     >
       {text}
     </time>
@@ -664,15 +809,17 @@ function MatchView({
     (player) => player.seat === credentials.seat,
   );
   const diceToolLabel =
-    config.randomnessMode === "drand" ? "Dés et preuve" : "À propos des dés";
+    config.randomnessMode === "drand"
+      ? t("Dés et preuve", "Dice and proof")
+      : t("À propos des dés", "About the dice");
   const toolsTitle =
     tool === "journal"
-      ? "Carnet de voyage"
+      ? t("Carnet de voyage", "Game log")
       : tool === "proof"
         ? diceToolLabel
         : tool === "view"
-          ? "Vue et animations"
-          : "Votre salle";
+          ? t("Vue et animations", "View and animation")
+          : t("Votre salle", "Your room");
   const latestAction = history
     .map((event) => eventText(event, game))
     .filter((text): text is string => text !== null)
@@ -736,7 +883,7 @@ function MatchView({
             fallback={
               <div className="scene-loading">
                 <span className="spinner" />
-                Votre plateau prend place…
+                {t("Votre plateau prend place…", "Loading board…")}
               </div>
             }
           >
@@ -755,7 +902,7 @@ function MatchView({
       <header className="match-topbar">
         <Logo small />
         <div className="match-time">
-          <span>Manche {game.round}</span>
+          <span>{t(`Manche ${game.round}`, `Round ${game.round}`)}</span>
           <MatchClock
             deadline={game.matchDeadline}
             finished={game.status === "finished"}
@@ -766,25 +913,28 @@ function MatchView({
           role="status"
           title={
             room.connection === "online"
-              ? "Connecté à votre salle"
-              : "Reconnexion à la salle"
+              ? t("Connecté à votre salle", "Connected to your room")
+              : t("Reconnexion à la salle", "Reconnecting to the room")
           }
         >
           <span className="connection-dot" data-state={room.connection} />
           {room.connection === "online"
-            ? "En ligne"
+            ? t("En ligne", "Online")
             : room.connection === "offline"
-              ? "Hors ligne"
-              : "Reconnexion…"}
+              ? t("Hors ligne", "Offline")
+              : t("Reconnexion…", "Reconnecting…")}
         </span>
       </header>
 
-      <nav className="game-tools" aria-label="Outils de la partie">
+      <nav
+        className="game-tools"
+        aria-label={t("Outils de la partie", "Game tools")}
+      >
         <button
           type="button"
           className="game-tool-button"
-          aria-label="Carnet de voyage"
-          title="Carnet de voyage"
+          aria-label={t("Carnet de voyage", "Game log")}
+          title={t("Carnet de voyage", "Game log")}
           aria-expanded={tool === "journal"}
           onClick={(event) => showTool("journal", event.currentTarget)}
         >
@@ -806,8 +956,8 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label="Explorer le plateau"
-          title="Explorer le plateau"
+          aria-label={t("Explorer le plateau", "Inspect the board")}
+          title={t("Explorer le plateau", "Inspect the board")}
           aria-expanded={inspectorOpen}
           onClick={(event) => {
             overlayTrigger.current = event.currentTarget;
@@ -820,8 +970,8 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label="Vue et animations"
-          title="Vue et animations"
+          aria-label={t("Vue et animations", "View and animation")}
+          title={t("Vue et animations", "View and animation")}
           aria-expanded={tool === "view"}
           onClick={(event) => showTool("view", event.currentTarget)}
         >
@@ -830,8 +980,11 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label="Inviter et voir les réglages"
-          title="Inviter et voir les réglages"
+          aria-label={t(
+            "Inviter et voir les réglages",
+            "Invite and view settings",
+          )}
+          title={t("Inviter et voir les réglages", "Invite and view settings")}
           aria-expanded={tool === "room"}
           onClick={(event) => showTool("room", event.currentTarget)}
         >
@@ -840,8 +993,8 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label="Comment jouer"
-          title="Comment jouer"
+          aria-label={t("Comment jouer", "How to play")}
+          title={t("Comment jouer", "How to play")}
           onClick={onHelp}
         >
           <Icon name="help" size={18} />
@@ -849,8 +1002,16 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={fullscreen ? "Quitter le plein écran" : "Plein écran"}
-          title={fullscreen ? "Quitter le plein écran" : "Plein écran"}
+          aria-label={
+            fullscreen
+              ? t("Quitter le plein écran", "Exit fullscreen")
+              : t("Plein écran", "Fullscreen")
+          }
+          title={
+            fullscreen
+              ? t("Quitter le plein écran", "Exit fullscreen")
+              : t("Plein écran", "Fullscreen")
+          }
           onClick={toggleFullscreen}
         >
           <Icon name="fullscreen" size={17} />
@@ -858,15 +1019,18 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label="Quitter la partie"
-          title="Quitter la partie"
+          aria-label={t("Quitter la partie", "Leave game")}
+          title={t("Quitter la partie", "Leave game")}
           onClick={onLeave}
         >
           <Icon name="exit" size={18} />
         </button>
       </nav>
 
-      <section className="player-roster" aria-label="Joueurs de la partie">
+      <section
+        className="player-roster"
+        aria-label={t("Joueurs de la partie", "Players")}
+      >
         {game.players.map((player) => {
           const active =
             decidingSeat === player.seat && game.status === "active";
@@ -892,12 +1056,12 @@ function MatchView({
                   <strong>{player.name}</strong>
                   <span>
                     {player.seat === credentials.seat
-                      ? "Vous"
+                      ? t("Vous", "You")
                       : player.control === "bot"
                         ? "Bot"
                         : presence?.online
-                          ? "En ligne"
-                          : "Absent"}
+                          ? t("En ligne", "Online")
+                          : t("Absent", "Away")}
                   </span>
                 </div>
                 <div className="player-cash">
@@ -909,30 +1073,41 @@ function MatchView({
                 <p>
                   <span>
                     {player.bankrupt
-                      ? "Faillite"
-                      : `${player.properties.length} ville${player.properties.length > 1 ? "s" : ""}`}
+                      ? t("Faillite", "Bankrupt")
+                      : t(
+                          `${player.properties.length} ville${player.properties.length > 1 ? "s" : ""}`,
+                          `${player.properties.length} ${player.properties.length === 1 ? "city" : "cities"}`,
+                        )}
                   </span>
-                  <span title="Argent et valeur des propriétés">
-                    Fortune {money(netWorth(game, player.seat))}
+                  <span
+                    title={t(
+                      "Argent et valeur des propriétés",
+                      "Cash and property value",
+                    )}
+                  >
+                    {t(
+                      `Fortune ${money(netWorth(game, player.seat))}`,
+                      `Net worth ${money(netWorth(game, player.seat))}`,
+                    )}
                   </span>
                 </p>
               </div>
               {active && (
                 <span className="active-marker">
                   {player.seat === credentials.seat
-                    ? "Votre décision"
-                    : "À son tour"}
+                    ? t("Votre décision", "Your turn")
+                    : t("À son tour", "Their turn")}
                 </span>
               )}
               {player.heldCards.length > 0 && (
                 <span
                   className="player-held-cards"
-                  title={player.heldCards
-                    .map((card) => CARD_NAMES[card])
-                    .join(" · ")}
+                  title={player.heldCards.map(cardName).join(" · ")}
                 >
-                  {player.heldCards.length} carte
-                  {player.heldCards.length > 1 ? "s" : ""}
+                  {t(
+                    `${player.heldCards.length} carte${player.heldCards.length > 1 ? "s" : ""}`,
+                    `${player.heldCards.length} card${player.heldCards.length === 1 ? "" : "s"}`,
+                  )}
                 </span>
               )}
             </motion.article>
@@ -984,7 +1159,7 @@ function MatchView({
             ref={inspectorRef}
             key="inspector"
             className="inspector-popover"
-            aria-label="Inspection du plateau"
+            aria-label={t("Inspection du plateau", "Board inspection")}
             initial={reducedMotion ? false : { opacity: 0, x: 8 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0 }}
@@ -993,7 +1168,7 @@ function MatchView({
             <button
               type="button"
               className="popover-close icon-button"
-              aria-label="Fermer l’inspection"
+              aria-label={t("Fermer l’inspection", "Close inspection")}
               onClick={closeTools}
             >
               <Icon name="close" size={16} />
@@ -1021,7 +1196,7 @@ function MatchView({
               <button
                 type="button"
                 className="icon-button"
-                aria-label="Fermer les outils"
+                aria-label={t("Fermer les outils", "Close tools")}
                 onClick={closeTools}
               >
                 <Icon name="close" size={17} />
@@ -1031,8 +1206,14 @@ function MatchView({
               <div className="journal">
                 <p className="held-cards-note">
                   {ownPlayer?.heldCards.length
-                    ? `Vos cartes : ${ownPlayer.heldCards.map((card) => CARD_NAMES[card]).join(" · ")}`
-                    : "Toutes les actions récentes de la partie."}
+                    ? t(
+                        `Vos cartes : ${ownPlayer.heldCards.map(cardName).join(" · ")}`,
+                        `Your cards: ${ownPlayer.heldCards.map(cardName).join(" · ")}`,
+                      )
+                    : t(
+                        "Toutes les actions récentes de la partie.",
+                        "Recent game actions.",
+                      )}
                 </p>
                 <ol>
                   {history
@@ -1048,7 +1229,12 @@ function MatchView({
                     ))}
                 </ol>
                 {!latestAction && (
-                  <p>Votre aventure commence ici. Lancez les dés !</p>
+                  <p>
+                    {t(
+                      "Lancez les dés pour commencer.",
+                      "Roll the dice to start.",
+                    )}
+                  </p>
                 )}
               </div>
             )}
@@ -1061,8 +1247,9 @@ function MatchView({
             )}
             {tool === "view" && (
               <div className="view-settings">
+                <LanguagePicker />
                 <label htmlFor="animation-speed">
-                  Vitesse des animations
+                  {t("Vitesse des animations", "Animation speed")}
                   <select
                     id="animation-speed"
                     value={speed}
@@ -1072,9 +1259,15 @@ function MatchView({
                       )
                     }
                   >
-                    <option value={1}>1× · Prendre le temps</option>
-                    <option value={1.5}>1,5× · Classique</option>
-                    <option value={2}>2× · Partie rapide</option>
+                    <option value={1}>
+                      {t("1× · Prendre le temps", "1× · Normal")}
+                    </option>
+                    <option value={1.5}>
+                      {t("1,5× · Classique", "1.5× · Faster")}
+                    </option>
+                    <option value={2}>
+                      {t("2× · Partie rapide", "2× · Fast")}
+                    </option>
                   </select>
                 </label>
                 <label className="checkbox-label">
@@ -1085,14 +1278,14 @@ function MatchView({
                       director.setReducedMotion(event.target.checked)
                     }
                   />
-                  Réduire les animations
+                  {t("Réduire les animations", "Reduce motion")}
                 </label>
                 <div className="zoom-control">
-                  <span>Taille du plateau</span>
+                  <span>{t("Taille du plateau", "Board size")}</span>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label="Dézoomer le plateau"
+                    aria-label={t("Dézoomer le plateau", "Zoom out")}
                     disabled={zoom <= 0.8}
                     onClick={() => onZoom(Math.max(0.8, zoom - 0.1))}
                   >
@@ -1103,12 +1296,12 @@ function MatchView({
                     className="button secondary"
                     onClick={() => onZoom(1)}
                   >
-                    Recentrer
+                    {t("Recentrer", "Reset view")}
                   </button>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label="Zoomer le plateau"
+                    aria-label={t("Zoomer le plateau", "Zoom in")}
                     disabled={zoom >= 1.3}
                     onClick={() => onZoom(Math.min(1.3, zoom + 0.1))}
                   >
@@ -1121,13 +1314,15 @@ function MatchView({
                   disabled={!busy}
                   onClick={director.skip}
                 >
-                  Terminer l’animation en cours
+                  {t("Terminer l’animation en cours", "Skip current animation")}
                 </button>
               </div>
             )}
             {tool === "room" && (
               <div className="room-tool">
-                <span className="small-label">Code de votre salle</span>
+                <span className="small-label">
+                  {t("Code de votre salle", "Room code")}
+                </span>
                 <div className="room-tool-code">
                   <strong>{credentials.roomCode}</strong>
                   <button
@@ -1136,11 +1331,16 @@ function MatchView({
                     onClick={() => void copyRoom()}
                   >
                     <Icon name={copied ? "check" : "copy"} size={16} />
-                    {copied ? "Invitation copiée" : "Copier l’invitation"}
+                    {copied
+                      ? t("Invitation copiée", "Invite copied")
+                      : t("Copier l’invitation", "Copy invite")}
                   </button>
                 </div>
                 <p className="field-note">
-                  Les réglages sont fixés pour toute la durée de cette partie.
+                  {t(
+                    "Les réglages sont fixés pour toute la durée de cette partie.",
+                    "Settings are fixed for the duration of this game.",
+                  )}
                 </p>
                 <RoomSettings config={config} disabled onChange={() => {}} />
               </div>
@@ -1151,7 +1351,11 @@ function MatchView({
 
       <div className="match-caption">
         <span>
-          {latestAction ?? "Bienvenue autour du plateau. Bon voyage !"}
+          {latestAction ??
+            t(
+              "La partie commence. Lancez les dés.",
+              "Game started. Roll the dice.",
+            )}
         </span>
         <button
           type="button"
@@ -1159,12 +1363,15 @@ function MatchView({
           disabled={!busy}
           onClick={director.skip}
         >
-          {busy ? "Passer l’animation ↗" : ""}
+          {busy ? t("Passer l’animation ↗", "Skip animation ↗") : ""}
         </button>
       </div>
       {debug && (
         <div id="frame-monitor" className="frame-monitor">
-          Scène au repos · rendu à la demande
+          {t(
+            "Scène au repos · rendu à la demande",
+            "Scene idle · on-demand rendering",
+          )}
         </div>
       )}
     </>
@@ -1172,6 +1379,7 @@ function MatchView({
 }
 
 function App() {
+  useLocale();
   const initialCode =
     new URLSearchParams(window.location.search).get("room")?.toUpperCase() ??
     "";
@@ -1222,12 +1430,22 @@ function App() {
     const cleanName = name.trim();
     const code = joinCode.trim().toUpperCase();
     if (!cleanName) {
-      setFormError("Choisissez un nom pour prendre place sur le plateau.");
+      setFormError(
+        t(
+          "Choisissez un nom pour prendre place sur le plateau.",
+          "Enter a player name.",
+        ),
+      );
       document.getElementById("player-name")?.focus();
       return;
     }
     if (join && !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(code)) {
-      setFormError("Le code de salle contient six lettres ou chiffres.");
+      setFormError(
+        t(
+          "Le code de salle contient six lettres ou chiffres.",
+          "Room codes contain six letters or digits.",
+        ),
+      );
       return;
     }
     entering.current = true;
@@ -1252,7 +1470,10 @@ function App() {
       setFormError(
         error instanceof Error
           ? error.message
-          : "Impossible d’ouvrir la partie. Réessayez.",
+          : t(
+              "Impossible d’ouvrir la partie. Réessayez.",
+              "Could not open the game. Try again.",
+            ),
       );
     } finally {
       entering.current = false;
@@ -1293,18 +1514,19 @@ function App() {
             <Logo small={Boolean(isGame)} />
           </span>
           <div className="topbar-right">
-            <span className="prototype-tag">Premier voyage · prototype</span>
+            <span className="prototype-tag">Prototype</span>
+            <LanguagePicker />
             <button
               type="button"
               className="text-button help-button"
               onClick={() => setHelpOpen(true)}
             >
               <Icon name="help" size={18} />
-              <span>Comment jouer</span>
+              <span>{t("Comment jouer", "How to play")}</span>
             </button>
             {credentials && (
               <button type="button" className="text-button" onClick={leave}>
-                Quitter
+                {t("Quitter", "Leave")}
               </button>
             )}
           </div>
@@ -1314,25 +1536,26 @@ function App() {
         <section className="welcome-grid">
           <div className="welcome-copy">
             <span className="travel-stamp">
-              <Icon name="flag" size={17} /> 4 joueurs. Une grande aventure.
+              <Icon name="people" size={17} />
+              {t("4 places · amis ou bots", "4 seats · friends or bots")}
             </span>
-            <h1>
-              Le monde
-              <br />
-              est à vous<span className="title-period">.</span>
-            </h1>
+            <h1>{t("Nouvelle partie", "New game")}</h1>
             <p className="welcome-intro">
-              Achetez des villes, faites grandir votre empire et bousculez vos
-              amis. Les dés décident. Vous faites le reste.
+              {t(
+                "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
+                "Buy the cities you land on, build and collect rent.",
+              )}
             </p>
             <div className="welcome-form">
-              <label htmlFor="player-name">Votre nom de joueur</label>
+              <label htmlFor="player-name">
+                {t("Votre nom de joueur", "Player name")}
+              </label>
               <input
                 id="player-name"
                 value={name}
                 maxLength={24}
                 autoComplete="nickname"
-                placeholder="Comment vous appelle-t-on ?"
+                placeholder={t("Votre pseudo", "Your nickname")}
                 onChange={(event) => setName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void enter(true);
@@ -1349,7 +1572,9 @@ function App() {
                 ) : (
                   <Icon name="dice" size={24} />
                 )}
-                {loading ? "Préparation du plateau…" : "Jouer avec 3 bots"}
+                {loading
+                  ? t("Préparation du plateau…", "Preparing board…")
+                  : t("Jouer avec 3 bots", "Play with 3 bots")}
                 <Icon name="arrow" />
               </button>
               <button
@@ -1359,10 +1584,12 @@ function App() {
                 onClick={() => void enter(false)}
               >
                 <Icon name="people" />
-                Créer une salle entre amis
+                {t("Créer une salle entre amis", "Create a room with friends")}
               </button>
               <div className="join-form">
-                <label htmlFor="room-code">Vous avez un code ?</label>
+                <label htmlFor="room-code">
+                  {t("Vous avez un code ?", "Have a room code?")}
+                </label>
                 <div>
                   <input
                     id="room-code"
@@ -1385,7 +1612,8 @@ function App() {
                     disabled={loading}
                     onClick={() => void enter(false, true)}
                   >
-                    Rejoindre <Icon name="arrow" size={18} />
+                    {t("Rejoindre", "Join")}
+                    <Icon name="arrow" size={18} />
                   </button>
                 </div>
               </div>
@@ -1396,55 +1624,34 @@ function App() {
               )}
               <RoomSettings config={config} onChange={setConfig} />
             </div>
-            <div className="fair-play">
-              <Icon name="check" size={18} />
-              <span>
-                Aucun avantage payant.
-                <br />
-                <strong>Les mêmes chances pour tout le monde.</strong>
-              </span>
-            </div>
           </div>
           <div className="welcome-world">
-            <div className="world-note">
-              <span>
-                Un petit monde.
-                <br />
-                <b>De grandes ambitions.</b>
-              </span>
-              <span className="note-arrow" aria-hidden="true">
-                ↙
-              </span>
-            </div>
-            <SceneBoundary
-              fallback={<BoardFallback state={null} onSelect={setSelected} />}
-            >
-              <Suspense
-                fallback={
-                  <div className="scene-loading">
-                    <span className="spinner" />
-                    Construction de votre petit monde…
-                  </div>
-                }
+            <div className="welcome-board-preview">
+              <SceneBoundary
+                fallback={<BoardFallback state={null} onSelect={setSelected} />}
               >
-                <BoardScene
-                  state={null}
-                  selected={null}
-                  onSelect={setSelected}
-                  preview
-                />
-              </Suspense>
-            </SceneBoundary>
-            <div className="world-caption">
-              <span className="mini-pawn">●</span>
-              <span className="mini-pawn blue">◆</span>
-              <span className="mini-pawn purple">▲</span>
-              <span className="mini-pawn green">■</span>
-              <p>
-                Un plateau 3D original.
-                <br />
-                <b>Une vraie partie dès maintenant.</b>
-              </p>
+                <Suspense
+                  fallback={
+                    <div className="scene-loading">
+                      <span className="spinner" />
+                      {t("Chargement du plateau…", "Loading board…")}
+                    </div>
+                  }
+                >
+                  <BoardScene
+                    state={null}
+                    selected={null}
+                    onSelect={setSelected}
+                    preview
+                  />
+                </Suspense>
+              </SceneBoundary>
+            </div>
+            <div className="welcome-quick-settings">
+              <span className="welcome-setup-title">
+                {t("Réglages rapides", "Quick settings")}
+              </span>
+              <QuickSettings config={config} onChange={setConfig} />
             </div>
           </div>
         </section>
@@ -1452,18 +1659,19 @@ function App() {
         <section className="room-lobby">
           <div className="room-lobby-main">
             <span className="travel-stamp">
-              <Icon name="people" size={17} /> Le départ approche
+              <Icon name="people" size={17} />
+              {t("Salle de jeu", "Game room")}
             </span>
-            <h1>
-              Prenez place<span className="title-period">.</span>
-            </h1>
+            <h1>{t("Joueurs", "Players")}</h1>
             <p className="welcome-intro">
-              Invitez vos amis avec ce code. Les places libres peuvent être
-              confiées à des bots.
+              {t(
+                "Invitez vos amis avec ce code. Les places libres peuvent être confiées à des bots.",
+                "Invite friends using this code. Bots can fill empty seats.",
+              )}
             </p>
             <div className="room-code-block">
               <div>
-                <span>Code de la salle</span>
+                <span>{t("Code de la salle", "Room code")}</span>
                 <strong>{credentials.roomCode}</strong>
               </div>
               <button
@@ -1472,7 +1680,9 @@ function App() {
                 onClick={() => void copyRoom()}
               >
                 <Icon name={copied ? "check" : "copy"} />
-                {copied ? "Lien copié" : "Copier l’invitation"}
+                {copied
+                  ? t("Lien copié", "Link copied")
+                  : t("Copier l’invitation", "Copy invite")}
               </button>
             </div>
             <div className="lobby-seats">
@@ -1495,7 +1705,10 @@ function App() {
                       <strong>
                         {player?.control
                           ? player.name
-                          : `Place ${seat + 1} disponible`}
+                          : t(
+                              `Place ${seat + 1} disponible`,
+                              `Seat ${seat + 1} available`,
+                            )}
                       </strong>
                       <span>
                         {player?.control === "bot"
@@ -1503,16 +1716,22 @@ function App() {
                           : player?.control === "human"
                             ? player.online
                               ? seat === credentials.seat
-                                ? "Vous êtes prêt"
-                                : "En ligne"
-                              : "Connexion…"
+                                ? t("Vous êtes prêt", "You are ready")
+                                : t("En ligne", "Online")
+                              : t("Connexion…", "Connecting…")
                             : fillBots
-                              ? "Un bot prendra place au départ"
-                              : "En attente d’un ami"}
+                              ? t(
+                                  "Un bot prendra place au départ",
+                                  "A bot will join when the game starts",
+                                )
+                              : t(
+                                  "En attente d’un ami",
+                                  "Waiting for a friend",
+                                )}
                       </span>
                     </div>
                     {seat === room.lobby?.hostSeat && (
-                      <span className="host-label">Hôte</span>
+                      <span className="host-label">{t("Hôte", "Host")}</span>
                     )}
                   </div>
                 );
@@ -1526,7 +1745,10 @@ function App() {
                     checked={fillBots}
                     onChange={(event) => setFillBots(event.target.checked)}
                   />
-                  Compléter les places libres avec des bots
+                  {t(
+                    "Compléter les places libres avec des bots",
+                    "Fill empty seats with bots",
+                  )}
                 </label>
                 <button
                   type="button"
@@ -1542,8 +1764,8 @@ function App() {
                 >
                   <Icon name="dice" />
                   {room.pending
-                    ? "Le plateau se prépare…"
-                    : "Démarrer la partie"}
+                    ? t("Le plateau se prépare…", "Preparing board…")
+                    : t("Démarrer la partie", "Start game")}
                   <Icon name="arrow" />
                 </button>
               </>
@@ -1551,7 +1773,10 @@ function App() {
             {!host && (
               <p className="waiting-host">
                 <span className="spinner" />
-                L’hôte prépare votre voyage.
+                {t(
+                  "En attente du démarrage par l’hôte.",
+                  "Waiting for the host to start.",
+                )}
               </p>
             )}
             <RoomSettings
@@ -1569,8 +1794,10 @@ function App() {
             />
             {host && settingsDirty && (
               <p className="field-note settings-unsaved" role="status">
-                Enregistrez vos réglages ci-dessus avant de démarrer. Vos
-                modifications restent un brouillon jusque-là.
+                {t(
+                  "Enregistrez vos réglages ci-dessus avant de démarrer. Vos modifications restent un brouillon jusque-là.",
+                  "Save your settings before starting. Changes remain a draft until saved.",
+                )}
               </p>
             )}
           </div>
@@ -1580,7 +1807,9 @@ function App() {
             >
               <Suspense
                 fallback={
-                  <div className="scene-loading">Préparation du plateau…</div>
+                  <div className="scene-loading">
+                    {t("Préparation du plateau…", "Preparing board…")}
+                  </div>
                 }
               >
                 <BoardScene
@@ -1618,8 +1847,8 @@ function App() {
         <div className="lobby-connection" role="status">
           <span className="connection-dot" data-state={room.connection} />
           {room.connection === "online"
-            ? "Salle connectée"
-            : "Connexion à votre salle…"}
+            ? t("Salle connectée", "Room connected")
+            : t("Connexion à votre salle…", "Connecting to your room…")}
         </div>
       )}
       {room.error && (
@@ -1631,13 +1860,13 @@ function App() {
               className="text-button"
               onClick={room.reconnect}
             >
-              Reconnecter
+              {t("Reconnecter", "Reconnect")}
             </button>
           )}
           <button
             type="button"
             className="icon-button"
-            aria-label="Fermer le message"
+            aria-label={t("Fermer le message", "Dismiss message")}
             onClick={room.clearError}
           >
             <Icon name="close" size={18} />
@@ -1647,8 +1876,8 @@ function App() {
       <Help open={helpOpen} onClose={() => setHelpOpen(false)} />
       {!isGame && (
         <footer className="lobby-footer">
-          <span>Une vraie partie, des règles communes.</span>
-          <span>Sans achat. Sans avantage. Bon voyage.</span>
+          <span>{t("4 joueurs · 32 cases", "4 players · 32 spaces")}</span>
+          <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
         </footer>
       )}
     </main>

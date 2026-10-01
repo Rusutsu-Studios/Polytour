@@ -332,6 +332,36 @@ advantages, but fair dice alone do not establish balanced strategy. Landmarks ca
 also earn less than some modified hotels. Further playtests should tune these
 values after the remaining reference prices and rents are captured.
 
+## Welcome, sliders and two languages — 1 October 2026
+
+French and English now cover the interface, board labels, decisions, all 16 card
+titles/effects, tools, standings and known connection errors. Language is stored
+locally and can change during a game without a new socket or a room action.
+Existing player names and unknown server explanations remain verbatim; already
+displayed errors retain their original text. See [LANGUAGES.md](LANGUAGES.md).
+
+The welcome screen removes the promotional headings, repeated fairness slogans
+and decorative pawn captions. A compact setup sheet offers solo play, create and
+join, while the board occupies the remaining area. Three visible native sliders
+share starting cash, salary and festivals with the complete settings dialog.
+Duration and decision time also have discrete sliders beside their presets.
+
+- 112 unit/Worker tests, TypeScript and Biome pass.
+- 15 local browser scenarios pass, including the two new language/sliders flows,
+  a full four-seat game, reconnect and the existing illustrated decision/card flows.
+- French and English welcome views are inspected at 1280×720, 1440×900 and
+  1920×1080. Bounds checks cover the board and sliders, including after resizing
+  from the largest viewport. Keyboard operation and reduced motion are preserved.
+- The manual design scan retains three known CSS warnings (roof triangles and
+  fallback tile color bands), plus 359 token advisories. It is not a zero-warning
+  claim. Copy scanners find no phrase/structure/silhouette issues; their prose
+  cadence/condensation checks are unsuitable for short UI labels and the expressly
+  requested deletion of marketing text. The actual rendered copy is reviewed.
+
+No rules, protocol, storage schema, billing or Durable Object behavior changes in
+this follow-up. These checks use local rooms or intercepted failures, never remote
+Durable Objects. Static Preview publication does not restore the exhausted quota.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,

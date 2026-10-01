@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDirector } from "../director/director.js";
+import { useLocale } from "../i18n.js";
 import Icon from "./Icon.js";
 import RoomSettingsFields, { type RoomSettingsProps } from "./RoomSettings.js";
 import "./SettingsDialog.css";
@@ -12,6 +13,7 @@ import "./SettingsDialog.css";
 // FIRST VIEWPORT: Two clear columns of controls with a persistent close action.
 // FORM: The requested central game popup extends the existing toy-board world.
 export default function SettingsDialog(props: RoomSettingsProps) {
+  const { t } = useLocale();
   const { disabled = false, save } = props;
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -44,8 +46,12 @@ export default function SettingsDialog(props: RoomSettingsProps) {
         onClick={() => setOpen(true)}
       >
         <Icon name="settings" size={21} />
-        <span className="settings-trigger-title">Réglages de la partie</span>
-        <span className="settings-trigger-hint">Personnaliser</span>
+        <span className="settings-trigger-title">
+          {t("Réglages de la partie", "Game settings")}
+        </span>
+        <span className="settings-trigger-hint">
+          {t("Personnaliser", "Customize")}
+        </span>
         <Icon name="arrow" size={17} />
       </button>
       {open &&
@@ -81,12 +87,12 @@ export default function SettingsDialog(props: RoomSettingsProps) {
               <header className="settings-dialog-ribbon">
                 <Icon name="settings" size={28} />
                 <h2 ref={headingRef} id={`${id}-heading`} tabIndex={-1}>
-                  Réglages de la partie
+                  {t("Réglages de la partie", "Game settings")}
                 </h2>
                 <button
                   type="button"
                   className="settings-dialog-close"
-                  aria-label="Fermer les réglages"
+                  aria-label={t("Fermer les réglages", "Close settings")}
                   onClick={dismiss}
                 >
                   <Icon name="close" size={25} />
@@ -95,10 +101,19 @@ export default function SettingsDialog(props: RoomSettingsProps) {
               <div className="settings-dialog-body">
                 <p id={`${id}-description`} className="settings-dialog-note">
                   {disabled
-                    ? "Consultez les règles de cette salle."
+                    ? t(
+                        "Consultez les règles de cette salle.",
+                        "View this room’s rules.",
+                      )
                     : save
-                      ? "Enregistrez vos changements pour la salle."
-                      : "Choisissez les règles de votre prochain voyage."}
+                      ? t(
+                          "Enregistrez vos changements pour la salle.",
+                          "Save your changes for this room.",
+                        )
+                      : t(
+                          "Choisissez les règles de votre prochaine partie.",
+                          "Choose the rules for your next game.",
+                        )}
                 </p>
                 <RoomSettingsFields {...props} />
               </div>
@@ -110,10 +125,10 @@ export default function SettingsDialog(props: RoomSettingsProps) {
                 >
                   {!save && !disabled && <Icon name="check" size={19} />}
                   {disabled
-                    ? "Revenir au plateau"
+                    ? t("Revenir au plateau", "Back to the board")
                     : save
-                      ? "Fermer les réglages"
-                      : "Appliquer les réglages"}
+                      ? t("Fermer les réglages", "Close settings")
+                      : t("Appliquer les réglages", "Apply settings")}
                 </button>
               </footer>
             </motion.div>

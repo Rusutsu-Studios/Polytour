@@ -61,10 +61,14 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.getByLabel("Votre nom de joueur").fill("Raimundo");
   await page.locator(".settings-trigger").click();
   await expect(
-    page.getByRole("slider", { name: "Capital de départ", exact: true }),
+    page
+      .locator(".settings-dialog")
+      .getByRole("slider", { name: "Capital de départ", exact: true }),
   ).toHaveValue("2000000");
   await expect(
-    page.getByRole("slider", { name: "Salaire au départ", exact: true }),
+    page
+      .locator(".settings-dialog")
+      .getByRole("slider", { name: "Salaire au départ", exact: true }),
   ).toHaveValue("400000");
   await expect(
     page
@@ -72,7 +76,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
       .getByRole("radio", { name: "120 min" }),
   ).toBeChecked();
   await expect(
-    page.getByRole("slider", { name: "Festivals initiaux", exact: true }),
+    page
+      .locator(".settings-dialog")
+      .getByRole("slider", { name: "Festivals initiaux", exact: true }),
   ).toHaveValue("3");
   await expect(
     page
@@ -87,9 +93,11 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
   await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(page.locator(".room-settings")).not.toContainText("drand");
-  await expect(page.locator(".room-settings")).toContainText(
-    "aléa cryptographique généré directement sur Cloudflare",
+  await expect(
+    page.locator(".settings-dialog .room-settings"),
+  ).not.toContainText("drand");
+  await expect(page.locator(".settings-dialog .room-settings")).toContainText(
+    "Les deux dés sont tirés sur le serveur avec un générateur cryptographique.",
   );
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
@@ -718,7 +726,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
   await page.locator(".settings-trigger").click();
   // No intermediate blur or render wait: switching from a slider to the exact
   // field must preserve the entered amount, even while a draft sync is pending.
-  const capital = page.getByRole("slider", {
+  const capital = page.locator(".settings-dialog").getByRole("slider", {
     name: "Capital de départ",
     exact: true,
   });
@@ -728,7 +736,9 @@ test("desktop room controls fit, create and join preserve the host settings", as
     .getByRole("spinbutton", { name: "Capital de départ : valeur exacte" })
     .fill("2000000");
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(page.locator(".room-settings")).not.toContainText("drand");
+  await expect(
+    page.locator(".settings-dialog .room-settings"),
+  ).not.toContainText("drand");
   await page
     .getByRole("group", { name: "Durée de partie" })
     .getByRole("radio", { name: "20 min", exact: true })
@@ -842,7 +852,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
     .getByRole("group", { name: "Temps de décision" })
     .getByRole("radio", { name: "60 s", exact: true })
     .check();
-  const capital = page.getByRole("slider", {
+  const capital = page.locator(".settings-dialog").getByRole("slider", {
     name: "Capital de départ",
     exact: true,
   });

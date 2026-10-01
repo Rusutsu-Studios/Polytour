@@ -7,6 +7,7 @@ import {
   director,
   useDirector,
 } from "../director/director.js";
+import { useLocale } from "../i18n.js";
 import { PLAYER_COLORS, PLAYER_SYMBOLS } from "./board-display.js";
 import { type CardDraw, describeCard } from "./chance-display.js";
 import "./CardMoment.css";
@@ -15,6 +16,7 @@ type Moment = { event: CardDraw; context: AnimationContext; readingMs: number };
 
 /** One bounded reading moment in the Director queue, before the card's effects. */
 export default function CardMoment() {
+  const { t } = useLocale();
   const [moment, setMoment] = useState<Moment | null>(null);
   const finish = useRef<() => void>(() => {});
   const dialog = useRef<HTMLDialogElement>(null);
@@ -113,7 +115,8 @@ export default function CardMoment() {
             ?
           </span>
           <span>
-            Une surprise pour <strong>{player?.name ?? "un voyageur"}</strong>
+            {t("Carte Surprise", "Chance card")} ·{" "}
+            <strong>{player?.name ?? t("Joueur", "Player")}</strong>
           </span>
           <i aria-hidden="true">{PLAYER_SYMBOLS[event.seat]}</i>
         </header>
@@ -134,7 +137,7 @@ export default function CardMoment() {
             className="button blue chance-continue"
             onClick={() => finish.current()}
           >
-            Continuer <span aria-hidden="true">↗</span>
+            {t("Continuer", "Continue")} <span aria-hidden="true">↗</span>
           </button>
         </div>
         <div className="chance-reading" aria-hidden="true">

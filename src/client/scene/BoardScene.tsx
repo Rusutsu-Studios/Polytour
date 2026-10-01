@@ -11,14 +11,15 @@ import type {
 import { getProperty, propertyRent } from "../../shared/engine/index.js";
 import type { AnimationContext } from "../director/director.js";
 import { director } from "../director/director.js";
+import { type Locale, useLocale } from "../i18n.js";
 import {
   money,
   PLAYER_COLORS,
   PLAYER_SYMBOLS,
   pawnOffset,
   TILE_ICONS,
-  TILE_NAMES,
   tileColor,
+  tileName,
   tilePosition,
   tilePrice,
 } from "../ui/board-display.js";
@@ -54,7 +55,12 @@ function tileDepth(index: number) {
   return index % 8 === 0 ? 1.035 : 1.15;
 }
 
-function tileTexture(index: number, amount: number | null, rented: boolean) {
+function tileTexture(
+  index: number,
+  amount: number | null,
+  rented: boolean,
+  locale: Locale,
+) {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 640;
@@ -78,10 +84,10 @@ function tileTexture(index: number, amount: number | null, rented: boolean) {
   context.save();
   context.translate(256, 432);
   context.scale(1, 1.7);
-  const name = TILE_NAMES[index];
+  const name = tileName(index);
   context.font = "900 68px Arial, sans-serif";
   context.fillText(
-    name.toLocaleUpperCase("fr"),
+    name.toLocaleUpperCase(locale),
     0,
     amount === null ? -15 : -75,
     474,
@@ -91,7 +97,17 @@ function tileTexture(index: number, amount: number | null, rented: boolean) {
     context.fillText(money(amount), 0, 35, 450);
     context.font = "700 18px Segoe UI, sans-serif";
     context.fillStyle = "#4b5c62";
-    context.fillText(rented ? "LOYER" : "ACHAT", 0, 109);
+    context.fillText(
+      rented
+        ? locale === "fr"
+          ? "LOYER"
+          : "RENT"
+        : locale === "fr"
+          ? "ACHAT"
+          : "PRICE",
+      0,
+      109,
+    );
   }
   context.restore();
   if (tile.kind !== "city" && tile.kind !== "resort") {
@@ -149,9 +165,10 @@ function TileFace({
   onSelect: (tile: number) => void;
   preview?: boolean;
 }) {
+  const { locale } = useLocale();
   const texture = useMemo(
-    () => tileTexture(index, amount, rented),
-    [index, amount, rented],
+    () => tileTexture(index, amount, rented, locale),
+    [index, amount, rented, locale],
   );
   useEffect(() => () => texture.dispose(), [texture]);
   const [x, z] = tilePosition(index);

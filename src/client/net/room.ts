@@ -10,6 +10,7 @@ import type {
 } from "../../shared/protocol/index.js";
 import { PROTOCOL_VERSION } from "../../shared/protocol/index.js";
 import { director } from "../director/director.js";
+import { translate } from "../i18n.js";
 import { parseRoomResponse, RoomCredentialsSchema } from "./room-response.js";
 import { parseServerMessage } from "./server-message.js";
 
@@ -43,7 +44,10 @@ export async function enterRoom(
     });
   } catch {
     throw new Error(
-      "Impossible de joindre le serveur de jeu. Vérifiez votre connexion puis réessayez.",
+      translate(
+        "Impossible de joindre le serveur de jeu. Vérifiez votre connexion puis réessayez.",
+        "Unable to reach the game server. Check your connection and try again.",
+      ),
     );
   }
   const body = await parseRoomResponse(response);
@@ -120,7 +124,10 @@ export function useRoom(credentials: RoomCredentials | null) {
         } catch {
           incompatible = true;
           setError(
-            "La salle a envoyé une réponse incompatible. Actualisez la page pour reprendre votre place.",
+            translate(
+              "La salle a envoyé une réponse incompatible. Actualisez la page pour reprendre votre place.",
+              "The room sent an incompatible response. Refresh the page to return to your seat.",
+            ),
           );
           ws.close(1002, "Invalid room response");
           return;
@@ -131,7 +138,10 @@ export function useRoom(credentials: RoomCredentials | null) {
             if (message.protocolVersion !== PROTOCOL_VERSION) {
               incompatible = true;
               setError(
-                "Le jeu a été mis à jour. Actualisez la page pour retrouver votre salle.",
+                translate(
+                  "Le jeu a été mis à jour. Actualisez la page pour retrouver votre salle.",
+                  "The game has been updated. Refresh the page to return to your room.",
+                ),
               );
               ws.close();
               return;
@@ -185,19 +195,73 @@ export function useRoom(credentials: RoomCredentials | null) {
               if (requestTimer.current) clearTimeout(requestTimer.current);
             }
             if (message.type === "reject") {
-              const reasons: Record<string, string> = {
-                "decision-expired":
+              const reasons: Record<string, readonly [string, string]> = {
+                "decision-expired": [
                   "Le temps de décision est écoulé. Le jeu applique le choix automatique.",
-                "stale-state":
+                  "The decision time has expired. The game applies the automatic choice.",
+                ],
+                "stale-state": [
                   "La partie a avancé. Vos choix ont été actualisés, réessayez.",
-                "randomness-pending":
+                  "The game has moved on. Your choices have been updated; try again.",
+                ],
+                stale: [
+                  "La partie a avancé. Vos choix ont été actualisés, réessayez.",
+                  "The game has moved on. Your choices have been updated; try again.",
+                ],
+                "randomness-pending": [
                   "Le lancer attend son signal aléatoire. Patientez un instant.",
-                "not-host": "Seul l’hôte peut démarrer ou régler la partie.",
+                  "The roll is waiting for its random result. Wait a moment.",
+                ],
+                "not-host": [
+                  "Seul l’hôte peut démarrer ou régler la partie.",
+                  "Only the host can start the game or change its settings.",
+                ],
+                "host-only": [
+                  "Seul l’hôte peut démarrer ou régler la partie.",
+                  "Only the host can start the game or change its settings.",
+                ],
+                "game-not-started": [
+                  "La partie n’a pas encore commencé. Attendez le départ.",
+                  "The game has not started yet. Wait for the host to start it.",
+                ],
+                "game-already-started": [
+                  "La partie a déjà commencé. Les réglages sont fixés.",
+                  "The game has already started. Its settings are locked.",
+                ],
+                "four-players-required": [
+                  "Il faut quatre joueurs pour démarrer. Invitez vos amis ou complétez avec des bots.",
+                  "Four players are required. Invite friends or fill empty seats with bots.",
+                ],
+                "game-over": [
+                  "La partie est terminée. Revenez à l’accueil pour en créer une autre.",
+                  "The game has ended. Return to the home screen to create another.",
+                ],
+                "not-your-turn": [
+                  "Ce choix appartient à un autre joueur. Attendez votre tour.",
+                  "This decision belongs to another player. Wait for your turn.",
+                ],
+                "not-active-seat": [
+                  "Ce choix appartient à un autre joueur. Attendez votre tour.",
+                  "This decision belongs to another player. Wait for your turn.",
+                ],
+                "incompatible-saved-match": [
+                  "Cette partie sauvegardée utilise une version incompatible. Revenez à l’accueil pour créer une partie.",
+                  "This saved game uses an incompatible version. Return to the home screen to create a game.",
+                ],
+                "illegal-action": [
+                  "Ce choix n’est plus disponible. Vérifiez les actions proposées.",
+                  "This choice is no longer available. Check the available actions.",
+                ],
               };
+              const knownReason = reasons[message.reason];
               setError(
-                reasons[message.reason] ??
-                  message.message ??
-                  "Ce choix n’est plus disponible. Réessayez.",
+                knownReason
+                  ? translate(...knownReason)
+                  : (message.message ??
+                      translate(
+                        "Ce choix n’est plus disponible. Réessayez.",
+                        "This choice is no longer available. Try again.",
+                      )),
               );
             }
             break;
@@ -239,8 +303,14 @@ export function useRoom(credentials: RoomCredentials | null) {
           setConnection("offline");
           setError(
             event.reason === "Room expired"
-              ? "Cette salle a expiré. Revenez à l’accueil pour créer une partie."
-              : "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
+              ? translate(
+                  "Cette salle a expiré. Revenez à l’accueil pour créer une partie.",
+                  "This room has expired. Return to the home screen to create a game.",
+                )
+              : translate(
+                  "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
+                  "The room refused the connection. Refresh the page or return to the home screen.",
+                ),
           );
           return;
         }
@@ -253,7 +323,10 @@ export function useRoom(credentials: RoomCredentials | null) {
           );
         else
           setError(
-            "La salle ne répond pas. Reconnectez-vous ou revenez à l’accueil.",
+            translate(
+              "La salle ne répond pas. Reconnectez-vous ou revenez à l’accueil.",
+              "The room is not responding. Reconnect or return to the home screen.",
+            ),
           );
       });
       ws.addEventListener("error", () => {
@@ -276,7 +349,12 @@ export function useRoom(credentials: RoomCredentials | null) {
       connection !== "online" ||
       socket.current?.readyState !== WebSocket.OPEN
     ) {
-      setError("Connexion en cours. Attendez le retour de la salle.");
+      setError(
+        translate(
+          "Connexion en cours. Attendez le retour de la salle.",
+          "Connecting. Wait for the room to reconnect.",
+        ),
+      );
       return;
     }
     // React may not have rendered the disabled button yet after the first click.
@@ -291,7 +369,10 @@ export function useRoom(credentials: RoomCredentials | null) {
         pendingId.current = null;
         setPending(false);
         setError(
-          "Votre choix n’a pas été confirmé. La salle est actualisée ; vérifiez le plateau avant de rejouer.",
+          translate(
+            "Votre choix n’a pas été confirmé. La salle est actualisée ; vérifiez le plateau avant de rejouer.",
+            "Your choice was not confirmed. The room is being refreshed; check the board before playing again.",
+          ),
         );
         requestSync.current?.();
       }, 10_000);
