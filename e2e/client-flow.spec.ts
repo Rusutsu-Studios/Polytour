@@ -232,6 +232,11 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Terminer l’animation en cours" }),
   ).toBeDisabled();
+  // Keep the 2x setting regression above, then use the normal animation window
+  // for a real mouse hit-test. At 2x, the animation can finish between
+  // Playwright's stability check and pointer dispatch on software-rendered CI.
+  await page.getByLabel("Vitesse des animations").selectOption("1");
+  await expect(page.getByLabel("Vitesse des animations")).toHaveValue("1");
   await page.getByLabel("Réduire les animations").uncheck();
   await page.getByLabel("Vitesse des animations").press("Escape");
   await expect(
@@ -242,9 +247,22 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .poll(() => page.locator(".match-clock").innerText())
     .not.toBe(previousTime);
   await roll.click();
-  await page
-    .getByRole("button", { name: "Passer l’animation ↗", exact: true })
-    .click();
+  const skip = page.getByRole("button", {
+    name: "Passer l’animation ↗",
+    exact: true,
+  });
+  await expect(skip).toBeEnabled();
+  const receivesPointer = await skip.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+    return hit !== null && button.contains(hit);
+  });
+  expect(receivesPointer).toBe(true);
+  await skip.click();
+  await expect(skip).toHaveCount(0);
   await page
     .getByRole("button", { name: "Carnet de voyage", exact: true })
     .click();
