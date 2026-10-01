@@ -1,8 +1,10 @@
 # Tech stack and why
 
-Target: a **web-first** game (desktop + mobile browsers, installable as a PWA) that
-feels like a premium mobile board game. Pin exact versions at scaffold time and
-record them in `package.json`; this doc records the *choices* and the reasons.
+Target: a **desktop browser** property-board game, played on PC with a mouse and
+keyboard. A large isometric board and compact corner HUDs define the experience;
+mobile adaptation and PWA installation are optional future work. Pin exact
+versions at scaffold time and record them in `package.json`; this doc records the
+*choices* and the reasons.
 
 ## The picks
 
@@ -27,22 +29,35 @@ record them in `package.json`; this doc records the *choices* and the reasons.
 | Tests | **Vitest 4** + **`@cloudflare/vitest-plugin`**, **fast-check**, **Playwright** | Engine unit + property tests, DO tests inside `workerd`, end-to-end multi-tab games. | Jest (not supported for Workers). |
 | Lint/format | **Biome** | One fast tool for lint + format. | ESLint + Prettier (slower, more config). |
 | Package manager | **pnpm** | Fast, strict. | npm/yarn. |
+| Live dice entropy | **Worker Web Crypto** | Fresh cryptographically secure bytes for every roll, uniform rejection sampling, no network wait. | `Math.random`, client-chosen dice, a public deterministic seed. |
+| Legacy beacon compatibility | **drand-client** | Retained signature verification for saved drand rooms and compatibility tools; absent from normal new-room settings. | Breaking saved commitments or mislabelling server draws as publicly verified. |
+| Simulator runner | **tsx** (development only) | Runs the same TypeScript engine with Node, without a separate emit/build step. | A second implementation of the rules in a simulator. |
 | PWA | **vite-plugin-pwa** | Installable, offline shell, precached assets. | Hand-written service worker. |
+
+The playable prototype installs only the layers it uses. It keeps ordinary CSS
+and React state for this first HUD; Tailwind and Zustand remain planned rather
+than adding unused dependencies. Original scene geometry is generated in Three.js
+and does not require external glTF/drei/postprocessing assets yet. The prototype
+connection uses a small reconnecting WebSocket client with no offline intent queue;
+the planned `partysocket` replacement must preserve that behavior. See
+[RANDOMNESS.md](RANDOMNESS.md) for the CSPRNG rationale and saved drand-room compatibility.
 
 ## Key decision: 3D (R3F) vs 2D (PixiJS)
 
 **Recommendation: 3D with React Three Fiber.** The "wow" of Business Tour–style
 games comes from things that are cheap in 3D and expensive in 2D:
 
-- A tilted board you can dolly and orbit, with the camera following a pawn's hops.
+- An isometric board with a stable whole-board camera, dimensional buildings and
+  readable pawn hops; optional action shots return to that frame.
 - Buildings that physically rise out of tiles with real lighting and soft shadows.
 - Dice that tumble and land with contact shadows.
 - One set of models works at any resolution and camera angle — no redrawing sprites
   for every building level and rotation.
 
-Choose **PixiJS v8** instead only if the art direction becomes flat/illustrated or
-if the target is very low-end phones. That decision should be made in Phase 3 with
-a prototype on real devices, not in the abstract.
+Three.js remains the chosen renderer for the PC prototype. Reconsider **PixiJS v8**
+only if a future product decision deliberately changes the art direction to a
+flat illustration. Optional support for low-end phones does not determine the
+desktop renderer or block the current release.
 
 Keep WebGL 2 as the target. Three.js's WebGPU renderer can be evaluated later behind
 a flag; don't depend on it for launch.
@@ -51,19 +66,22 @@ a flag; don't depend on it for launch.
 
 | Budget | Target |
 | --- | --- |
-| Frame rate | 60 fps on a mid-range 2022 Android phone at quality tier "medium" |
+| Desktop viewport | 1280×720 minimum; review at 1440×900 and 1920×1080 as well |
+| Frame rate | Aim for 60 fps on a documented PC/GPU during active animation; record the measured hardware and result before claiming it |
 | Draw calls | < 150 in the main board view (instance tiles, houses, coins) |
 | Initial JS (lobby) | < 250 KB gzipped; 3D scene, Rapier, and audio are lazy chunks |
 | First match download | < 12 MB total (models + textures + audio) |
 | Per-file asset size | < 25 MiB (hard Workers Static Assets limit) |
-| Device pixel ratio | clamp to `[1, 2]` desktop, `[1, 1.5]` mobile |
+| Device pixel ratio | clamp to `[1, 2]` on desktop; tune against measured GPU cost |
 
 CI enforces the lobby JS budget and the per-file asset limit on every pull request
 (`pnpm check:bundle`, constants in `tools/ci/check-bundle-size.ts`); change the
 budget here and there together.
 
-Use drei's `<PerformanceMonitor>` to step quality down (shadows → bloom → DPR)
-automatically, and `@pmndrs/detect-gpu` to pick the initial tier.
+Use measured desktop scene cost to decide quality reductions (shadows → bloom →
+DPR). Drei's `<PerformanceMonitor>` and `@pmndrs/detect-gpu` remain planned helpers,
+not claims about dependencies already present. No physical phone frame-rate
+criterion is required for this prototype.
 
 ## Asset pipeline
 
@@ -74,9 +92,12 @@ automatically, and `@pmndrs/detect-gpu` to pick the initial tier.
    sprites with `audiosprite`.
 5. Fonts: one display face + one UI face, self-hosted `woff2`, subset.
 
-## Web-first, platform later
+## Desktop first, other platforms later
 
-- Ship as a responsive web app + PWA (landscape and portrait layouts, touch-first input).
-- Haptics via `navigator.vibrate` where supported (Android); silently skip elsewhere.
+- Ship the browser PC experience first: viewport-filling board, compact corner
+  information, keyboard-accessible decisions and overlays, mouse tile inspection.
+- Preserve best-effort narrow-screen behavior without making portrait or touch
+  design a desktop acceptance criterion. A dedicated mobile/PWA adaptation can
+  later add touch controls, audio unlocking and optional haptics.
 - If app-store presence is needed later, wrap the same build with **Capacitor**.
   Nothing in the stack blocks this — keep native-only features behind feature checks.

@@ -6,15 +6,21 @@ reads it directly, and Claude Code reads it through the `@AGENTS.md` import in
 CI fails if the import is missing.
 
 Polytour is a web-first, real-time multiplayer property-trading board game in the
-spirit of Business Tour / Modoo Marble (Monopoly-like, 2–4 players, ~20-minute
-matches). It runs entirely on Cloudflare: a Worker serves the SPA and API, and
+spirit of Business Tour / Modoo Marble (four-seat rooms, configurable 20/60/120-minute
+limits). The current target is desktop browsers with mouse and keyboard; mobile
+support is optional. It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: Phase 0 scaffold.** The React client, Worker, SQLite Durable Object
-> bindings, and local integration tests exist. The deterministic rules engine is the
-> next implementation phase. When you change commands or paths, update this file in
-> the same change.
+> **Status: first playable prototype.** Shared rules, four-seat private rooms,
+> server bots, persistence/reconnection, a Three.js board, and immediate server
+> Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
+> The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
+> 120 minutes. New rooms use staged hotels: buy up to three houses, then return
+> after a completed lap to upgrade an owned three-house city. Direct hotels are
+> an explicit custom exception; saved version-2 rooms retain their earlier rule.
+> Intermediate economy remains provisional. Keep these instructions
+> current when changing commands or paths.
 
 ## Read before working
 
@@ -26,6 +32,8 @@ a stylized 3D board with juicy, choreographed animations.
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Any client↔server message change |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Any rendering, VFX, sound, or UI motion work |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Picking the next task |
+| [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Dice, entropy, commitments and proof verification |
+| [docs/REFERENCE_PARITY.md](docs/REFERENCE_PARITY.md) | Confirmed values versus provisional balance |
 
 ## Stack (short version)
 
@@ -36,6 +44,10 @@ a stylized 3D board with juicy, choreographed animations.
   postprocessing (3D board), GSAP (3D/scene choreography), Motion (DOM/UI animation),
   Tailwind CSS v4, Zustand, Howler.js, `partysocket` (reconnecting WebSocket).
 - **Tooling:** pnpm, Biome, Vitest 4 + `@cloudflare/vitest-plugin`, fast-check, Playwright.
+
+The prototype uses Three.js/R3F, GSAP, Motion, ordinary CSS, React state, and a
+small reconnecting socket adapter. Drei, postprocessing, Tailwind, Zustand,
+Howler and partysocket remain planned; see TECH_STACK.md.
 
 ## Layout (planned — single package, one Worker, one deploy)
 
@@ -68,14 +80,17 @@ pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm run deploy     # build + wrangler deploy (bare `pnpm deploy` is a pnpm builtin)
 pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
-pnpm test:e2e       # Playwright on the production build (vite preview), desktop + phone
+pnpm test:e2e       # desktop UI plus production Worker/socket flows
                     # first run: pnpm exec playwright install chromium
 pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
+pnpm sim -- --games 1000 # deterministic bot simulations
+pnpm check:drand    # live future-round verification; local proof evidence
+pnpm verify:dice path/to/proof.json # independent beacon/dice verification
 ```
 
-`pnpm sim` and `pnpm db:migrate:local` are added with the rules engine and D1
-schema, respectively; do not imply that either exists before its phase.
+`pnpm db:migrate:local` remains planned with the D1 schema. Simulation and dice
+verification commands exist; local browser/proof evidence stays gitignored.
 
 ## Golden rules (architecture)
 
@@ -83,10 +98,12 @@ schema, respectively; do not imply that either exists before its phase.
    with the engine and broadcasts resulting *events*. Never trust client-side money,
    dice, positions, or turn order.
 2. **The engine is pure and deterministic.** `shared/engine` has no I/O, no
-   `Date.now()`, no `Math.random()`. Randomness comes from a seeded PRNG whose state
-   lives in the game state; time is passed in as input. Same inputs → same outputs.
+   `Date.now()`, no `Math.random()`. Live dice arrive through `EngineContext.dice`
+   from fresh server Web Crypto (or verified legacy drand). The private seeded PRNG handles shuffles and
+   reproducible simulation. Time is passed in as input. Same inputs → same outputs.
 3. **The RNG seed never leaves the server.** Clients receive dice results and card
-   draws as events, never the seed or the deck order.
+   draws as events, never the seed or the deck order. Public drand proofs after
+   beacon publication are separate from the private deck seed.
 4. **Events drive animation; snapshots drive recovery.** Clients animate the event
    stream in order. On join/reconnect they get a snapshot and snap the view to it.
    Public state only ever changes through the shared reducer `applyEvent`, on both
@@ -169,6 +186,11 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 
 ## Client & animation rules
 
+- The board owns the desktop viewport. Four compact player HUDs frame it at the
+  corners; the current choice sits near the lower center. Keep history, fairness
+  proofs and help behind secondary controls, and show city details on inspection.
+- Validate 1280×720, 1440×900 and 1920×1080 desktop layouts. Mobile is best effort
+  and must not force the desktop match into a dashboard or scrolling card stack.
 - Two animation systems with a hard boundary: **GSAP** for anything inside the R3F
   scene (camera, pawns, dice, buildings, particles) and for sequencing; **Motion** for
   DOM UI (HUD, dialogs, menus). Don't mix them on the same element.
@@ -204,8 +226,9 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - Engine/rules change → engine tests + a quick `pnpm sim` run to catch balance/termination regressions.
 - DO/protocol change → a `@cloudflare/vitest-plugin` test covering the message flow
   (connect → intent → broadcast, reconnect with `lastSeq`, alarm firing).
-- Visual change → run `pnpm dev` and check it in the browser at desktop and phone
-  width; check the FPS overlay (`?debug=1`) stays at 60 on the target device tier.
+- Visual change → check real browser rendering and gameplay at the three desktop
+  sizes above. Review keyboard focus, overlays and reduced motion. A 60 fps desktop
+  target requires evidence from the target hardware; emulation does not prove it.
 - Worker routing, `wrangler.jsonc`, or app shell change → `pnpm test:e2e`, and
   `pnpm check:wrangler` for `wrangler.jsonc`.
 

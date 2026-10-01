@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - 'codex/**'
   merge_group:
   workflow_dispatch:
 
@@ -69,6 +70,7 @@ jobs:
       # Engine tests and Worker/DO tests inside workerd. Vitest fails on
       # `.only` in CI and annotates failures on the diff.
       - run: pnpm test
+      - run: pnpm sim -- --games 100
 
   build:
     name: Build, budgets & deploy dry run
@@ -99,10 +101,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm exec playwright install --with-deps --only-shell chromium
-      # Builds, serves the production bundle with `vite preview` (Worker and
-      # Durable Objects in workerd), and smoke-tests it at desktop and phone
-      # sizes.
-      - run: pnpm test:e2e
+      # Production Worker/socket flows plus desktop client presentation tests.
+      # Live drand verification runs separately because it needs a public relay.
+      - run: pnpm test:e2e --grep-invert @live
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

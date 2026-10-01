@@ -1,12 +1,17 @@
-# Game design (rules v0.1)
+# Game design (new-room rules v0.3; v0.2 saved rooms retained)
 
-Polytour is a fast, aggressive property game for 2–4 players. Compared to classic
+Polytour is a fast, aggressive property game. This prototype uses four seats,
+with server bots filling empty places. Compared to classic
 Monopoly: a smaller board (32 tiles), bigger rents, **buyouts** (you can take an
 opponent's city), several **instant-win monopolies**, and a round limit so a match
-lasts ~20 minutes.
+has a configurable duration. The user's default is a two-hour maximum; instant
+wins and bankruptcies can end a match earlier.
 
-All numbers here are **starting values**. They live in `src/shared/board/` as config
+All numbers here are **prototype starting values**, not a verified reproduction
+of the reference game's current economy. They live in `src/shared/board/` as config
 and get tuned with the simulator (`pnpm sim`) — never hard-code them in logic.
+See [REFERENCE_PARITY.md](REFERENCE_PARITY.md) for the live comparison still needed
+to reproduce the requested reference values and room settings accurately.
 
 ## Design pillars and v1 boundaries
 
@@ -20,14 +25,17 @@ and get tuned with the simulator (`pnpm sim`) — never hard-code them in logic.
   out of scope: they slow a 20-minute match, are difficult to time out fairly, and
   make bots much weaker. Buyouts are the fast, public property-transfer mechanic.
 
-The server owns turn order, deck order, and all random draws. The rules below are
+The server owns turn order, deck order, and all random draws. Live dice come from
+fresh server Web Crypto for each new match, without an external beacon wait.
+Saved drand matches retain their committed-round mode. The private seeded PRNG is used for deck/turn-order shuffles
+and repeatable simulations. See [RANDOMNESS.md](RANDOMNESS.md). The rules below are
 written to be deterministic: when several legal targets are otherwise equivalent,
 the lowest tile index wins the tie.
 
 ## Match setup, laps, and rounds
 
 1. The server shuffles occupied seats with the match PRNG to create `turnOrder`.
-   Every player starts on Start with 1,500 cash, no property, no cards, and zero
+   Every player starts on Start with configured cash (default 2,000,000), no property, no cards, and zero
    completed laps. The first seat in `turnOrder` starts round 1.
 2. A **lap** is a clockwise crossing from tile 31 to tile 0. Crossing it immediately
    pays the Start salary and increments that player's lap count. Landing on Start by
@@ -38,8 +46,16 @@ the lowest tile index wins the tie.
 3. A **round** ends when every non-bankrupt seat that was still in `turnOrder` at
    the start of that round has completed one turn. Extra rolls from doubles remain
    part of that same turn. Bankrupt seats are skipped thereafter.
-4. The round-limit comparison happens only after round 20 completes and no instant
-   win has already been resolved on that final turn.
+4. The match's wall-clock deadline is `startedAt + timeLimitMinutes * 60,000`.
+   A persistent server alarm ends it at the configured 20/60/120-minute limit.
+   Pending landing effects and owed payments settle deterministically without a
+   new dice roll before highest net worth wins using the standings tie-breaks.
+   A separate round limit
+   applies to short tests/simulations; the timed preset uses a 10,000-round safety
+   cap. Twenty rounds are not labelled twenty minutes.
+5. Three initial festival cities are selected by the seeded shuffle by default.
+   Their visible ×2 rent effect uses the same maximum-only modifier rule as
+   country ownership and the single championship host. Festival count is configurable.
 
 > Mechanics are not protected by copyright, but names and art are trademarks. Board
 > theme, city names, card names, and visuals must be our own.
@@ -65,45 +81,64 @@ Corners at 0, 8, 16, 24. Each side has 7 tiles between corners. Prices rise cloc
 
 | Parameter | Value |
 | --- | --- |
-| Starting cash | 1,500 |
-| Salary for passing/landing on Start | 200 |
-| Players | 2–4 (bots fill empty seats) |
-| Round limit | 20 rounds (then highest net worth wins) |
+| Starting cash | 2,000,000 (configurable) |
+| Salary for passing/landing on Start | 400,000 (configurable) |
+| Players | 4 (bots can fill empty seats) |
+| Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
+| Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
+| Initial festivals | 3 (configurable); neutral city squares with ×2 rent |
 | Sell-back to bank | 50% of invested value |
 | Buyout price | 2× invested value (paid to owner) |
 
-**Country land prices:** A 60 · B 90 · C 120 · D 150 · E 180 · F 210 · G 240 · H 280
+**Tile-specific economy:** prices increase from 60,000 on the early French cities
+to 400,000 at Tokyo. Each city has independent land, house and hotel costs in
+`src/shared/board/city-economy.ts`. The actual first-city and Tokyo costs come from the
+supplied editor captures; intermediate costs and all rents are provisional.
 
-**Build levels** (cost and rent are multiples of the land price `L`):
+**Build levels** (each cost is incremental; rent is a provisional percentage of
+that tile's land price `L`):
 
 | Level | Name | Build cost | Rent | Notes |
 | --- | --- | --- | --- | --- |
-| 0 | Land | 1.0 × L | 0.2 × L | |
-| 1 | House | 0.5 × L | 0.6 × L | |
-| 2 | Villa | 0.5 × L | 1.4 × L | |
-| 3 | Hotel | 1.0 × L | 2.8 × L | Unlocked after your first lap |
-| 4 | Landmark | 1.5 × L | 4.0 × L | Only on your own city when you land on it at Hotel; **cannot be bought out** |
+| 0 | Land | Tile land price | 0.2 × L | |
+| 1 | House I | Tile house price | 0.6 × L | |
+| 2 | House II | Tile house price | 1.0 × L | |
+| 3 | House III | Tile house price | 1.4 × L | |
+| 4 | Hotel | Tile hotel price | 2.8 × L | Return to owned House III after a completed lap; direct-hotel setting is an exception |
+| 5 | Landmark | Tile landmark price | 4.0 × L | Only on your own Hotel; **cannot be bought out** |
 
-`invested value` is a pure function of a city's country and current level: the sum
+`invested value` is a pure function of a tile and current level: the sum
 of the build costs of every level from Land up to that level. It does not depend on
 what was actually paid, so a free Contractor level counts, a level destroyed by
 Earthquake no longer counts, and rent, tax, Championship effects, and buyout prices
-never count. A Villa, for example, has invested value `2.0 × L`; a Landmark `4.5 × L`.
+never count. The first city's Hotel has invested value 360,000 and Tokyo's 1,500,000.
 A resort's invested value is its price.
 
 **Integer money and rounding.** Money is always an integer. Coefficients are stored
-in config as integer percentages (e.g. Villa rent `140` = 1.4 × L) and evaluated
+   in config as integer percentages (e.g. House III rent `140` = 1.4 × L) and evaluated
 with integer arithmetic, never floating-point multiplication. Whenever a rule takes
 a fraction of an amount, charges to a player round **up** (tax, Audit, Coupon rent)
 and payouts to a player round **down** (sell-back refunds).
 
 On an unowned city, the active player may decline or buy it at any level from Land
 through their current unlock cap, paying every intervening cost in one transaction.
-On their own city, they may decline or raise it to any higher unlocked level in one
-transaction. House and Villa are unlocked from the start; Hotel unlocks after that
-player completes their first lap. Landmark is only available when that player lands
-on their own Hotel. An action is legal only when its full cost leaves the buyer with
+On their own city, they may decline or raise it to a higher unlocked level in one
+transaction. The three Houses are unlocked from the start. In new rooms, an initial
+purchase stops at House III even if the player has completed a lap. An owned city
+with fewer than three houses also stops at House III for that landing. Hotel is
+available on a later landing when the city already has three houses and the player
+has completed at least one lap. The explicit `hotelsDirectly` custom setting bypasses
+these hotel prerequisites. Landmark is only available when that player lands on
+their own Hotel. An action is legal only when its full cost leaves the buyer with
 cash of at least zero.
+
+This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
+Existing version-2 rooms keep `"legacy-lap"` (or an absent marker on older active
+saves), so their hotel still unlocks after a lap, including on initial purchase.
+The server loads both versions and cannot accept an internal rule marker through
+room settings. A stale pending choice cannot bypass the new cap. See
+[REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
+for the historical reference evidence and the retained Polytour lap condition.
 
 Owning every city of a country doubles the base rent of that country's Land through
 Hotel properties. It does not affect Landmark rent. Championship is a separate
@@ -113,9 +148,9 @@ whichever single modifier is larger.
 > **Open balance question.** With these numbers a Landmark (4.0 × L, no modifier)
 > earns less than a Hotel in a full country (5.6 × L) or a hosted Hotel (up to
 > 14 × L), so upgrading can lower rent; its only gain is buyout immunity. Keep the
-> rule for v0.1, but the simulator must report it (see below) before rents are tuned.
+> rule for this prototype, but the simulator must report it (see below) before rents are tuned.
 
-**Resorts:** price 200, no building. Rent by resorts owned: 1 → 50, 2 → 100, 3 → 200,
+**Resorts:** price 200,000, no building. Rent by resorts owned: 1 → 50,000, 2 → 100,000, 3 → 200,000,
 4 → instant win. Resorts are not cities: they cannot be bought out, hosted, targeted
 by Earthquake or Land Swap, or upgraded. The only ways a resort changes hands are
 buying it while unowned and its owner selling it to the bank.
@@ -127,7 +162,7 @@ buying it while unowned and its owner selling it to the bank.
   sends the pawn to tile 8 with `islandTurns = 0` and **ends the turn immediately**,
   forfeiting any pending doubles roll; it does not pass Start or resolve Island
   again. At the start of each trapped turn, the player chooses one of:
-  - **Pay 100** (legal only with at least 100 cash): released, then a normal roll.
+  - **Pay 100,000** (legal only with enough cash): released, then a normal roll.
     A double on that roll grants the usual extra roll.
   - **Escape roll** (free; also the timeout default): a double releases the pawn and
     those same dice move it — there is no second roll, and an escape roll never
@@ -145,11 +180,11 @@ buying it while unowned and its owner selling it to the bank.
   uses the larger of the Championship and full-country multiplier, never both.
 - **World Tour:** landing here **ends the turn immediately**, forfeiting any pending
   doubles roll, and gives that player a travel option for their next turn. At its
-  start they may pay 50 (legal only with at least 50 cash) to travel clockwise to
+  start they may pay 50,000 (legal only with enough cash) to travel clockwise to
   any other tile, resolving the destination normally; otherwise, or on timeout, they
   roll normally. The option expires after that choice. A World Tour move neither
   counts as a dice roll nor creates a doubles bonus.
-- **Tax:** pay 10% of your total invested property value, rounded up (minimum 50).
+- **Tax:** pay 10% of your total invested property value, rounded up (minimum 50,000).
 - **Chance:** draw from a 16-card deck. When its draw pile is empty, shuffle the
   discard pile to make the next draw pile; held keep cards remain unavailable.
 
@@ -220,10 +255,10 @@ lands it on World Tour, even in the middle of a doubles streak.
 ## Win conditions and standings
 
 1. **Last standing** — every other player is bankrupt.
-2. **Triple Monopoly** — own every city of any 3 countries.
-3. **Line Monopoly** — own every city and resort on one side of the board.
+2. **Triple Monopoly** — own every city of any 3 countries; enabled by default, configurable.
+3. **Line Monopoly** — own every city and resort on one side; enabled by default, configurable.
 4. **Resort Monopoly** — own all 4 resorts.
-5. **Round limit** — after round 20, highest net worth (cash + invested value) wins.
+5. **Time limit / round cap** — highest net worth (cash + invested value) wins.
 
 Check instant wins after any change of ownership (purchase, buyout, Land Swap, sale)
 and after any forced-sell or bankruptcy phase has completed, never while a
@@ -252,9 +287,9 @@ properties to *block* a monopoly, which is where the tension comes from.
 | Stranded | Go to Island | |
 | Jet Set | Move to World Tour | |
 | Stadium Call | Move to Championship | |
-| Windfall | Collect 150 | |
-| Parking Fine | Pay 100 | |
-| Birthday | Collect 50 from every other non-bankrupt player | |
+| Windfall | Collect 150,000 | |
+| Parking Fine | Pay 100,000 | |
+| Birthday | Collect 50,000 from every other non-bankrupt player | |
 | Audit | Pay 10% of your cash, rounded up | |
 | Guardian Angel | Cancel one rent payment | ✅ |
 | Coupon | Halve one rent payment | ✅ |
@@ -263,7 +298,7 @@ properties to *block* a monopoly, which is where the tension comes from.
 | Detour | Move back 3 tiles | |
 | Contractor | Upgrade one of your cities by 1 level for free | |
 | Jailbreak | Everyone on the Island is released | |
-| Charity | Give 100 to the poorest player | |
+| Charity | Give 100,000 to the poorest player | |
 
 ### Chance resolution details
 
@@ -304,15 +339,14 @@ they are legal and relevant.
 
 ## Dice
 
-- 2d6 from the server's seeded PRNG. A double on a normal roll (including the roll
+- Uniform 2d6 from server-injected entropy. A double on a normal roll (including the roll
   after paying to leave Island) grants another roll after the current landing is
   fully resolved, unless that landing ended the turn (Island, World Tour). Island
   escape rolls never grant one. A third consecutive double sends the player to
   Island instead of moving; the counter resets whenever the turn ends.
-- **Experimental (Phase 5): power gauge.** Hold-and-release a gauge that biases the
-  roll toward low (2–6), mid (5–9) or high (8–12) totals. Server applies a weighted
-  distribution — the client only sends which band the gauge stopped in. Ship only if
-  playtests show it adds skill without feeling rigged.
+- **No biased power gauge.** The user explicitly requires genuinely random dice.
+  Holding a button, account history, spending, cosmetics, or bot difficulty must
+  never change the dice distribution. Any future throwing gesture is cosmetic.
 
 ## Timers (defaults)
 
@@ -352,7 +386,7 @@ export function applyAction(
   state: GameState,
   seat: Seat,
   action: Action,
-  ctx: { now: number },
+  ctx: { now: number; dice?: readonly [number, number] },
 ): { ok: true; state: GameState; events: GameEvent[] } | { ok: false; error: RuleError };
 
 export function applyTimeout(state: GameState, ctx: { now: number }): { state: GameState; events: GameEvent[] };
@@ -379,6 +413,12 @@ true:
   `BoughtOut`, `PropertySold`) are not duplicated by `MoneyTransferred`, which is
   only for movements without their own event (tax, card effects, Island and World
   Tour fees).
+
+`SalaryPaid.amount` is the single accounting input: the reducer adds it to the
+player's existing cash and subtracts it from the bank ledger. The redundant
+absolute `cash` field remains on the wire for previously opened clients and
+stored-event compatibility; the current reducer ignores it. This adopts only the
+salary-calculation improvement from PR #12 into the complete prototype engine.
 
 Property test: for any action sequence,
 `toPublic(next) == events.reduce(applyEvent, toPublic(prev))`.
@@ -408,7 +448,7 @@ Change one parameter at a time and commit the sim output alongside the config ch
 
 ## Modes (roadmap)
 
-- **Private room** (friends, room code, bots optional) — Phase 4.
+- **Private room** (friends, room code, bots optional) — implemented in this prototype.
 - **Quick match** (2p / 4p, matchmaking) — Phase 4.
 - **Ranked** (rating per mode) — Phase 7.
 - **2v2 teams** (shared win conditions, can't pay rent to teammates) — Phase 7.

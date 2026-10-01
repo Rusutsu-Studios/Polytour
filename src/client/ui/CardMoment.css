@@ -1,0 +1,129 @@
+.chance-dialog {
+  width: min(540px, calc(100vw - 48px));
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  overflow: visible;
+  background: transparent;
+  color: #203c42;
+}
+.chance-dialog::backdrop {
+  background: rgb(18 48 64 / 55%);
+}
+.chance-card {
+  overflow: hidden;
+  border-radius: 22px;
+  background: #fff8e9;
+  box-shadow:
+    0 12px 0 rgb(58 83 85 / 22%),
+    0 28px 70px rgb(12 45 53 / 36%);
+  border: 4px solid #fffdf6;
+}
+.chance-card header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 10px 22px;
+  background: var(--chance-player);
+  color: #fff;
+  font-size: 15px;
+}
+.chance-card header strong {
+  display: block;
+  font-size: 19px;
+}
+.chance-card :where(header) i {
+  margin-left: auto;
+  font-size: 24px;
+  font-style: normal;
+}
+.chance-seal {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid rgb(255 255 255 / 70%);
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 900;
+}
+.chance-art {
+  display: block;
+  width: 100%;
+  height: clamp(150px, 27vh, 250px);
+  object-fit: contain;
+  background: #fff8e9;
+}
+.chance-copy {
+  padding: 8px 32px 24px;
+  text-align: center;
+}
+.chance-copy h2 {
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.15;
+  margin: 0 0 10px;
+}
+.chance-impact {
+  display: block;
+  font-size: 24px;
+  line-height: 1.25;
+  color: #26764c;
+}
+.chance-card[data-tone="cost"] .chance-impact {
+  color: #a53221;
+}
+.chance-card[data-tone="travel"] .chance-impact {
+  color: #236cce;
+}
+.chance-card[data-tone="keep"] .chance-impact {
+  color: #8151b5;
+}
+.chance-copy p {
+  min-height: 44px;
+  margin: 14px auto 20px;
+  max-width: 410px;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.chance-continue {
+  min-width: 220px;
+  justify-content: center;
+  border-radius: 14px;
+  color: #fffaf0;
+  background: #236cce;
+  box-shadow: 0 4px 0 #194d99;
+}
+.chance-continue:hover:not(:disabled) {
+  background: #195dab;
+}
+.chance-continue span {
+  margin-left: 14px;
+}
+.chance-reading {
+  height: 5px;
+  background: #efe5cc;
+}
+.chance-reading i {
+  display: block;
+  height: 100%;
+  background: var(--chance-player);
+  transform-origin: left;
+}
+@media (max-height: 760px) {
+  .chance-card header {
+    min-height: 54px;
+  }
+  .chance-copy {
+    padding: 6px 28px 18px;
+  }
+  .chance-copy p {
+    margin: 10px auto 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chance-reading {
+    display: none;
+  }
+}

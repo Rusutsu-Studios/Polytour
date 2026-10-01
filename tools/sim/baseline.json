@@ -1,0 +1,20 @@
+{
+  "games": 10000,
+  "config": "four medium bots, 20-round limit, 3 seeded festivals; captured costs + provisional rents",
+  "medianRounds": 20,
+  "p90Rounds": 20,
+  "wins": {
+    "round-limit": 9054,
+    "triple-monopoly": 90,
+    "last-standing": 187,
+    "resort-monopoly": 660,
+    "line-monopoly": 9
+  },
+  "seatWins": [2471, 2560, 2433, 2536],
+  "turnPositionWins": [3333, 2580, 2300, 1787],
+  "landmarkBuilds": 8447,
+  "landmarkRent": 1624720000,
+  "modifiedHotelRent": 16221254000,
+  "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+  "note": "Balance is provisional: compare round-limit rate and turnPositionWins against targets; Landmarks may earn less than hosted/full-country/festival Hotels; prices/rents and rare monopoly rates need playtesting"
+}

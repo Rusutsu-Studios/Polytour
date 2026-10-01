@@ -1,0 +1,21 @@
+{
+  "games": 1000,
+  "hotelPurchaseRule": "staged-hotels",
+  "config": "four medium bots, 20-round limit, 3 seeded festivals; captured costs + provisional rents",
+  "medianRounds": 20,
+  "p90Rounds": 20,
+  "wins": {
+    "round-limit": 928,
+    "resort-monopoly": 55,
+    "last-standing": 4,
+    "triple-monopoly": 12,
+    "line-monopoly": 1
+  },
+  "seatWins": [251, 257, 236, 256],
+  "turnPositionWins": [348, 287, 216, 149],
+  "landmarkBuilds": 340,
+  "landmarkRent": 70960000,
+  "modifiedHotelRent": 833840000,
+  "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+  "note": "Balance is provisional: 92.8% reached the 20-round cap, distinct from the live 120-minute preset; first/last turn win rates are 34.8%/14.9%. Landmarks may earn less than modified Hotels. Compare and playtest the remaining rents and prices before balancing."
+}
