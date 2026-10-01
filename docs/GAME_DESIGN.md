@@ -402,6 +402,12 @@ true:
   only for movements without their own event (tax, card effects, Island and World
   Tour fees).
 
+`SalaryPaid.amount` is the single accounting input: the reducer adds it to the
+player's existing cash and subtracts it from the bank ledger. The redundant
+absolute `cash` field remains on the wire for previously opened clients and
+stored-event compatibility; the current reducer ignores it. This adopts only the
+salary-calculation improvement from PR #12 into the complete prototype engine.
+
 Property test: for any action sequence,
 `toPublic(next) == events.reduce(applyEvent, toPublic(prev))`.
 

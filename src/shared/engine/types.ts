@@ -197,6 +197,7 @@ export type SalaryPaidEvent = {
   readonly type: "SalaryPaid";
   readonly seat: Seat;
   readonly amount: number;
+  /** Legacy absolute balance retained for wire compatibility; the reducer credits amount. */
   readonly cash: number;
 };
 export type TurnPhaseChangedEvent = {

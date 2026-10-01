@@ -86,10 +86,7 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
       }));
     case "SalaryPaid":
       return {
-        ...updatePlayer(state, event.seat, (player) => ({
-          ...player,
-          cash: event.cash,
-        })),
+        ...cashChange(state, event.seat, event.amount),
         bankLedger: state.bankLedger - event.amount,
       };
     case "TurnPhaseChanged":

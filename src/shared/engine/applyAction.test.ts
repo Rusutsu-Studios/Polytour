@@ -68,7 +68,7 @@ function grant(
     }),
   };
 }
-function money(state: GameState): number {
+function money(state: Pick<GameState, "bankLedger" | "players">): number {
   return (
     state.bankLedger +
     state.players.reduce((sum, player) => sum + player.cash, 0)
@@ -121,6 +121,60 @@ function other(state: GameState): Seat {
   if (seat === undefined) throw new Error("Expected other seat");
   return seat;
 }
+
+describe("salary event reducer", () => {
+  it("credits the amount rather than mismatched legacy cash without mutating the input", () => {
+    const state = toPublic(newGame());
+    const seat = state.activeSeat;
+    const before = JSON.stringify(state);
+    const cashBefore = getPlayer(state, seat).cash;
+    const bankBefore = state.bankLedger;
+    const totalBefore = money(state);
+    for (const player of state.players) Object.freeze(player);
+    Object.freeze(state.players);
+    Object.freeze(state);
+
+    const next = applyEvent(state, {
+      type: "SalaryPaid",
+      seat,
+      amount: 400_000,
+      cash: 1,
+    });
+
+    expect(getPlayer(next, seat).cash).toBe(cashBefore + 400_000);
+    expect(next.bankLedger).toBe(bankBefore - 400_000);
+    expect(money(next)).toBe(totalBefore);
+    expect(JSON.stringify(state)).toBe(before);
+    expect(next).not.toBe(state);
+    expect(next.players).not.toBe(state.players);
+  });
+
+  it("adds sequential salaries, including zero amounts, instead of overwriting the balance", () => {
+    const state = toPublic(newGame());
+    const seat = state.activeSeat;
+    let replay = state;
+
+    for (const amount of [400_000, 200_000, 0]) {
+      const previous = replay;
+      replay = applyEvent(previous, {
+        type: "SalaryPaid",
+        seat,
+        amount,
+        cash: getPlayer(state, seat).cash,
+      });
+      expect(getPlayer(replay, seat).cash).toBe(
+        getPlayer(previous, seat).cash + amount,
+      );
+      expect(replay.bankLedger).toBe(previous.bankLedger - amount);
+      expect(money(replay)).toBe(money(state));
+    }
+
+    expect(getPlayer(replay, seat).cash).toBe(
+      getPlayer(state, seat).cash + 600_000,
+    );
+    expect(replay.bankLedger).toBe(state.bankLedger - 600_000);
+  });
+});
 
 describe("authoritative action validation and public replay", () => {
   it("uses injected dice without advancing private RNG and offers an affordable purchase", () => {
