@@ -21,6 +21,16 @@ The user pinned the conventional property-board game composition on 1 October 20
 
 ## Memorable moment
 
+The user's later 1 October request expands the current legal choice into a
+centered illustrated dialog, temporarily dimming the board. Building comparison
+uses selectable stages and a slider; confirmation alone submits an intent.
+Room settings use their own centered slider sheet. Drawn cards have original
+painted vignettes and a bounded reading moment before their effects; cash reserves
+and pooled transfers make money visible outside the track. The compact bottom
+prompt remains for rolls, opponent turns and minimized decisions. This supersedes
+the earlier bottom-only decision footprint below, while retaining the board,
+corner HUDs, closed tools and all frozen game rules.
+
 The two dice settle to the server's exact values, the pawn traverses the visible track and the destination's choice appears after arrival, without replacing the board with interface panels.
 
 The 1 October refinement keeps that composition: layered board edges, distinct

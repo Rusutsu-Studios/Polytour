@@ -13,21 +13,39 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     page.getByRole("button", { name: "Jouer avec 3 bots" }),
   ).toBeVisible();
   await page.getByLabel("Votre nom de joueur").fill("Raimundo");
-  await page.locator(".settings-disclosure summary").click();
-  await expect(page.getByLabel("Capital de départ")).toHaveValue("2000000");
-  await expect(page.getByLabel("Salaire au départ")).toHaveValue("400000");
-  await expect(page.getByLabel("Durée de partie")).toHaveValue("120");
-  await expect(page.getByLabel("Festivals initiaux")).toHaveValue("3");
-  await expect(page.getByLabel("Temps de décision")).toHaveValue("30");
+  await page.locator(".settings-trigger").click();
+  await expect(
+    page.getByRole("slider", { name: "Capital de départ", exact: true }),
+  ).toHaveValue("2000000");
+  await expect(
+    page.getByRole("slider", { name: "Salaire au départ", exact: true }),
+  ).toHaveValue("400000");
+  await expect(
+    page
+      .getByRole("group", { name: "Durée de partie" })
+      .getByRole("radio", { name: "120 min" }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("slider", { name: "Festivals initiaux", exact: true }),
+  ).toHaveValue("3");
+  await expect(
+    page
+      .getByRole("group", { name: "Temps de décision" })
+      .getByRole("radio", { name: "30 s", exact: true }),
+  ).toBeChecked();
   // Give the screenshot-heavy regression enough time on software-rendered CI.
-  await page.getByLabel("Temps de décision").selectOption("60");
+  await page
+    .getByRole("group", { name: "Temps de décision" })
+    .getByRole("radio", { name: "60 s", exact: true })
+    .check();
   await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
   await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(page.locator(".settings-fields")).not.toContainText("drand");
-  await expect(page.locator(".settings-fields")).toContainText(
+  await expect(page.locator(".room-settings")).not.toContainText("drand");
+  await expect(page.locator(".room-settings")).toContainText(
     "aléa cryptographique généré directement sur Cloudflare",
   );
+  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator("canvas")).toBeVisible();
@@ -58,7 +76,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // UI regression fixture: a Birthday debtor can act during another seat's
   // turn. This only changes this tab's presentation, never Worker state.
   const original = await page.evaluate(async () => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     const snapshot = director.getSnapshot().serverState;
     if (!snapshot) throw new Error("Expected a public snapshot");
@@ -94,7 +117,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     page.locator(".decision-panel").getByRole("button", { name: /Vendre/ }),
   ).toBeEnabled();
   await page.evaluate(async (snapshot) => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     director.reset(snapshot);
   }, original);
@@ -147,7 +175,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // Synthetic presentation fixture: development levels and a five-choice buy
   // decision. The Worker remains untouched; restore its snapshot before rolling.
   const presentationBase = await page.evaluate(async () => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     const snapshot = director.getSnapshot().serverState as PublicState | null;
     if (!snapshot) throw new Error("Expected an active snapshot");
@@ -195,7 +228,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     return snapshot;
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await expect(page.locator(".decision-actions button")).toHaveCount(6);
+  await expect(
+    page.locator(".decision-actions .construction-choice"),
+  ).toHaveCount(5);
+  await expect(page.getByRole("button", { name: /^Acheter ·/ })).toBeEnabled();
   await expect(page.locator(".decision-panel")).toContainText("Roubaix");
   await expect(page.locator(".construction-choice")).toHaveCount(5);
   await expect(
@@ -204,29 +240,50 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator(".construction-guide")).toContainText(
     "Prix tout compris",
   );
-  const overlap = await page.evaluate(() => {
-    const action = document
-      .querySelector(".decision-panel")
-      ?.getBoundingClientRect();
-    if (!action) throw new Error("Expected a purchase decision");
-    return [...document.querySelectorAll(".player-card")].some((card) => {
-      const rect = card.getBoundingClientRect();
-      return (
-        action.left < rect.right &&
-        action.right > rect.left &&
-        action.top < rect.bottom &&
-        action.bottom > rect.top
-      );
+  const popupBounds = await page
+    .locator(".decision-popup")
+    .evaluate((popup) => {
+      const rect = popup.getBoundingClientRect();
+      return {
+        x: rect.x,
+        y: rect.y,
+        right: rect.right,
+        bottom: rect.bottom,
+        center: rect.x + rect.width / 2,
+      };
     });
-  });
-  expect(overlap).toBe(false);
+  expect(popupBounds.x).toBeGreaterThan(0);
+  expect(popupBounds.y).toBeGreaterThan(0);
+  expect(popupBounds.right).toBeLessThan(1280);
+  expect(popupBounds.bottom).toBeLessThan(720);
+  expect(popupBounds.center).toBeCloseTo(640, 0);
+  await page.getByRole("button", { name: /^3 maisons/ }).click();
+  await expect(page.getByRole("button", { name: /^Acheter ·/ })).toContainText(
+    "210 k",
+  );
+  await expect(page.locator(".ledger-balance")).toContainText("1,79 M");
+  await expect(
+    page.locator(".construction-choice[aria-pressed='true']"),
+  ).toContainText("3 maisons");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".decision-popup")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Reprendre le choix" }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Reprendre le choix" }).click();
+  await expect(page.locator(".decision-popup")).toBeVisible();
   await page.screenshot({
     path: ".local/verification/desktop-developed-fixture.png",
   });
   // Current staged construction: even after a lap, an unowned city stops at
   // three houses. A stale permissive decision must not hide the explanation.
   await page.evaluate(async () => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     const snapshot = director.getSnapshot().serverState as PublicState | null;
     if (snapshot?.pending?.kind !== "buy")
@@ -250,7 +307,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // The explicit custom rule can unlock Hotel immediately; no misleading lock
   // explanation remains. These are only presentation snapshots, never intents.
   await page.evaluate(async () => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     const snapshot = director.getSnapshot().serverState as PublicState | null;
     if (snapshot?.pending?.kind !== "buy")
@@ -289,7 +351,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // A collection winner may not have the largest wealth. Preserve the server's
   // winner and its final standings rather than deriving a winner from wealth.
   const winnerName = await page.evaluate(async () => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     const snapshot = director.getSnapshot().serverState as PublicState | null;
     if (!snapshot) throw new Error("Expected the current match");
@@ -347,7 +414,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     });
   }
   await page.evaluate(async (snapshot) => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     director.reset(snapshot);
   }, presentationBase);
@@ -385,7 +457,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   });
   await expect(skip).toBeEnabled();
   const receivesPointer = await skip.evaluate(async (button) => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     // Observe after React's delegated click handler, within the same task.
     // A later bot event can legitimately make the Director busy again.
@@ -414,6 +491,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     "data-skip-synced",
     "true",
   );
+  // Native decisions protect focus; minimize without sending a gameplay action.
+  if (await page.locator(".decision-popup").isVisible())
+    await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Carnet de voyage", exact: true })
     .click();
@@ -433,7 +513,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // An explicitly inspected city stays selected when another pawn moves.
   // Presentation-only snapshot, restored before the real reconnect below.
   const beforeMovement = await page.evaluate(async () => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     const snapshot = (director.getSnapshot().viewState ??
       director.getSnapshot().serverState) as PublicState | null;
@@ -456,7 +541,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
   await expect(page.locator(".property-numbers")).toContainText("400 k");
   await page.evaluate(async (snapshot) => {
-    const modulePath = "/src/client/director/director.ts";
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
     director.reset(snapshot);
   }, beforeMovement);
@@ -471,6 +561,8 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Quitter la partie", exact: true }),
   ).toBeVisible();
+  if (await page.locator(".decision-popup").isVisible())
+    await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Comment jouer" }).click();
   await expect(page.locator("dialog")).toBeVisible();
   await page.getByRole("button", { name: "C’est parti" }).click();
@@ -485,10 +577,14 @@ test("desktop room controls fit, create and join preserve the host settings", as
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
-  await page.locator(".settings-disclosure summary").click();
+  await page.locator(".settings-trigger").click();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(page.locator(".settings-fields")).not.toContainText("drand");
-  await page.getByLabel("Durée de partie").selectOption("20");
+  await expect(page.locator(".room-settings")).not.toContainText("drand");
+  await page
+    .getByRole("group", { name: "Durée de partie" })
+    .getByRole("radio", { name: "20 min", exact: true })
+    .check();
+  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
   await page
     .getByRole("button", { name: "Créer une salle entre amis" })
     .click();
@@ -507,12 +603,28 @@ test("desktop room controls fit, create and join preserve the host settings", as
       .click();
     await expect(second.locator(".lobby-seats")).toContainText("Alice");
     await expect(page.locator(".lobby-seats")).toContainText("Bo");
-    await second.locator(".settings-disclosure summary").click();
-    await expect(second.getByLabel("Durée de partie")).toHaveValue("20");
-    await expect(second.getByLabel("Durée de partie")).toBeDisabled();
-    await page.locator(".settings-disclosure summary").click();
-    await page.getByLabel("Capital de départ").fill("1250000");
-    await page.getByLabel("Durée de partie").selectOption("60");
+    await second.locator(".settings-trigger").click();
+    await expect(
+      second
+        .getByRole("group", { name: "Durée de partie" })
+        .getByRole("radio", { name: "20 min", exact: true }),
+    ).toBeChecked();
+    await expect(
+      second
+        .getByRole("group", { name: "Durée de partie" })
+        .getByRole("radio", { name: "20 min", exact: true }),
+    ).toBeDisabled();
+    await page.locator(".settings-trigger").click();
+    await page
+      .getByRole("spinbutton", { name: "Capital de départ : valeur exacte" })
+      .fill("1250000");
+    await page
+      .getByRole("spinbutton", { name: "Capital de départ : valeur exacte" })
+      .press("Tab");
+    await page
+      .getByRole("group", { name: "Durée de partie" })
+      .getByRole("radio", { name: "60 min", exact: true })
+      .check();
     await expect(
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeDisabled();
@@ -526,15 +638,30 @@ test("desktop room controls fit, create and join preserve the host settings", as
       if (!response.ok) throw new Error("Expected a third seat");
     }, code);
     await expect(page.locator(".lobby-seats")).toContainText("Cam");
-    await expect(page.getByLabel("Capital de départ")).toHaveValue("1250000");
-    await expect(second.getByLabel("Durée de partie")).toHaveValue("20");
+    await expect(
+      page.getByRole("slider", { name: "Capital de départ", exact: true }),
+    ).toHaveValue("1250000");
+    await expect(
+      second
+        .getByRole("group", { name: "Durée de partie" })
+        .getByRole("radio", { name: "20 min", exact: true }),
+    ).toBeChecked();
     await page
       .getByRole("button", { name: "Enregistrer les réglages" })
       .click();
-    await expect(second.getByLabel("Durée de partie")).toHaveValue("60");
+    await expect(
+      second
+        .getByRole("group", { name: "Durée de partie" })
+        .getByRole("radio", { name: "60 min", exact: true }),
+    ).toBeChecked();
     await expect(
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeEnabled();
+    await page
+      .locator(".settings-dialog-footer")
+      .getByRole("button", { name: "Fermer les réglages" })
+      .click();
+    await second.getByRole("button", { name: "Revenir au plateau" }).click();
     await page.getByRole("button", { name: "Démarrer la partie" }).click();
     await expect(page.locator(".player-card")).toHaveCount(4);
     await expect(second.locator(".player-card")).toHaveCount(4);
@@ -549,4 +676,306 @@ test("desktop room controls fit, create and join preserve the host settings", as
   } finally {
     await friend.close();
   }
+});
+
+test("illustrated cards play in order and cancel safely on skip and reconnect", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.getByLabel("Votre nom de joueur").fill("Camille");
+  await page.locator(".settings-trigger").click();
+  await page
+    .getByRole("group", { name: "Temps de décision" })
+    .getByRole("radio", { name: "60 s", exact: true })
+    .check();
+  const capital = page.getByRole("slider", {
+    name: "Capital de départ",
+    exact: true,
+  });
+  await capital.focus();
+  await capital.press("ArrowRight");
+  await expect(capital).toHaveValue("2010000");
+  await capital.press("ArrowLeft");
+  await expect(capital).toHaveValue("2000000");
+  await page.screenshot({ path: ".local/verification/settings-sliders.png" });
+  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
+  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await expect(page.locator(".canvas-layer")).toHaveAttribute(
+    "data-scene-ready",
+    "true",
+  );
+  await expect(
+    page.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled({ timeout: 60_000 });
+  await page
+    .getByRole("button", { name: "Lancer les dés", exact: true })
+    .focus();
+  // Authored presentation events only. This tab never sends these to the Worker.
+  const original = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const state = director.getSnapshot().serverState as PublicState | null;
+    if (!state) throw new Error("Expected match snapshot");
+    director.setReducedMotion(false);
+    director.setSpeed(1);
+    director.receive([
+      { type: "CardDrawn", seat: 0, card: "Windfall", kept: false },
+      {
+        type: "MoneyTransferred",
+        from: null,
+        to: 0,
+        amount: 150_000,
+        reason: "Windfall",
+      },
+    ]);
+    return state;
+  });
+  await expect(page.locator("#chance-title")).toHaveText("Bonne fortune");
+  await expect(page.locator(".chance-impact")).toHaveText("+ 150 k");
+  await expect(page.locator(".chance-art")).toHaveJSProperty(
+    "naturalWidth",
+    960,
+  );
+  // Effects await the card presentation; the exact server state already includes them.
+  const balances = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const { viewState, serverState } = director.getSnapshot();
+    return [viewState.players[0].cash, serverState.players[0].cash];
+  });
+  expect(balances).toEqual([2_000_000, 2_150_000]);
+  await page.screenshot({ path: ".local/verification/card-fortune.png" });
+  await page.getByRole("button", { name: "Continuer", exact: false }).click();
+  await expect(page.locator(".chance-dialog")).toHaveCount(0);
+  await expect(
+    page.locator('.player-card[data-seat="0"] .player-cash'),
+  ).toContainText("2,15 M");
+  await expect(
+    page.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeFocused();
+  // A skip resolves the waiting presenter. Its old completion cannot hide a new card.
+  await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.receive([
+      { type: "CardDrawn", seat: 0, card: "Jet Set", kept: false },
+    ]);
+  });
+  await expect(page.locator("#chance-title")).toHaveText("Jet-set");
+  await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.skip();
+    director.receive([
+      { type: "CardDrawn", seat: 1, card: "Guardian Angel", kept: true },
+    ]);
+  });
+  await expect(page.locator("#chance-title")).toHaveText("Ange gardien");
+  await expect(page.locator(".chance-impact")).toHaveText("Gardez cette carte");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".chance-dialog")).toHaveCount(0);
+  await page.evaluate(async (state) => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.receive([
+      { type: "CardDrawn", seat: 0, card: "Contractor", kept: false },
+    ]);
+    director.reset(state);
+    director.setReducedMotion(true);
+    director.receive([
+      { type: "CardDrawn", seat: 0, card: "Contractor", kept: false },
+    ]);
+  }, original);
+  await expect(page.locator("#chance-title")).toHaveText("Coup de pouce");
+  await expect(page.locator(".chance-art")).toHaveJSProperty(
+    "naturalWidth",
+    960,
+  );
+  await page.screenshot({ path: ".local/verification/card-construction.png" });
+  // Reduced motion keeps the reading moment, with a stationary illustration.
+  await expect(page.locator(".chance-reading")).not.toBeVisible();
+  await page.reload();
+  await expect(page.locator(".player-card")).toHaveCount(4);
+  await expect(page.locator(".chance-dialog")).toHaveCount(0);
+  await expect(page.locator(".match-connection")).toContainText("En ligne");
+  expect(errors).toEqual([]);
+});
+
+test("travel, rent protections and exchanges show the complete legal choice", async ({
+  page,
+}) => {
+  let intents = 0;
+  page.on("websocket", (socket) =>
+    socket.on("framesent", (frame) => {
+      if (String(frame.payload).includes('"type":"intent"')) intents += 1;
+    }),
+  );
+  await page.goto("/");
+  await page.getByLabel("Votre nom de joueur").fill("Alex");
+  await page.locator(".settings-trigger").click();
+  await page
+    .getByRole("group", { name: "Temps de décision" })
+    .getByRole("radio", { name: "60 s", exact: true })
+    .check();
+  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
+  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await expect(
+    page.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled({ timeout: 60_000 });
+  const original = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const state = director.getSnapshot().serverState as PublicState | null;
+    if (!state) throw new Error("Expected a match");
+    director.reset({
+      ...state,
+      activeSeat: 0,
+      pending: {
+        kind: "travel",
+        seat: 0,
+        fee: 50_000,
+        targets: [1, 31],
+        deadline: Date.now() + 60_000,
+      },
+    });
+    return state;
+  });
+  await expect(
+    page.getByRole("button", { name: "Choisir le lancer gratuit" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Lancer les dés",
+  );
+  await page.getByLabel("Destination", { exact: true }).selectOption("31");
+  await expect(page.locator(".decision-confirm")).toContainText("Voyager ici");
+  await expect(page.locator(".ledger-balance")).toContainText("1,95 M");
+  await page.getByRole("button", { name: "Choisir le lancer gratuit" }).click();
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Lancer les dés",
+  );
+  await page.screenshot({
+    path: ".local/verification/decision-travel-regression.png",
+  });
+  await page.evaluate(async (state) => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const properties = state.properties.map((property) => ({
+      ...property,
+      owner: property.tile === 9 ? 1 : property.tile === 11 ? 0 : null,
+      level: property.tile === 9 ? 1 : property.tile === 11 ? 2 : 0,
+    }));
+    director.reset({
+      ...state,
+      activeSeat: 0,
+      properties,
+      players: state.players.map((player) => ({
+        ...player,
+        cash: player.seat === 0 ? 1_000 : player.cash,
+        heldCards: player.seat === 0 ? ["Guardian Angel", "Coupon"] : [],
+        properties: properties
+          .filter((property) => property.owner === player.seat)
+          .map((property) => property.tile),
+      })),
+      pending: {
+        kind: "rent-card",
+        seat: 0,
+        tile: 9,
+        owner: 1,
+        amount: 101,
+        cards: ["Guardian Angel", "Coupon"],
+        deadline: Date.now() + 60_000,
+      },
+    });
+  }, original);
+  const payment = page.getByText("À payer", { exact: true }).locator("..");
+  await expect(payment).toContainText("0");
+  await expect(page.locator(".ledger-balance")).toContainText("1 k");
+  await page
+    .getByRole("button", { name: "Bon de réduction", exact: true })
+    .click();
+  await expect(payment).toContainText("51");
+  await expect(page.locator(".ledger-balance")).toContainText("949");
+  await expect(
+    page.getByRole("button", { name: /Payer le loyer · 101/ }),
+  ).toBeEnabled();
+  await page.screenshot({
+    path: ".local/verification/decision-coupon-regression.png",
+  });
+  await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const state = director.getSnapshot().serverState as PublicState;
+    director.reset({
+      ...state,
+      pending: {
+        kind: "card-target",
+        card: "Land Swap",
+        seat: 0,
+        sourceTile: 11,
+        targets: [9],
+        deadline: Date.now() + 60_000,
+      },
+    });
+  });
+  await expect(page.locator("#decision-description")).toContainText("Rome");
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Échanger Rome contre Porto",
+  );
+  await page.screenshot({
+    path: ".local/verification/decision-exchange-regression.png",
+  });
+  await page.keyboard.press("Escape");
+  expect(intents).toBe(0);
+  await page.evaluate(async (state) => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    director.reset(state);
+  }, original);
 });

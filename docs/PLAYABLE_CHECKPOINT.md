@@ -1,7 +1,7 @@
 # First playable checkpoint
 
-Branch: `codex/playable-four-player-mockup`. Rules version: 2; stored-state version:
-1. The feature connects the shared engine, private authoritative rooms and the
+Branch: `codex/playable-four-player-mockup`. New-room rules version: 3; legacy
+rooms retain version 2. Stored-state version: 1. The feature connects the shared engine, private authoritative rooms and the
 Three.js client. No production migration or main-branch deployment is part of this
 checkpoint.
 
@@ -207,6 +207,53 @@ legal decisions. Median/p90 rounds are 20/20; 928 matches reach the cap, 55 end 
 resort collection, 12 by triple collection, four by last standing and one by line.
 First/last turn win rates are 34.8%/14.9%. This strengthens the need for a separate
 balance pass; the construction correction does not claim to resolve that issue.
+
+## Illustrated decisions and slider settings — 1 October 2026
+
+Settings now open in a central dialog with money and festival sliders, exact
+numeric inputs, duration choices and custom rule switches. The host's explicit
+save and unsaved draft behavior remain intact; other seats see read-only settings.
+Purchase, construction, buyout, travel, protection and forced-sale decisions use
+central illustrated confirmations. Adjusting a slider or selecting a destination
+does not send an action. Escape minimizes a decision and returns focus to its
+resume control without declining it.
+
+Chance draws have original painted illustrations, their actual effect and a
+Continue button. The Director coordinates the scene and card presentation;
+skip, reset, reconnect and a following card cancel the earlier presentation.
+The reading interval is bounded at 2.6 seconds (850 ms while catching up). It
+does not pause the authoritative decision clock. Reduced motion suppresses the
+entry animation and reading progress decoration.
+
+Original banknote reserves and coin piles surround the board. Cancellable cash
+transfers show salaries, rent, purchases, upgrades, buyouts and sales using the
+existing animation budgets. The player HUD retains the exact balances. Artwork,
+source references and complete generation prompts are recorded in
+[CARD_ART.md](CARD_ART.md) and [card-art-prompts.json](card-art-prompts.json).
+
+Review corrections preserve the free dice option during travel, show the exact
+payment after Guardian/Coupon protection (including odd-value rounding), and
+identify both cities before a land exchange. The rent preview and engine use the
+same pure calculation; game rules and the saved-state format are unchanged.
+
+- 88 unit/Worker tests, TypeScript, Biome across 69 files, production build,
+  bundle budgets, deployment-config checks and a deployment dry run pass.
+- Eight local browser scenarios pass in **1.1 minutes**, including a complete
+  four-seat match and reconnect, legacy proof/new-room compatibility, settings,
+  card sequencing/focus/cancellation and travel/protection/exchange regressions.
+- Browser captures at 1280×720, 1440×900 and 1920×1080 cover the new dialogs and
+  cash reserves. The settings controls fit at 1280×720 without page scrolling.
+  Authored presentation fixtures remain separate from the real match evidence.
+- One manual Impeccable scan reports three warnings and 440 advisories. The
+  warnings concern legacy CSS roof borders and the flat-board country strip;
+  actual rendered dialogs and the 3D board have been inspected. This is a reviewed
+  visual result, not a claim that the detector produced zero findings.
+- Latest deployed Preview evidence and its exact revision are recorded in
+  [PR #15](https://github.com/Rusutsu-Studios/Polytour/pull/15). Earlier remote
+  checks above remain tied to their stated revisions.
+
+The existing balance reports still apply. Target-hardware FPS has not been
+measured; this presentation change does not establish the balance targets.
 
 ## Simulator findings (earlier lap-only rules)
 

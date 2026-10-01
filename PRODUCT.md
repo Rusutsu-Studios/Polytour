@@ -32,6 +32,7 @@ The existing architecture specifies a Cloudflare Worker, one authoritative Durab
 - Production publication, durable user accounts, trading, audio, advanced physical dice, and cosmetic purchases are separate work.
 - New rolls require no external randomness service. Saved drand matches still honor their committed round, without silently changing their source mid-game.
 - Host settings remain a local draft until explicitly saved. A room cannot start with unsaved edits. The match toolbar counts down to the server-provided end time.
+- Room sliders support precise cash/salary entry; duration and decision time use discrete choices. Illustrated central decisions separate comparing an option from confirming it. Chance cards show their effect before event playback resumes; the server clock continues while the bounded reading moment is open.
 
 ## Brand Commitments
 

@@ -56,6 +56,22 @@ The user confirmed the familiar PC property-board game composition on 1 October 
 
 Retain the travel progression from French cities to Tokyo and the original toy geometry, rounded pawns, raised buildings, flags and dice. A sky-blue surround, grassy center and ivory track provide the setting. The board carries the story; interface tools open on demand rather than sharing equal visual weight with it.
 
+The user's later 1 October reference explicitly asks for centered illustrated
+decisions. Purchases, development, buyouts and other choices now temporarily dim
+the board and open an ivory dialog with a title ribbon. Original isometric city
+previews, selectable building stages and a comparison slider precede one final
+confirmation. Price, projected rent and remaining cash use shared engine helpers.
+Escape minimizes a decision without sending an action; the bottom prompt reopens
+it. Roll and opponent turns keep their compact bottom prompt.
+
+Drawn cards have a separate illustrated reading moment, using three original
+painted image families with individual effect text. Four small banknote reserves,
+gold coins and owner-coloured straps sit outside the board track; quantities are
+illustrative and capped, while HUD figures remain exact. Money transfers follow
+the payer and recipient in the server event. Room settings open in a centered
+dialog with sliders, exact entry and discrete duration choices. No permanent
+sidebar or additional dashboard is introduced.
+
 Build the scene with React Three Fiber and Three.js. GSAP owns scene choreography and Motion owns DOM transitions. The Director separates authoritative state from the events already shown to the player. The screen's strategy is recorded in its Experience surface brief, not a marketing-page layout.
 
 ## Colors
@@ -81,7 +97,7 @@ Board lettering is part of the track: town names and prices sit on their tiles. 
 
 PC browser play with a mouse and keyboard is the priority. Validate 1280×720 as the minimum, with 1440×900 and 1920×1080 as the main targets. During a match, the board fills the viewport and all four corners stay visible through a fixed diagonal orthographic camera. The page must not require vertical scrolling to find a required action.
 
-Place four compact player HUDs at the corners, approximately 220×112 px at the main target, with name, symbol, cash and concise portfolio status. Keep room/connection state, remaining match time and animation controls discreet. The current decision sits near the bottom center; its normal footprint is around 112–220 px high and no more than 620 px wide. Expand only for the current legal choice, then recede. Fit controls around the board rather than shrinking the board into a card.
+Place four compact player HUDs at the corners, approximately 220×112 px at the main target, with name, symbol, cash and concise portfolio status. Keep room/connection state, remaining match time and animation controls discreet. Rolls, opponent turns and minimized choices use the compact bottom-center prompt. A player's other legal decisions open a temporary centered illustrated dialog, up to 850 px wide, as requested in the later reference. Settings use a 900 px sheet. Fit each dialog within the minimum PC viewport, then return focus to play. Keep the board's camera and size throughout.
 
 Journal, randomness proof, instructions, room information and tile details are closed by default. Open them as dismissible popovers or dialogs through labeled controls. An inspector opened by selecting a tile or Explorer may show the keyboard-accessible tile index. The lobby exposes name, create/join and settings alongside the world; it does not determine the match's composition.
 

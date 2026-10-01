@@ -1300,7 +1300,7 @@ input::placeholder {
 .settings-disclosure {
   margin-top: 22px;
 }
-.settings-disclosure summary {
+.settings-disclosure > summary {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1308,14 +1308,14 @@ input::placeholder {
   font-size: 12px;
   font-weight: 750;
 }
-.settings-disclosure summary::before {
+.settings-disclosure > summary::before {
   content: "+";
   font-size: 16px;
 }
-.settings-disclosure[open] summary::before {
+.settings-disclosure[open] > summary::before {
   content: "−";
 }
-.settings-disclosure summary > span {
+.settings-disclosure > summary > span {
   margin-left: auto;
   color: #456c65;
   font-size: 11px;
