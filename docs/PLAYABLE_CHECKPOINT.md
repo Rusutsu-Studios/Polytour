@@ -141,6 +141,14 @@ pass. Two focused regressions cover a conflicting legacy `cash` value, immutable
 input, and successive or zero salaries. A fresh 100-game simulation also passes
 the per-event money, replay, ownership, card and termination invariants.
 
+CI also exposed a browser-test race unrelated to salary: at 2× speed, animation
+could finish between the skip button's visibility check and the mouse hit-test.
+The trace shows the button disappear before the canvas receives that coordinate.
+The regression still checks 2× selection, then uses normal 1× animation for the
+real roll, verifies the button is the pointer target and clicks it normally.
+Three consecutive full executions of that UI scenario pass in **43.6 seconds**.
+No presentation or CSS change was needed.
+
 ## Simulator findings
 
 The committed [baseline](../tools/sim/baseline.json) records 10,000 seeded games
