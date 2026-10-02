@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Friends who want to play a four-seat property board game in a PC browser with a mouse and keyboard. A player can also start alone with three server-controlled bots. Desktop is the product priority: 1280×720 is the minimum layout target, with 1440×900 and 1920×1080 as the main evaluation sizes. Mobile support is best effort and may become a separate future adaptation; it is not a release gate for this prototype.
+Friends who want to play a property board game for two to four players in a PC browser with a mouse and keyboard. A player can also start alone with three server-controlled bots. Desktop is the product priority: 1280×720 is the minimum layout target, with 1440×900 and 1920×1080 as the main evaluation sizes. Mobile support is best effort and may become a separate future adaptation; it is not a release gate for this prototype.
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ The user asks for a property game without paid advantages and with honest random
 
 ## Operating Context
 
-The existing architecture specifies a Cloudflare Worker, one authoritative Durable Object per room, deterministic shared rules, and events driving animation. A room has four seats; empty seats may be filled by bots. Reconnection restores the player's seat from a credential stored in the current browser session. During a match, the board occupies the desktop viewport and four compact player HUDs frame its corners. Contextual decisions appear when needed; journal, proof, instructions, room information and tile details are closed by default.
+The existing architecture specifies a Cloudflare Worker, one authoritative Durable Object per room, deterministic shared rules, and events driving animation. A room has four seats and starts with two to four players; in the lobby the host clicks an empty seat card to add a bot, or removes one. Reconnection restores the player's seat from a credential stored in the current browser session. During a match, the board occupies the desktop viewport and up to four compact player HUDs frame its corners. Contextual decisions appear when needed; journal, proof, instructions, room information and tile details are closed by default.
 
 ## Capabilities and Constraints
 

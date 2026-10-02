@@ -1473,19 +1473,32 @@ export function createGame(
     seats.some((seat) => seat.playerId.length === 0 || seat.name.length === 0)
   )
     throw new RangeError("Every seat must have a player ID and name");
-  const players: PlayerState[] = seats.map((seat, index) => ({
-    ...seat,
-    seat: index as Seat,
-    cash: config.startingCash,
-    position: 0,
-    laps: 0,
-    onIsland: false,
-    islandTurns: 0,
-    bankrupt: false,
-    properties: [],
-    heldCards: [],
-    travelPending: false,
-  }));
+  const tableSeats = seats.map((seat, index) => seat.seat ?? index);
+  if (
+    tableSeats.some(
+      (seat) =>
+        !Number.isInteger(seat) || seat < 0 || seat >= ECONOMY.maximumPlayers,
+    ) ||
+    new Set(tableSeats).size !== tableSeats.length
+  )
+    throw new RangeError("Every player needs a unique table seat from 0 to 3");
+  const players: PlayerState[] = seats
+    .map((seat, index) => ({
+      playerId: seat.playerId,
+      name: seat.name,
+      control: seat.control,
+      seat: tableSeats[index] as Seat,
+      cash: config.startingCash,
+      position: 0,
+      laps: 0,
+      onIsland: false,
+      islandTurns: 0,
+      bankrupt: false,
+      properties: [],
+      heldCards: [],
+      travelPending: false,
+    }))
+    .sort((a, b) => a.seat - b.seat);
   const order = shuffle(
     players.map((player) => player.seat),
     seed,

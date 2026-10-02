@@ -835,9 +835,31 @@ test("desktop room controls fit, create and join preserve the host settings", as
       .getByRole("button", { name: "Fermer les réglages" })
       .click();
     await second.getByRole("button", { name: "Revenir au plateau" }).click();
+    // The host seats a bot on the open card, then sends it away again.
+    await expect(
+      second.getByRole("button", { name: /Ajouter un bot/ }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Ajouter un bot à la place 4" })
+      .click();
+    await expect(page.locator(".lobby-seats")).toContainText("Atlas");
+    await expect(second.locator(".lobby-seats")).toContainText("Atlas");
+    await expect(
+      second.getByRole("button", { name: "Retirer le bot Atlas" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Retirer le bot Atlas" }).click();
+    await expect(
+      page.getByRole("button", { name: "Ajouter un bot à la place 4" }),
+    ).toBeVisible();
+    await expect(second.locator(".lobby-seats")).not.toContainText("Atlas");
+    await expect(page.locator(".lobby-count")).toContainText(
+      "Partie à 3 joueurs",
+    );
     await page.getByRole("button", { name: "Démarrer la partie" }).click();
-    await expect(page.locator(".player-card")).toHaveCount(4);
-    await expect(second.locator(".player-card")).toHaveCount(4);
+    // Three players keep their lobby colours; the fourth corner stays empty.
+    await expect(page.locator(".player-card")).toHaveCount(3);
+    await expect(second.locator(".player-card")).toHaveCount(3);
+    await expect(page.locator('.player-card[data-seat="3"]')).toHaveCount(0);
     await expect(page.locator(".decision-panel")).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),

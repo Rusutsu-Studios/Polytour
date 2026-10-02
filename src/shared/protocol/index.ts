@@ -36,6 +36,7 @@ export const CreateRoomSchema = z
   .strict();
 export const JoinRoomSchema = z.object({ name: NameSchema }).strict();
 
+const seat = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
 const tile = z.number().int().min(0).max(31);
 const level = z.number().int().min(0).max(5);
 export const ActionSchema = z.discriminatedUnion("type", [
@@ -85,21 +86,26 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
         z
           .object({ type: z.literal("settings"), config: RoomConfigSchema })
           .strict(),
+        z.object({ type: z.literal("add-bot"), seat }).strict(),
+        z.object({ type: z.literal("remove-bot"), seat }).strict(),
       ]),
     })
     .strict(),
   z.object({ type: z.literal("ping"), t: z.number().finite() }).strict(),
 ]);
+/**
+ * Host-only lobby operations. `start` with `fillBots` seats bots in every empty
+ * place; without it, the room starts with its occupied seats (two or more).
+ */
+export type LobbyOp =
+  | { type: "start"; fillBots: boolean }
+  | { type: "settings"; config: RoomConfig }
+  | { type: "add-bot"; seat: Seat }
+  | { type: "remove-bot"; seat: Seat };
 export type ClientMessage =
   | { type: "sync"; lastSeq: number | null }
   | { type: "intent"; id: string; atSeq: number; action: Action }
-  | {
-      type: "lobby";
-      id: string;
-      op:
-        | { type: "start"; fillBots: boolean }
-        | { type: "settings"; config: RoomConfig };
-    }
+  | { type: "lobby"; id: string; op: LobbyOp }
   | { type: "ping"; t: number };
 
 export type RoomCredentials = { roomCode: string; seat: Seat; token: string };

@@ -21,8 +21,8 @@ const welcome = (seq = 0) =>
       config: RoomConfigSchema.parse({}),
       seats: [0, 1, 2, 3].map((seat) => ({
         seat,
-        name: seat === 0 ? "Network fixture" : "",
-        control: seat === 0 ? "human" : null,
+        name: ["Network fixture", "Milo", "", ""][seat],
+        control: seat === 0 ? "human" : seat === 1 ? "bot" : null,
         online: seat === 0,
       })),
     },

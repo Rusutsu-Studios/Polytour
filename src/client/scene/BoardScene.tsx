@@ -1641,7 +1641,10 @@ function SceneContent(props: BoardProps) {
       <ResortProps />
       <FestivalFlags state={state} />
       <Landmarks />
-      {([0, 1, 2, 3] as const).map((seat) => (
+      {(state && !preview
+        ? state.players.map((player) => player.seat)
+        : ([0, 1, 2, 3] as const)
+      ).map((seat) => (
         <Pawn
           key={seat}
           seat={seat}

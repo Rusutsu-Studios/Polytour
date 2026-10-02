@@ -6,13 +6,13 @@ reads it directly, and Claude Code reads it through the `@AGENTS.md` import in
 CI fails if the import is missing.
 
 Polytour is a web-first, real-time multiplayer property-trading board game in the
-spirit of Business Tour / Modoo Marble (four-seat rooms, configurable 20/60/120-minute
+spirit of Business Tour / Modoo Marble (2–4 player rooms, configurable 20/60/120-minute
 limits). The current target is desktop browsers with mouse and keyboard; mobile
 support is optional. It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: first playable prototype.** Shared rules, four-seat private rooms,
+> **Status: first playable prototype.** Shared rules, 2–4 player private rooms,
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
@@ -84,7 +84,7 @@ pnpm test:e2e       # desktop UI plus production Worker/socket flows
                     # first run: pnpm exec playwright install chromium
 pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
-pnpm sim -- --games 1000 # deterministic bot simulations
+pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4)
 pnpm check:drand    # live future-round verification; local proof evidence
 pnpm verify:dice path/to/proof.json # independent beacon/dice verification
 ```
