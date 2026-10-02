@@ -1316,6 +1316,14 @@ function cashTransfer(event: GameEvent) {
 }
 
 /** Fit the whole board between the HUD's reserved top and bottom bands. */
+/** The DOM interface zoom set by CSS media steps on large screens. */
+function interfaceZoom() {
+  const value = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--ui-zoom"),
+  );
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
 function frameBoard(
   camera: THREE.OrthographicCamera,
   width: number,
@@ -1323,12 +1331,14 @@ function frameBoard(
   preview: boolean,
   zoom: number,
 ) {
+  // The HUD grows on large screens, so its reserved bands grow with it.
+  const ui = interfaceZoom();
   const insets = preview
     ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }
     : {
         // The match title and tools above, the current choice below.
-        top: THREE.MathUtils.clamp(height * 0.11, 78, 118),
-        bottom: THREE.MathUtils.clamp(height * 0.125, 86, 134),
+        top: THREE.MathUtils.clamp(height * 0.11, 78 * ui, 118 * ui),
+        bottom: THREE.MathUtils.clamp(height * 0.125, 86 * ui, 134 * ui),
         side: width * 0.04,
       };
   const bounds = new THREE.Box3();

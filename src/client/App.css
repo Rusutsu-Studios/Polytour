@@ -387,6 +387,24 @@
   bottom: auto;
   top: -12px;
 }
+/* On large screens the HUD, choices and dialogs grow with the board, as on a
+   1920×1080 screen. Only DOM layers zoom: the WebGL canvas keeps its own size. */
+.game-shell
+:is(
+  .match-topbar,
+  .game-tools,
+  .player-card,
+  .contextual-action,
+  .inspector-popover,
+  .tool-drawer,
+  .match-end-panel
+),
+.decision-popup,
+.chance-dialog,
+.settings-dialog,
+.help-dialog {
+  zoom: var(--ui-zoom);
+}
 .contextual-action {
   position: absolute;
   z-index: 5;
@@ -1301,14 +1319,21 @@
   color: #5e7c7c;
   opacity: 0.65;
 }
+/* Large screens zoom the lobby panels; the preview canvas never zooms, so its
+   area grows through --ui-zoom instead. */
+.lobby-shell
+:is(.topbar, .welcome-copy, .welcome-quick-settings, .lobby-footer) {
+  zoom: var(--ui-zoom);
+}
 .welcome-grid {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 28px;
-  min-height: calc(100svh - 122px);
-  max-width: 1510px;
+  grid-template-columns: calc(360px * var(--ui-zoom)) minmax(0, 1fr);
+  gap: calc(28px * var(--ui-zoom));
+  min-height: calc(100svh - 122px * var(--ui-zoom));
+  max-width: calc(1510px * var(--ui-zoom));
   margin: auto;
-  padding: 8px 48px 24px;
+  padding: calc(8px * var(--ui-zoom)) calc(48px * var(--ui-zoom))
+    calc(24px * var(--ui-zoom));
   align-items: center;
 }
 .welcome-copy {
@@ -1539,7 +1564,11 @@ input::placeholder {
   line-height: 1.6;
 }
 .welcome-world {
-  height: clamp(530px, calc(100svh - 154px), 780px);
+  height: clamp(
+    calc(530px * var(--ui-zoom)),
+    calc(100svh - 154px * var(--ui-zoom)),
+    calc(780px * var(--ui-zoom))
+  );
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);

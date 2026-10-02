@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -38,17 +39,21 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   ).toHaveValue("2010000");
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-trigger")).toBeFocused();
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     await expect(page.locator(".welcome-board-preview canvas")).toBeVisible();
     const preview = await page.locator(".welcome-board-preview").boundingBox();
     expect(preview?.height).toBeGreaterThan(340);
     const settingsBounds = await quickSettings.boundingBox();
-    expect(settingsBounds?.height).toBeLessThan(220);
+    // Large screens zoom the panels; compactness is judged at that zoom.
+    const uiZoom = await page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--ui-zoom",
+        ),
+      ),
+    );
+    expect(settingsBounds?.height).toBeLessThan(220 * uiZoom);
     expect(
       (settingsBounds?.x ?? 0) + (settingsBounds?.width ?? 0),
     ).toBeLessThanOrEqual(size.width);

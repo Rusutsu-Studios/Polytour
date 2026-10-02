@@ -4,6 +4,7 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -184,11 +185,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // Every secondary panel starts closed; a match needs no page scrolling.
   await expect(page.locator(".journal")).not.toBeVisible();
   await expect(page.locator(".inspector")).not.toBeVisible();
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     await expect(page.locator(".board-stage")).toHaveCSS(
       "height",
@@ -446,11 +443,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator(".standings-label")).toContainText(
     "Classement final",
   );
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     const resultBounds = await page
       .locator(".match-end-panel")
