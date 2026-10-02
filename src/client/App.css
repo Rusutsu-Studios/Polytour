@@ -1,4 +1,12 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: Independent component scopes do not share descendant elements; media overrides are intentional. */
+/* A bright sky with a few faint floating tiles behind the board. */
+.lobby-shell,
+.game-shell {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'%3E%3Cg fill='none' stroke='white' stroke-opacity='0.34' stroke-width='3'%3E%3Crect x='120' y='190' width='86' height='86' rx='12' transform='rotate(30 163 233)'/%3E%3Crect x='1392' y='238' width='66' height='66' rx='10' transform='rotate(-25 1425 271)'/%3E%3Crect x='1268' y='600' width='112' height='112' rx='15' transform='rotate(40 1324 656)'/%3E%3Crect x='236' y='560' width='62' height='62' rx='9' transform='rotate(-35 267 591)'/%3E%3Crect x='560' y='60' width='44' height='44' rx='7' transform='rotate(20 582 82)'/%3E%3Crect x='1010' y='812' width='54' height='54' rx='8' transform='rotate(-15 1037 839)'/%3E%3C/g%3E%3Cg fill='white' fill-opacity='0.12'%3E%3Crect x='58' y='420' width='52' height='52' rx='9' transform='rotate(45 84 446)'/%3E%3Crect x='1500' y='452' width='60' height='60' rx='10' transform='rotate(15 1530 482)'/%3E%3Crect x='1060' y='70' width='40' height='40' rx='7' transform='rotate(-30 1080 90)'/%3E%3C/g%3E%3C/svg%3E")
+    center / cover no-repeat,
+    radial-gradient(120% 95% at 50% 44%, #b7edfa 0%, #86d9f0 45%, #5bc3e5 100%);
+}
 .lobby-shell {
   min-height: 100svh;
   overflow: hidden;
@@ -12,7 +20,6 @@
   overflow: hidden;
   padding: 0;
   position: relative;
-  background: #75d4ed;
   isolation: isolate;
 }
 .game-shell > .topbar {
@@ -144,44 +151,38 @@
   z-index: 4;
   pointer-events: none;
 }
+/* Corner HUD: a portrait tile in the screen corner, a ribbon in the player's
+   color carrying the name, and an ivory plate with the cash. Bottom seats
+   carry the ribbon below the plate; right seats mirror the left ones. */
 .player-card {
+  --hud-dark: color-mix(in srgb, var(--player-color) 70%, #0f2630);
+  --hud-inset: 26px;
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 252px;
-  min-height: 115px;
-  padding: 15px;
-  background: #fffaf0;
-  border-radius: 14px;
-  box-shadow:
-    0 5px 0 #397e9880,
-    0 10px 25px #1f65771a;
+  width: 296px;
   pointer-events: auto;
 }
 .player-card[data-seat="0"] {
-  left: 22px;
-  bottom: 24px;
+  left: 16px;
+  bottom: 16px;
 }
 .player-card[data-seat="1"] {
-  left: 22px;
-  top: 22px;
+  left: 16px;
+  top: 16px;
 }
 .player-card[data-seat="2"] {
-  right: 22px;
-  top: 22px;
+  right: 16px;
+  top: 16px;
+  flex-direction: row-reverse;
 }
 .player-card[data-seat="3"] {
-  right: 22px;
-  bottom: 24px;
-}
-.player-card.active {
-  box-shadow:
-    0 5px 0 var(--player-color),
-    0 10px 25px #1f657726;
+  right: 16px;
+  bottom: 16px;
+  flex-direction: row-reverse;
 }
 .player-card.bankrupt {
-  filter: saturate(0.3);
+  filter: saturate(0.25);
 }
 .player-avatar {
   position: relative;
@@ -261,40 +262,96 @@
   left: 50%;
   translate: -50% 0;
 }
+.player-card .player-avatar {
+  z-index: 2;
+  width: 80px;
+  height: 88px;
+  border: 4px solid #fffaf0;
+  border-radius: 16px;
+  background: radial-gradient(
+    circle at 50% 30%,
+    color-mix(in srgb, var(--player-color) 16%, #fffaf0) 0 42%,
+    color-mix(in srgb, var(--player-color) 42%, #fffaf0) 100%
+  );
+  box-shadow:
+    0 4px 0 var(--hud-dark),
+    0 10px 22px #0f40521f;
+}
 .player-card.active .player-avatar {
-  background: color-mix(in srgb, var(--player-color) 18%, #fffaf0);
+  border-color: #ffd45e;
+  box-shadow:
+    0 0 0 3px var(--player-color),
+    0 4px 0 3px var(--hud-dark),
+    0 10px 24px #0f405233;
 }
 .player-card-body {
+  position: relative;
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: -18px;
+  border-radius: 0 14px 14px 0;
+  background: #fffaf0;
+  box-shadow:
+    0 4px 0 #3b819766,
+    0 10px 22px #0f40521a;
+  overflow: hidden;
+}
+.player-card[data-seat="2"] .player-card-body,
+.player-card[data-seat="3"] .player-card-body {
+  margin: 0 -18px 0 0;
+  border-radius: 14px 0 0 14px;
 }
 .player-name-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   justify-content: space-between;
+  padding: 6px 12px 6px var(--hud-inset);
+  background: var(--player-color);
+  color: #fffaf0;
+}
+.player-card[data-seat="2"] .player-name-row,
+.player-card[data-seat="3"] .player-name-row {
+  padding: 6px var(--hud-inset) 6px 12px;
+}
+.player-card[data-seat="0"] .player-name-row,
+.player-card[data-seat="3"] .player-name-row {
+  order: 3;
 }
 .player-name-row strong {
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 16px;
   font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .player-name-row > span {
-  font-size: 10px;
-  color: #63746b;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #ffffff2e;
+  font-size: 11px;
+  font-weight: 700;
 }
 .player-cash {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 7px 0 6px;
+  padding: 10px 12px 10px var(--hud-inset);
   font-size: 30px;
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+.player-card[data-seat="2"] .player-cash,
+.player-card[data-seat="3"] .player-cash {
+  padding: 10px var(--hud-inset) 10px 12px;
 }
 .coin-symbol {
   display: grid;
@@ -307,41 +364,28 @@
   box-shadow: 0 2px 0 #b98823;
   font-size: 10px;
 }
-.player-card-body p {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 10px;
-  color: #5d7169;
-  line-height: 1.3;
-}
-.active-marker {
-  position: absolute;
-  left: 17px;
-  top: -13px;
-  color: #fffaf0;
-  background: var(--player-color);
-  font-size: 10px;
-  font-weight: 800;
-  border-radius: 5px;
-  padding: 3px 8px;
-  box-shadow: 0 2px 0 #173b4522;
-}
-.player-card[data-seat="1"] .active-marker,
-.player-card[data-seat="2"] .active-marker {
-  top: auto;
-  bottom: -12px;
-}
 .player-held-cards {
   position: absolute;
+  z-index: 3;
   right: 12px;
   bottom: -12px;
   background: #f7f2df;
-  border-radius: 4px;
+  border-radius: 999px;
   color: #5d6655;
   font-size: 9px;
   font-weight: 700;
-  padding: 3px 6px;
+  padding: 3px 8px;
+  box-shadow: 0 2px 0 #173b4522;
+}
+.player-card[data-seat="2"] .player-held-cards,
+.player-card[data-seat="3"] .player-held-cards {
+  right: auto;
+  left: 12px;
+}
+.player-card[data-seat="0"] .player-held-cards,
+.player-card[data-seat="3"] .player-held-cards {
+  bottom: auto;
+  top: -12px;
 }
 .contextual-action {
   position: absolute;
@@ -427,12 +471,8 @@
 .game-shell .decision-panel[data-kind="buyout"][data-busy="false"] h2 {
   display: none;
 }
-.game-shell
-  .decision-panel[data-kind="buy"][data-busy="false"]
-  > p:not(.construction-guide),
-.game-shell
-  .decision-panel[data-kind="build"][data-busy="false"]
-  > p:not(.construction-guide) {
+.game-shell .decision-panel[data-kind="buy"][data-busy="false"] > p,
+.game-shell .decision-panel[data-kind="build"][data-busy="false"] > p {
   display: none;
 }
 .game-shell .last-dice {
@@ -811,22 +851,6 @@
   font-weight: 500;
   max-width: 100%;
   text-align: center;
-}
-.game-shell .decision-panel > .construction-guide {
-  display: grid;
-  gap: 4px;
-  font-size: 14px;
-  line-height: 1.4;
-  margin-top: 11px;
-  color: #47666c;
-}
-.hotel-note {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.hotel-note svg {
-  flex-shrink: 0;
 }
 .building-miniature {
   position: relative;
@@ -2150,21 +2174,17 @@ input::placeholder {
 
 @media (min-width: 1700px) {
   .player-card {
-    width: 282px;
-    padding: 16px 18px;
+    width: 330px;
   }
   .player-name-row strong {
-    font-size: 16px;
+    font-size: 17px;
   }
   .player-cash {
     font-size: 31px;
   }
-  .player-card-body p {
-    font-size: 11px;
-  }
-  .player-avatar {
-    width: 64px;
-    height: 74px;
+  .player-card .player-avatar {
+    width: 92px;
+    height: 100px;
   }
   .contextual-action {
     width: 660px;
@@ -2172,58 +2192,57 @@ input::placeholder {
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="1"] {
-    left: 28px;
+    left: 22px;
   }
   .player-card[data-seat="2"],
   .player-card[data-seat="3"] {
-    right: 28px;
+    right: 22px;
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="3"] {
-    bottom: 28px;
+    bottom: 22px;
   }
   .player-card[data-seat="1"],
   .player-card[data-seat="2"] {
-    top: 28px;
+    top: 22px;
   }
 }
 
 @media (max-height: 780px) and (min-width: 1051px) {
   .player-card {
-    width: 228px;
-    padding: 10px 12px;
-    min-height: 91px;
-    gap: 9px;
+    --hud-inset: 22px;
+    width: 252px;
+  }
+  .player-name-row {
+    padding-block: 4px;
   }
   .player-name-row strong {
     font-size: 14px;
   }
   .player-cash {
     font-size: 24px;
-    margin: 6px 0;
+    padding-block: 7px;
   }
-  .player-card-body p {
-    font-size: 9px;
-  }
-  .player-avatar {
-    width: 48px;
-    height: 59px;
+  .player-card .player-avatar {
+    width: 64px;
+    height: 72px;
+    border-width: 3px;
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="1"] {
-    left: 16px;
+    left: 12px;
   }
   .player-card[data-seat="2"],
   .player-card[data-seat="3"] {
-    right: 16px;
+    right: 12px;
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="3"] {
-    bottom: 20px;
+    bottom: 14px;
   }
   .player-card[data-seat="1"],
   .player-card[data-seat="2"] {
-    top: 16px;
+    top: 12px;
   }
   .match-topbar {
     top: 12px;
@@ -2257,10 +2276,6 @@ input::placeholder {
   }
   .game-shell .construction-cost {
     font-size: 18px;
-  }
-  .game-shell .decision-panel > .construction-guide {
-    font-size: 14px;
-    margin-top: 9px;
   }
   .game-shell .match-end-panel {
     padding: 19px 22px;
@@ -2354,22 +2369,23 @@ input::placeholder {
     padding: 0 32px 24px;
   }
   .player-card {
-    width: 180px;
-    min-height: 86px;
-    gap: 8px;
-    padding: 10px;
+    --hud-inset: 12px;
+    width: 190px;
   }
-  .player-avatar {
+  .player-card .player-avatar {
     display: none;
+  }
+  .player-card .player-card-body,
+  .player-card[data-seat="2"] .player-card-body,
+  .player-card[data-seat="3"] .player-card-body {
+    margin: 0;
+    border-radius: 12px;
   }
   .player-name-row strong {
     font-size: 12px;
   }
   .player-cash {
     font-size: 24px;
-  }
-  .player-card-body p {
-    font-size: 9px;
   }
   .contextual-action {
     width: min(580px, calc(100vw - 410px));
@@ -2465,9 +2481,8 @@ input::placeholder {
     height: 30px;
   }
   .player-card {
-    width: 145px;
-    min-height: 80px;
-    padding: 9px;
+    --hud-inset: 10px;
+    width: 150px;
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="1"] {
@@ -2484,9 +2499,6 @@ input::placeholder {
   .player-card[data-seat="0"],
   .player-card[data-seat="3"] {
     bottom: 12px;
-  }
-  .player-card-body p > span:last-child {
-    display: none;
   }
   .player-name-row > span {
     font-size: 9px;

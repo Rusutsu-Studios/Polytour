@@ -22,7 +22,7 @@ export {
   roundCharge,
   roundPayout,
 } from "./economy.js";
-export { CHANCE_AMOUNTS, DECISION_TIMING } from "./timing.js";
+export { BOT_TIMING, CHANCE_AMOUNTS, DECISION_TIMING } from "./timing.js";
 export type {
   BoardSide,
   BuildLevel,
