@@ -13,6 +13,7 @@ export {
   botDecisionAt,
   createGame,
   DEFAULT_GAME_CONFIG,
+  decisionWindow,
   getPlayer,
   getProperty,
   legalActions,

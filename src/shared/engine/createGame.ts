@@ -405,7 +405,7 @@ function animationBudget(events: readonly GameEvent[]): number {
   }, 0);
 }
 /** A player's own time for a decision, after the animations that open it. */
-function decisionWindow(
+export function decisionWindow(
   config: GameConfig,
   kind: PendingDecision["kind"],
 ): number {

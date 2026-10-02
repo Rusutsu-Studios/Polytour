@@ -607,7 +607,8 @@ export default function DecisionPanel({
   )?.name;
   // Only what the player acts on: their own countdown, and a debt warning.
   const debt = ownTurn && pending?.kind === "sell";
-  const timer = ownTurn && pending && !rngBusy;
+  // The rolling player's clock is the bar on their HUD; a decision shows its seconds here.
+  const timer = ownTurn && pending && pending.kind !== "roll" && !rngBusy;
   const kicker =
     debt || timer ? (
       <div className="decision-kicker">
@@ -637,6 +638,27 @@ export default function DecisionPanel({
       </div>
     ) : null;
 
+  const statusTitle = rngBusy
+    ? randomness?.status === "error"
+      ? t("Le lancer se fait attendre", "Waiting for the dice")
+      : t("Les dés se préparent", "Preparing the dice")
+    : ownTurn && !busy
+      ? copy[0]
+      : shownSeat === seat
+        ? t("Votre tour", "Your turn")
+        : t(
+            `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
+            `${shownName ?? t("Votre adversaire", "Your opponent")} is playing`,
+          );
+  // Someone else's turn, or an animation in progress: the board and the active
+  // HUD already show it, so the bottom of the screen stays empty.
+  if (!modalOpen && !rngBusy && !(ownTurn && !busy))
+    return (
+      <p className="sr-only" role="status">
+        {statusTitle}
+      </p>
+    );
+
   if (!modalOpen)
     return (
       <section
@@ -647,20 +669,7 @@ export default function DecisionPanel({
         aria-labelledby="decision-heading"
       >
         {kicker}
-        <h2 id="decision-heading">
-          {rngBusy
-            ? randomness?.status === "error"
-              ? t("Le lancer se fait attendre", "Waiting for the dice")
-              : t("Les dés se préparent", "Preparing the dice")
-            : ownTurn && !busy
-              ? copy[0]
-              : shownSeat === seat
-                ? t("Votre tour", "Your turn")
-                : t(
-                    `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
-                    `${shownName ?? t("Votre adversaire", "Your opponent")} is playing`,
-                  )}
-        </h2>
+        <h2 id="decision-heading">{statusTitle}</h2>
         {rngBusy && randomness?.commitment?.mode === "drand" && (
           <p>
             {t(
@@ -698,12 +707,14 @@ export default function DecisionPanel({
                   type="button"
                   key={actionKey(action)}
                   className="button primary roll-button"
+                  aria-label={actionLabel(action, state)}
                   disabled={blocked}
                   onClick={() => act(action)}
                 >
                   <Icon name="dice" size={24} />
-                  {actionLabel(action, state)}
-                  <Icon name="arrow" />
+                  {action.type === "Roll"
+                    ? t("Lancer", "Roll")
+                    : actionLabel(action, state)}
                 </button>
               ))
             )}

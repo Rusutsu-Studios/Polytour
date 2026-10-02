@@ -303,6 +303,65 @@
   margin: 0 -18px 0 0;
   border-radius: 14px 0 0 14px;
 }
+/* The deciding player's clock, right under their ribbon. Bottom seats carry
+   the ribbon below the cash plate, so the bar moves with it. */
+.player-timer {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  background: #173b4514;
+}
+.player-card[data-seat="0"] .player-timer,
+.player-card[data-seat="3"] .player-timer {
+  order: 2;
+}
+.player-timer-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: #3fae6c;
+  animation: timer-drain var(--timer-window) linear var(--timer-delay) both;
+}
+.player-card[data-seat="2"] .player-timer-fill,
+.player-card[data-seat="3"] .player-timer-fill {
+  transform-origin: right center;
+}
+@keyframes timer-drain {
+  0%,
+  55% {
+    background: #3fae6c;
+  }
+  78% {
+    background: #f0b83a;
+  }
+  to {
+    transform: scaleX(0);
+    background: #d63f28;
+  }
+}
+.player-card {
+  transition:
+    scale 220ms,
+    filter 220ms;
+}
+.player-card[data-seat="0"] {
+  transform-origin: left bottom;
+}
+.player-card[data-seat="1"] {
+  transform-origin: left top;
+}
+.player-card[data-seat="2"] {
+  transform-origin: right top;
+}
+.player-card[data-seat="3"] {
+  transform-origin: right bottom;
+}
+.player-card.active {
+  scale: 1.05;
+  filter: drop-shadow(
+    0 0 14px color-mix(in srgb, var(--player-color) 65%, transparent)
+  );
+}
 .player-name-row {
   display: flex;
   align-items: center;
@@ -491,25 +550,39 @@
 .game-shell .dice-total {
   font-size: 11px;
 }
+/* Your roll: a push button lying on the lawn, in front of the dice. The
+   scene reports that spot in pixels; the screen center is the fallback. */
+.contextual-action:has(
+  .decision-compact[data-kind="roll"][data-own="true"][data-busy="false"]
+) {
+  top: var(--roll-y, 50%);
+  bottom: auto;
+  left: var(--roll-x, 50%);
+  translate: -50% -50%;
+  width: auto;
+  max-height: none;
+}
 .game-shell
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {
-  width: 320px;
-  margin: 0 auto;
-  padding: 0;
+  width: auto;
+  margin: 0;
+  padding: 0 0 8px;
   background: none;
   box-shadow: none;
   overflow: visible;
+  animation: roll-pop 360ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
+/* The button says it all; the heading stays for screen readers. */
 .game-shell
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"]
-  .decision-kicker {
-  justify-content: center;
-  color: #214e54;
-  text-shadow: 0 1px 0 #fffaf099;
+  h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
-.game-shell
-  .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"]
-  h2,
 .game-shell
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"]
   > p,
@@ -521,16 +594,84 @@
 .game-shell .decision-panel[data-kind="roll"] .decision-actions {
   display: flex;
   justify-content: center;
+  margin-top: 0;
 }
+/* A physical blue key: a glossy cap on a dark base that sinks when pressed. */
 .game-shell .decision-panel .roll-button {
-  width: 100%;
-  min-height: 57px;
-  font-size: 17px;
-  padding: 14px 22px;
-  justify-content: flex-start;
+  --push: 7px;
+  position: relative;
+  width: auto;
+  min-height: 0;
+  padding: 12px 40px 11px;
+  gap: 10px;
+  border-radius: 14px;
+  background: linear-gradient(#5bbcf8, #2d8fe2 70%);
+  color: #fff;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 #1c64a8;
+  box-shadow:
+    inset 0 2px 0 #ffffff70,
+    inset 0 -3px 0 #1f78c780,
+    0 var(--push) 0 #1a5c9c,
+    0 calc(var(--push) + 7px) 16px #0f2d4a52;
+  transition:
+    translate 70ms ease-out,
+    box-shadow 70ms ease-out,
+    filter 120ms;
 }
-.game-shell .roll-button svg:last-child {
-  margin-left: auto;
+.game-shell .decision-panel .roll-button:hover:not(:disabled) {
+  background: linear-gradient(#5bbcf8, #2d8fe2 70%);
+  transform: none;
+  filter: brightness(1.07);
+  box-shadow:
+    inset 0 2px 0 #ffffff70,
+    inset 0 -3px 0 #1f78c780,
+    0 var(--push) 0 #1a5c9c,
+    0 calc(var(--push) + 7px) 16px #0f2d4a52;
+}
+.game-shell .decision-panel .roll-button:active:not(:disabled) {
+  transform: none;
+  translate: 0 calc(var(--push) - 1px);
+  box-shadow:
+    inset 0 2px 0 #ffffff50,
+    inset 0 -2px 0 #1f78c780,
+    0 1px 0 #1a5c9c,
+    0 3px 6px #0f2d4a40;
+}
+.game-shell .decision-panel .roll-button:disabled {
+  opacity: 0.7;
+  translate: 0 calc(var(--push) - 1px);
+  box-shadow: 0 1px 0 #1a5c9c;
+}
+.game-shell .decision-panel .roll-button svg {
+  filter: drop-shadow(0 2px 0 #1c64a8);
+}
+/* A ring that keeps swelling off the key so the eye lands on it. */
+.game-shell .decision-panel .roll-button:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: roll-ring 1.8s ease-out infinite;
+}
+@keyframes roll-pop {
+  from {
+    opacity: 0;
+    scale: 0.85;
+  }
+}
+@keyframes roll-ring {
+  from {
+    box-shadow: 0 0 0 0 #fffaf0cc;
+  }
+  to {
+    box-shadow: 0 0 0 18px #fffaf000;
+  }
 }
 .game-shell .decision-panel[data-own="false"] {
   max-width: 360px;
@@ -2595,10 +2736,6 @@ button.seat-open:disabled {
   .game-shell .decision-actions[data-construction="true"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .game-shell
-    .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {
-    width: min(320px, 100%);
-  }
   .inspector-popover {
     width: min(280px, calc(100vw - 24px));
     bottom: 118px;
@@ -2685,7 +2822,9 @@ button.seat-open:disabled {
     transition-duration: 0s;
     animation-duration: 0s;
   }
-  .spinner {
+  .spinner,
+  .game-shell .decision-panel[data-kind="roll"],
+  .game-shell .decision-panel .roll-button::after {
     animation: none;
   }
   .button:hover:not(:disabled),
