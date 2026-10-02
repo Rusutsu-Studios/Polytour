@@ -17,6 +17,26 @@ import {
   ROAD_WIDTH,
   screenTop,
 } from "./board-layout.js";
+import {
+  AVENUE_HALF_WIDTH,
+  AVENUE_START,
+  avenuePoint,
+  CAROUSEL,
+  cornerDirection,
+  FERRIS_WHEEL,
+  HELIPAD,
+  lawnPoint,
+  PLAZA_RADIUS,
+  PLOT_DEPTH,
+  PLOT_INSET,
+  PLOT_WIDTH,
+  POND,
+  RING_HALF_WIDTH,
+  RING_RADIUS,
+  TOWN_PLOTS,
+  TURNING_CIRCLE,
+  TURNING_CIRCLE_PAVED,
+} from "./town-layout.js";
 
 // Printed board art, painted once per change into canvas textures. Every
 // canvas keeps one density on both axes so letters are never stretched.
@@ -474,41 +494,204 @@ export function cornerTexture(index: number, locale: Locale, salary: number) {
 }
 
 /** Mown stripes and a chalk circle where the dice land. */
+/**
+ * The town ground under the middle of the board, painted in world units: a
+ * mown park, a paved plaza for the dice, the roundabout and its avenues, and
+ * one street of plots per side, each edged in its city's country color.
+ */
 export function lawnTexture() {
-  const size = 1024;
+  const size = 1536;
   const unit = size / (LAWN_HALF * 2);
   return canvasTexture(size, size, (context) => {
     context.fillStyle = "#9fcb59";
     context.fillRect(0, 0, size, size);
-    const stripes = 8;
+    const stripes = 12;
     for (let stripe = 0; stripe < stripes; stripe += 2) {
-      context.fillStyle = "#abd466";
+      context.fillStyle = "#a9d264";
       context.fillRect((stripe * size) / stripes, 0, size / stripes, size);
     }
-    const shade = context.createRadialGradient(
-      size / 2,
-      size / 2,
-      size * 0.25,
-      size / 2,
-      size / 2,
-      size * 0.72,
-    );
-    shade.addColorStop(0, "#ffffff00");
-    shade.addColorStop(1, "#4d7d2a2e");
-    context.fillStyle = shade;
-    context.fillRect(0, 0, size, size);
-    context.strokeStyle = "#f5fbeacc";
-    context.lineWidth = 7;
+    // Canvas x is world x and canvas y is world z, both in board units.
+    context.setTransform(unit, 0, 0, unit, size / 2, size / 2);
+    const disc = (x: number, z: number, radius: number, fill: string) => {
+      context.fillStyle = fill;
+      context.beginPath();
+      context.arc(x, z, radius, 0, Math.PI * 2);
+      context.fill();
+    };
+    const ring = (radius: number, width: number, stroke: string) => {
+      context.strokeStyle = stroke;
+      context.lineWidth = width;
+      context.beginPath();
+      context.arc(0, 0, radius, 0, Math.PI * 2);
+      context.stroke();
+    };
+    const avenue = (
+      corner: number,
+      from: number,
+      to: number,
+      halfWidth: number,
+      fill: string,
+    ) => {
+      const [x, z] = cornerDirection(corner);
+      context.save();
+      context.rotate(Math.atan2(z, x));
+      context.fillStyle = fill;
+      context.fillRect(from, -halfWidth, to - from, halfWidth * 2);
+      context.restore();
+    };
+    // Footpaths from the board road to the roundabout, between the plots.
+    for (let side = 0; side < 4; side++) {
+      const [ax, az] = lawnPoint(side, 0, 0);
+      const [bx, bz] = lawnPoint(side, 0, LAWN_HALF - RING_RADIUS);
+      context.strokeStyle = "#eee6d4";
+      context.lineWidth = 0.09;
+      context.beginPath();
+      context.moveTo(ax, az);
+      context.lineTo(bx, bz);
+      context.stroke();
+    }
+    // Avenues with pale sidewalks and a dashed center line.
+    for (let corner = 0; corner < 4; corner++) {
+      avenue(corner, 1.3, TURNING_CIRCLE, AVENUE_HALF_WIDTH + 0.05, "#ece4d2");
+      avenue(corner, 1.3, TURNING_CIRCLE, AVENUE_HALF_WIDTH, "#88939b");
+      disc(
+        ...avenuePoint(corner, TURNING_CIRCLE, 0),
+        TURNING_CIRCLE_PAVED + 0.05,
+        "#ece4d2",
+      );
+      disc(
+        ...avenuePoint(corner, TURNING_CIRCLE, 0),
+        TURNING_CIRCLE_PAVED,
+        "#88939b",
+      );
+      disc(...avenuePoint(corner, TURNING_CIRCLE, 0), 0.1, "#d9ceb6");
+      const [x, z] = cornerDirection(corner);
+      context.save();
+      context.rotate(Math.atan2(z, x));
+      context.strokeStyle = "#f4f1e8";
+      context.lineWidth = 0.014;
+      context.setLineDash([0.07, 0.06]);
+      context.beginPath();
+      context.moveTo(AVENUE_START + 0.05, 0);
+      context.lineTo(TURNING_CIRCLE - TURNING_CIRCLE_PAVED, 0);
+      context.stroke();
+      context.setLineDash([]);
+      context.restore();
+    }
+    // The roundabout, then the plaza where the dice land.
+    disc(0, 0, RING_RADIUS + RING_HALF_WIDTH + 0.05, "#ece4d2");
+    disc(0, 0, RING_RADIUS + RING_HALF_WIDTH, "#88939b");
+    context.setLineDash([0.07, 0.06]);
+    ring(RING_RADIUS, 0.012, "#f4f1e8");
+    context.setLineDash([]);
+    disc(0, 0, PLAZA_RADIUS, "#efe5cf");
+    ring(PLAZA_RADIUS - 0.03, 0.035, "#dccdb0");
+    ring(1.0, 0.018, "#e3d6bc");
+    ring(0.55, 0.018, "#e3d6bc");
+    // A faint compass rose, low contrast so the dice stay the subject.
+    context.fillStyle = "#e6d8bd";
+    for (let point = 0; point < 8; point++) {
+      const angle = (point * Math.PI) / 4;
+      const length = point % 2 ? 0.42 : 0.9;
+      context.beginPath();
+      context.moveTo(Math.cos(angle) * length, Math.sin(angle) * length);
+      context.lineTo(
+        Math.cos(angle + 0.32) * 0.16,
+        Math.sin(angle + 0.32) * 0.16,
+      );
+      context.lineTo(
+        Math.cos(angle - 0.32) * 0.16,
+        Math.sin(angle - 0.32) * 0.16,
+      );
+      context.closePath();
+      context.fill();
+    }
+    disc(0, 0, 0.12, "#e3d6bc");
+    // One paved street of plots facing each side.
+    const rounded = (
+      x: number,
+      z: number,
+      halfX: number,
+      halfZ: number,
+      radius: number,
+    ) => {
+      context.beginPath();
+      context.roundRect(x - halfX, z - halfZ, halfX * 2, halfZ * 2, radius);
+    };
+    for (let side = 0; side < 4; side++) {
+      const [x, z] = lawnPoint(side, 0, PLOT_INSET);
+      const alongX = side % 2 === 0;
+      const halfAlong = 1.38;
+      const halfDepth = PLOT_DEPTH / 2 + 0.07;
+      rounded(
+        x,
+        z,
+        alongX ? halfAlong : halfDepth,
+        alongX ? halfDepth : halfAlong,
+        0.06,
+      );
+      context.fillStyle = "#e9e0cc";
+      context.fill();
+    }
+    for (const plot of TOWN_PLOTS) {
+      const alongX = plot.side % 2 === 0;
+      const halfAlong = PLOT_WIDTH / 2;
+      const halfDepth = PLOT_DEPTH / 2;
+      rounded(
+        plot.position[0],
+        plot.position[1],
+        alongX ? halfAlong : halfDepth,
+        alongX ? halfDepth : halfAlong,
+        0.035,
+      );
+      context.fillStyle = "#f7f1e3";
+      context.fill();
+      context.strokeStyle = tileColor(plot.tile);
+      context.lineWidth = 0.03;
+      context.stroke();
+    }
+    // Fairground, pond and helipad.
+    disc(...FERRIS_WHEEL.position, 0.3, "#eedfbd");
+    disc(...CAROUSEL.position, 0.27, "#eedfbd");
+    disc(...POND.position, POND.radius - 0.01, "#e5d7b8");
+    disc(...POND.position, POND.radius - 0.04, "#62c3dc");
+    context.strokeStyle = "#9fe0ef";
+    context.lineWidth = 0.012;
+    for (const radius of [0.09, 0.17]) {
+      context.beginPath();
+      context.arc(...POND.position, radius, 0.4, 1.6);
+      context.stroke();
+    }
+    disc(...HELIPAD.position, HELIPAD.radius - 0.02, "#8e999f");
+    context.strokeStyle = "#fffaf0";
+    context.lineWidth = 0.018;
     context.beginPath();
-    context.arc(size / 2, size / 2, unit * 1.45, 0, Math.PI * 2);
+    context.arc(...HELIPAD.position, HELIPAD.radius - 0.06, 0, Math.PI * 2);
     context.stroke();
-    context.fillStyle = "#f5fbeacc";
-    context.beginPath();
-    context.arc(size / 2, size / 2, 9, 0, Math.PI * 2);
-    context.fill();
+    context.save();
+    context.translate(...HELIPAD.position);
+    context.rotate(Math.PI / 4);
+    context.fillStyle = "#fffaf0";
+    context.fillRect(-0.06, -0.07, 0.025, 0.14);
+    context.fillRect(0.035, -0.07, 0.025, 0.14);
+    context.fillRect(-0.06, -0.0125, 0.12, 0.025);
+    context.restore();
+    // Flower beds at the inner corners of the plot streets.
+    const flowers = ["#f2a5b8", "#ffd166", "#fffaf0", "#f59f7a"];
+    for (let corner = 0; corner < 4; corner++)
+      for (const across of [-1, 1])
+        for (let petal = 0; petal < 7; petal++) {
+          const [x, z] = avenuePoint(
+            corner,
+            1.78 + (petal % 3) * 0.05,
+            across * (0.24 + Math.floor(petal / 3) * 0.045),
+          );
+          disc(x, z, 0.022, flowers[(petal + corner) % flowers.length]);
+        }
+    context.setTransform(1, 0, 0, 1, 0, 0);
     context.strokeStyle = "#5f8f3a40";
-    context.lineWidth = 10;
-    context.strokeRect(5, 5, size - 10, size - 10);
+    context.lineWidth = 14;
+    context.strokeRect(7, 7, size - 14, size - 14);
   });
 }
 

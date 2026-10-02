@@ -402,6 +402,37 @@ Verification on this machine:
 - On the two back sides, a pawn standing on the road can hide part of the price
   of its own lot; the inspector and decision dialogs still show it.
 
+## Living town in the center — 2 October 2026
+
+The user found the middle of the board empty and asked for a livelier center
+that builds up during the match, as in familiar mobile and console property
+games, while the board stays readable. The lawn became a small original town
+(see DESIGN.md and ANIMATION.md → Current town in the center). No rule, event,
+protocol or Worker code changes.
+
+- `client/scene/town-layout.ts` places a paved dice plaza, a roundabout, four
+  avenues with turning circles and one street of six plots per side, one plot
+  per city or resort in play order. `town-layout.test.ts` adds four tests:
+  plots match the board, nothing overlaps or sits on a road, the car circuit
+  stays on paved roads, and no town envelope hides a pawn spot, a lot print,
+  the board road or a die at rest when projected through the camera.
+- `client/scene/Downtown.tsx` draws the plots from `viewState` (tree when
+  unsold, then the lot's level under the owner's color) and replays their
+  construction with a crane inside the existing property animation.
+- Ambient cars, big wheel, carousel, boat, helicopter and fountains render at
+  30 fps between game animations; reduced motion freezes them.
+
+Verification on this machine:
+
+- 132 unit/Worker tests (4 new town tests), TypeScript and Biome pass.
+- The match was inspected at 1280×720, 1440×900 and 1920×1080 at the start
+  of a match, with a partly owned fixture and with every plot owned. A
+  synthetic landmark upgrade shows the crane and the rising tower. Prices,
+  names, pawns and dice stay unobstructed.
+- A WebGL hook counts 295 draw calls per frame with the town, against 239
+  before, both including the shadow pass. Software-rendered frame rates are
+  not hardware evidence; the 60 fps desktop target still needs a hardware run.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,

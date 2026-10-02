@@ -51,6 +51,7 @@ import {
   scoreTexture,
   seatBadgeTexture,
 } from "./board-textures.js";
+import { Downtown, type DowntownHandle } from "./Downtown.js";
 import { BeachUmbrella, Landmarks } from "./Landmarks.js";
 
 type BoardProps = {
@@ -1098,6 +1099,7 @@ function SceneContent(props: BoardProps) {
   const scoreTextures = useRef(new Map<string, THREE.Texture>());
   const timelines = useRef(new Map<gsap.core.Timeline, () => void>());
   const towns = useRef<TownsHandle | null>(null);
+  const downtown = useRef<DowntownHandle | null>(null);
   const growth = useMemo(() => ({ tile: 0, progress: 0 }), []);
   const pulse = useRef<THREE.Mesh>(null);
   const sparks = useRef<THREE.InstancedMesh>(null);
@@ -1182,6 +1184,7 @@ function SceneContent(props: BoardProps) {
       paintDice(next?.lastRoll?.seat ?? null);
       showScore(next?.lastRoll ?? null);
       towns.current?.draw(next, null);
+      downtown.current?.draw(next, null);
       invalidate();
     }
     function cancel() {
@@ -1556,10 +1559,20 @@ function SceneContent(props: BoardProps) {
               (context.previous
                 ? (getProperty(context.previous, event.tile)?.level ?? 0)
                 : 0);
-          const drawGrowth = () => towns.current?.draw(context.next, growth);
+          // The town plot answers every change of owner or level.
+          const before = context.previous
+            ? getProperty(context.previous, event.tile)
+            : null;
+          const after = getProperty(context.next, event.tile);
+          const rebuilds =
+            before?.owner !== after?.owner || before?.level !== after?.level;
+          const drawGrowth = () => {
+            if (builds) towns.current?.draw(context.next, growth);
+            if (rebuilds) downtown.current?.draw(context.next, growth);
+          };
           growth.tile = event.tile;
           growth.progress = 0;
-          if (builds) drawGrowth();
+          drawGrowth();
           const budget = DECISION_TIMING.propertyAnimation / 1000;
           await play((timeline) => {
             timeline.fromTo(
@@ -1567,7 +1580,7 @@ function SceneContent(props: BoardProps) {
               { x: 0.1, y: 0.1, z: 0.1 },
               { x: 1.3, y: 1.3, z: 1.3, duration: 0.55, ease: "power2.out" },
             );
-            if (builds)
+            if (builds || rebuilds)
               timeline.to(
                 growth,
                 {
@@ -1648,6 +1661,7 @@ function SceneContent(props: BoardProps) {
       <BoardTiles {...props} />
       <TileFocus {...props} />
       <Towns state={state} preview={preview} handle={towns} />
+      <Downtown state={state} preview={preview} handle={downtown} />
       <ResortProps />
       <FestivalFlags state={state} />
       <Landmarks />

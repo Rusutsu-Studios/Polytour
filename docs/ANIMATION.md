@@ -2,7 +2,8 @@
 
 The PC game should feel like a **premium toy diorama**: a chunky, softly lit 3D board
 filling the play viewport, pieces with weight and bounce, money that *flies*. A
-sky-blue surround, grassy center and ivory track support the original geometry.
+sky-blue surround, a small living town in the center and an ivory track support
+the original geometry.
 Four compact player HUDs sit at the corners; only the current decision opens a
 contextual action panel. Journal, proof, instructions and inspection tools stay
 closed until requested. Every event the
@@ -109,11 +110,39 @@ instanced; hotels and terraced landmarks stay visually distinct. These are the
 implemented construction accents, not the full sound/particle specification in
 the signature-moment table above.
 
+## Current town in the center
+
+`client/scene/town-layout.ts` holds the town's geometry and
+`client/scene/Downtown.tsx` draws it. Each city and resort has one plot in the
+street facing its side, in play order. The plot mirrors `viewState`: a tree
+while unsold, then the lot's level under the owner's color (a pool and parasol
+for a resort). Plots, facades, roofs, windows and trees are instanced.
+
+- **Construction:** the property handler that raises a lot's buildings also
+  replays the town plot when its owner or level changes, with the same growth
+  progress and overshoot, slightly delayed. A crane stands on the camera side of
+  the plot and swings its jib during the rise. A buyout re-raises the plot in
+  the buyer's color. Skip, reset and reduced motion snap it like the lot.
+- **Ambient life:** seven cars circle the roundabout and visit every avenue's
+  turning circle, the big wheel turns once every 40 s, the carousel spins with
+  bobbing horses, a boat sails the pond, the helicopter hops off its pad every
+  18 s and the four fountains pulse. Motion reads only the frame clock and
+  never game state. Reduced motion freezes it.
+- **Readability:** the plaza keeps the dice clear. An object may be no taller
+  than its distance to the lawn edge behind it (`visibilityCap`), and the
+  tallest building (0.68) stays under a die's top face. `town-layout.test.ts`
+  projects every envelope through the camera against pawn spots, lot prints,
+  the board road and the dice, and checks plots, trees and roads never overlap.
+- **Cost:** about 56 more draw calls per frame including the shadow pass
+  (295 against 239, measured with a WebGL hook in software rendering). Ambient
+  life keeps the canvas rendering at 30 fps between game animations instead of
+  idling; reduced motion restores fully on-demand rendering.
+
 ## Current dice feedback
 
 The dice take the roller's color, shake briefly on the roller's side of the
-board, then fly high across the lawn, tumbling, and bounce to the server's values
-on the chalk circle. A small scoreboard then pops up with their total (gold for a
+board, then fly high across the town, tumbling, and bounce to the server's values
+on the central plaza. A small scoreboard then pops up with their total (gold for a
 double) and holds long enough to read before the pawn sets off. The shake, throw
 and reveal fit the shared 1.7 s dice budget. Pawns hop one tile per 0.3 s and
 bounce on the last; a corner they only pass counts as a hop but is turned on the
@@ -192,8 +221,9 @@ Consistency matters more than any single animation: reuse these presets from
 
 - Tiles, houses, coins, and particles are **instanced**. Target < 150 draw calls.
 - Never allocate in `useFrame`; keep temp `Vector3`/`Quaternion` objects module-level.
-- `frameloop="demand"` when nothing is animating (Director idle + no camera input);
-  call `invalidate()` from GSAP's `onUpdate`. Avoids rendering idle PC scenes.
+- `frameloop="demand"`; call `invalidate()` from GSAP's `onUpdate`. The town's
+  ambient life adds a capped 30 fps `invalidate()` loop between game
+  animations; reduced motion stops it, so that scene renders only on demand.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated
   SDF font, or HTML overlays via drei `<Html>` sparingly (they're DOM nodes).
