@@ -860,14 +860,6 @@ describe("Authoritative private rooms", () => {
     expect((await secondSocket.next("reject")).reason).toBe("host-only");
     hostSocket.send({
       type: "lobby",
-      id: "missing",
-      op: { type: "start", fillBots: false },
-    });
-    expect((await hostSocket.next("reject")).reason).toBe(
-      "four-players-required",
-    );
-    hostSocket.send({
-      type: "lobby",
       id: "start",
       op: { type: "start", fillBots: true },
     });
@@ -883,6 +875,171 @@ describe("Authoritative private rooms", () => {
       }),
     );
     expect(rejectedJoin.status).toBe(409);
+  });
+
+  it("lets the host add and remove bots, then start with only the filled seats", async () => {
+    const host = await create();
+    const hostSocket = await connect(host);
+    await hostSocket.next("welcome");
+    await hostSocket.next("lobby");
+    const lobbyOp = async (
+      id: string,
+      op: Record<string, unknown>,
+      socket = hostSocket,
+    ) => {
+      socket.send({ type: "lobby", id, op });
+      for (;;) {
+        const reply = socket.messages.find(
+          (message) =>
+            (message.type === "ack" || message.type === "reject") &&
+            message.id === id,
+        );
+        if (reply) {
+          socket.messages.splice(socket.messages.indexOf(reply), 1);
+          return reply.type === "reject" ? reply.reason : "ack";
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    };
+    const seats = async () =>
+      (await hostSocket.next("lobby")).lobby.seats.map((seat) => [
+        seat.name,
+        seat.control,
+      ]);
+    // Alone at the table, the host cannot start without filling seats.
+    expect(await lobbyOp("alone", { type: "start", fillBots: false })).toBe(
+      "players-required",
+    );
+    expect(await lobbyOp("bot-2", { type: "add-bot", seat: 2 })).toBe("ack");
+    expect(await seats()).toEqual([
+      ["Alex", "human"],
+      ["Place libre", null],
+      ["Nova", "bot"],
+      ["Place libre", null],
+    ]);
+    expect(await lobbyOp("again", { type: "add-bot", seat: 2 })).toBe(
+      "seat-taken",
+    );
+    expect(await lobbyOp("host-seat", { type: "add-bot", seat: 0 })).toBe(
+      "seat-taken",
+    );
+    expect(await lobbyOp("human", { type: "remove-bot", seat: 0 })).toBe(
+      "not-a-bot",
+    );
+    expect(await lobbyOp("empty", { type: "remove-bot", seat: 1 })).toBe(
+      "not-a-bot",
+    );
+    expect(await lobbyOp("bot-3", { type: "add-bot", seat: 3 })).toBe("ack");
+    await hostSocket.next("lobby");
+    expect(await lobbyOp("drop-2", { type: "remove-bot", seat: 2 })).toBe(
+      "ack",
+    );
+    expect(await seats()).toEqual([
+      ["Alex", "human"],
+      ["Place libre", null],
+      ["Place libre", null],
+      ["Atlas", "bot"],
+    ]);
+    // A friend takes the first free place; only the host manages bots.
+    const friend = await join(host.roomCode, "Bo");
+    expect(friend.seat).toBe(1);
+    await hostSocket.next("lobby");
+    const friendSocket = await connect(friend);
+    await friendSocket.next("welcome");
+    expect(
+      await lobbyOp("guest", { type: "add-bot", seat: 2 }, friendSocket),
+    ).toBe("host-only");
+    expect(await lobbyOp("start", { type: "start", fillBots: false })).toBe(
+      "ack",
+    );
+    const events = await hostSocket.next("events");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(
+      created.state.players.map((player) => [
+        player.seat,
+        player.name,
+        player.control,
+      ]),
+    ).toEqual([
+      [0, "Alex", "human"],
+      [1, "Bo", "human"],
+      [3, "Atlas", "bot"],
+    ]);
+    expect([...created.state.turnOrder].sort()).toEqual([0, 1, 3]);
+    let started = (await hostSocket.next("lobby")).lobby;
+    while (started.status === "lobby")
+      started = (await hostSocket.next("lobby")).lobby;
+    expect(started.status).toBe("playing");
+    expect(started.seats[2].control).toBeNull();
+    expect(await lobbyOp("late-bot", { type: "add-bot", seat: 2 })).toBe(
+      "game-already-started",
+    );
+    const lateJoin = await exports.default.fetch(
+      new Request(`${origin}/api/rooms/${host.roomCode}/join`, {
+        method: "POST",
+        body: JSON.stringify({ name: "Late" }),
+      }),
+    );
+    expect(lateJoin.status).toBe(409);
+  });
+
+  it("starts a one-human room against a single bot and advances its first turn", async () => {
+    const host = await create();
+    const hostSocket = await connect(host);
+    await hostSocket.next("welcome");
+    hostSocket.send({
+      type: "lobby",
+      id: "bot",
+      op: { type: "add-bot", seat: 1 },
+    });
+    await hostSocket.next("ack");
+    hostSocket.send({
+      type: "lobby",
+      id: "start",
+      op: { type: "start", fillBots: false },
+    });
+    const events = await hostSocket.next("events");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(created.state.players.map((player) => player.seat)).toEqual([0, 1]);
+    const seat = created.state.activeSeat;
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const state = JSON.parse(row.json) as GameState;
+      if (!state.pending) throw new Error("Pending decision expected");
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...state,
+          pending: { ...state.pending, deadline: Date.now() - 1 },
+        }),
+      );
+      expect(
+        durableState.storage.sql
+          .exec<{ kind: string }>(
+            "SELECT kind FROM timers WHERE kind IN ('decision','bot')",
+          )
+          .toArray()
+          .map((timer) => timer.kind),
+      ).toEqual([seat === 1 ? "bot" : "decision"]);
+      durableState.storage.sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind IN ('decision','bot')",
+        Date.now() - 1,
+      );
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const rolled = await hostSocket.next("events");
+    expect(
+      rolled.events.some(
+        (event) => event.type === "DiceRolled" && event.seat === seat,
+      ),
+    ).toBe(true);
   });
 
   it("rejects wrong-seat, malformed and stale intents without changing money or sequence", async () => {

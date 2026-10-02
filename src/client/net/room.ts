@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Action } from "../../shared/engine/index.js";
+import type { Action, Seat } from "../../shared/engine/index.js";
 import type {
   ClientMessage,
   LobbyState,
@@ -228,9 +228,17 @@ export function useRoom(credentials: RoomCredentials | null) {
                   "La partie a déjà commencé. Les réglages sont fixés.",
                   "The game has already started. Its settings are locked.",
                 ],
-                "four-players-required": [
-                  "Il faut quatre joueurs pour démarrer. Invitez vos amis ou complétez avec des bots.",
-                  "Four players are required. Invite friends or fill empty seats with bots.",
+                "players-required": [
+                  "Il faut au moins deux joueurs. Invitez un ami ou ajoutez un bot.",
+                  "At least two players are needed. Invite a friend or add a bot.",
+                ],
+                "seat-taken": [
+                  "Cette place vient d’être prise. La salle est à jour.",
+                  "That seat was just taken. The room is up to date.",
+                ],
+                "not-a-bot": [
+                  "Cette place n’est plus occupée par un bot.",
+                  "That seat is no longer held by a bot.",
                 ],
                 "game-over": [
                   "La partie est terminée. Revenez à l’accueil pour en créer une autre.",
@@ -405,6 +413,18 @@ export function useRoom(credentials: RoomCredentials | null) {
         type: "lobby",
         id: crypto.randomUUID(),
         op: { type: "settings", config },
+      }),
+    addBot: (seat: Seat) =>
+      send({
+        type: "lobby",
+        id: crypto.randomUUID(),
+        op: { type: "add-bot", seat },
+      }),
+    removeBot: (seat: Seat) =>
+      send({
+        type: "lobby",
+        id: crypto.randomUUID(),
+        op: { type: "remove-bot", seat },
       }),
   };
 }

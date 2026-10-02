@@ -24,6 +24,10 @@ import {
 export const SIM_SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
   (name, index) => ({ playerId: `sim-${index}`, name, control: "bot" }),
 );
+/** The first `players` simulator seats, at their own table seats. */
+export function simSeats(players: number): readonly SeatInfo[] {
+  return SIM_SEATS.slice(0, players);
+}
 export const SIM_CONFIG: GameConfig = {
   ...DEFAULT_GAME_CONFIG,
   roundLimit: 20,
@@ -123,8 +127,9 @@ export function simulateGame(
     actions: readonly Action[],
     index: number,
   ) => Action,
+  seats: readonly SeatInfo[] = SIM_SEATS,
 ): SimulationResult {
-  let state = createGame(config, SIM_SEATS, seed, { now: 0 }).state;
+  let state = createGame(config, seats, seed, { now: 0 }).state;
   const expectedCash = cashTotal(state);
   let decisions = 0;
   let landmarkBuilds = 0;

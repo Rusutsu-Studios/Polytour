@@ -1,7 +1,7 @@
 # Game design (new-room rules v0.3; v0.2 saved rooms retained)
 
-Polytour is a fast, aggressive property game. This prototype uses four seats,
-with server bots filling empty places. Compared to classic
+Polytour is a fast, aggressive property game for two to four players. A room has
+four seats; the host can seat server bots in empty places. Compared to classic
 Monopoly: a smaller board (32 tiles), bigger rents, **buyouts** (you can take an
 opponent's city), several **instant-win monopolies**, and a round limit so a match
 has a configurable duration. The user's default is a two-hour maximum; instant
@@ -83,7 +83,7 @@ Corners at 0, 8, 16, 24. Each side has 7 tiles between corners. Prices rise cloc
 | --- | --- |
 | Starting cash | 2,000,000 (configurable) |
 | Salary for passing/landing on Start | 400,000 (configurable) |
-| Players | 4 (bots can fill empty seats) |
+| Players | 2–4; empty seats stay empty or take a bot |
 | Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
 | Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
 | Initial festivals | 3 (configurable); neutral city squares with ×2 rent |

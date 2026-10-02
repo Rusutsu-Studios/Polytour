@@ -3,7 +3,7 @@
 ## Implemented prototype boundary
 
 The first playable slice uses a Worker and one SQLite-backed GameRoom per private
-four-seat match. It stores state, events, proof receipts, commands and timers in
+match of two to four seats. It stores state, events, proof receipts, commands and timers in
 that room. Create/join issues a cryptographically random seat capability; only its
 hash is stored. The WebSocket sends the token in `Sec-WebSocket-Protocol`, never
 the URL. The client keeps it in sessionStorage, so refresh restores its seat in
@@ -133,7 +133,7 @@ WebSocket hijacking on top of `SameSite=Lax`.
 ```mermaid
 stateDiagram-v2
   [*] --> Lobby: init() from POST /api/rooms or the Matchmaker
-  Lobby --> Playing: host starts (2–4 seats filled, bots fill empties)
+  Lobby --> Playing: host starts (2–4 seats filled by players or host-added bots)
   Playing --> Playing: intents → engine → events
   Playing --> Finished: win condition or round limit
   Finished --> Archived: results → D1, log → R2
