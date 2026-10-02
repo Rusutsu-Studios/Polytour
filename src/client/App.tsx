@@ -574,8 +574,8 @@ function TileInspector({
                         "Draw a card and follow its instructions.",
                       )
                     : t(
-                        "La taxe est calculée selon votre fortune.",
-                        "Tax is based on your net worth.",
+                        `Payez ${ECONOMY.taxPercent} % de la valeur de vos terrains et bâtiments, pas de votre argent liquide (minimum ${money(ECONOMY.minimumTax)}).`,
+                        `Pay ${ECONOMY.taxPercent}% of the value of your land and buildings, not of your cash (minimum ${money(ECONOMY.minimumTax)}).`,
                       )}
         </p>
       )}
