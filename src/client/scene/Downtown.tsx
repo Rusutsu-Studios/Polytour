@@ -30,7 +30,8 @@ import {
 // built to the same level as the lot, under the owner's color. Construction
 // is played by the Director like the lot's own buildings. Cars, the big
 // wheel, the carousel, a sailing boat, a helicopter and the fountains only
-// add ambient life; reduced motion keeps them still.
+// add ambient life during a match; lobby previews and reduced motion keep
+// them still.
 
 export type TownGrowth = { tile: number; progress: number };
 export type DowntownHandle = {
@@ -844,10 +845,12 @@ export function Downtown({
   handle: { current: DowntownHandle | null };
 }) {
   const { reducedMotion } = useDirector();
+  // Lobby previews stay still: they are decoration, and an idle lobby should
+  // not keep rendering a 3D scene.
   return (
     <group>
       <TownBuildings state={state} preview={preview} handle={handle} />
-      <AmbientLife animated={!reducedMotion} />
+      <AmbientLife animated={!reducedMotion && !preview} />
     </group>
   );
 }

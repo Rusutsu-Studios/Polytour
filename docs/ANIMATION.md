@@ -127,7 +127,7 @@ for a resort). Plots, facades, roofs, windows and trees are instanced.
   turning circle, the big wheel turns once every 40 s, the carousel spins with
   bobbing horses, a boat sails the pond, the helicopter hops off its pad every
   18 s and the four fountains pulse. Motion reads only the frame clock and
-  never game state. Reduced motion freezes it.
+  never game state. Reduced motion and the lobby previews keep it still.
 - **Readability:** the plaza keeps the dice clear. An object may be no taller
   than its distance to the lawn edge behind it (`visibilityCap`), and the
   tallest building (0.68) stays under a die's top face. `town-layout.test.ts`
@@ -135,8 +135,8 @@ for a resort). Plots, facades, roofs, windows and trees are instanced.
   the board road and the dice, and checks plots, trees and roads never overlap.
 - **Cost:** about 56 more draw calls per frame including the shadow pass
   (295 against 239, measured with a WebGL hook in software rendering). Ambient
-  life keeps the canvas rendering at 30 fps between game animations instead of
-  idling; reduced motion restores fully on-demand rendering.
+  life keeps the match canvas rendering at 30 fps between game animations
+  instead of idling; reduced motion and lobby previews stay fully on demand.
 
 ## Current dice feedback
 
@@ -222,8 +222,8 @@ Consistency matters more than any single animation: reuse these presets from
 - Tiles, houses, coins, and particles are **instanced**. Target < 150 draw calls.
 - Never allocate in `useFrame`; keep temp `Vector3`/`Quaternion` objects module-level.
 - `frameloop="demand"`; call `invalidate()` from GSAP's `onUpdate`. The town's
-  ambient life adds a capped 30 fps `invalidate()` loop between game
-  animations; reduced motion stops it, so that scene renders only on demand.
+  ambient life adds a capped 30 fps `invalidate()` loop to the match board;
+  reduced motion and lobby previews skip it and render only on demand.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated
   SDF font, or HTML overlays via drei `<Html>` sparingly (they're DOM nodes).

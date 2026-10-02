@@ -85,7 +85,8 @@ of that side. An unsold plot holds a tree inside an outline in its country's
 color; a bought one shows the lot's own level (flag, house, town house, block,
 hotel tower, landmark with a gold spire) under the owner's color. A crane works
 beside a plot while the Director plays its construction. Cars, a big wheel, a
-carousel, a sailing pond, a helicopter and four fountains add ambient motion.
+carousel, a sailing pond, a helicopter and four fountains add ambient motion
+during a match; lobby previews stay still.
 Nothing in the town may hide a pawn, a lot, the board road or a die at rest;
 layout tests project every town envelope through the camera to prove it.
 

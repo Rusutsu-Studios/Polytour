@@ -420,7 +420,11 @@ protocol or Worker code changes.
   unsold, then the lot's level under the owner's color) and replays their
   construction with a crane inside the existing property animation.
 - Ambient cars, big wheel, carousel, boat, helicopter and fountains render at
-  30 fps between game animations; reduced motion freezes them.
+  30 fps between game animations on the match board; lobby previews and
+  reduced motion keep them still. A first CI run showed why previews must stay
+  still: the fake-clock socket scenarios advance minutes of browser time in a
+  room lobby, and an animated preview turned that into thousands of software
+  renders.
 
 Verification on this machine:
 

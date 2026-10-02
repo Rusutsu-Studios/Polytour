@@ -7,6 +7,7 @@ import {
   LAWN_HALF,
   LAWN_TOP,
   LOT_TOP,
+  passingSpot,
   pawnSpot,
   ROAD_TOP,
   ROAD_WIDTH,
@@ -181,6 +182,12 @@ function protectedPoints() {
       points.push({
         at: [x, isCorner(tile.index) ? LOT_TOP : ROAD_TOP, z],
         name: `pawn ${seat} on ${tile.index}`,
+      });
+      // Walking pawns turn corners on the road's corner square.
+      const [px, pz] = passingSpot(seat, tile.index);
+      points.push({
+        at: [px, ROAD_TOP, pz],
+        name: `pawn ${seat} passing ${tile.index}`,
       });
     }
     // The whole printed lot: name, price, plot and buildings.
