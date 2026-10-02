@@ -159,6 +159,12 @@ export function tilePosition(index: number): [number, number] {
 export function pawnOffset(seat: Seat): [number, number] {
   return [seat % 2 === 0 ? -0.19 : 0.19, seat < 2 ? -0.18 : 0.18];
 }
+/** Exact amount with grouped digits (1 800 000), for balances players track. */
+export function fullMoney(value: number) {
+  return new Intl.NumberFormat(getLocale() === "fr" ? "fr-FR" : "en-GB", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 export function money(value: number) {
   const locale = getLocale() === "fr" ? "fr-CH" : "en-GB";
   if (Math.abs(value) >= 1_000_000)

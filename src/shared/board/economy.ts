@@ -26,6 +26,8 @@ type RuleEconomy = {
     readonly 2: number;
     readonly 3: number;
   };
+  /** Houses a player may own on one city before completing a first lap. */
+  readonly firstLapHouseCap: BuildLevel;
   /** Highest build level: the Landmark exists only in prototype rooms. */
   readonly topLevel: BuildLevel;
   /** Buyout and Land Swap cannot take a city from this level up. */
@@ -56,6 +58,7 @@ export const RULE_ECONOMY = {
     islandReleaseFee: 100_000,
     islandMaxFailedEscapes: 2,
     resortRents: { 1: 50_000, 2: 100_000, 3: 200_000 },
+    firstLapHouseCap: 3,
     topLevel: 5,
     protectedLevel: 5,
     rentModifiers: "largest",
@@ -72,6 +75,7 @@ export const RULE_ECONOMY = {
     islandReleaseFee: 200_000,
     islandMaxFailedEscapes: 3,
     resortRents: { 1: 25_000, 2: 50_000, 3: 100_000 },
+    firstLapHouseCap: 2,
     topLevel: 4,
     protectedLevel: 4,
     rentModifiers: "additive",

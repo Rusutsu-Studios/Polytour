@@ -133,8 +133,10 @@ and payouts to a player round **down** (sell-back refunds).
 On an unowned city, the active player may decline or buy it at any level from Land
 through their current unlock cap, paying every intervening cost in one transaction.
 On their own city, they may decline or raise it to a higher unlocked level in one
-transaction. The three Houses are unlocked from the start. In new rooms, an initial
-purchase stops at House III even if the player has completed a lap. An owned city
+transaction. Before their first completed lap, a player can own at most two houses
+on a city in reference rooms (three in prototype rooms); after it, a purchase can go
+straight to House III. In new rooms, an initial purchase stops at House III even if
+the player has completed a lap. An owned city
 with fewer than three houses also stops at House III for that landing. Hotel is
 available on a later landing when the city already has three houses and the player
 has completed at least one lap. The explicit `hotelsDirectly` custom setting bypasses

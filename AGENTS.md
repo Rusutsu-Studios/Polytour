@@ -18,8 +18,9 @@ a stylized 3D board with juicy, choreographed animations.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
 > 120 minutes. New rooms (rules version 4) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
-> championship, Hotels that cannot be bought out and no Landmark. Hotels are
-> staged: buy up to three houses, then return after a completed lap. Direct
+> championship, Hotels that cannot be bought out and no Landmark. Two houses
+> before a first completed lap, three after; the Hotel follows on a later
+> visit to a three-house city. Direct
 > hotels are an explicit custom exception; saved version-2/3 rooms keep the
 > prototype economy. Keep these instructions current when changing commands or
 > paths.

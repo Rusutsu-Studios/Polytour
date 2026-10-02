@@ -205,12 +205,15 @@ export function maxBuildLevel(
   const level = getProperty(state, tileIndex)?.level ?? 0;
   if (!purchasing && level === 4) return rules(state).topLevel;
   if (state.config.hotelsDirectly === true) return 4;
+  // Reference rooms allow two houses before a first completed lap, then three.
+  const lapped = getPlayer(state, seat).laps > 0;
+  const houses = lapped ? 3 : rules(state).firstLapHouseCap;
   if (
     state.config.hotelPurchaseRule === "staged-hotels" &&
     (purchasing || level < 3)
   )
-    return 3;
-  return getPlayer(state, seat).laps > 0 ? 4 : 3;
+    return houses;
+  return lapped ? 4 : houses;
 }
 export function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
@@ -911,7 +914,7 @@ function resolver(initial: GameState, context: EngineContext) {
           getPlayer(state, seat).laps > 0 ||
           state.config.hotelsDirectly === true
             ? 4
-            : 3;
+            : rules(state).firstLapHouseCap;
         const targets = eligibleOwnCities(seat)
           .filter((property) => property.level < cap)
           .map((property) => property.tile);

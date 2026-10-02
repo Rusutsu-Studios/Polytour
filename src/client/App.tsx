@@ -31,6 +31,7 @@ import {
   useRoom,
 } from "./net/room.js";
 import {
+  fullMoney,
   levelName,
   money,
   PLAYER_COLORS,
@@ -113,7 +114,7 @@ function MoneyCounter({ value }: { value: number }) {
     previous.current = value;
     return () => controls.stop();
   }, [value, speed, reducedMotion]);
-  return <>{money(display)}</>;
+  return <>{fullMoney(display)}</>;
 }
 
 function PlayerAvatar({ seat }: { seat: Seat }) {

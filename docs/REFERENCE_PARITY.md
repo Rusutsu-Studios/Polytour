@@ -168,8 +168,11 @@ damage a Hotel. New rooms freeze `rulesVersion: 4` with
 economy. Room settings cannot choose the marker.
 
 1. **Hotel.** A Hotel cannot be bought out or taken by Land Swap. Earthquake can
-   still remove one of its levels. There is no Landmark. The staged construction
-   and its completed-lap condition are unchanged.
+   still remove one of its levels. There is no Landmark. Before a first completed
+   lap, a city holds at most two houses; afterwards a purchase can go straight to
+   three, and the Hotel follows on a later visit
+   ([beginner guide](https://www.webtech360.com/detail/how-to-play-business-tour-for-beginners-44400044.html):
+   "2 houses in the first round"; the third needs a full lap).
 2. **Grid.** The reference values are laid side by side, so each side of the board
    keeps its price tier. The table below names the reference city each tile takes:
    the first side drops Madrid, and tile 27 interpolates between Paris and Osaka.
@@ -200,10 +203,11 @@ economy. Room settings cannot choose the marker.
 | 25, 26, 27 · 30, 31 | Lyon, Paris, interpolated · Osaka, Tokyo |
 
 Simulations with 1,000 four-bot matches (`tools/sim/reference.json`) keep every
-invariant. With a 60-round cap, matches last a median of 44 rounds (prototype:
-42). Monopolies still decide most matches. Bankruptcies are rarer (9.6 % against
-15 %) because sales refund the full investment. The last player in turn order
-wins 20.7 % of matches instead of 15.3 %.
+invariant. With a 60-round cap, matches last a median of 47 rounds (prototype:
+42); 28 % reach the cap (prototype: 21 %) because the first lap stops at two
+houses. Monopolies still decide most matches. Bankruptcies are rarer (7.7 %
+against 15 %) because sales refund the full investment. The last player in turn
+order wins 19.3 % of matches instead of 15.3 %.
 
 ## Capture from the running reference before adding an exact preset
 

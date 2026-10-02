@@ -1127,6 +1127,30 @@ describe("reference rules for new rooms", () => {
       ),
     ).toThrow("Unsupported economy rule");
   });
+  it("caps a city at two houses before the first lap, three after, and the Hotel on a later visit", () => {
+    const state = reference();
+    const seat = state.activeSeat;
+    const first = land(state, 6).state;
+    expect(first.pending).toMatchObject({ kind: "buy", maxLevel: 2 });
+    expect(legalActions(first, seat)).not.toContainEqual({
+      type: "Buy",
+      level: 3,
+    });
+    const owned = land(grant(state, 6, seat, 2), 6).state;
+    expect(owned.pending?.kind).not.toBe("build");
+    const lapped = setPlayer(state, seat, { laps: 1 });
+    const second = land(lapped, 6).state;
+    expect(second.pending).toMatchObject({ kind: "buy", maxLevel: 3 });
+    const bought = act(second, { type: "Buy", level: 3 }).state;
+    expect(getProperty(bought, 6)?.level).toBe(3);
+    const revisit = land(withActive(bought, seat), 6).state;
+    expect(revisit.pending).toMatchObject({ kind: "build", maxLevel: 4 });
+    const contractor = draw(grant(state, 6, seat, 1), "Contractor").state;
+    expect(contractor.pending).toMatchObject({ targets: [6] });
+    expect(
+      draw(grant(state, 6, seat, 2), "Contractor").state.pending?.kind,
+    ).not.toBe("card-target");
+  });
   it("charges the reference rents and adds each modifier, capped at ten", () => {
     let state = reference();
     const seat = state.activeSeat;

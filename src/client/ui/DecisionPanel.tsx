@@ -549,7 +549,12 @@ export default function DecisionPanel({
               "Hôtel après votre premier tour complet",
               "Hotel after your first complete lap",
             )
-          : t("Pas encore disponible", "Not available yet");
+          : level === 3
+            ? t(
+                "3 maisons après votre premier tour complet",
+                "Three houses after your first complete lap",
+              )
+            : t("Pas encore disponible", "Not available yet");
   const modalOpen = Boolean(
     ownTurn &&
       pending &&

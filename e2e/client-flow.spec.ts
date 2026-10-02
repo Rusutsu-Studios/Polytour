@@ -961,7 +961,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toContainText("2,15 M");
+  ).toHaveText(/2\s150\s000/);
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeFocused();
