@@ -538,7 +538,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
             )
           );
         }, previousDeadline),
-      { timeout: 30_000 },
+      // A real roll can end the turn (Island, Chance), so the next own decision
+      // may wait for a full bot round, like the other 60 s waits in this file.
+      { timeout: 60_000 },
     )
     .toBe(true);
   // Native decisions protect focus; minimize without sending a gameplay action.
