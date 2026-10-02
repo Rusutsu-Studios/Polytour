@@ -19,6 +19,9 @@ a stylized 3D board with juicy, choreographed animations.
 > 120 minutes. New rooms use staged hotels: buy up to three houses, then return
 > after a completed lap to upgrade an owned three-house city. Direct hotels are
 > an explicit custom exception; saved version-2 rooms retain their earlier rule.
+> New rooms sell cities and resorts back at their full land-plus-standing-building
+> value; saved version-2/3 rooms retain their frozen 50% refund. Forced sales select
+> highlighted properties directly on the board, then confirm in a compact panel.
 > Intermediate economy remains provisional. Keep these instructions
 > current when changing commands or paths.
 

@@ -1293,10 +1293,11 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on staged hotel rules version 3", async () => {
+  it("freezes new rooms on staged hotels and full-investment sale rules version 4", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
+    expect(game.state.config.sellBackPercent).toBe(100);
     const rules = await runInDurableObject(
       stub,
       (_instance, durableState) =>
@@ -1304,7 +1305,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("3");
+    expect(rules).toBe("4");
   });
 
   it("rejects client-supplied internal hotel rule markers at room creation", async () => {
@@ -1320,6 +1321,116 @@ describe("Authoritative private rooms", () => {
     }
   });
 
+  it.each([50, 100])(
+    "rejects client-supplied internal sale percentage %s",
+    async (sellBackPercent) => {
+      const response = await exports.default.fetch(
+        new Request(`${origin}/api/rooms`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: origin },
+          body: JSON.stringify({ name: "Alex", config: { sellBackPercent } }),
+        }),
+      );
+      expect(response.status).toBe(400);
+    },
+  );
+
+  it.each([2, 3, 4])(
+    "resumes version-%s forced sales with the frozen refund, persists and replays the sale",
+    async (rulesVersion) => {
+      const game = await startFour();
+      const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        const saved = JSON.parse(row.json) as GameState;
+        const {
+          sellBackPercent: _saleMarker,
+          hotelPurchaseRule: _hotelMarker,
+          ...config
+        } = saved.config;
+        const owner = saved.activeSeat;
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(rulesVersion),
+        );
+        durableState.storage.sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            config: {
+              ...config,
+              ...(rulesVersion === 2
+                ? {}
+                : { hotelPurchaseRule: "staged-hotels" }),
+              ...(rulesVersion === 4 ? { sellBackPercent: 100 } : {}),
+            },
+            players: saved.players.map((player) =>
+              player.seat === owner
+                ? { ...player, cash: -130_000, properties: [6] }
+                : player,
+            ),
+            properties: saved.properties.map((property) =>
+              property.tile === 6 ? { ...property, owner, level: 3 } : property,
+            ),
+            pending: {
+              kind: "sell",
+              seat: owner,
+              targets: [6],
+              creditor: null,
+              deadline: Date.now() + 30_000,
+            },
+            resolutionQueue: [{ kind: "finish" }],
+          }),
+        );
+      });
+      await evictDurableObject(stub);
+      const resumed = await connect(game.credentials[game.state.activeSeat]);
+      const welcome = await resumed.next("welcome");
+      expect(welcome.snapshot?.pending?.kind).toBe("sell");
+      resumed.send({
+        type: "intent",
+        id: "resumed-sale",
+        atSeq: welcome.seq,
+        action: { type: "Sell", tile: 6 },
+      });
+      const events = await resumed.next("events");
+      const amount = rulesVersion === 4 ? 280_000 : 140_000;
+      const sale = {
+        type: "PropertySold",
+        seat: game.state.activeSeat,
+        tile: 6,
+        amount,
+      };
+      expect(events.events).toContainEqual(sale);
+      const persisted = await runInDurableObject(
+        stub,
+        (_instance, durableState) => {
+          const row = durableState.storage.sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0];
+          return JSON.parse(row.json) as GameState;
+        },
+      );
+      expect(persisted.players[game.state.activeSeat].cash).toBe(
+        amount - 130_000,
+      );
+      expect(
+        persisted.properties.find((property) => property.tile === 6),
+      ).toMatchObject({ owner: null, level: 0 });
+      if (rulesVersion !== 4)
+        expect(persisted.config).not.toHaveProperty("sellBackPercent");
+      await closeInbox(resumed);
+      const replay = await connect(
+        game.credentials[game.state.activeSeat],
+        welcome.seq,
+      );
+      expect((await replay.next("welcome")).snapshot).toBeNull();
+      expect((await replay.next("events")).events).toContainEqual(sale);
+    },
+  );
+
   it("loads an existing version-2 active save without changing its legal Hotel purchase", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
@@ -1328,7 +1439,11 @@ describe("Authoritative private rooms", () => {
         .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
         .toArray()[0];
       const saved = JSON.parse(row.json) as GameState;
-      const { hotelPurchaseRule: _marker, ...oldConfig } = saved.config;
+      const {
+        hotelPurchaseRule: _hotelMarker,
+        sellBackPercent: _saleMarker,
+        ...oldConfig
+      } = saved.config;
       durableState.storage.sql.exec(
         "UPDATE meta SET v='2' WHERE k='rulesVersion'",
       );
@@ -1387,41 +1502,51 @@ describe("Authoritative private rooms", () => {
     ).toMatchObject({ owner: game.state.activeSeat, level: 4 });
   });
 
-  it("starts preexisting version-2 lobbies with their original lap-only hotel rule", async () => {
-    const host = await create();
-    const stub = env.GAME_ROOM.getByName(host.roomCode);
-    await runInDurableObject(stub, (_instance, durableState) =>
-      durableState.storage.sql.exec(
-        "UPDATE meta SET v='2' WHERE k='rulesVersion'",
-      ),
-    );
-    const inbox = await connect(host);
-    await inbox.next("welcome");
-    inbox.send({
-      type: "lobby",
-      id: "legacy-lobby-start",
-      op: { type: "start", fillBots: true },
-    });
-    const events = await inbox.next("events");
-    const created = events.events.find((event) => event.type === "GameCreated");
-    expect(
-      created?.type === "GameCreated" && created.state.config.hotelPurchaseRule,
-    ).toBe("legacy-lap");
-    const rules = await runInDurableObject(
-      stub,
-      (_instance, durableState) =>
-        durableState.storage.sql
-          .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
-          .toArray()[0]?.v,
-    );
-    expect(rules).toBe("2");
-  });
+  it.each([2, 3])(
+    "starts preexisting version-%s lobbies with their original hotel and half-investment sale rules",
+    async (rulesVersion) => {
+      const host = await create();
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(rulesVersion),
+        ),
+      );
+      const inbox = await connect(host);
+      await inbox.next("welcome");
+      inbox.send({
+        type: "lobby",
+        id: "legacy-lobby-start",
+        op: { type: "start", fillBots: true },
+      });
+      const events = await inbox.next("events");
+      const created = events.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      expect(
+        created?.type === "GameCreated" &&
+          created.state.config.hotelPurchaseRule,
+      ).toBe(rulesVersion === 2 ? "legacy-lap" : "staged-hotels");
+      expect(
+        created?.type === "GameCreated" && created.state.config.sellBackPercent,
+      ).toBe(50);
+      const rules = await runInDurableObject(
+        stub,
+        (_instance, durableState) =>
+          durableState.storage.sql
+            .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
+            .toArray()[0]?.v,
+      );
+      expect(rules).toBe(String(rulesVersion));
+    },
+  );
 
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 999]) {
-      // Version 2 cannot use this new match's frozen staged marker; 999 is unknown.
+    for (const rulesVersion of [2, 3, 999]) {
+      // Older versions cannot use this match's full-value sale marker; 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -1439,7 +1564,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='3' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='4' WHERE k='rulesVersion'",
       ),
     );
   });

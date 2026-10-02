@@ -24,6 +24,8 @@ export type GameConfig = {
   readonly hotelsDirectly?: boolean;
   /** Missing on existing saves: preserve the original lap-only hotel rule. */
   readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";
+  /** Missing on existing saves: retain the original half-investment sale value. */
+  readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;

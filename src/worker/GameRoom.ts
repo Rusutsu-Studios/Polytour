@@ -139,7 +139,7 @@ export class GameRoom extends DurableObject<Env> {
     if (
       (row || this.readMeta("room") !== null) &&
       (this.readMeta<number>("stateVersion") !== 1 ||
-        (rulesVersion !== 2 && rulesVersion !== 3))
+        (rulesVersion !== 2 && rulesVersion !== 3 && rulesVersion !== 4))
     ) {
       throw new Error(
         "Unsupported saved match version; this room cannot use different rules silently",
@@ -149,13 +149,25 @@ export class GameRoom extends DurableObject<Env> {
     const state = JSON.parse(row.json) as GameState;
     const hotelRule = state.config.hotelPurchaseRule;
     if (
-      (rulesVersion === 3 && hotelRule !== "staged-hotels") ||
+      ((rulesVersion === 3 || rulesVersion === 4) &&
+        hotelRule !== "staged-hotels") ||
       (rulesVersion === 2 &&
         hotelRule !== undefined &&
         hotelRule !== "legacy-lap")
     ) {
       throw new Error(
         "Saved match hotel rule does not match its frozen rules version",
+      );
+    }
+    const sellBackPercent = state.config.sellBackPercent;
+    if (
+      (rulesVersion === 4 && sellBackPercent !== ECONOMY.sellBackPercent) ||
+      (rulesVersion !== 4 &&
+        sellBackPercent !== undefined &&
+        sellBackPercent !== ECONOMY.legacySellBackPercent)
+    ) {
+      throw new Error(
+        "Saved match sale value does not match its frozen rules version",
       );
     }
     return { seq: row.seq, state };
@@ -184,7 +196,7 @@ export class GameRoom extends DurableObject<Env> {
         createdAt: Date.now(),
       } satisfies RoomMeta);
       this.writeMeta("stateVersion", 1);
-      this.writeMeta("rulesVersion", 3);
+      this.writeMeta("rulesVersion", 4);
       this.ctx.storage.sql.exec(
         "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
         name,
@@ -605,6 +617,10 @@ export class GameRoom extends DurableObject<Env> {
           this.readMeta<number>("rulesVersion") === 2
             ? "legacy-lap"
             : "staged-hotels",
+        sellBackPercent:
+          this.readMeta<number>("rulesVersion") === 4
+            ? ECONOMY.sellBackPercent
+            : ECONOMY.legacySellBackPercent,
       },
       allSeats,
       seed,

@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 
-export const PROTOCOL_VERSION = 1;
+// Older clients hard-code half-price sales and must refresh before quoting v4 rooms.
+export const PROTOCOL_VERSION = 2;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);

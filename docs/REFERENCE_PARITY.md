@@ -81,6 +81,26 @@ Other sources were compared without treating their contents as user instructions
 Keep rents and intermediate prices provisional. These dated checks refine the
 documented comparison and construction progression without claiming exact parity.
 
+## Forced sale comparison — 2 October 2026
+
+The user's liquidation screenshot shows selection directly on highlighted board
+tiles, displayed proceeds of 240 k and 710 k, a selected-city checkmark, and a
+separate sale confirmation. It also shows debt and the projected remaining cash.
+This supports board-based selection and an explicit quote before committing.
+The purchase/build costs of those two properties are not visible, so the image
+does not establish a refund percentage or a rent-based formula.
+
+The [official Steam page](https://store.steampowered.com/app/397900/Business_Tour__Online_Multiplayer_Board_Game/)
+and [publisher FAQ on Epic](https://store.epicgames.com/p/business-tour-board-game-with-online-multiplayer-faq-27319a?lang=en-US)
+were checked for sale rules; neither gives a city liquidation calculation.
+Polytour's previous 50% refund was a provisional tuning choice, not a confirmed
+reference rule. To address the reported low sale prices, new Polytour rooms return
+100% of land plus all standing buildings. For example, the first city's House III
+returns 210 k and Tokyo Hotel returns 1.5 M. Resorts return their 200 k price.
+Rent bonuses, tax, and buyout premiums do not increase proceeds. This is an explicit
+Polytour adjustment; exact reference liquidation parity remains unverified.
+Existing rooms retain 50% under their frozen rules version.
+
 ## Capture from the running reference before adding an exact preset
 
 | Area | Evidence needed | Current status |
@@ -91,6 +111,7 @@ documented comparison and construction progression without claiming exact parity
 | Board | All 32 positions, purchase prices, country groups | France to Tokyo progression; intermediate reference table pending |
 | Buildings | Every level's incremental price and rent | First-city/Tokyo costs captured; rent table pending |
 | Buyout | Cost formula, protection, payout recipient | Polytour v0.1 config; reference comparison pending |
+| Forced sale | Proceeds relative to land and standing buildings | Board selection captured; new-room 100% is Polytour tuning, reference ratio unverified |
 | Specials | Island, travel, championship, resorts, tax | Polytour v0.1 rules; reference comparison pending |
 | Cards | Deck contents, targeting, held cards | Original 16-card deck; reference comparison pending |
 | End conditions | Monopolies, bankruptcy, duration tie-breaks | User monopoly switches plus last standing/resorts and real-time/round limits |

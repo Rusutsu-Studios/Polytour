@@ -22,7 +22,8 @@ describe("economy configuration", () => {
       startSalary: 400_000,
       minimumPlayers: 2,
       maximumPlayers: 4,
-      sellBackPercent: 50,
+      sellBackPercent: 100,
+      legacySellBackPercent: 50,
       buyoutMultiplier: 2,
       resortPrice: 200_000,
     });

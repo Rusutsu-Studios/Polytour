@@ -232,17 +232,23 @@ export type LotPrint = {
   readonly amount: number | null;
   readonly owner: Seat | null;
   readonly locale: Locale;
+  /** Eligible sale lots stay white rather than taking the owner's paper tint. */
+  readonly forSale?: boolean;
 };
 
 export function lotTexture(index: number, print: LotPrint) {
   const width = LOT_WIDTH * PIXELS_PER_UNIT;
   const height = LOT_DEPTH * PIXELS_PER_UNIT;
   const band = Math.round((BUILDING_BAND / LOT_DEPTH) * height);
-  const { amount, owner, locale } = print;
+  const { amount, owner, locale, forSale } = print;
   return canvasTexture(width, height, (context) => {
     const tile = BOARD[index];
     const ownerColor = owner == null ? null : PLAYER_COLORS[owner];
-    context.fillStyle = ownerColor ? mix(PAPER, ownerColor, 0.12) : PAPER;
+    context.fillStyle = forSale
+      ? "#ffffff"
+      : ownerColor
+        ? mix(PAPER, ownerColor, 0.12)
+        : PAPER;
     context.fillRect(0, 0, width, height);
     const name = tileName(index).toLocaleUpperCase(locale);
     if (tile.kind === "chance") {

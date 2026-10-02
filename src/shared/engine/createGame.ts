@@ -52,6 +52,7 @@ export const DEFAULT_GAME_CONFIG = {
   tripleMonopoly: true,
   hotelsDirectly: false,
   hotelPurchaseRule: "staged-hotels",
+  sellBackPercent: ECONOMY.sellBackPercent,
   extraRollOnDouble: true,
   botCanBuild: true,
   giftCanBankrupt: true,
@@ -179,7 +180,9 @@ export function maxBuildLevel(
 }
 export function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
-    (propertyInvestedValue(state, tile) * ECONOMY.sellBackPercent) / 100,
+    (propertyInvestedValue(state, tile) *
+      (state.config.sellBackPercent ?? ECONOMY.legacySellBackPercent)) /
+      100,
   );
 }
 function purchaseCost(tileIndex: number, level: BuildLevel): number {
@@ -1458,6 +1461,12 @@ export function createGame(
     !["staged-hotels", "legacy-lap"].includes(config.hotelPurchaseRule)
   )
     throw new RangeError("Unsupported hotel purchase rule");
+  if (
+    config.sellBackPercent !== undefined &&
+    config.sellBackPercent !== ECONOMY.sellBackPercent &&
+    config.sellBackPercent !== ECONOMY.legacySellBackPercent
+  )
+    throw new RangeError("Unsupported sell-back percentage");
   if (!Number.isFinite(context.now))
     throw new RangeError("Game time must be finite");
   if (
@@ -1513,6 +1522,7 @@ export function createGame(
     config: {
       ...config,
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
+      sellBackPercent: config.sellBackPercent ?? ECONOMY.sellBackPercent,
     },
     players,
     properties: BOARD.filter(

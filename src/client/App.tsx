@@ -9,7 +9,13 @@ import type {
   Seat,
   WinKind,
 } from "../shared/engine/index.js";
-import { getProperty, netWorth, propertyRent } from "../shared/engine/index.js";
+import {
+  getProperty,
+  legalActions,
+  netWorth,
+  propertyRefund,
+  propertyRent,
+} from "../shared/engine/index.js";
 import type {
   LobbyState,
   RandomnessStatus,
@@ -344,13 +350,20 @@ function MatchResults({
 function BoardFallback({
   state,
   onSelect,
+  saleTargets,
+  saleSelected,
+  saleBlocked = false,
 }: {
   state: PublicState | null;
   onSelect: (tile: number) => void;
+  saleTargets?: readonly number[];
+  saleSelected?: number | null;
+  saleBlocked?: boolean;
 }) {
   return (
     <section
       className="flat-board"
+      data-sale-active={saleTargets !== undefined}
       aria-label={t("Plateau accessible", "Accessible board")}
     >
       <p className="flat-board-note">
@@ -361,15 +374,35 @@ function BoardFallback({
           type="button"
           key={tile.index}
           style={{ "--tile-color": tileColor(tile.index) } as CSSProperties}
+          data-sale={saleTargets?.includes(tile.index) || undefined}
+          aria-pressed={
+            saleTargets?.includes(tile.index)
+              ? saleSelected === tile.index
+              : undefined
+          }
+          aria-label={
+            state && saleTargets?.includes(tile.index)
+              ? t(
+                  `Choisir ${tileName(tile.index)} à vendre · ${money(propertyRefund(state, tile.index))}`,
+                  `Select ${tileName(tile.index)} to sell · ${money(propertyRefund(state, tile.index))}`,
+                )
+              : undefined
+          }
+          disabled={
+            saleTargets !== undefined &&
+            (saleBlocked || !saleTargets.includes(tile.index))
+          }
           onClick={() => onSelect(tile.index)}
         >
           <span>{tileName(tile.index)}</span>
           <b>
-            {state && getProperty(state, tile.index)?.owner != null
-              ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
-              : tilePrice(tile.index) != null
-                ? money(tilePrice(tile.index) ?? 0)
-                : TILE_ICONS[tile.kind]}
+            {state && saleTargets?.includes(tile.index)
+              ? `+${money(propertyRefund(state, tile.index))}`
+              : state && getProperty(state, tile.index)?.owner != null
+                ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
+                : tilePrice(tile.index) != null
+                  ? money(tilePrice(tile.index) ?? 0)
+                  : TILE_ICONS[tile.kind]}
           </b>
         </button>
       ))}
@@ -900,6 +933,11 @@ function MatchView({
   const [tool, setTool] = useState<GameTool>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [saleSelection, setSaleSelection] = useState<{
+    gameId: string;
+    pending: PublicState["pending"];
+    tile: number;
+  } | null>(null);
   const overlayTrigger = useRef<HTMLButtonElement | null>(null);
   const inspectorRef = useRef<HTMLElement | null>(null);
   const toolRef = useRef<HTMLElement | null>(null);
@@ -907,6 +945,36 @@ function MatchView({
   const ownPlayer = game.players.find(
     (player) => player.seat === credentials.seat,
   );
+  const authoritative = serverState ?? game;
+  const salePending =
+    authoritative.status === "active" &&
+    authoritative.pending?.kind === "sell" &&
+    authoritative.pending.seat === credentials.seat &&
+    !authoritative.players.find((player) => player.seat === credentials.seat)
+      ?.bankrupt
+      ? authoritative.pending
+      : null;
+  const saleTargets = salePending
+    ? legalActions(authoritative, credentials.seat).flatMap((action) =>
+        action.type === "Sell" ? [action.tile] : [],
+      )
+    : [];
+  const saleBlocked =
+    busy ||
+    room.pending ||
+    room.connection !== "online" ||
+    (room.randomness !== null && room.randomness.status !== "resolved");
+  // A new decision or recovered snapshot requires a fresh, deliberate choice.
+  const saleSelected =
+    salePending &&
+    !busy &&
+    room.connection === "online" &&
+    saleSelection?.gameId === authoritative.gameId &&
+    saleSelection.pending === salePending &&
+    saleTargets.includes(saleSelection.tile)
+      ? saleSelection.tile
+      : null;
+  const decisionSelected = salePending ? saleSelected : selected;
   const diceToolLabel =
     config.randomnessMode === "drand"
       ? t("Dés et preuve", "Dice and proof")
@@ -937,6 +1005,17 @@ function MatchView({
     overlayTrigger.current?.focus();
   }
   function inspectTile(tile: number) {
+    if (salePending) {
+      if (saleBlocked || !saleTargets.includes(tile)) return;
+      setSaleSelection({
+        gameId: authoritative.gameId,
+        pending: salePending,
+        tile,
+      });
+      setInspectorOpen(false);
+      setTool(null);
+      return;
+    }
     overlayTrigger.current = null;
     onSelect(tile);
     setInspectorOpen(true);
@@ -976,7 +1055,15 @@ function MatchView({
     <>
       <div className="board-stage">
         <SceneBoundary
-          fallback={<BoardFallback state={game} onSelect={inspectTile} />}
+          fallback={
+            <BoardFallback
+              state={game}
+              onSelect={inspectTile}
+              saleTargets={salePending ? saleTargets : undefined}
+              saleSelected={saleSelected}
+              saleBlocked={saleBlocked}
+            />
+          }
         >
           <Suspense
             fallback={
@@ -988,9 +1075,11 @@ function MatchView({
           >
             <BoardScene
               state={game}
-              selected={selected}
+              selected={decisionSelected}
               onSelect={inspectTile}
               zoom={zoom}
+              saleSeat={salePending ? credentials.seat : undefined}
+              saleBlocked={saleBlocked}
             />
           </Suspense>
         </SceneBoundary>
@@ -1225,6 +1314,7 @@ function MatchView({
           <motion.div
             key="decision"
             className="contextual-action"
+            data-sale={Boolean(salePending && !busy)}
             initial={false}
             animate={{ opacity: 1 }}
           >
@@ -1234,15 +1324,15 @@ function MatchView({
               act={room.act}
               blocked={room.pending || room.connection !== "online"}
               randomness={room.randomness}
-              selected={selected}
-              onSelect={onSelect}
+              selected={decisionSelected}
+              onSelect={salePending ? inspectTile : onSelect}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {inspectorOpen && (
+        {inspectorOpen && !salePending && (
           <motion.aside
             ref={inspectorRef}
             key="inspector"

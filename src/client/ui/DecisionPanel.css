@@ -348,6 +348,147 @@
   width: 100%;
 }
 
+/* A two-row dock sits below the board, leaving every sale price clickable. */
+.game-shell .contextual-action[data-sale="true"] {
+  top: auto;
+}
+.game-shell .decision-panel.decision-sale {
+  padding: 11px 16px 12px;
+}
+.game-shell .decision-panel.decision-sale[data-busy="true"] {
+  max-width: none;
+}
+.sale-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.game-shell .decision-sale .sale-topline h2 {
+  margin: 0;
+  font-size: 18px;
+  white-space: nowrap;
+}
+.sale-ledger {
+  display: flex;
+  justify-content: flex-end;
+  flex: 1;
+  gap: 14px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.sale-ledger > div {
+  display: grid;
+  gap: 2px;
+}
+.sale-ledger dt {
+  color: #47666c;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.game-shell .decision-sale .sale-ledger dd {
+  margin: 0;
+  color: #b8331b;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.game-shell .decision-sale .sale-ledger > div[data-negative="false"] dd {
+  color: #26764c;
+}
+.sale-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  color: #173b45;
+}
+.sale-selection > div {
+  min-width: 0;
+}
+.sale-selection strong,
+.sale-selection span {
+  display: block;
+}
+.sale-selection strong {
+  font-size: 16px;
+  line-height: 1.2;
+}
+.sale-selection span {
+  margin-top: 2px;
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.sale-selection > b {
+  color: #26764c;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sale-controls {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-top: 10px;
+}
+.sale-warning {
+  flex: 1;
+  margin: 0;
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.sale-confirmation {
+  display: flex;
+  gap: 8px;
+}
+.game-shell .sale-confirmation .button {
+  min-height: 40px;
+  padding: 10px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.game-shell .sale-confirmation .quiet {
+  background: #e9e9d9;
+  color: #173b45;
+  box-shadow: none;
+}
+.sale-confirmation .sale-confirm {
+  min-width: 144px;
+  justify-content: space-between;
+}
+.sale-confirmation .decision-bankruptcy {
+  background: #c74024;
+  color: #fffaf0;
+  box-shadow: 0 4px 0 #98291a;
+}
+.sale-confirmation .sale-confirm:disabled {
+  opacity: 0.6;
+  box-shadow: none;
+}
+.game-shell .flat-board button[data-sale="true"] {
+  outline: 3px solid #26764c;
+  outline-offset: -3px;
+}
+.game-shell .flat-board button[aria-pressed="true"] {
+  background: #f8db9b;
+  outline-color: #c29336;
+}
+.game-shell .flat-board[data-sale-active="true"] button {
+  background: #747983;
+  color: #f4f6f8;
+  filter: grayscale(1);
+}
+.game-shell .flat-board[data-sale-active="true"] button[data-sale="true"] {
+  background: #fff;
+  color: #173b45;
+  filter: none;
+}
+
 @media (max-height: 780px) and (min-width: 900px) {
   .decision-popup-inner {
     padding: 28px 25px 15px;
