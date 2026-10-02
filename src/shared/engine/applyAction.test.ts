@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BuildLevel } from "../board/index.js";
+import { BOT_TIMING, DECISION_TIMING } from "../board/index.js";
 import type {
   Action,
   ChanceCard,
@@ -14,6 +15,7 @@ import {
   applyEvent,
   applyTimeout,
   botAction,
+  botDecisionAt,
   CHANCE_CARDS,
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -786,6 +788,31 @@ describe("wins, rankings and timeouts", () => {
       now: host.pending?.deadline ?? 0,
     }).state;
     expect(selected.championshipHost).toEqual({ tile: 6, multiplier: 2 });
+  });
+  it("starts the decision clock and bot moves after the animations", () => {
+    const state = newGame();
+    // Nothing to watch yet: a bot only takes its short pause.
+    expect(botDecisionAt(toPublic(state))).toBe(BOT_TIMING.roll);
+    // From tile 4 to 7: the dice, three hops, then the purchase decision.
+    const purchase = land(state, 7, [1, 2]).state;
+    const presented =
+      1 + DECISION_TIMING.diceAnimation + 3 * DECISION_TIMING.stepAnimation;
+    expect(purchase.pending).toMatchObject({
+      kind: "buy",
+      deadline: presented + DECISION_TIMING.choice,
+    });
+    expect(botDecisionAt(toPublic(purchase))).toBe(
+      presented + BOT_TIMING.choice,
+    );
+    // A custom decision time does not shorten the wait for the animations.
+    const custom = land(
+      newGame(4, { ...CONFIG, decisionSeconds: 30 }),
+      7,
+      [1, 2],
+    ).state;
+    expect(custom.pending?.deadline).toBe(presented + 30_000);
+    expect(botDecisionAt(toPublic(custom))).toBe(presented + BOT_TIMING.choice);
+    expect(botDecisionAt({ ...toPublic(purchase), pending: null })).toBeNull();
   });
   it("bot choices are always among exposed legal actions", () => {
     for (const difficulty of ["easy", "medium", "hard"] as const) {

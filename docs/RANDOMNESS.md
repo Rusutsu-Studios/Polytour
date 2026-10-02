@@ -1,7 +1,7 @@
 # Fair randomness and immediate dice
 
 Polytour has no paid dice, luck statistic, paid reroll, power gauge, or outcome
-modifier. The server applies the same uniform 2d6 distribution to all four seats.
+modifier. The server applies the same uniform 2d6 distribution to every seat.
 Cosmetics must never enter the rules, entropy input, or bot policy.
 
 ## Current gameplay: server Web Crypto

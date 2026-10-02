@@ -105,9 +105,10 @@ test("English local match switches language without rejoining or changing game s
   await page.getByLabel("Player name").fill("English player");
   await page.getByRole("button", { name: "Play with 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
+  // Bots before this seat play their turns at a readable pace first.
   await expect(
     page.getByRole("button", { name: "Roll the dice", exact: true }),
-  ).toBeEnabled();
+  ).toBeEnabled({ timeout: 60_000 });
   const before = await page.evaluate(() =>
     sessionStorage.getItem("polytour-room-v1"),
   );

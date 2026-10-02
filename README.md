@@ -1,12 +1,13 @@
 # Polytour
 
-A multiplayer property-strategy board game for PC browsers. Four players travel from
+A multiplayer property-strategy board game for PC browsers. Two to four players travel from
 French cities to Tokyo, buy land, build, pay rent and compete for collections on an
 original Three.js toy board. Cloudflare Workers and one SQLite Durable Object per
 room own the rules, persistence and WebSockets.
 
 **Status:** first playable prototype. Create a private room and share its code with
-friends, or immediately play against three server bots. The default preset is
+friends, or immediately play against three server bots. In a private room the host
+clicks an empty seat card to add a bot; a match starts with two to four players. The default preset is
 2 M starting cash, 400 k per lap, three festivals, line/triple collection wins and
 a two-hour maximum. Room settings can be adjusted before starting.
 

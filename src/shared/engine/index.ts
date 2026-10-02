@@ -10,6 +10,7 @@ export {
   applyEvent,
   applyTimeout,
   botAction,
+  botDecisionAt,
   createGame,
   DEFAULT_GAME_CONFIG,
   getPlayer,

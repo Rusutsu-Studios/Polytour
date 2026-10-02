@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { BOT_TIMING, ECONOMY } from "../shared/board/index.js";
 import type {
   Action,
   GameEvent,
@@ -10,6 +11,7 @@ import {
   applyAction,
   applyTimeout,
   botAction,
+  botDecisionAt,
   createGame,
   legalActions,
   toPublic,
@@ -51,6 +53,7 @@ type PendingDice = {
   atSeq: number;
 };
 type EventRow = { seq: number; json: string; proof: string | null };
+const BOT_NAMES = ["Iris", "Milo", "Nova", "Atlas"] as const;
 
 function newToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
@@ -553,16 +556,54 @@ export class GameRoom extends DurableObject<Env> {
       this.broadcast({ type: "lobby", lobby: this.lobby() });
       return;
     }
+    if (message.op.type === "add-bot" || message.op.type === "remove-bot") {
+      const target = message.op.seat;
+      const entry = this.seats().find((candidate) => candidate.seat === target);
+      if (message.op.type === "add-bot" && entry)
+        return this.reject(socket, message.id, "seat-taken");
+      if (message.op.type === "remove-bot" && entry?.control !== "bot")
+        return this.reject(socket, message.id, "not-a-bot");
+      const adding = message.op.type === "add-bot";
+      this.ctx.storage.transactionSync(() => {
+        if (adding)
+          this.ctx.storage.sql.exec(
+            "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'bot',NULL)",
+            target,
+            BOT_NAMES[target],
+          );
+        else
+          this.ctx.storage.sql.exec(
+            "DELETE FROM seats WHERE seat=? AND control='bot'",
+            target,
+          );
+        this.rememberCommand(seat, message.id);
+      });
+      this.send(socket, { type: "ack", id: message.id });
+      this.broadcast({ type: "lobby", lobby: this.lobby() });
+      return;
+    }
     const seats = this.seats();
-    if (seats.length < 4 && !message.op.fillBots)
-      return this.reject(socket, message.id, "four-players-required");
-    const allSeats: SeatInfo[] = ([0, 1, 2, 3] as const).map((index) => {
+    const fillBots = message.op.fillBots;
+    if (!fillBots && seats.length < ECONOMY.minimumPlayers)
+      return this.reject(
+        socket,
+        message.id,
+        "players-required",
+        `A game needs ${ECONOMY.minimumPlayers} to ${ECONOMY.maximumPlayers} players`,
+      );
+    // Seats keep their lobby number (colour and corner) in the match, so a
+    // three-player room can leave any one of the four places empty.
+    const allSeats: SeatInfo[] = ([0, 1, 2, 3] as const).flatMap((index) => {
       const entry = seats.find((candidate) => candidate.seat === index);
-      return {
-        playerId: `seat-${index}`,
-        name: entry?.name ?? ["", "Milo", "Nova", "Atlas"][index],
-        control: entry?.control ?? "bot",
-      };
+      if (!entry && !fillBots) return [];
+      return [
+        {
+          playerId: `seat-${index}`,
+          name: entry?.name ?? BOT_NAMES[index],
+          control: entry?.control ?? "bot",
+          seat: index,
+        },
+      ];
     });
     // Lobbies created before a rule change start under their frozen version.
     const rulesVersion = this.readMeta<number>("rulesVersion");
@@ -580,12 +621,12 @@ export class GameRoom extends DurableObject<Env> {
       { now: startedAt },
     );
     this.ctx.storage.transactionSync(() => {
-      for (const index of [0, 1, 2, 3] as const)
-        if (!seats.some((candidate) => candidate.seat === index))
+      for (const entry of allSeats)
+        if (!seats.some((candidate) => candidate.seat === entry.seat))
           this.ctx.storage.sql.exec(
             "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'bot',NULL)",
-            index,
-            allSeats[index].name,
+            entry.seat,
+            entry.name,
           );
       // A human can leave while the room is still a lobby. Lobby disconnects
       // need no alarm, but starting that room must give every absent human the
@@ -780,7 +821,7 @@ export class GameRoom extends DurableObject<Env> {
         "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES('cleanup',?)",
         Date.now() + 600_000,
       );
-    // An abandoned game must not become an unattended 900 ms bot simulation.
+    // An abandoned game must not become an unattended bot simulation.
     // Keep its state, grace timers and real-time end intact; reconnect restores
     // the remaining timers without extending any engine deadline.
     const pendingDice = this.readMeta<PendingDice>("pendingDice");
@@ -808,15 +849,21 @@ export class GameRoom extends DurableObject<Env> {
         "DELETE FROM timers WHERE kind=?",
         bot ? "decision" : "bot",
       );
+      // A bot waits for the animations that opened its decision, so players
+      // can follow its turn. After a wake-up, nothing is left to watch.
+      const botAt = Math.max(
+        botDecisionAt(state) ?? 0,
+        Date.now() + (resetBot ? 0 : BOT_TIMING.resume),
+      );
       if (bot && !resetBot)
         this.ctx.storage.sql.exec(
           "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES('bot',?)",
-          Date.now() + 900,
+          botAt,
         );
       else
         this.setTimer(
           bot ? "bot" : "decision",
-          bot ? Date.now() + 900 : state.pending.deadline,
+          bot ? botAt : state.pending.deadline,
         );
     } else {
       this.ctx.storage.sql.exec(

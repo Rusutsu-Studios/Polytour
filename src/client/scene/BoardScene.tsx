@@ -1,8 +1,9 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import gsap from "gsap";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BOARD, DECISION_TIMING } from "../../shared/board/index.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { BOARD, DECISION_TIMING, ECONOMY } from "../../shared/board/index.js";
 import type {
   GameEvent,
   PublicState,
@@ -11,18 +12,46 @@ import type {
 import { getProperty, propertyRent } from "../../shared/engine/index.js";
 import type { AnimationContext } from "../director/director.js";
 import { director, useDirector } from "../director/director.js";
-import { type Locale, useLocale } from "../i18n.js";
+import { useLocale } from "../i18n.js";
+import { PLAYER_COLORS, tileColor, tilePrice } from "../ui/board-display.js";
 import {
-  money,
-  PLAYER_COLORS,
-  PLAYER_SYMBOLS,
-  pawnOffset,
-  TILE_ICONS,
-  tileColor,
-  tileName,
-  tilePosition,
-  tilePrice,
-} from "../ui/board-display.js";
+  BOARD_BOTTOM,
+  BOARD_HALF,
+  BOARD_TOP,
+  buildingBandZ,
+  CAMERA_OFFSET,
+  faceRotation,
+  INNER_HALF,
+  isCorner,
+  LAWN_HALF,
+  LAWN_TOP,
+  LOT_DEPTH,
+  LOT_GAP,
+  LOT_TOP,
+  LOT_WIDTH,
+  pawnSpot,
+  ROAD_TOP,
+  reserveAnchor,
+  screenTop,
+  sideFrame,
+  tileCenter,
+  tilePoint,
+  tileRotation,
+  tileSize,
+  visibleFaces,
+} from "./board-layout.js";
+import {
+  cornerTexture,
+  FESTIVAL_COLORS,
+  lawnTexture,
+  lotTexture,
+  medallionTexture,
+  noteTexture,
+  roadTexture,
+  scoreTexture,
+  seatBadgeTexture,
+} from "./board-textures.js";
+import { BeachUmbrella, Landmarks } from "./Landmarks.js";
 
 type BoardProps = {
   state: PublicState | null;
@@ -34,183 +63,95 @@ type BoardProps = {
   zoom?: number;
 };
 
-// THESIS: A readable printed game board, with small low-poly pieces above its track.
-// OWN-WORLD: lilac paper tiles, a quiet lawn, clear dark amounts and colored gabled roofs.
-// STORY: roll, travel, buy, collect; the board shows events, the server owns rules.
-// FIRST VIEWPORT: a fixed diamond fills the screen, with four corner players and a small action below.
-// FORM: the user's pinned tabletop reference; shallow edges, separated print and buildings.
+// THESIS: a printed property board seen from its Start corner, like the classic tabletop.
+// OWN-WORLD: ivory lots with colored plots, big printed prices, a mown lawn, toy buildings.
+// STORY: roll, travel left from Start, buy, build, collect; the server owns every rule.
+// FIRST VIEWPORT: a diamond board between four corner players, the choice below it.
+// FORM: large corners (a printed Start, three landmarks), seven deep lots per side, a road.
 
-function tileAngle(index: number) {
-  return (index > 8 && index < 16) || index > 24 ? Math.PI / 2 : 0;
+const PAWN_SCALE = 0.85;
+// The pawn base sits this far below the pawn group's origin.
+const PAWN_LIFT = 0.03 * PAWN_SCALE;
+const DIE_SIZE = 0.6;
+const DIE_SCALE = 1.25;
+const DIE_REST_Y = LAWN_TOP + (DIE_SIZE * DIE_SCALE) / 2;
+const DIE_REST: readonly [number, number, number][] = [
+  [-0.56, DIE_REST_Y, 0.56],
+  [0.56, DIE_REST_Y, -0.56],
+];
+const DICE_DEFAULT_COLOR = "#d9473a";
+// The dice take the roller's color, brighter than the pawn so pips stay crisp.
+const DICE_COLORS = ["#e0533b", "#3a87e2", "#9564d3", "#2f9b5f"] as const;
+const [BANK_X, BANK_Z] = tileCenter(0);
+const BANK_POSITION: readonly [number, number, number] = [BANK_X, 0.7, BANK_Z];
+
+function pawnPosition(seat: Seat, tile: number): [number, number, number] {
+  const [x, z] = pawnSpot(seat, tile);
+  return [x, (isCorner(tile) ? LOT_TOP : ROAD_TOP) + PAWN_LIFT, z];
 }
 
-function tileLocalPosition(index: number, localX: number, localZ: number) {
-  const [x, z] = tilePosition(index);
-  const angle = tileAngle(index);
-  return [
-    x + localX * Math.cos(angle) + localZ * Math.sin(angle),
-    z - localX * Math.sin(angle) + localZ * Math.cos(angle),
-  ] as const;
-}
-
-function tileDepth(index: number) {
-  return index % 8 === 0 ? 1.035 : 1.15;
-}
-
-const FESTIVAL_COLORS = [
-  "#e2553f",
-  "#2f8fc4",
-  "#8a5cc2",
-  "#2f9a64",
-  "#f08a2c",
-  "#fffaf0",
-] as const;
-
-/** A printed fête band: gold ground and fixed confetti, never random per render. */
-function drawFestivalBand(
-  context: CanvasRenderingContext2D,
-  index: number,
-  top: number,
-  height: number,
-) {
-  const gradient = context.createLinearGradient(0, top, 0, top + height);
-  gradient.addColorStop(0, "#ffe39a");
-  gradient.addColorStop(1, "#ffcd5c");
-  context.fillStyle = gradient;
-  context.fillRect(14, top, 484, height);
-  for (let piece = 0; piece < 34; piece++) {
-    const x = 26 + ((piece * 137 + index * 59) % 460);
-    const y = top + 10 + ((piece * 89 + index * 31) % (height - 20));
-    context.save();
-    context.translate(x, y);
-    context.rotate(((piece * 47) % 180) * (Math.PI / 180));
-    context.fillStyle = FESTIVAL_COLORS[piece % FESTIVAL_COLORS.length];
-    if (piece % 3 === 0) {
-      context.beginPath();
-      context.arc(0, 0, 7, 0, Math.PI * 2);
-      context.fill();
-    } else context.fillRect(-9, -4, 18, 8);
-    context.restore();
-  }
-  // Scalloped bunting along the inner edge of the band, toward the print.
-  for (let flag = 0; flag < 12; flag++) {
-    const left = 14 + flag * 40.3;
-    context.fillStyle = FESTIVAL_COLORS[flag % 5];
-    context.beginPath();
-    context.moveTo(left, top + height);
-    context.lineTo(left + 40.3, top + height);
-    context.lineTo(left + 20.15, top + height + 18);
-    context.closePath();
-    context.fill();
-  }
-}
-
-function tileTexture(
-  index: number,
-  amount: number | null,
-  rented: boolean,
-  locale: Locale,
-  festival: boolean,
-) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 640;
-  const context = canvas.getContext("2d");
-  if (!context) return new THREE.CanvasTexture(canvas);
-  const tile = BOARD[index];
-  context.clearRect(0, 0, 512, 640);
-  context.fillStyle = tile.kind === "resort" ? "#fff1d5" : "#f1eef2";
-  context.fillRect(0, 0, 512, 640);
-  if (tile.kind === "city") {
-    context.fillStyle = "#d9e7bb";
-    context.fillRect(14, 12, 484, 230);
-    if (festival) drawFestivalBand(context, index, 27, 215);
-    context.fillStyle = tileColor(index);
-    context.fillRect(14, 12, 484, 15);
-  }
-  context.fillStyle = "#253641";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  // Each side reads along the track. The upper band belongs to the buildings;
-  // the city and its amount always keep their own unoccluded printed area.
-  context.save();
-  context.translate(256, 432);
-  context.scale(1, 1.7);
-  const name = tileName(index);
-  context.font = "900 68px Arial, sans-serif";
-  context.fillText(
-    name.toLocaleUpperCase(locale),
-    0,
-    amount === null ? -15 : -75,
-    474,
+function BoardBase({ onRendered }: { onRendered: () => void }) {
+  const lawn = useMemo(lawnTexture, []);
+  const road = useMemo(roadTexture, []);
+  useEffect(
+    () => () => {
+      lawn.dispose();
+      road.dispose();
+    },
+    [lawn, road],
   );
-  if (amount !== null) {
-    context.font = "900 130px Arial, sans-serif";
-    context.fillText(money(amount), 0, 35, 450);
-    context.font = "700 18px Segoe UI, sans-serif";
-    context.fillStyle = "#4b5c62";
-    context.fillText(
-      rented
-        ? locale === "fr"
-          ? "LOYER"
-          : "RENT"
-        : locale === "fr"
-          ? "ACHAT"
-          : "PRICE",
-      0,
-      109,
-    );
-  }
-  context.restore();
-  if (tile.kind !== "city" && tile.kind !== "resort") {
-    const colors = [
-      "#e95d75",
-      "#efb840",
-      "#55a881",
-      "#47a5c8",
-      "#9369bc",
-      "#f08945",
-    ];
-    if (tile.kind === "chance") {
-      for (let wedge = 0; wedge < 6; wedge++) {
-        context.fillStyle = colors[wedge];
-        context.beginPath();
-        context.moveTo(256, 178);
-        context.arc(
-          256,
-          178,
-          116,
-          (wedge * Math.PI) / 3,
-          ((wedge + 1) * Math.PI) / 3,
-        );
-        context.closePath();
-        context.fill();
-      }
-      context.fillStyle = "#fffaf0";
-      context.beginPath();
-      context.arc(256, 178, 34, 0, Math.PI * 2);
-      context.fill();
-    } else if (tile.kind === "championship") {
-      // The festival tent stands on this band; the print only sets the mood.
-      drawFestivalBand(context, index, 12, 256);
-    } else {
-      context.fillStyle = tile.kind === "tax" ? "#dbc7d7" : "#d7e6bd";
-      context.fillRect(14, 12, 484, 256);
-      context.fillStyle = "#36516a";
-      context.font = "900 138px Segoe UI, sans-serif";
-      context.fillText(TILE_ICONS[tile.kind], 256, 159);
-    }
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  return texture;
+  // A two-tone edge: a darker base under a lighter rim that frames the lots.
+  const lower = BOARD_HALF * 2 + 0.16;
+  const upper = BOARD_HALF * 2 + 0.08;
+  const seam = 0.1;
+  return (
+    <group>
+      <mesh position={[0, BOARD_BOTTOM - 0.002, 0]} receiveShadow>
+        <boxGeometry args={[200, 0.002, 200]} />
+        <shadowMaterial opacity={0.13} />
+      </mesh>
+      <mesh
+        position={[0, (BOARD_BOTTOM + seam) / 2, 0]}
+        receiveShadow
+        castShadow
+      >
+        <boxGeometry args={[lower, seam - BOARD_BOTTOM, lower]} />
+        <meshStandardMaterial color="#a597ad" roughness={1} />
+      </mesh>
+      <mesh
+        position={[0, (seam + BOARD_TOP) / 2, 0]}
+        receiveShadow
+        castShadow
+        onAfterRender={onRendered}
+      >
+        <boxGeometry args={[upper, BOARD_TOP - seam, upper]} />
+        <meshStandardMaterial color="#e9e3ed" roughness={1} />
+      </mesh>
+      <mesh
+        position={[0, ROAD_TOP, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[INNER_HALF * 2, INNER_HALF * 2]} />
+        <meshStandardMaterial map={road} roughness={1} />
+      </mesh>
+      <mesh
+        position={[0, LAWN_TOP, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[LAWN_HALF * 2, LAWN_HALF * 2]} />
+        <meshStandardMaterial map={lawn} roughness={1} />
+      </mesh>
+    </group>
+  );
 }
 
 function TileFace({
   index,
   amount,
-  rented,
+  owner,
+  salary,
   festival,
   onSelect,
   preview,
@@ -219,7 +160,8 @@ function TileFace({
 }: {
   index: number;
   amount: number | null;
-  rented: boolean;
+  owner: Seat | null;
+  salary: number;
   festival: boolean;
   onSelect: (tile: number) => void;
   preview?: boolean;
@@ -228,15 +170,20 @@ function TileFace({
 }) {
   const { locale } = useLocale();
   const texture = useMemo(
-    () => tileTexture(index, amount, rented, locale, festival),
-    [index, amount, rented, locale, festival],
+    () =>
+      isCorner(index)
+        ? cornerTexture(index, locale, salary)
+        : lotTexture(index, { amount, owner, locale, festival }),
+    [index, amount, owner, locale, salary, festival],
   );
   useEffect(() => () => texture.dispose(), [texture]);
-  const [x, z] = tilePosition(index);
+  const [x, z] = tileCenter(index);
+  const [along, depth] = tileSize(index);
   return (
     <mesh
-      position={[x, 0.317, z]}
-      rotation={[-Math.PI / 2, 0, tileAngle(index)]}
+      position={[x, LOT_TOP + 0.0015, z]}
+      rotation={[-Math.PI / 2, 0, faceRotation(index)]}
+      receiveShadow
       onPointerDown={(event) => {
         if (preview) return;
         event.stopPropagation();
@@ -251,9 +198,14 @@ function TileFace({
         if (pickable) document.body.style.cursor = "";
       }}
     >
-      <planeGeometry args={[1.035, tileDepth(index)]} />
+      {/* Canvas width runs along play and its height toward the center. */}
+      <planeGeometry args={[along - LOT_GAP, depth - LOT_GAP]} />
       {/* Multiplying the print keeps one texture per tile while choices dim others. */}
-      <meshBasicMaterial map={texture} color={dimmed ? "#9d98a4" : "#ffffff"} />
+      <meshBasicMaterial
+        map={texture}
+        color={dimmed ? "#9d98a4" : "#ffffff"}
+        toneMapped={false}
+      />
     </mesh>
   );
 }
@@ -266,10 +218,13 @@ function BoardTiles({
   preview,
 }: BoardProps) {
   const mesh = useRef<THREE.InstancedMesh>(null);
-  const geometry = useMemo(() => new THREE.BoxGeometry(1.035, 0.075, 1), []);
   const transforms = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
+  const neutral = useMemo(() => new THREE.Color("#ece6ef"), []);
   const dim = useMemo(() => new THREE.Color("#7f7a88"), []);
+  useEffect(() => {
+    if (!targets) document.body.style.cursor = "";
+  }, [targets]);
   useEffect(
     () => () => {
       document.body.style.cursor = "";
@@ -277,27 +232,24 @@ function BoardTiles({
     [],
   );
   useEffect(() => {
-    if (!targets) document.body.style.cursor = "";
-  }, [targets]);
-  useEffect(() => {
     if (!mesh.current) return;
     for (const tile of BOARD) {
-      const [x, z] = tilePosition(tile.index);
-      transforms.position.set(x, 0.278, z);
-      transforms.rotation.set(0, tileAngle(tile.index), 0);
-      transforms.scale.set(1, 1, tileDepth(tile.index));
+      const [x, z] = tileCenter(tile.index);
+      const [along, depth] = tileSize(tile.index);
+      transforms.position.set(x, (BOARD_TOP + LOT_TOP) / 2, z);
+      transforms.rotation.set(0, tileRotation(tile.index), 0);
+      transforms.scale.set(
+        along - LOT_GAP,
+        LOT_TOP - BOARD_TOP,
+        depth - LOT_GAP,
+      );
       transforms.updateMatrix();
       mesh.current.setMatrixAt(tile.index, transforms.matrix);
       const owner = state ? getProperty(state, tile.index)?.owner : null;
-      color.set(
-        tile.index === selected
-          ? "#ffda72"
-          : owner != null
-            ? PLAYER_COLORS[owner]
-            : "#d3cbd7",
-      );
-      if (owner != null && tile.index !== selected)
-        color.lerp(new THREE.Color("#d3cbd7"), 0.82);
+      if (tile.index === selected) color.set("#ffd45e");
+      else if (owner != null)
+        color.set(PLAYER_COLORS[owner]).lerp(neutral, 0.35);
+      else color.copy(neutral);
       if (targets && !targets.includes(tile.index)) color.lerp(dim, 0.55);
       mesh.current.setColorAt(tile.index, color);
     }
@@ -305,18 +257,13 @@ function BoardTiles({
     mesh.current.computeBoundingSphere();
     if (mesh.current.instanceColor)
       mesh.current.instanceColor.needsUpdate = true;
-  }, [state, selected, targets, transforms, color, dim]);
-  useEffect(
-    () => () => {
-      geometry.dispose();
-    },
-    [geometry],
-  );
+  }, [state, selected, targets, transforms, color, neutral, dim]);
+  const salary = state?.config.startSalary ?? ECONOMY.startSalary;
   return (
     <>
       <instancedMesh
         ref={mesh}
-        args={[geometry, undefined, 32]}
+        args={[undefined, undefined, BOARD.length]}
         receiveShadow
         castShadow
         onPointerDown={(event) => {
@@ -325,30 +272,32 @@ function BoardTiles({
           onSelect(event.instanceId);
         }}
       >
+        <boxGeometry />
         <meshStandardMaterial roughness={1} />
       </instancedMesh>
       {BOARD.map((tile) => {
         const property = state ? getProperty(state, tile.index) : null;
-        const rented = property?.owner != null;
+        const owner = property?.owner ?? null;
         return (
           <TileFace
             key={tile.index}
             index={tile.index}
-            rented={rented}
+            owner={owner}
+            salary={salary}
             festival={Boolean(
               state &&
                 (state.festivalTiles.includes(tile.index) ||
                   state.championshipHost?.tile === tile.index),
             )}
+            dimmed={Boolean(targets && !targets.includes(tile.index))}
+            pickable={Boolean(targets?.includes(tile.index))}
             amount={
-              rented && state
+              owner != null && state
                 ? propertyRent(state, tile.index)
                 : tilePrice(tile.index)
             }
             onSelect={onSelect}
             preview={preview}
-            dimmed={Boolean(targets && !targets.includes(tile.index))}
-            pickable={Boolean(targets?.includes(tile.index))}
           />
         );
       })}
@@ -356,24 +305,38 @@ function BoardTiles({
   );
 }
 
+function outlineGeometry(width: number, depth: number, border: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, -depth / 2);
+  shape.lineTo(width / 2, -depth / 2);
+  shape.lineTo(width / 2, depth / 2);
+  shape.lineTo(-width / 2, depth / 2);
+  shape.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(-width / 2 + border, -depth / 2 + border);
+  hole.lineTo(-width / 2 + border, depth / 2 - border);
+  hole.lineTo(width / 2 - border, depth / 2 - border);
+  hole.lineTo(width / 2 - border, -depth / 2 + border);
+  hole.closePath();
+  shape.holes.push(hole);
+  return new THREE.ShapeGeometry(shape);
+}
+
 function TileFocus({ state, selected, preview }: BoardProps) {
-  const outline = useMemo(() => {
-    const shape = new THREE.Shape();
-    shape.moveTo(-0.5, -0.5);
-    shape.lineTo(0.5, -0.5);
-    shape.lineTo(0.5, 0.5);
-    shape.lineTo(-0.5, 0.5);
-    shape.closePath();
-    const hole = new THREE.Path();
-    hole.moveTo(-0.455, -0.455);
-    hole.lineTo(-0.455, 0.455);
-    hole.lineTo(0.455, 0.455);
-    hole.lineTo(0.455, -0.455);
-    hole.closePath();
-    shape.holes.push(hole);
-    return new THREE.ShapeGeometry(shape);
-  }, []);
-  useEffect(() => () => outline.dispose(), [outline]);
+  const outlines = useMemo(
+    () => ({
+      lot: outlineGeometry(LOT_WIDTH, LOT_DEPTH, 0.06),
+      corner: outlineGeometry(LOT_DEPTH, LOT_DEPTH, 0.07),
+    }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      outlines.lot.dispose();
+      outlines.corner.dispose();
+    },
+    [outlines],
+  );
   if (preview) return null;
   const pending = state?.pending;
   const decisionTile = pending && "tile" in pending ? pending.tile : null;
@@ -381,19 +344,20 @@ function TileFocus({ state, selected, preview }: BoardProps) {
     <>
       {[decisionTile, selected].map((tile, index) => {
         if (tile == null || (index === 1 && tile === decisionTile)) return null;
-        const [x, z] = tilePosition(tile);
+        const [x, z] = tileCenter(tile);
         return (
           <mesh
             key={index === 0 ? "decision" : "inspection"}
-            geometry={outline}
-            position={[x, 0.323, z]}
-            rotation={[-Math.PI / 2, 0, tileAngle(tile)]}
-            scale={[1.045, tileDepth(tile), 1]}
+            geometry={isCorner(tile) ? outlines.corner : outlines.lot}
+            position={[x, LOT_TOP + 0.004, z]}
+            rotation={[-Math.PI / 2, 0, tileRotation(tile)]}
+            renderOrder={2}
           >
             <meshBasicMaterial
               color={
-                index === 0 && pending ? PLAYER_COLORS[pending.seat] : "#db9e25"
+                index === 0 && pending ? PLAYER_COLORS[pending.seat] : "#e8a321"
               }
+              toneMapped={false}
             />
           </mesh>
         );
@@ -402,7 +366,227 @@ function TileFocus({ state, selected, preview }: BoardProps) {
   );
 }
 
-function tileFrameGeometry(inset: number) {
+/** A construction animating on one tile: its buildings rise with progress. */
+type Growth = { tile: number; progress: number };
+type TownsHandle = {
+  draw: (state: PublicState | null, growth: Growth | null) => void;
+};
+// Each building starts slightly after the previous one, like a crew at work.
+const GROWTH_STAGGER = 0.16;
+const GROWTH_SPAN = 0.6;
+const growthEase = gsap.parseEase("back.out(2.2)");
+
+function Towns({
+  state,
+  preview,
+  handle,
+}: Pick<BoardProps, "state" | "preview"> & {
+  handle: { current: TownsHandle | null };
+}) {
+  const walls = useRef<THREE.InstancedMesh>(null);
+  const roofs = useRef<THREE.InstancedMesh>(null);
+  const windows = useRef<THREE.InstancedMesh>(null);
+  const details = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+  const roofGeometry = useMemo(() => {
+    const triangle = new THREE.Shape();
+    triangle.moveTo(-0.5, 0);
+    triangle.lineTo(0.5, 0);
+    triangle.lineTo(0, 1);
+    triangle.closePath();
+    const geometry = new THREE.ExtrudeGeometry(triangle, {
+      depth: 1,
+      bevelEnabled: false,
+      steps: 1,
+    });
+    geometry.translate(0, 0, -0.5);
+    return geometry;
+  }, []);
+  const draw = useCallback(
+    (view: PublicState | null, growth: Growth | null) => {
+      if (
+        !walls.current ||
+        !roofs.current ||
+        !windows.current ||
+        !details.current
+      )
+        return;
+      let count = 0;
+      let windowCount = 0;
+      let detailCount = 0;
+      for (const tile of BOARD) {
+        if (tile.kind !== "city") continue;
+        const growing = growth?.tile === tile.index ? growth : null;
+        let order = 0;
+        const property = view ? getProperty(view, tile.index) : null;
+        const owner = property?.owner;
+        const level =
+          owner != null
+            ? (property?.level ?? 0)
+            : preview
+              ? 1 + (tile.index % 5)
+              : 0;
+        if (level === 0) continue;
+        const roofColor =
+          owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
+        const angle = tileRotation(tile.index);
+        const bandZ = buildingBandZ(tile.index);
+        const [faceX, faceZ] = visibleFaces(tile.index);
+        const building = (
+          localX: number,
+          fullWidth: number,
+          fullHeight: number,
+          depth = 0.28,
+        ) => {
+          let width = fullWidth;
+          let height = fullHeight;
+          const [x, z] = tilePoint(tile.index, localX, bandZ);
+          const base = LOT_TOP;
+          if (growing) {
+            const start = order * GROWTH_STAGGER;
+            const progress = THREE.MathUtils.clamp(
+              (growing.progress - start) / GROWTH_SPAN,
+              0,
+              1,
+            );
+            order += 1;
+            if (progress === 0) return;
+            // Overshoots, then settles: the building pops out of its plot.
+            height *= Math.max(0.02, growthEase(progress));
+            width *= 0.7 + 0.3 * Math.min(1, progress * 1.6);
+          }
+          dummy.rotation.set(0, angle, 0);
+          dummy.position.set(x, base + height / 2, z);
+          dummy.scale.set(width, height, depth);
+          dummy.updateMatrix();
+          walls.current?.setMatrixAt(count, dummy.matrix);
+          walls.current?.setColorAt(count, color.set("#fffaf4"));
+          dummy.position.y = base + height;
+          dummy.scale.set(width + 0.05, level >= 4 ? 0.13 : 0.12, depth + 0.05);
+          dummy.updateMatrix();
+          roofs.current?.setMatrixAt(count, dummy.matrix);
+          roofs.current?.setColorAt(count, color.set(roofColor));
+          count += 1;
+          // An owner-colored footing and windows on the two faces the camera
+          // sees: the roof identifies a house, the height a hotel or landmark.
+          dummy.position.y = base + 0.018;
+          dummy.scale.set(width + 0.03, 0.036, depth + 0.03);
+          dummy.updateMatrix();
+          details.current?.setMatrixAt(detailCount, dummy.matrix);
+          details.current?.setColorAt(detailCount, color.set(roofColor));
+          detailCount += 1;
+          const rows = fullHeight > 0.35 ? 3 : 1;
+          const paneHeight = Math.min(0.07, height * 0.3);
+          for (let row = 0; row < rows; row++) {
+            const y = base + (height * (row + 0.55)) / rows;
+            for (const column of [-1, 1]) {
+              const [windowX, windowZ] = tilePoint(
+                tile.index,
+                localX + column * width * 0.23,
+                bandZ + faceZ * (depth / 2 + 0.004),
+              );
+              dummy.position.set(windowX, y, windowZ);
+              dummy.scale.set(width * 0.2, paneHeight, 0.01);
+              dummy.updateMatrix();
+              windows.current?.setMatrixAt(windowCount++, dummy.matrix);
+            }
+            const [sideX, sideZ] = tilePoint(
+              tile.index,
+              localX + faceX * (width / 2 + 0.004),
+              bandZ,
+            );
+            dummy.position.set(sideX, y, sideZ);
+            dummy.scale.set(0.01, paneHeight, depth * 0.34);
+            dummy.updateMatrix();
+            windows.current?.setMatrixAt(windowCount++, dummy.matrix);
+          }
+        };
+        if (level >= 1 && level <= 3) {
+          const offsets =
+            level === 1 ? [0] : level === 2 ? [-0.2, 0.2] : [-0.3, 0, 0.3];
+          for (const x of offsets) building(x, level === 1 ? 0.3 : 0.24, 0.22);
+        } else if (level === 4) {
+          building(0, 0.44, 0.44, 0.32);
+          building(-0.34, 0.14, 0.2);
+          building(0.34, 0.14, 0.2);
+        } else if (level === 5) {
+          building(0, 0.52, 0.6, 0.34);
+          building(-0.36, 0.12, 0.3);
+          building(0.36, 0.12, 0.3);
+        }
+      }
+      walls.current.count = roofs.current.count = count;
+      windows.current.count = windowCount;
+      details.current.count = detailCount;
+      for (const object of [
+        walls.current,
+        roofs.current,
+        windows.current,
+        details.current,
+      ]) {
+        object.instanceMatrix.needsUpdate = true;
+        if (object.instanceColor) object.instanceColor.needsUpdate = true;
+        object.computeBoundingSphere();
+      }
+    },
+    [preview, dummy, color],
+  );
+  useEffect(() => {
+    handle.current = { draw };
+    return () => {
+      handle.current = null;
+    };
+  }, [handle, draw]);
+  useEffect(() => draw(state, null), [state, draw]);
+  useEffect(() => () => roofGeometry.dispose(), [roofGeometry]);
+  return (
+    <>
+      <instancedMesh ref={walls} args={[undefined, undefined, 72]} castShadow>
+        <boxGeometry />
+        <meshStandardMaterial roughness={0.95} />
+      </instancedMesh>
+      <instancedMesh
+        ref={roofs}
+        args={[roofGeometry, undefined, 72]}
+        castShadow
+      >
+        <meshStandardMaterial roughness={0.8} />
+      </instancedMesh>
+      <instancedMesh ref={windows} args={[undefined, undefined, 640]}>
+        <boxGeometry />
+        <meshBasicMaterial color="#35546a" />
+      </instancedMesh>
+      <instancedMesh ref={details} args={[undefined, undefined, 72]} castShadow>
+        <boxGeometry />
+        <meshStandardMaterial roughness={1} />
+      </instancedMesh>
+    </>
+  );
+}
+
+function ResortProps() {
+  return (
+    <>
+      {BOARD.filter((tile) => tile.kind === "resort").map((tile) => {
+        const [x, z] = tilePoint(
+          tile.index,
+          -0.24,
+          buildingBandZ(tile.index) + screenTop(tile.index) * 0.04,
+        );
+        return (
+          <BeachUmbrella
+            key={tile.index}
+            position={[x, LOT_TOP, z]}
+            scale={0.8}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function unitFrameGeometry(inset: number) {
   const shape = new THREE.Shape();
   shape.moveTo(-0.5, -0.5);
   shape.lineTo(0.5, -0.5);
@@ -435,13 +619,14 @@ function PickHighlights({
   const fills = useRef<THREE.InstancedMesh>(null);
   const pin = useRef<THREE.Group>(null);
   const transform = useMemo(() => new THREE.Object3D(), []);
-  const frame = useMemo(() => tileFrameGeometry(0.468), []);
+  const frame = useMemo(() => unitFrameGeometry(0.47), []);
   const fillMaterial = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.14,
         depthWrite: false,
+        toneMapped: false,
       }),
     [],
   );
@@ -458,13 +643,14 @@ function PickHighlights({
     const glow = fills.current;
     if (!outlines || !glow) return;
     targets.forEach((tile, index) => {
-      const [x, z] = tilePosition(tile);
-      transform.position.set(x, 0.3236, z);
-      transform.rotation.set(-Math.PI / 2, 0, tileAngle(tile));
-      transform.scale.set(1.035, tileDepth(tile), 1);
+      const [x, z] = tileCenter(tile);
+      const [along, depth] = tileSize(tile);
+      transform.position.set(x, LOT_TOP + 0.0045, z);
+      transform.rotation.set(-Math.PI / 2, 0, tileRotation(tile));
+      transform.scale.set(along - LOT_GAP, depth - LOT_GAP, 1);
       transform.updateMatrix();
       outlines.setMatrixAt(index, transform.matrix);
-      transform.position.y = 0.3196;
+      transform.position.y = LOT_TOP + 0.003;
       transform.updateMatrix();
       glow.setMatrixAt(index, transform.matrix);
     });
@@ -487,27 +673,29 @@ function PickHighlights({
     // The board renders on demand; keep frames coming only while choosing.
     if (!reducedMotion) frameState.invalidate();
   });
-  const [pinX, pinZ] = picked === null ? [0, 0] : tilePosition(picked);
+  const [pinX, pinZ] = picked === null ? [0, 0] : tileCenter(picked);
   return (
     <>
       <instancedMesh
         ref={fills}
-        args={[undefined, fillMaterial, 32]}
+        args={[undefined, fillMaterial, BOARD.length]}
         frustumCulled={false}
+        renderOrder={1}
       >
         <planeGeometry />
       </instancedMesh>
       <instancedMesh
         ref={frames}
-        args={[frame, undefined, 32]}
+        args={[frame, undefined, BOARD.length]}
         frustumCulled={false}
+        renderOrder={2}
       >
-        <meshBasicMaterial color={color} />
+        <meshBasicMaterial color={color} toneMapped={false} />
       </instancedMesh>
       {picked !== null && (
-        <group position={[pinX, 0.33, pinZ]}>
+        <group position={[pinX, LOT_TOP, pinZ]}>
           <group ref={pin}>
-            <group position={[0, 0.78, 0]}>
+            <group position={[0, 0.82, 0]}>
               <mesh
                 position={[0, -0.17, 0]}
                 rotation={[Math.PI, 0, 0]}
@@ -532,282 +720,6 @@ function PickHighlights({
   );
 }
 
-function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
-  const walls = useRef<THREE.InstancedMesh>(null);
-  const roofs = useRef<THREE.InstancedMesh>(null);
-  const windows = useRef<THREE.InstancedMesh>(null);
-  const details = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const color = useMemo(() => new THREE.Color(), []);
-  const roofGeometry = useMemo(() => {
-    const triangle = new THREE.Shape();
-    triangle.moveTo(-0.5, 0);
-    triangle.lineTo(0.5, 0);
-    triangle.lineTo(0, 1);
-    triangle.closePath();
-    const geometry = new THREE.ExtrudeGeometry(triangle, {
-      depth: 1,
-      bevelEnabled: false,
-      steps: 1,
-    });
-    geometry.translate(0, 0, -0.5);
-    return geometry;
-  }, []);
-  useEffect(() => {
-    if (
-      !walls.current ||
-      !roofs.current ||
-      !windows.current ||
-      !details.current
-    )
-      return;
-    let count = 0;
-    let windowCount = 0;
-    let detailCount = 0;
-    for (const tile of BOARD) {
-      if (tile.kind !== "city") continue;
-      const property = state ? getProperty(state, tile.index) : null;
-      const owner = property?.owner;
-      const level =
-        owner != null
-          ? (property?.level ?? 0)
-          : preview
-            ? 1 + (tile.index % 5)
-            : 0;
-      const roofColor =
-        owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
-      const angle = tileAngle(tile.index);
-      const building = (
-        localX: number,
-        width: number,
-        height: number,
-        depth = 0.24,
-      ) => {
-        const [x, z] = tileLocalPosition(tile.index, localX, -0.35);
-        const base = 0.324;
-        dummy.rotation.set(0, angle, 0);
-        dummy.position.set(x, base + height / 2, z);
-        dummy.scale.set(width, height, depth);
-        dummy.updateMatrix();
-        walls.current?.setMatrixAt(count, dummy.matrix);
-        walls.current?.setColorAt(count, color.set("#fffaf4"));
-        dummy.position.y = base + height;
-        dummy.scale.set(
-          width + 0.045,
-          level >= 4 ? 0.12 : 0.105,
-          depth + 0.045,
-        );
-        dummy.updateMatrix();
-        roofs.current?.setMatrixAt(count, dummy.matrix);
-        roofs.current?.setColorAt(count, color.set(roofColor));
-        count += 1;
-        // One owner-colored footing and simple front windows: the roof silhouette
-        // identifies a house, while the body height identifies hotels/monuments.
-        dummy.position.y = base + 0.018;
-        dummy.scale.set(width + 0.025, 0.036, depth + 0.025);
-        dummy.updateMatrix();
-        details.current?.setMatrixAt(detailCount, dummy.matrix);
-        details.current?.setColorAt(detailCount, color.set(roofColor));
-        detailCount += 1;
-        const rows = height > 0.35 ? 3 : 1;
-        for (let row = 0; row < rows; row++) {
-          for (const column of [-1, 1]) {
-            const [windowX, windowZ] = tileLocalPosition(
-              tile.index,
-              localX + column * width * 0.22,
-              -0.35 + depth * 0.505,
-            );
-            dummy.position.set(
-              windowX,
-              base + (height * (row + 0.5)) / rows,
-              windowZ,
-            );
-            dummy.scale.set(width * 0.22, Math.min(0.07, height * 0.34), 0.009);
-            dummy.updateMatrix();
-            windows.current?.setMatrixAt(windowCount++, dummy.matrix);
-          }
-        }
-      };
-      if (level >= 1 && level <= 3) {
-        const offsets =
-          level === 1 ? [0] : level === 2 ? [-0.18, 0.18] : [-0.3, 0, 0.3];
-        for (const x of offsets) building(x, level === 1 ? 0.27 : 0.235, 0.2);
-      } else if (level === 4) {
-        building(0, 0.44, 0.41, 0.27);
-        building(-0.31, 0.14, 0.18);
-        building(0.31, 0.14, 0.18);
-      } else if (level === 5) {
-        building(0, 0.53, 0.53, 0.29);
-        building(-0.32, 0.12, 0.28);
-        building(0.32, 0.12, 0.28);
-      }
-    }
-    walls.current.count = roofs.current.count = count;
-    windows.current.count = windowCount;
-    details.current.count = detailCount;
-    for (const object of [
-      walls.current,
-      roofs.current,
-      windows.current,
-      details.current,
-    ]) {
-      object.instanceMatrix.needsUpdate = true;
-      if (object.instanceColor) object.instanceColor.needsUpdate = true;
-      object.computeBoundingSphere();
-    }
-  }, [state, preview, dummy, color]);
-  useEffect(() => () => roofGeometry.dispose(), [roofGeometry]);
-  return (
-    <>
-      <instancedMesh ref={walls} args={[undefined, undefined, 96]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial roughness={1} />
-      </instancedMesh>
-      <instancedMesh
-        ref={roofs}
-        args={[roofGeometry, undefined, 96]}
-        castShadow
-      >
-        <meshStandardMaterial roughness={1} />
-      </instancedMesh>
-      <instancedMesh ref={windows} args={[undefined, undefined, 320]}>
-        <boxGeometry />
-        <meshBasicMaterial color="#334759" />
-      </instancedMesh>
-      <instancedMesh ref={details} args={[undefined, undefined, 96]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial roughness={1} />
-      </instancedMesh>
-    </>
-  );
-}
-function markerTexture(text: string, background: string, foreground: string) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 96;
-  const context = canvas.getContext("2d");
-  if (context) {
-    context.fillStyle = background;
-    context.fillRect(0, 0, 128, 96);
-    context.fillStyle = foreground;
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.font = "900 62px Segoe UI, sans-serif";
-    context.fillText(text, 64, 50);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-function BoardMarkers({ state }: { state: PublicState | null }) {
-  const owners = useRef<(THREE.InstancedMesh | null)[]>([]);
-  const badges = useMemo(
-    () =>
-      PLAYER_SYMBOLS.map((symbol, seat) =>
-        markerTexture(symbol, PLAYER_COLORS[seat], "#fffaf0"),
-      ),
-    [],
-  );
-  const transform = useMemo(() => new THREE.Object3D(), []);
-  useEffect(() => {
-    for (let seat = 0; seat < 4; seat++) {
-      const mesh = owners.current[seat];
-      if (!mesh) continue;
-      let count = 0;
-      for (const property of state?.properties ?? []) {
-        if (property.owner !== seat) continue;
-        const [x, z] = tileLocalPosition(property.tile, -0.4, 0.44);
-        transform.position.set(x, 0.322, z);
-        transform.rotation.set(-Math.PI / 2, 0, tileAngle(property.tile));
-        transform.scale.set(0.14, 0.105, 1);
-        transform.updateMatrix();
-        mesh.setMatrixAt(count, transform.matrix);
-        count += 1;
-      }
-      mesh.count = count;
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
-    }
-  }, [state, transform]);
-  useEffect(
-    () => () => {
-      for (const texture of badges) texture.dispose();
-    },
-    [badges],
-  );
-  return (
-    <>
-      {badges.map((texture, seat) => (
-        <instancedMesh
-          key={PLAYER_SYMBOLS[seat]}
-          ref={(mesh) => {
-            owners.current[seat] = mesh;
-          }}
-          args={[undefined, undefined, 24]}
-        >
-          <planeGeometry />
-          <meshBasicMaterial map={texture} side={THREE.DoubleSide} />
-        </instancedMesh>
-      ))}
-    </>
-  );
-}
-
-/** A gold rosette with the rent multiplier; a hosted festival wears its host's ring. */
-function medallionTexture(multiplier: number, ring: string) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
-  const context = canvas.getContext("2d");
-  if (context) {
-    // Ribbon tails first, so the coin covers their tops.
-    for (const side of [-1, 1]) {
-      context.fillStyle = side < 0 ? "#e2553f" : "#2f8fc4";
-      context.beginPath();
-      context.moveTo(128 + side * 22, 170);
-      context.lineTo(128 + side * 62, 250);
-      context.lineTo(128 + side * 40, 236);
-      context.lineTo(128 + side * 28, 254);
-      context.lineTo(128 + side * 2, 186);
-      context.closePath();
-      context.fill();
-    }
-    context.fillStyle = ring;
-    context.beginPath();
-    for (let point = 0; point < 24; point++) {
-      const angle = (point * Math.PI) / 12;
-      const radius = point % 2 ? 98 : 110;
-      context.lineTo(
-        128 + Math.cos(angle) * radius,
-        112 + Math.sin(angle) * radius,
-      );
-    }
-    context.closePath();
-    context.fill();
-    context.fillStyle = "#ffd24f";
-    context.beginPath();
-    context.arc(128, 112, 84, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = "#fff1b8";
-    context.lineWidth = 6;
-    context.beginPath();
-    context.arc(128, 112, 72, 0, Math.PI * 2);
-    context.stroke();
-    context.fillStyle = "#5b3b06";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.font = "900 82px Arial, sans-serif";
-    context.fillText(`×${multiplier}`, 128, 120);
-    context.font = "900 30px Segoe UI, sans-serif";
-    context.fillText("★", 128, 56);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
-}
-
 function pennantGeometry() {
   const shape = new THREE.Shape();
   shape.moveTo(-0.5, 0);
@@ -818,8 +730,16 @@ function pennantGeometry() {
 }
 
 const BUNTING_FLAGS = 7;
+const BUNTING_HEIGHT = 0.62;
+const BUNTING_SAG = 0.08;
+const BUNTING_HALF = 0.46;
 
-/** Festival cities: printed fête band, a garland between two masts and a medallion. */
+/** Tile-local z of a festival garland: the screen-top edge of the plot. */
+function buntingZ(index: number) {
+  return screenTop(index) * (LOT_DEPTH / 2 - 0.05);
+}
+
+/** Festival cities: a printed fête band, a garland on two masts and a medallion. */
 function FestivalMarkers({ state }: { state: PublicState | null }) {
   const masts = useRef<THREE.InstancedMesh>(null);
   const cords = useRef<THREE.InstancedMesh>(null);
@@ -880,31 +800,40 @@ function FestivalMarkers({ state }: { state: PublicState | null }) {
     let cordCount = 0;
     let flagCount = 0;
     for (const tile of festivals) {
-      const angle = tileAngle(tile);
-      const height = 0.66;
-      const sag = 0.08;
+      const angle = tileRotation(tile);
+      const z = buntingZ(tile);
       for (const side of [-1, 1]) {
-        const [x, z] = tileLocalPosition(tile, side * 0.47, -0.53);
-        transform.position.set(x, 0.325 + height / 2, z);
+        const [x, worldZ] = tilePoint(tile, side * BUNTING_HALF, z);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT / 2, worldZ);
         transform.rotation.set(0, 0, 0);
-        transform.scale.set(1, height, 1);
+        transform.scale.set(1, BUNTING_HEIGHT, 1);
         transform.updateMatrix();
         mastMesh.setMatrixAt(mastCount++, transform.matrix);
       }
       // Two straight cord halves meet at the sagging middle of the garland.
       for (const side of [-1, 1]) {
-        const [x, z] = tileLocalPosition(tile, side * 0.235, -0.53);
-        transform.position.set(x, 0.325 + height - sag / 2, z);
-        transform.rotation.set(0, angle, side * Math.atan2(sag, 0.47));
-        transform.scale.set(Math.hypot(0.47, sag), 1, 1);
+        const [x, worldZ] = tilePoint(tile, (side * BUNTING_HALF) / 2, z);
+        transform.position.set(
+          x,
+          LOT_TOP + BUNTING_HEIGHT - BUNTING_SAG / 2,
+          worldZ,
+        );
+        transform.rotation.set(
+          0,
+          angle,
+          side * Math.atan2(BUNTING_SAG, BUNTING_HALF),
+        );
+        transform.scale.set(Math.hypot(BUNTING_HALF, BUNTING_SAG), 1, 1);
         transform.updateMatrix();
         cordMesh.setMatrixAt(cordCount++, transform.matrix);
       }
       for (let flag = 0; flag < BUNTING_FLAGS; flag++) {
-        const along = -0.4 + (flag * 0.8) / (BUNTING_FLAGS - 1);
-        const [x, z] = tileLocalPosition(tile, along, -0.53);
-        const drop = sag * (1 - Math.abs(along) / 0.47);
-        transform.position.set(x, 0.325 + height - drop, z);
+        const along =
+          -BUNTING_HALF * 0.86 +
+          (flag * BUNTING_HALF * 1.72) / (BUNTING_FLAGS - 1);
+        const [x, worldZ] = tilePoint(tile, along, z);
+        const drop = BUNTING_SAG * (1 - Math.abs(along) / BUNTING_HALF);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT - drop, worldZ);
         transform.rotation.set(0, angle, 0);
         transform.scale.set(0.085, 0.11, 1);
         transform.updateMatrix();
@@ -942,11 +871,11 @@ function FestivalMarkers({ state }: { state: PublicState | null }) {
         <meshStandardMaterial side={THREE.DoubleSide} roughness={0.9} />
       </instancedMesh>
       {medals.map(({ tile, hosted, texture }) => {
-        const [x, z] = tileLocalPosition(tile, 0, -0.53);
+        const [x, z] = tilePoint(tile, 0, buntingZ(tile));
         return (
-          <group key={tile} position={[x, 0.325, z]}>
-            <sprite position={[0, 0.98, 0]} scale={hosted ? 0.44 : 0.38}>
-              <spriteMaterial map={texture} />
+          <group key={tile} position={[x, LOT_TOP, z]}>
+            <sprite position={[0, 0.92, 0]} scale={hosted ? 0.44 : 0.38}>
+              <spriteMaterial map={texture} toneMapped={false} />
             </sprite>
             {hosted && <FestivalBeams />}
           </group>
@@ -980,344 +909,6 @@ function FestivalBeams() {
   );
 }
 
-function stripeTexture(colors: readonly string[], stripes: number) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
-  const context = canvas.getContext("2d");
-  if (context)
-    for (let stripe = 0; stripe < stripes; stripe++) {
-      context.fillStyle = colors[stripe % colors.length];
-      context.fillRect((stripe * 256) / stripes, 0, 256 / stripes + 1, 64);
-    }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-type Garland = {
-  middle: THREE.Vector3;
-  quaternion: THREE.Quaternion;
-  length: number;
-  slope: number;
-};
-
-/** The Festival corner: an original striped show tent, garlands and searchlights. */
-function FestivalVenue() {
-  const roof = useMemo(
-    () => stripeTexture(["#e2553f", "#fff4dc", "#f4b63a", "#fff4dc"], 16),
-    [],
-  );
-  const wall = useMemo(() => stripeTexture(["#2f8fc4", "#fff4dc"], 16), []);
-  const pennant = useMemo(pennantGeometry, []);
-  useEffect(
-    () => () => {
-      roof.dispose();
-      wall.dispose();
-      pennant.dispose();
-    },
-    [roof, wall, pennant],
-  );
-  const poles = useMemo<[number, number][]>(
-    () => [
-      [-0.4, -0.42],
-      [0.4, -0.42],
-      [0.4, 0.2],
-      [-0.4, 0.2],
-    ],
-    [],
-  );
-  // Static garland transforms are computed once, never per frame.
-  const garlands = useMemo<Garland[]>(
-    () =>
-      poles.map(([x, z]) => {
-        const top = new THREE.Vector3(0, 0.5, -0.1);
-        const end = new THREE.Vector3(x, 0.34, z);
-        const direction = end.clone().sub(top).normalize();
-        return {
-          middle: top.clone().add(end).multiplyScalar(0.5),
-          quaternion: new THREE.Quaternion().setFromUnitVectors(
-            new THREE.Vector3(1, 0, 0),
-            direction,
-          ),
-          length: top.distanceTo(end),
-          slope: Math.asin(direction.y),
-        };
-      }),
-    [poles],
-  );
-  const [tileX, tileZ] = tilePosition(16);
-  return (
-    <group position={[tileX + 0.04, 0.325, tileZ - 0.1]}>
-      <mesh position={[0, 0.02, -0.1]} receiveShadow castShadow>
-        <cylinderGeometry args={[0.36, 0.38, 0.04, 24]} />
-        <meshStandardMaterial color="#f2e6c9" roughness={1} />
-      </mesh>
-      <group position={[0, 0, -0.1]}>
-        <mesh position={[0, 0.13, 0]} castShadow>
-          <cylinderGeometry args={[0.27, 0.27, 0.18, 24, 1, true]} />
-          <meshStandardMaterial
-            map={wall}
-            roughness={0.9}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-        <mesh position={[0, 0.37, 0]} castShadow>
-          <coneGeometry args={[0.33, 0.32, 24, 1, true]} />
-          <meshStandardMaterial
-            map={roof}
-            roughness={0.85}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-        {/* A dark doorway faces the camera so the tent reads as a venue. */}
-        <mesh position={[0.192, 0.11, 0.192]} rotation={[0, Math.PI / 4, 0]}>
-          <planeGeometry args={[0.12, 0.15]} />
-          <meshBasicMaterial color="#5a2e3a" />
-        </mesh>
-        <mesh position={[0, 0.6, 0]} castShadow>
-          <cylinderGeometry args={[0.01, 0.01, 0.2, 6]} />
-          <meshStandardMaterial color="#b98a3e" />
-        </mesh>
-        <mesh
-          geometry={pennant}
-          position={[0.06, 0.69, 0]}
-          rotation={[0, Math.PI / 4, Math.PI / 2]}
-          scale={[0.07, 0.12, 1]}
-        >
-          <meshStandardMaterial color="#f4b63a" side={THREE.DoubleSide} />
-        </mesh>
-      </group>
-      {poles.map(([x, z], index) => (
-        <group key={`${x}:${z}`}>
-          <mesh position={[x, 0.17, z]} castShadow>
-            <cylinderGeometry args={[0.01, 0.012, 0.34, 6]} />
-            <meshStandardMaterial color="#b98a3e" />
-          </mesh>
-          <group
-            position={garlands[index].middle}
-            quaternion={garlands[index].quaternion}
-          >
-            <mesh>
-              <boxGeometry args={[garlands[index].length, 0.005, 0.005]} />
-              <meshBasicMaterial color="#6d5a3c" />
-            </mesh>
-            {[0.2, 0.4, 0.6, 0.8].map((along, flag) => (
-              <mesh
-                key={along}
-                geometry={pennant}
-                position={[(along - 0.5) * garlands[index].length, 0, 0]}
-                rotation={[0, 0, -garlands[index].slope]}
-                scale={[0.06, 0.08, 1]}
-              >
-                <meshStandardMaterial
-                  color={FESTIVAL_COLORS[(flag + index) % 5]}
-                  side={THREE.DoubleSide}
-                />
-              </mesh>
-            ))}
-          </group>
-        </group>
-      ))}
-      {[-1, 1].map((side) => (
-        <mesh
-          key={side}
-          position={[side * 0.42, 1.05, -0.44]}
-          rotation={[side * 0.28, Math.PI / 4, side * -0.2]}
-        >
-          <cylinderGeometry args={[0.24, 0.03, 2.1, 16, 1, true]} />
-          <meshBasicMaterial
-            color="#fff1b0"
-            transparent
-            opacity={0.16}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function Palm({
-  position,
-  scale = 1,
-}: {
-  position: [number, number, number];
-  scale?: number;
-}) {
-  return (
-    <group position={position} scale={scale}>
-      <mesh position={[0, 0.34, 0]} rotation={[0, 0, -0.13]} castShadow>
-        <cylinderGeometry args={[0.04, 0.055, 0.7, 6]} />
-        <meshStandardMaterial color="#b88148" />
-      </mesh>
-      {[0, 1, 2, 3, 4].map((leaf) => (
-        <mesh
-          key={leaf}
-          position={[
-            Math.cos(leaf * 1.257) * 0.13,
-            0.7,
-            Math.sin(leaf * 1.257) * 0.13,
-          ]}
-          rotation={[0.3, leaf * 1.257, 0.45]}
-          scale={[0.7, 0.2, 1.7]}
-          castShadow
-        >
-          <sphereGeometry args={[0.2, 5, 4]} />
-          <meshStandardMaterial color={leaf % 2 ? "#559653" : "#7bb64d"} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function CenterIsland() {
-  const lawn = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 1024;
-    canvas.height = 1024;
-    const context = canvas.getContext("2d");
-    if (context) {
-      context.fillStyle = "#b5cf72";
-      context.fillRect(0, 0, 1024, 1024);
-      // Soft, broad lawn patches leave the center quiet for dice and money.
-      for (let patch = 0; patch < 6; patch++) {
-        context.fillStyle = patch % 2 ? "#c0d780" : "#afc969";
-        context.beginPath();
-        context.moveTo(patch * 240 - 250, 0);
-        context.lineTo(patch * 240 - 90, 0);
-        context.lineTo(patch * 240 + 420, 1024);
-        context.lineTo(patch * 240 + 260, 1024);
-        context.closePath();
-        context.fill();
-      }
-      for (let flower = 0; flower < 18; flower++) {
-        const x = 80 + ((flower * 179) % 864);
-        const y = 80 + ((flower * 293) % 864);
-        context.fillStyle = "#d6e5a1";
-        context.beginPath();
-        context.ellipse(x, y, 4, 2.6, 0, 0, Math.PI * 2);
-        context.fill();
-      }
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 8;
-    return texture;
-  }, []);
-  const road = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 512;
-    const context = canvas.getContext("2d");
-    if (context) {
-      context.fillStyle = "#83908e";
-      context.fillRect(0, 0, 512, 512);
-      context.strokeStyle = "#dce1cf";
-      context.lineWidth = 2;
-      context.setLineDash([8, 8]);
-      context.strokeRect(6, 6, 500, 500);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
-  }, []);
-  useEffect(
-    () => () => {
-      lawn.dispose();
-      road.dispose();
-    },
-    [lawn, road],
-  );
-  return (
-    <group>
-      <mesh
-        position={[0, 0.308, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[7.52, 7.52]} />
-        <meshBasicMaterial map={road} />
-      </mesh>
-      <mesh
-        position={[0, 0.311, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[7.2, 7.2]} />
-        <meshStandardMaterial map={lawn} roughness={1} />
-      </mesh>
-      {[5, 12, 21, 28].map((index) => {
-        const [x, z] = tileLocalPosition(index, 0, -0.35);
-        return (
-          <group
-            key={index}
-            position={[x, 0.325, z]}
-            scale={0.48}
-            rotation={[0, tileAngle(index), 0]}
-          >
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[0.37, 16]} />
-              <meshBasicMaterial color="#eedca6" />
-            </mesh>
-            <Palm position={[-0.12, 0.01, -0.04]} scale={0.66} />
-            <mesh position={[0.16, 0.12, 0.05]} castShadow>
-              <cylinderGeometry args={[0.2, 0.025, 0.1, 6]} />
-              <meshStandardMaterial color="#f3ba4b" roughness={1} />
-            </mesh>
-            <mesh position={[0.16, 0.065, 0.05]}>
-              <cylinderGeometry args={[0.012, 0.012, 0.13, 5]} />
-              <meshStandardMaterial color="#fffaf0" />
-            </mesh>
-          </group>
-        );
-      })}
-      <group
-        position={[-4.32, 0.365, -4.65]}
-        rotation={[Math.PI / 2, 0, Math.PI / 4]}
-      >
-        <mesh castShadow>
-          <capsuleGeometry args={[0.05, 0.36, 2, 6]} />
-          <meshStandardMaterial color="#fffaf0" roughness={1} />
-        </mesh>
-        <mesh
-          rotation={[0, 0, Math.PI / 2]}
-          position={[0, 0.025, 0]}
-          castShadow
-        >
-          <boxGeometry args={[0.055, 0.42, 0.08]} />
-          <meshStandardMaterial color="#3481c3" roughness={1} />
-        </mesh>
-        <mesh position={[0, -0.15, 0]}>
-          <boxGeometry args={[0.19, 0.05, 0.04]} />
-          <meshStandardMaterial color="#3481c3" roughness={1} />
-        </mesh>
-      </group>
-      <group position={[4.32, 0.325, 4.04]} scale={0.54}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.48, 16]} />
-          <meshBasicMaterial color="#68b7cb" />
-        </mesh>
-        <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.3, 12]} />
-          <meshBasicMaterial color="#f1dba3" />
-        </mesh>
-        <Palm position={[0, 0.01, 0]} scale={0.62} />
-      </group>
-      <group position={[-4.32, 0.325, 3.98]}>
-        <mesh position={[-0.12, 0.17, 0]}>
-          <cylinderGeometry args={[0.011, 0.011, 0.34, 5]} />
-          <meshStandardMaterial color="#fffaf0" />
-        </mesh>
-        <mesh position={[0.01, 0.29, 0]} rotation={[0, Math.PI / 4, 0]}>
-          <planeGeometry args={[0.24, 0.14]} />
-          <meshBasicMaterial color="#639247" side={THREE.DoubleSide} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
 const PIP_COORDINATES: Record<number, [number, number][]> = {
   1: [[0, 0]],
   2: [
@@ -1373,105 +964,51 @@ function diceRotation(value: number) {
 }
 function Die({
   groupRef,
+  materialRef,
+  geometry,
   position,
 }: {
   groupRef: (group: THREE.Group | null) => void;
-  position: [number, number, number];
+  materialRef: (material: THREE.MeshStandardMaterial | null) => void;
+  geometry: THREE.BufferGeometry;
+  position: readonly [number, number, number];
 }) {
-  return (
-    <group ref={groupRef} position={position} scale={1.25}>
-      <mesh castShadow>
-        <boxGeometry args={[0.6, 0.6, 0.6]} />
-        <meshStandardMaterial color="#fffdf2" roughness={0.38} />
-      </mesh>
-      {DIE_FACES.map((face) => (
-        <group
-          key={face.value}
-          position={face.position}
-          rotation={face.rotation}
-        >
-          {PIP_COORDINATES[face.value].map(([x, y]) => (
-            <mesh key={`${x}-${y}`} position={[x * 0.15, y * 0.15, 0]}>
-              <circleGeometry args={[0.045, 12]} />
-              <meshBasicMaterial color="#173b45" />
-            </mesh>
-          ))}
-        </group>
-      ))}
-    </group>
-  );
-}
-
-// A small rear lane keeps the pawn's base off the printed name and amount.
-// Every hop and snapshot uses this same visual offset; the board index stays authoritative.
-function scenePawnOffset(seat: Seat, tile = 0): [number, number] {
-  const [x, z] = pawnOffset(seat);
-  // Walk on the inner edge of the track. Pawns never stand on printed amounts
-  // or inside a house, including when several players share a destination.
-  if (tile % 8 === 0) {
-    const [tileX, tileZ] = tilePosition(tile);
-    return [
-      -Math.sign(tileX) * 0.88 + x * 0.65,
-      -Math.sign(tileZ) * 0.88 + z * 0.65,
-    ];
-  }
-  if (tile < 8) return [x * 0.65, -1.26 + z * 0.35];
-  if (tile < 16) return [-1.26 + x * 0.35, z * 0.65];
-  if (tile < 24) return [x * 0.65, 1.26 + z * 0.35];
-  return [1.26 + x * 0.35, z * 0.65];
-}
-
-function PawnPositions({ state }: { state: PublicState | null }) {
-  const paths = useRef<THREE.InstancedMesh>(null);
-  const pins = useRef<THREE.InstancedMesh>(null);
-  const transform = useMemo(() => new THREE.Object3D(), []);
-  const color = useMemo(() => new THREE.Color(), []);
+  const pips = useRef<THREE.InstancedMesh>(null);
   useEffect(() => {
-    if (!paths.current || !pins.current) return;
+    const mesh = pips.current;
+    if (!mesh) return;
+    // All 21 pips of a die share one draw call.
+    const face = new THREE.Object3D();
+    const pip = new THREE.Object3D();
+    face.add(pip);
     let count = 0;
-    for (const player of state?.players ?? []) {
-      if (player.bankrupt) continue;
-      const [x, z] = tilePosition(player.position);
-      const [dx, dz] = scenePawnOffset(player.seat, player.position);
-      const start = player.position % 8 === 0 ? 0.75 : 0.55;
-      const length = Math.hypot(dx, dz) * (1 - start);
-      color.set(PLAYER_COLORS[player.seat]);
-      transform.position.set(
-        x + (dx * (1 + start)) / 2,
-        0.328,
-        z + (dz * (1 + start)) / 2,
-      );
-      transform.rotation.set(0, Math.atan2(dx, dz), 0);
-      transform.scale.set(1, 1, length);
-      transform.updateMatrix();
-      paths.current.setMatrixAt(count, transform.matrix);
-      paths.current.setColorAt(count, color);
-      transform.position.set(x + dx * start, 0.333, z + dz * start);
-      transform.rotation.set(0, 0, 0);
-      transform.scale.set(1, 1, 1);
-      transform.updateMatrix();
-      pins.current.setMatrixAt(count, transform.matrix);
-      pins.current.setColorAt(count, color);
-      count += 1;
+    for (const { value, position, rotation } of DIE_FACES) {
+      face.position.set(...position);
+      face.rotation.set(...rotation);
+      for (const [x, y] of PIP_COORDINATES[value]) {
+        pip.position.set(x * 0.15, y * 0.15, 0);
+        face.updateMatrixWorld(true);
+        mesh.setMatrixAt(count++, pip.matrixWorld);
+      }
     }
-    for (const mesh of [paths.current, pins.current]) {
-      mesh.count = count;
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      mesh.computeBoundingSphere();
-    }
-  }, [state, transform, color]);
+    mesh.count = count;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, []);
   return (
-    <>
-      <instancedMesh ref={paths} args={[undefined, undefined, 4]}>
-        <boxGeometry args={[0.015, 0.008, 1]} />
-        <meshBasicMaterial transparent opacity={0.6} depthWrite={false} />
+    <group ref={groupRef} position={[...position]} scale={DIE_SCALE}>
+      <mesh geometry={geometry} castShadow>
+        <meshStandardMaterial
+          ref={materialRef}
+          color={DICE_DEFAULT_COLOR}
+          roughness={0.32}
+        />
+      </mesh>
+      <instancedMesh ref={pips} args={[undefined, undefined, 21]}>
+        <circleGeometry args={[0.05, 14]} />
+        <meshBasicMaterial color="#fffaf0" toneMapped={false} />
       </instancedMesh>
-      <instancedMesh ref={pins} args={[undefined, undefined, 4]}>
-        <cylinderGeometry args={[0.048, 0.048, 0.012, 8]} />
-        <meshBasicMaterial />
-      </instancedMesh>
-    </>
+    </group>
   );
 }
 
@@ -1484,18 +1021,16 @@ function Pawn({
   active: boolean;
   groupRef: (group: THREE.Group | null) => void;
 }) {
-  const [x, z] = tilePosition(0);
-  const [offsetX, offsetZ] = scenePawnOffset(seat);
   const color = PLAYER_COLORS[seat];
   return (
-    <group ref={groupRef} position={[x + offsetX, 0.38, z + offsetZ]}>
+    <group ref={groupRef} position={pawnPosition(seat, 0)}>
       {active && (
-        <mesh position={[0, 0.048, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.225, 0.265, 24]} />
-          <meshBasicMaterial color="#ffcf59" />
+        <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.2, 0.245, 24]} />
+          <meshBasicMaterial color="#ffcf59" toneMapped={false} />
         </mesh>
       )}
-      <group rotation={[0, Math.PI / 4, 0]} scale={0.82}>
+      <group rotation={[0, Math.PI / 4, 0]} scale={PAWN_SCALE}>
         <mesh position={[0, 0.005, 0]} castShadow>
           <cylinderGeometry args={[0.19, 0.2, 0.07, 16]} />
           <meshStandardMaterial color={color} />
@@ -1583,46 +1118,22 @@ function Pawn({
     </group>
   );
 }
-const CASH_PILES: readonly [number, number, number][] = [
-  [1.4, -0.26, 5.65],
-  [-5.65, -0.26, -1.4],
-  [-1.4, -0.26, -5.65],
-  [5.65, -0.26, 1.4],
-];
+
 const CASH_BUNDLES_PER_SEAT = 6;
 const CASH_TRANSFER_BUNDLES = 3;
 
-function noteTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 128;
-  const context = canvas.getContext("2d");
-  if (context) {
-    context.fillStyle = "#b9d98f";
-    context.fillRect(0, 0, 256, 128);
-    context.strokeStyle = "#689056";
-    context.lineWidth = 7;
-    context.strokeRect(9, 9, 238, 110);
-    context.strokeStyle = "#8db470";
-    context.lineWidth = 3;
-    context.strokeRect(19, 19, 218, 90);
-    for (const x of [42, 214]) {
-      context.fillStyle = "#749955";
-      context.beginPath();
-      context.ellipse(x, 64, 18, 29, 0, 0, Math.PI * 2);
-      context.fill();
-      context.fillStyle = "#e4eec7";
-      context.fillRect(x - 6, 51, 12, 26);
-    }
-    context.fillStyle = "#91b66a";
-    context.beginPath();
-    context.ellipse(128, 64, 39, 34, 0, 0, Math.PI * 2);
-    context.fill();
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
+function reserveSpot(
+  seat: Seat,
+  localX: number,
+  localZ: number,
+  y: number,
+): [number, number, number] {
+  const { position, rotation } = reserveAnchor(seat);
+  return [
+    position[0] + localX * Math.cos(rotation) + localZ * Math.sin(rotation),
+    y,
+    position[1] - localX * Math.sin(rotation) + localZ * Math.cos(rotation),
+  ];
 }
 
 function cashBundleCount(cash: number) {
@@ -1634,42 +1145,17 @@ function cashBundleCount(cash: number) {
 }
 
 function CashReserveBadge({ seat, cash }: { seat: Seat; cash: number }) {
-  const texture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 128;
-    canvas.height = 128;
-    const context = canvas.getContext("2d");
-    if (context) {
-      context.fillStyle = PLAYER_COLORS[seat];
-      context.beginPath();
-      context.arc(64, 64, 59, 0, Math.PI * 2);
-      context.fill();
-      context.strokeStyle = "#fffaf0";
-      context.lineWidth = 7;
-      context.beginPath();
-      context.arc(64, 64, 51, 0, Math.PI * 2);
-      context.stroke();
-      context.fillStyle = "#fffaf0";
-      context.font = "700 70px Segoe UI, sans-serif";
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText(PLAYER_SYMBOLS[seat], 64, 64);
-    }
-    const result = new THREE.CanvasTexture(canvas);
-    result.colorSpace = THREE.SRGBColorSpace;
-    return result;
-  }, [seat]);
+  const texture = useMemo(() => seatBadgeTexture(seat), [seat]);
   useEffect(() => () => texture.dispose(), [texture]);
   const bundle = cashBundleCount(cash) - 1;
   if (bundle < 0) return null;
-  const [x, y, z] = CASH_PILES[seat];
-  const sideways = seat === 1 || seat === 3;
   const across = ((bundle % 2) - 0.5) * 0.56;
-  const top = y + 0.144 + Math.floor(bundle / 2) * 0.15;
+  const top = BOARD_BOTTOM + 0.144 + Math.floor(bundle / 2) * 0.15;
   return (
     <mesh
-      position={[x + (sideways ? across : 0), top, z + (sideways ? 0 : across)]}
-      rotation={[-Math.PI / 2, 0, -Math.PI / 4]}
+      position={reserveSpot(seat, 0, across, top)}
+      // Laid flat and turned so the symbol stands upright on screen.
+      rotation={[-Math.PI / 2, 0, Math.PI / 4]}
     >
       <planeGeometry args={[0.155, 0.155]} />
       <meshBasicMaterial map={texture} transparent depthWrite={false} />
@@ -1700,19 +1186,17 @@ function CashReserves({ state }: { state: PublicState }) {
     let edgeCount = 0;
     for (const player of state.players) {
       if (player.bankrupt || player.cash <= 0) continue;
-      const [x, y, z] = CASH_PILES[player.seat];
-      const sideways = player.seat === 1 || player.seat === 3;
-      const rotation = sideways ? Math.PI / 2 : 0;
+      const { rotation } = reserveAnchor(player.seat);
       // This is a capped physical illustration, never an alternate cash counter.
       const bundles = cashBundleCount(player.cash);
       color.set(PLAYER_COLORS[player.seat]);
       for (let index = 0; index < bundles; index++) {
         const column = index % 2;
         const layer = Math.floor(index / 2);
-        const across = (column - 0.5) * 0.56;
-        const dx = sideways ? across : 0;
-        const dz = sideways ? 0 : across;
-        transform.position.set(x + dx, y + 0.065 + layer * 0.15, z + dz);
+        const y = BOARD_BOTTOM + 0.065 + layer * 0.15;
+        transform.position.set(
+          ...reserveSpot(player.seat, 0, (column - 0.5) * 0.56, y),
+        );
         transform.rotation.set(0, rotation + (layer % 2 ? 0.05 : -0.02), 0);
         transform.scale.set(1, 1, 1);
         transform.updateMatrix();
@@ -1723,7 +1207,7 @@ function CashReserves({ state }: { state: PublicState }) {
         transform.updateMatrix();
         face.setMatrixAt(count, transform.matrix);
         for (const offset of [-0.029, 0.006]) {
-          transform.position.y = y + 0.065 + layer * 0.15 + offset;
+          transform.position.y = y + offset;
           transform.updateMatrix();
           edges.setMatrixAt(edgeCount++, transform.matrix);
         }
@@ -1731,12 +1215,13 @@ function CashReserves({ state }: { state: PublicState }) {
       }
       const goldCount = Math.min(6, Math.ceil(player.cash / 600_000));
       for (let index = 0; index < goldCount; index++) {
-        const along = 0.61;
-        const across = -0.15 + Math.floor(index / 3) * 0.25;
         transform.position.set(
-          x + (sideways ? across : along),
-          y + 0.035 + (index % 3) * 0.048,
-          z + (sideways ? along : across),
+          ...reserveSpot(
+            player.seat,
+            0.62,
+            -0.15 + Math.floor(index / 3) * 0.25,
+            BOARD_BOTTOM + 0.035 + (index % 3) * 0.048,
+          ),
         );
         transform.rotation.set(0, 0, 0);
         transform.updateMatrix();
@@ -1830,12 +1315,69 @@ function cashTransfer(event: GameEvent) {
   }
 }
 
+/** Fit the whole board between the HUD's reserved top and bottom bands. */
+function frameBoard(
+  camera: THREE.OrthographicCamera,
+  width: number,
+  height: number,
+  preview: boolean,
+  zoom: number,
+) {
+  const insets = preview
+    ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }
+    : {
+        // The match title and tools above, the current choice below.
+        top: THREE.MathUtils.clamp(height * 0.11, 78, 118),
+        bottom: THREE.MathUtils.clamp(height * 0.125, 86, 134),
+        side: width * 0.04,
+      };
+  const bounds = new THREE.Box3();
+  const point = new THREE.Vector3();
+  const add = (x: number, y: number, z: number) =>
+    bounds.expandByPoint(
+      point.set(x, y, z).applyMatrix4(camera.matrixWorldInverse),
+    );
+  const edge = BOARD_HALF + 0.08;
+  for (const x of [-edge, edge])
+    for (const z of [-edge, edge]) {
+      add(x, BOARD_BOTTOM, z);
+      add(x, LOT_TOP, z);
+    }
+  // Landmarks and buildings rise above the far corner and the back lots.
+  for (const tile of BOARD) {
+    const [x, z] = tileCenter(tile.index);
+    add(x, LOT_TOP + (isCorner(tile.index) ? 0.95 : 0.8), z);
+  }
+  const availableWidth = Math.max(1, width - insets.side * 2);
+  const availableHeight = Math.max(1, height - insets.top - insets.bottom);
+  const unitsPerPixel = Math.max(
+    (bounds.max.x - bounds.min.x) / availableWidth,
+    (bounds.max.y - bounds.min.y) / availableHeight,
+  );
+  const centerX = (bounds.min.x + bounds.max.x) / 2;
+  const centerY = (bounds.min.y + bounds.max.y) / 2;
+  // Place the board's center at the center of the free band, in pixels.
+  const pixelX = width / 2;
+  const pixelY = insets.top + availableHeight / 2;
+  camera.left = centerX - pixelX * unitsPerPixel;
+  camera.right = camera.left + width * unitsPerPixel;
+  camera.top = centerY + pixelY * unitsPerPixel;
+  camera.bottom = camera.top - height * unitsPerPixel;
+  camera.zoom = zoom;
+  camera.updateProjectionMatrix();
+}
+
 function SceneContent(props: BoardProps) {
   const { state, preview, zoom = 1 } = props;
   const { camera, invalidate, size, gl } = useThree();
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
+  const diceMaterials = useRef<(THREE.MeshStandardMaterial | null)[]>([]);
+  const score = useRef<THREE.Sprite>(null);
+  const scoreTextures = useRef(new Map<string, THREE.Texture>());
   const timelines = useRef(new Map<gsap.core.Timeline, () => void>());
+  const towns = useRef<TownsHandle | null>(null);
+  const growth = useMemo(() => ({ tile: 0, progress: 0 }), []);
   const pulse = useRef<THREE.Mesh>(null);
   const sparks = useRef<THREE.InstancedMesh>(null);
   const sparkTransform = useMemo(() => new THREE.Object3D(), []);
@@ -1848,70 +1390,64 @@ function SceneContent(props: BoardProps) {
   const cashProgress = useMemo(() => ({ value: 0 }), []);
   const cashColor = useMemo(() => new THREE.Color(), []);
   const cashTexture = useMemo(noteTexture, []);
+  const dieGeometry = useMemo(
+    () => new RoundedBoxGeometry(DIE_SIZE, DIE_SIZE, DIE_SIZE, 4, 0.085),
+    [],
+  );
   const rendered = useRef(false);
-  useEffect(() => () => cashTexture.dispose(), [cashTexture]);
+  useEffect(
+    () => () => {
+      cashTexture.dispose();
+      dieGeometry.dispose();
+      for (const texture of scoreTextures.current.values()) texture.dispose();
+      scoreTextures.current.clear();
+    },
+    [cashTexture, dieGeometry],
+  );
 
   useEffect(() => {
-    const aspect = size.width / size.height;
-    const narrow = aspect < 1;
-    const pitch = narrow ? 0.75 : 0.66;
-    camera.position.set(13, Math.hypot(13, 13) * pitch, 13);
-    camera.lookAt(0, 0.28, 0);
+    camera.position.set(...CAMERA_OFFSET);
+    camera.lookAt(0, LOT_TOP, 0);
     camera.updateMatrixWorld();
-    if (camera instanceof THREE.OrthographicCamera) {
-      const bounds = new THREE.Box3();
-      for (const x of [-5.03, 5.03])
-        for (const z of [-5.03, 5.03])
-          for (const y of [0.05, 0.65]) {
-            bounds.expandByPoint(
-              new THREE.Vector3(x, y, z).applyMatrix4(
-                camera.matrixWorldInverse,
-              ),
-            );
-          }
-      for (const tile of BOARD) {
-        const [x, z] = tilePosition(tile.index);
-        bounds.expandByPoint(
-          new THREE.Vector3(
-            x,
-            tile.kind === "city" ? 1.08 : 0.95,
-            z,
-          ).applyMatrix4(camera.matrixWorldInverse),
-        );
-      }
-      const width = bounds.max.x - bounds.min.x;
-      const height = bounds.max.y - bounds.min.y;
-      const halfHeight = Math.max(
-        height / (preview ? 1.72 : 1.64),
-        width / (aspect * (narrow ? 1.83 : 1.8)),
-      );
-      // Leave a little sky above and room for the compact action at the bottom.
-      const centerY =
-        (bounds.min.y + bounds.max.y) / 2 - (preview ? 0 : halfHeight * 0.075);
-      camera.left = -halfHeight * aspect;
-      camera.right = halfHeight * aspect;
-      camera.top = centerY + halfHeight;
-      camera.bottom = centerY - halfHeight;
-      camera.zoom = zoom;
-      camera.updateProjectionMatrix();
-    }
+    if (camera instanceof THREE.OrthographicCamera)
+      frameBoard(camera, size.width, size.height, Boolean(preview), zoom);
     invalidate();
   }, [camera, size.width, size.height, zoom, preview, invalidate]);
+
   useEffect(() => {
     if (preview) return;
     let propertyEffectGeneration = 0;
     let cashEffectGeneration = 0;
+    function showScore(roll: PublicState["lastRoll"]) {
+      const sprite = score.current;
+      if (!sprite) return;
+      if (!roll) {
+        sprite.visible = false;
+        return;
+      }
+      const total = roll.dice[0] + roll.dice[1];
+      const double = roll.dice[0] === roll.dice[1];
+      const key = `${total}:${double}`;
+      let texture = scoreTextures.current.get(key);
+      if (!texture) {
+        texture = scoreTexture(total, double);
+        scoreTextures.current.set(key, texture);
+      }
+      sprite.material.map = texture;
+      sprite.material.needsUpdate = true;
+      sprite.scale.set(0.7, 0.7, 1);
+      sprite.visible = true;
+    }
+    function paintDice(seat: Seat | null) {
+      const color = seat == null ? DICE_DEFAULT_COLOR : DICE_COLORS[seat];
+      for (const material of diceMaterials.current) material?.color.set(color);
+    }
     function snap(next: PublicState | null) {
       if (cashFlight.current) cashFlight.current.visible = false;
       for (const player of next?.players ?? []) {
         const pawn = pawns.current[player.seat];
         if (!pawn) continue;
-        const [x, z] = tilePosition(player.position);
-        const [offsetX, offsetZ] = scenePawnOffset(
-          player.seat,
-          player.position,
-        );
-        pawn.position.set(x + offsetX, 0.38, z + offsetZ);
+        pawn.position.set(...pawnPosition(player.seat, player.position));
         pawn.scale.set(1, 1, 1);
         pawn.visible = !player.bankrupt;
       }
@@ -1920,8 +1456,11 @@ function SceneContent(props: BoardProps) {
         if (!die) continue;
         const rotation = diceRotation(next?.lastRoll?.dice[index] ?? index + 1);
         die.rotation.set(rotation[0], rotation[1], rotation[2]);
-        die.position.set(index ? 0.65 : -0.65, 0.66, 0.85);
+        die.position.set(...DIE_REST[index]);
       }
+      paintDice(next?.lastRoll?.seat ?? null);
+      showScore(next?.lastRoll ?? null);
+      towns.current?.draw(next, null);
       invalidate();
     }
     function cancel() {
@@ -1972,10 +1511,12 @@ function SceneContent(props: BoardProps) {
       )
         return true;
       const generation = ++cashEffectGeneration;
-      const [bankX, bankZ] = tilePosition(0);
-      const bank: readonly [number, number, number] = [bankX, 0.7, bankZ];
-      const from = transfer.from === null ? bank : CASH_PILES[transfer.from];
-      const to = transfer.to === null ? bank : CASH_PILES[transfer.to];
+      const reserve = (seat: Seat | null) =>
+        seat === null
+          ? BANK_POSITION
+          : reserveSpot(seat, 0, 0, BOARD_BOTTOM + 0.2);
+      const from = reserve(transfer.from);
+      const to = reserve(transfer.to);
       const count = Math.min(
         CASH_TRANSFER_BUNDLES,
         1 + Math.floor(Math.log10(1 + transfer.amount / 10_000)),
@@ -2023,7 +1564,7 @@ function SceneContent(props: BoardProps) {
         timeline.to(cashProgress, {
           value: 1,
           duration: DECISION_TIMING.moneyAnimation / 1000,
-          ease: "none",
+          ease: "power1.inOut",
           onUpdate: updateCash,
         });
       }, context);
@@ -2047,33 +1588,104 @@ function SceneContent(props: BoardProps) {
         )
           return;
         if (event.type === "DiceRolled") {
+          // The roller shakes the dice on their side of the board, throws
+          // them high across the lawn, lets them settle, then shows the total.
+          const { inward } = sideFrame(event.seat);
+          const budget = DECISION_TIMING.diceAnimation / 1000;
+          const shake = 0.22;
+          const throwTime = budget * 0.62;
+          const reveal = shake + throwTime + 0.06;
+          paintDice(event.seat);
+          const sprite = score.current;
+          if (sprite) sprite.visible = false;
           await play((timeline) => {
             for (let index = 0; index < 2; index++) {
               const die = dice.current[index];
               if (!die) continue;
+              const rest = DIE_REST[index];
               const target = diceRotation(event.dice[index]);
+              const start = shake + index * 0.07;
+              const fromX = rest[0] - inward[0] * 2.6;
+              const fromZ = rest[2] - inward[1] * 2.6;
+              timeline.set(
+                die.position,
+                { x: fromX, y: DIE_REST_Y + 0.55, z: fromZ },
+                0,
+              );
+              timeline.set(die.rotation, { x: 0.3, y: index, z: -0.2 }, 0);
+              timeline.to(
+                die.rotation,
+                {
+                  keyframes: [
+                    { z: 0.25, duration: shake / 3 },
+                    { z: -0.25, duration: shake / 3 },
+                    { z: 0, duration: shake / 3 },
+                  ],
+                  ease: "sine.inOut",
+                },
+                0,
+              );
               timeline.to(
                 die.position,
-                { y: 2.0, z: 0.3, duration: 0.3, ease: "power2.out" },
-                index * 0.04,
+                {
+                  x: rest[0],
+                  z: rest[2],
+                  duration: throwTime,
+                  ease: "power3.out",
+                },
+                start,
+              );
+              timeline.to(
+                die.position,
+                {
+                  keyframes: [
+                    {
+                      y: DIE_REST_Y + 2.1,
+                      duration: throwTime * 0.3,
+                      ease: "power2.out",
+                    },
+                    {
+                      y: DIE_REST_Y,
+                      duration: throwTime * 0.7,
+                      ease: "bounce.out",
+                    },
+                  ],
+                },
+                start,
               );
               timeline.to(
                 die.rotation,
                 {
-                  x: target[0] + Math.PI * 4,
+                  x: target[0] + Math.PI * 6,
                   y: target[1] + Math.PI * 4,
-                  z: target[2] + Math.PI * 2,
-                  duration: 0.9,
-                  ease: "power2.out",
+                  z: target[2] + Math.PI * 4,
+                  duration: throwTime,
+                  ease: "power3.out",
                 },
-                index * 0.04,
-              );
-              timeline.to(
-                die.position,
-                { y: 0.66, z: 0.85, duration: 0.65, ease: "bounce.out" },
-                0.3 + index * 0.04,
+                start,
               );
             }
+            if (sprite) {
+              timeline.call(
+                () => showScore({ seat: event.seat, dice: event.dice }),
+                [],
+                reveal,
+              );
+              timeline.fromTo(
+                sprite.scale,
+                { x: 0.2, y: 0.2 },
+                {
+                  x: 0.7,
+                  y: 0.7,
+                  duration: 0.3,
+                  ease: "back.out(2.6)",
+                  immediateRender: false,
+                },
+                reveal,
+              );
+            }
+            // Hold the total long enough to read before the pawn sets off.
+            timeline.set({}, {}, budget);
           }, context);
         } else if (event.type === "PlayerMoved") {
           const pawn = pawns.current[event.seat];
@@ -2085,45 +1697,57 @@ function SceneContent(props: BoardProps) {
           const steps = event.steps ?? (event.position - from + 32) % 32;
           await play((timeline) => {
             if (Math.abs(steps) > 16 || steps === 0) {
-              const [x, z] = tilePosition(event.position);
-              const [offsetX, offsetZ] = scenePawnOffset(
-                event.seat,
-                event.position,
-              );
+              // Travel and card moves: one long leap to the destination.
+              const [x, y, z] = pawnPosition(event.seat, event.position);
+              const half = DECISION_TIMING.jumpAnimation / 2000;
               timeline.to(pawn.position, {
-                x: x + offsetX,
-                z: z + offsetZ,
-                y: 1.4,
-                duration: 0.35,
+                x,
+                z,
+                duration: half * 2,
                 ease: "power2.inOut",
               });
-              timeline.to(pawn.position, {
-                y: 0.38,
-                duration: 0.24,
-                ease: "bounce.out",
-              });
+              timeline.to(
+                pawn.position,
+                { y: y + 1.6, duration: half, ease: "power2.out" },
+                0,
+              );
+              timeline.to(
+                pawn.position,
+                { y, duration: half, ease: "bounce.out" },
+                half,
+              );
             } else {
+              // A board-game walk: one hop per tile, a settle on the last.
               const duration = DECISION_TIMING.stepAnimation / 1000;
-              for (let step = 1; step <= Math.abs(steps); step++) {
+              const count = Math.abs(steps);
+              for (let step = 1; step <= count; step++) {
                 const tile =
                   (((from + step * Math.sign(steps)) % 32) + 32) % 32;
-                const [x, z] = tilePosition(tile);
-                const [offsetX, offsetZ] = scenePawnOffset(event.seat, tile);
+                const [x, y, z] = pawnPosition(event.seat, tile);
                 const at = (step - 1) * duration;
+                const last = step === count;
                 timeline.to(
                   pawn.position,
-                  { x: x + offsetX, z: z + offsetZ, duration, ease: "none" },
+                  { x, z, duration: duration * 0.9, ease: "sine.inOut" },
                   at,
                 );
                 timeline.to(
                   pawn.position,
-                  { y: 0.75, duration: duration * 0.47, ease: "power2.out" },
+                  {
+                    y: y + 0.5,
+                    duration: duration * 0.42,
+                    ease: "power2.out",
+                  },
                   at,
                 );
                 timeline.to(
                   pawn.position,
-                  { y: 0.38, duration: duration * 0.53, ease: "power2.in" },
-                  at + duration * 0.47,
+                  {
+                    y,
+                    duration: duration * 0.58,
+                    ease: last ? "bounce.out" : "power2.in",
+                  },
+                  at + duration * 0.42,
                 );
               }
             }
@@ -2146,11 +1770,16 @@ function SceneContent(props: BoardProps) {
             }, context);
           else {
             snap(context.next);
+            const landing = pawn.position.y;
             await play((timeline) => {
               timeline.fromTo(
                 pawn.position,
-                { y: 1.7 },
-                { y: 0.38, duration: 0.5, ease: "bounce.out" },
+                { y: landing + 1.6 },
+                {
+                  y: landing,
+                  duration: DECISION_TIMING.islandAnimation / 1000,
+                  ease: "bounce.out",
+                },
               );
             }, context);
           }
@@ -2162,8 +1791,8 @@ function SceneContent(props: BoardProps) {
           const ring = pulse.current;
           if (!ring) return;
           const effectGeneration = ++propertyEffectGeneration;
-          const [x, z] = tilePosition(event.tile);
-          ring.position.set(x, 0.34, z);
+          const [x, z] = tileCenter(event.tile);
+          ring.position.set(x, LOT_TOP + 0.03, z);
           const owner = getProperty(context.next, event.tile)?.owner;
           if (ring.material instanceof THREE.MeshBasicMaterial)
             ring.material.color.set(
@@ -2177,10 +1806,10 @@ function SceneContent(props: BoardProps) {
             const progress = sparkProgress.value;
             for (let index = 0; index < 8; index++) {
               const angle = (index * Math.PI) / 4;
-              const radius = 0.16 + progress * 0.4;
+              const radius = 0.16 + progress * 0.45;
               sparkTransform.position.set(
                 x + Math.cos(angle) * radius,
-                0.42 + Math.sin(progress * Math.PI) * 0.55,
+                LOT_TOP + 0.1 + Math.sin(progress * Math.PI) * 0.6,
                 z + Math.sin(angle) * radius,
               );
               sparkTransform.rotation.set(
@@ -2188,29 +1817,55 @@ function SceneContent(props: BoardProps) {
                 angle,
                 Math.PI / 4,
               );
-              sparkTransform.scale.setScalar(0.075 * (1 - progress));
+              sparkTransform.scale.setScalar(0.08 * (1 - progress));
               sparkTransform.updateMatrix();
               burst.setMatrixAt(index, sparkTransform.matrix);
             }
             burst.instanceMatrix.needsUpdate = true;
           };
+          // New houses rise one after another on their plot; the view
+          // shows the next state on this tile while it is being built.
+          const builds =
+            event.type !== "BoughtOut" &&
+            BOARD[event.tile].kind === "city" &&
+            (getProperty(context.next, event.tile)?.level ?? 0) >
+              (context.previous
+                ? (getProperty(context.previous, event.tile)?.level ?? 0)
+                : 0);
+          const drawGrowth = () => towns.current?.draw(context.next, growth);
+          growth.tile = event.tile;
+          growth.progress = 0;
+          if (builds) drawGrowth();
+          const budget = DECISION_TIMING.propertyAnimation / 1000;
           await play((timeline) => {
             timeline.fromTo(
               ring.scale,
               { x: 0.1, y: 0.1, z: 0.1 },
-              { x: 1.25, y: 1.25, z: 1.25, duration: 0.4, ease: "power2.out" },
+              { x: 1.3, y: 1.3, z: 1.3, duration: 0.55, ease: "power2.out" },
             );
+            if (builds)
+              timeline.to(
+                growth,
+                {
+                  progress: 1,
+                  duration: budget * 0.85,
+                  ease: "none",
+                  onUpdate: drawGrowth,
+                },
+                0.1,
+              );
             timeline.fromTo(
               sparkProgress,
               { value: 0 },
               {
                 value: 1,
-                duration: 0.45,
+                duration: 0.6,
                 ease: "power2.out",
                 onUpdate: updateSparks,
               },
-              0,
+              builds ? 0.35 : 0,
             );
+            timeline.set({}, {}, budget);
           }, context);
           // A cancelled handler may resume after the next effect has started.
           if (effectGeneration === propertyEffectGeneration) {
@@ -2224,6 +1879,7 @@ function SceneContent(props: BoardProps) {
   }, [
     preview,
     invalidate,
+    growth,
     sparkProgress,
     sparkTransform,
     cashProgress,
@@ -2235,34 +1891,27 @@ function SceneContent(props: BoardProps) {
     if (state || preview) invalidate();
   }, [state, preview, invalidate]);
   useEffect(() => {
-    gl.setClearColor("#75d4ed", 0);
+    gl.setClearColor("#000000", 0);
   }, [gl]);
   return (
     <>
-      <ambientLight intensity={1.1} />
-      <hemisphereLight args={["#edf8ff", "#a9ad8a", 0.7]} />
+      <ambientLight intensity={0.95} />
+      <hemisphereLight args={["#eef8ff", "#b3ad92", 0.75]} />
       <directionalLight
-        position={[-5, 10, 5]}
-        intensity={1.1}
-        color="#fff1d5"
+        position={[-6, 11, 4]}
+        intensity={1.45}
+        color="#fff4dc"
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-8}
-        shadow-camera-right={8}
-        shadow-camera-top={8}
-        shadow-camera-bottom={-8}
+        shadow-camera-left={-9}
+        shadow-camera-right={9}
+        shadow-camera-top={9}
+        shadow-camera-bottom={-9}
         shadow-normalBias={0.035}
         shadow-radius={3}
       />
-      <mesh position={[0, -0.085, 0]} receiveShadow>
-        <boxGeometry args={[200, 0.1, 200]} />
-        <shadowMaterial opacity={0.11} />
-      </mesh>
-      <mesh
-        position={[0, 0.14, 0]}
-        receiveShadow
-        castShadow
-        onAfterRender={() => {
+      <BoardBase
+        onRendered={() => {
           if (rendered.current) return;
           rendered.current = true;
           gl.domElement.dataset.sceneReady = "true";
@@ -2270,15 +1919,7 @@ function SceneContent(props: BoardProps) {
             .closest(".canvas-layer")
             ?.setAttribute("data-scene-ready", "true");
         }}
-      >
-        <boxGeometry args={[9.91, 0.2, 9.91]} />
-        <meshStandardMaterial color="#b6aeba" roughness={1} />
-      </mesh>
-      <mesh position={[0, 0.251, 0]} receiveShadow>
-        <boxGeometry args={[9.86, 0.025, 9.86]} />
-        <meshStandardMaterial color="#e6e0e9" roughness={1} />
-      </mesh>
-      <CenterIsland />
+      />
       {!preview && state && <CashReserves state={state} />}
       <BoardTiles {...props} />
       <TileFocus {...props} />
@@ -2289,12 +1930,14 @@ function SceneContent(props: BoardProps) {
           color={PLAYER_COLORS[state?.pending?.seat ?? 0]}
         />
       )}
-      <Towns state={state} preview={preview} />
-      <BoardMarkers state={state} />
+      <Towns state={state} preview={preview} handle={towns} />
+      <ResortProps />
       <FestivalMarkers state={state} />
-      <FestivalVenue />
-      {!preview && <PawnPositions state={state} />}
-      {([0, 1, 2, 3] as const).map((seat) => (
+      <Landmarks />
+      {(state && !preview
+        ? state.players.map((player) => player.seat)
+        : ([0, 1, 2, 3] as const)
+      ).map((seat) => (
         <Pawn
           key={seat}
           seat={seat}
@@ -2308,25 +1951,36 @@ function SceneContent(props: BoardProps) {
           }}
         />
       ))}
-      <Die
-        position={[-0.65, 0.66, 0.85]}
-        groupRef={(group) => {
-          dice.current[0] = group;
-        }}
-      />
-      <Die
-        position={[0.65, 0.66, 0.85]}
-        groupRef={(group) => {
-          dice.current[1] = group;
-        }}
-      />
+      {DIE_REST.map((position, index) => (
+        <Die
+          key={position.join(",")}
+          position={position}
+          geometry={dieGeometry}
+          groupRef={(group) => {
+            dice.current[index] = group;
+          }}
+          materialRef={(material) => {
+            diceMaterials.current[index] = material;
+          }}
+        />
+      ))}
+      <sprite
+        ref={score}
+        visible={false}
+        position={[0, DIE_REST_Y + 1.15, 0]}
+        scale={[0.7, 0.7, 1]}
+        renderOrder={5}
+      >
+        <spriteMaterial depthTest={false} transparent toneMapped={false} />
+      </sprite>
       <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.42, 0.49, 24]} />
+        <ringGeometry args={[0.42, 0.5, 28]} />
         <meshBasicMaterial
           color="#ffda72"
           transparent
           opacity={0.85}
           depthWrite={false}
+          toneMapped={false}
         />
       </mesh>
       <instancedMesh
@@ -2336,7 +1990,7 @@ function SceneContent(props: BoardProps) {
         frustumCulled={false}
       >
         <boxGeometry />
-        <meshBasicMaterial color="#ffcf59" />
+        <meshBasicMaterial color="#ffcf59" toneMapped={false} />
       </instancedMesh>
       <group ref={cashFlight} visible={false}>
         <instancedMesh
@@ -2393,11 +2047,11 @@ export default function BoardScene(props: BoardProps) {
         shadows={{ type: THREE.PCFShadowMap }}
         frameloop="demand"
         dpr={[1, 1.5]}
-        camera={{ position: [13, 11, 13], near: 0.1, far: 100, zoom: 1 }}
+        camera={{ position: [...CAMERA_OFFSET], near: 0.1, far: 100, zoom: 1 }}
         gl={{
           antialias: true,
           alpha: true,
-          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMapping: THREE.NeutralToneMapping,
         }}
       >
         <SceneContent {...props} />

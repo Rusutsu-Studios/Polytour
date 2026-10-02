@@ -2,6 +2,7 @@ import type { BuildLevel } from "../board/index.js";
 import {
   BOARD,
   BOARD_SIZE,
+  BOT_TIMING,
   CHANCE_AMOUNTS,
   COUNTRY_IDS,
   DECISION_TIMING,
@@ -383,10 +384,19 @@ function animationBudget(events: readonly GameEvent[]): number {
     switch (event.type) {
       case "DiceRolled":
         return total + DECISION_TIMING.diceAnimation;
-      case "PlayerMoved":
+      case "PlayerMoved": {
+        // Mirrors the client: a walk hops tile by tile, anything else jumps.
+        const steps = Math.abs(event.steps ?? 0);
         return (
-          total + Math.abs(event.steps ?? 0) * DECISION_TIMING.stepAnimation
+          total +
+          (steps === 0 || steps > 16
+            ? DECISION_TIMING.jumpAnimation
+            : steps * DECISION_TIMING.stepAnimation)
         );
+      }
+      case "SentToIsland":
+      case "PlayerBankrupt":
+        return total + DECISION_TIMING.islandAnimation;
       case "CardDrawn":
         return total + DECISION_TIMING.cardAnimation;
       case "SalaryPaid":
@@ -409,6 +419,33 @@ function animationBudget(events: readonly GameEvent[]): number {
         return total;
     }
   }, 0);
+}
+/** A player's own time for a decision, after the animations that open it. */
+function decisionWindow(
+  config: GameConfig,
+  kind: PendingDecision["kind"],
+): number {
+  return config.decisionSeconds !== undefined
+    ? config.decisionSeconds * 1_000
+    : kind === "sell"
+      ? DECISION_TIMING.sell
+      : kind === "roll" || kind === "island" || kind === "travel"
+        ? DECISION_TIMING.roll
+        : DECISION_TIMING.choice;
+}
+/**
+ * When a server bot should act on the pending decision: once the events that
+ * opened it have played at 1× speed, plus a short pause, so players can follow
+ * a bot's turn. The deadline already holds that animation budget.
+ */
+export function botDecisionAt(state: PublicState): number | null {
+  const pending = state.pending;
+  if (!pending) return null;
+  const presented =
+    pending.deadline - decisionWindow(state.config, pending.kind);
+  return (
+    presented + (pending.kind === "roll" ? BOT_TIMING.roll : BOT_TIMING.choice)
+  );
 }
 type DecisionInput = PendingDecision extends infer T
   ? T extends PendingDecision
@@ -442,19 +479,14 @@ function resolver(initial: GameState, context: EngineContext) {
   const prepend = (...tasks: ResolutionTask[]) =>
     secrets({ resolutionQueue: [...tasks, ...state.resolutionQueue] });
   const open = (decision: DecisionInput) => {
-    const base =
-      state.config.decisionSeconds !== undefined
-        ? state.config.decisionSeconds * 1_000
-        : decision.kind === "sell"
-          ? DECISION_TIMING.sell
-          : ["roll", "island", "travel"].includes(decision.kind)
-            ? DECISION_TIMING.roll
-            : DECISION_TIMING.choice;
     emit({
       type: "DecisionOpened",
       pending: {
         ...decision,
-        deadline: context.now + base + animationBudget(events),
+        deadline:
+          context.now +
+          decisionWindow(state.config, decision.kind) +
+          animationBudget(events),
       } as PendingDecision,
     });
   };
@@ -1460,19 +1492,32 @@ export function createGame(
     seats.some((seat) => seat.playerId.length === 0 || seat.name.length === 0)
   )
     throw new RangeError("Every seat must have a player ID and name");
-  const players: PlayerState[] = seats.map((seat, index) => ({
-    ...seat,
-    seat: index as Seat,
-    cash: config.startingCash,
-    position: 0,
-    laps: 0,
-    onIsland: false,
-    islandTurns: 0,
-    bankrupt: false,
-    properties: [],
-    heldCards: [],
-    travelPending: false,
-  }));
+  const tableSeats = seats.map((seat, index) => seat.seat ?? index);
+  if (
+    tableSeats.some(
+      (seat) =>
+        !Number.isInteger(seat) || seat < 0 || seat >= ECONOMY.maximumPlayers,
+    ) ||
+    new Set(tableSeats).size !== tableSeats.length
+  )
+    throw new RangeError("Every player needs a unique table seat from 0 to 3");
+  const players: PlayerState[] = seats
+    .map((seat, index) => ({
+      playerId: seat.playerId,
+      name: seat.name,
+      control: seat.control,
+      seat: tableSeats[index] as Seat,
+      cash: config.startingCash,
+      position: 0,
+      laps: 0,
+      onIsland: false,
+      islandTurns: 0,
+      bankrupt: false,
+      properties: [],
+      heldCards: [],
+      travelPending: false,
+    }))
+    .sort((a, b) => a.seat - b.seat);
   const order = shuffle(
     players.map((player) => player.seat),
     seed,

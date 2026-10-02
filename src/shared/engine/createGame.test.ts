@@ -78,6 +78,37 @@ describe("createGame", () => {
     expect(toPublic(first.state)).not.toHaveProperty("rngState");
     expect(first.events[0]).not.toHaveProperty("state.deck");
   });
+  it("keeps the table seats of a smaller room, including an empty seat between players", () => {
+    const { state, events } = createGame(
+      DEFAULT_GAME_CONFIG,
+      [
+        { ...SEATS[3], seat: 3 },
+        { ...SEATS[0], seat: 0 },
+        { ...SEATS[1], seat: 1 },
+      ],
+      42,
+      { now: 0 },
+    );
+    expect(state.players.map((player) => [player.seat, player.name])).toEqual([
+      [0, "Ada"],
+      [1, "Bea"],
+      [3, "Dan"],
+    ]);
+    expect([...state.turnOrder].sort()).toEqual([0, 1, 3]);
+    expect(state.pending?.seat).toBe(state.turnOrder[0]);
+    expect(events.reduce(applyEvent, toPublic(state))).toEqual(toPublic(state));
+    expect(() =>
+      createGame(
+        DEFAULT_GAME_CONFIG,
+        [
+          { ...SEATS[0], seat: 2 },
+          { ...SEATS[1], seat: 2 },
+        ],
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("unique table seat");
+  });
   it("freezes the staged hotel rule for new games even when no marker is supplied", () => {
     const game = createGame(
       { ...DEFAULT_GAME_CONFIG, hotelPurchaseRule: undefined },

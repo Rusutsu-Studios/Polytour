@@ -291,9 +291,6 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: /^Terrain · 60 k/ }),
   ).toContainText("Loyer 24 k");
-  await expect(page.locator(".construction-guide")).toContainText(
-    "Prix tout compris",
-  );
   const popupBounds = await page
     .locator(".decision-popup")
     .evaluate((popup) => {
@@ -348,13 +345,20 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
       pending: { ...snapshot.pending, maxLevel: 4 },
     });
   });
-  await expect(page.locator(".construction-choice")).toHaveCount(4);
-  await expect(page.locator(".hotel-note")).toContainText(
-    "3 maisons, un tour complet, puis revenir ici",
+  // The hotel stays visible but locked; its rule is on hover, not in a note.
+  await expect(page.locator(".construction-choice")).toHaveCount(5);
+  const lockedHotel = page
+    .locator(".decision-actions")
+    .getByRole("button", { name: /^Hôtel/ });
+  await expect(lockedHotel).toBeDisabled();
+  await expect(lockedHotel).toHaveAttribute("data-locked", "true");
+  await expect(lockedHotel).toHaveAttribute(
+    "title",
+    /3 maisons, un tour complet, puis revenir ici/,
   );
   await expect(
-    page.locator(".decision-actions").getByRole("button", { name: /^Hôtel/ }),
-  ).toHaveCount(0);
+    page.locator(".construction-choice[data-locked='true']"),
+  ).toHaveCount(1);
   await page.screenshot({
     path: ".local/verification/desktop-staged-purchase.png",
   });
@@ -388,8 +392,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   });
   await expect(
     page.locator(".decision-actions").getByRole("button", { name: /^Hôtel/ }),
-  ).toHaveCount(1);
-  await expect(page.locator(".hotel-note")).toHaveCount(0);
+  ).toBeEnabled();
+  await expect(
+    page.locator(".construction-choice[data-locked='true']"),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /^Hôtel · 1,5 M/ }),
   ).toContainText("Loyer 1,12 M");
@@ -607,7 +613,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   ).toBeFocused();
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
-  await expect(page.locator(".match-connection")).toContainText("En ligne");
+  // A healthy connection is silent; only its state attribute shows it.
+  await expect(page.locator(".match-connection")).toHaveAttribute(
+    "data-state",
+    "online",
+  );
+  await expect(page.locator(".match-connection")).toHaveText("");
   await expect(
     page.getByRole("button", { name: "Quitter la partie", exact: true }),
   ).toBeVisible();
@@ -824,9 +835,31 @@ test("desktop room controls fit, create and join preserve the host settings", as
       .getByRole("button", { name: "Fermer les réglages" })
       .click();
     await second.getByRole("button", { name: "Revenir au plateau" }).click();
+    // The host seats a bot on the open card, then sends it away again.
+    await expect(
+      second.getByRole("button", { name: /Ajouter un bot/ }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Ajouter un bot à la place 4" })
+      .click();
+    await expect(page.locator(".lobby-seats")).toContainText("Atlas");
+    await expect(second.locator(".lobby-seats")).toContainText("Atlas");
+    await expect(
+      second.getByRole("button", { name: "Retirer le bot Atlas" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Retirer le bot Atlas" }).click();
+    await expect(
+      page.getByRole("button", { name: "Ajouter un bot à la place 4" }),
+    ).toBeVisible();
+    await expect(second.locator(".lobby-seats")).not.toContainText("Atlas");
+    await expect(page.locator(".lobby-count")).toContainText(
+      "Partie à 3 joueurs",
+    );
     await page.getByRole("button", { name: "Démarrer la partie" }).click();
-    await expect(page.locator(".player-card")).toHaveCount(4);
-    await expect(second.locator(".player-card")).toHaveCount(4);
+    // Three players keep their lobby colours; the fourth corner stays empty.
+    await expect(page.locator(".player-card")).toHaveCount(3);
+    await expect(second.locator(".player-card")).toHaveCount(3);
+    await expect(page.locator('.player-card[data-seat="3"]')).toHaveCount(0);
     await expect(page.locator(".decision-panel")).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
@@ -986,7 +1019,12 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
-  await expect(page.locator(".match-connection")).toContainText("En ligne");
+  // A healthy connection is silent; only its state attribute shows it.
+  await expect(page.locator(".match-connection")).toHaveAttribute(
+    "data-state",
+    "online",
+  );
+  await expect(page.locator(".match-connection")).toHaveText("");
   expect(errors).toEqual([]);
 });
 
@@ -1034,19 +1072,25 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     });
     return state;
   });
+  // Board choices stay non-modal: nothing travels until a space is picked,
+  // on the board or through the keyboard list of the same legal spaces.
+  const pick = page.locator(".decision-pick");
+  await expect(pick).toContainText("Grand voyage");
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await expect(pick.locator(".decision-confirm")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Choisir le lancer gratuit" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".decision-confirm")).toContainText(
-    "Lancer les dés",
-  );
+    pick.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page
+      .getByLabel("Destination", { exact: true })
+      .locator("option:not([disabled])"),
+  ).toHaveCount(2);
   await page.getByLabel("Destination", { exact: true }).selectOption("31");
-  await expect(page.locator(".decision-confirm")).toContainText("Voyager ici");
-  await expect(page.locator(".ledger-balance")).toContainText("1,95 M");
-  await page.getByRole("button", { name: "Choisir le lancer gratuit" }).click();
-  await expect(page.locator(".decision-confirm")).toContainText(
-    "Lancer les dés",
+  await expect(pick.locator(".decision-confirm")).toContainText(
+    "Voyager à Tokyo · 50 k",
   );
+  await expect(pick.locator(".ledger-balance")).toContainText("1,95 M");
   await page.screenshot({
     path: ".local/verification/decision-travel-regression.png",
   });
@@ -1122,6 +1166,7 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     });
   });
   await expect(page.locator("#decision-description")).toContainText("Rome");
+  await page.getByLabel("Ville ciblée", { exact: true }).selectOption("9");
   await expect(page.locator(".decision-confirm")).toContainText(
     "Échanger Rome contre Porto",
   );

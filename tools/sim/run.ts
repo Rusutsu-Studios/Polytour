@@ -1,10 +1,18 @@
-import { simulateGame } from "./simulation.js";
+import { SIM_CONFIG, simSeats, simulateGame } from "./simulation.js";
 
-const index = process.argv.indexOf("--games");
-const games = index < 0 ? 100 : Number(process.argv[index + 1]);
+function option(name: string, fallback: number): number {
+  const index = process.argv.indexOf(name);
+  return index < 0 ? fallback : Number(process.argv[index + 1]);
+}
+const games = option("--games", 100);
 if (!Number.isInteger(games) || games < 1 || games > 10_000)
   throw new RangeError("--games must be an integer from 1 to 10000");
-const results = Array.from({ length: games }, (_, seed) => simulateGame(seed));
+const players = option("--players", 4);
+if (!Number.isInteger(players) || players < 2 || players > 4)
+  throw new RangeError("--players must be an integer from 2 to 4");
+const results = Array.from({ length: games }, (_, seed) =>
+  simulateGame(seed, SIM_CONFIG, undefined, simSeats(players)),
+);
 const rounds = results.map((result) => result.rounds).sort((a, b) => a - b);
 const count: Record<string, number> = {};
 const seatWins = [0, 0, 0, 0];
@@ -16,8 +24,7 @@ for (const result of results) {
 }
 const report = {
   games,
-  config:
-    "four medium bots, 20-round limit, 3 seeded festivals; captured costs + provisional rents",
+  config: `${["", "", "two", "three", "four"][players]} medium bots, 20-round limit, 3 seeded festivals; captured costs + provisional rents`,
   medianRounds: rounds[Math.floor((games - 1) * 0.5)],
   p90Rounds: rounds[Math.floor((games - 1) * 0.9)],
   wins: count,

@@ -19,9 +19,15 @@ debug socket has been removed; `/api/health` remains.
 - First send `sync {lastSeq:null}` for a snapshot, or a known sequence for replay.
   `welcome {protocolVersion,you,seq,snapshot,lobby,randomness}` always comes first.
   Replay then sends the contiguous events and any persisted dice proof receipts.
-- Host lobby operations are `start {fillBots}` and `settings {config}`. All rooms
-  start with exactly four seats. Empty seats can become server bots. Settings are
-  validated and freeze when the match starts.
+- Host lobby operations are `start {fillBots}`, `settings {config}`,
+  `add-bot {seat}` and `remove-bot {seat}`. A room has four places and starts with
+  two to four players. `add-bot` seats a server bot on an empty place (`seat-taken`
+  otherwise) and `remove-bot` frees a bot's place (`not-a-bot` otherwise); joining
+  friends take the first empty place. `start {fillBots: true}` seats bots in every
+  empty place; `start {fillBots: false}` starts with the occupied places and is
+  rejected with `players-required` below two. Each player keeps its lobby seat
+  number (colour and corner) in the match, so a smaller match can have gaps such
+  as seats 0, 1 and 3. Settings are validated and freeze when the match starts.
 - New-room hotel progression is frozen by the server in the optional public config
   marker `hotelPurchaseRule: "staged-hotels"`. Older saves may omit it or use
   `"legacy-lap"`. This is not an accepted room-setting input; clients must derive

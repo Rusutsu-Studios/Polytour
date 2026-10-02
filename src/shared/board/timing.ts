@@ -1,13 +1,27 @@
-/** Rules and animation budgets, shared by the engine and presentation. */
+/**
+ * Rules and animation budgets, shared by the engine and presentation.
+ * Animation budgets are the 1× durations the client plays; the engine adds
+ * them to the next decision so its clock never runs during an animation.
+ */
 export const DECISION_TIMING = {
   roll: 10_000,
   choice: 15_000,
   sell: 30_000,
-  diceAnimation: 1_000,
-  stepAnimation: 190,
-  cardAnimation: 600,
-  moneyAnimation: 200,
-  propertyAnimation: 450,
+  diceAnimation: 1_700,
+  stepAnimation: 300,
+  jumpAnimation: 900,
+  cardAnimation: 3_200,
+  moneyAnimation: 650,
+  propertyAnimation: 1_100,
+  islandAnimation: 700,
+} as const;
+
+/** Server bots act only after the 1× presentation, then pause like a player. */
+export const BOT_TIMING = {
+  roll: 700,
+  choice: 1_400,
+  /** After a wake-up or reconnect, when no animation is left to wait for. */
+  resume: 900,
 } as const;
 
 export const CHANCE_AMOUNTS = {
