@@ -9,6 +9,7 @@ import {
   INNER_HALF,
   LOT_DEPTH,
   LOT_TOP,
+  passingSpot,
   pawnSpot,
   ROAD_WIDTH,
   reserveAnchor,
@@ -187,6 +188,37 @@ describe("board layout", () => {
           `${a.seat}@${a.tile} / ${b.seat}@${b.tile}`,
         ).toBeGreaterThan(0.3);
       }
+  });
+
+  it("turns passing pawns on the road, clear of every standing pawn", () => {
+    const standing = BOARD.flatMap((tile) =>
+      SEATS.map((seat) => pawnSpot(seat, tile.index)),
+    );
+    for (const index of [0, 8, 16, 24]) {
+      const [cx, cz] = tileCenter(index);
+      for (const seat of SEATS) {
+        const [x, z] = passingSpot(seat, index);
+        // On the road's corner square, beside its own corner, never on it.
+        for (const at of [x, z]) {
+          expect(Math.abs(at)).toBeGreaterThan(INNER_HALF - ROAD_WIDTH);
+          expect(Math.abs(at)).toBeLessThan(INNER_HALF - 0.15);
+        }
+        expect(Math.sign(x)).toBe(Math.sign(cx));
+        expect(Math.sign(z)).toBe(Math.sign(cz));
+        for (const [sx, sz] of standing)
+          expect(Math.hypot(x - sx, z - sz)).toBeGreaterThan(0.34);
+      }
+    }
+  });
+
+  it("passes lots on the spot where a pawn would stop", () => {
+    for (const tile of BOARD) {
+      if (tile.index % 8 === 0) continue;
+      for (const seat of SEATS)
+        expect(passingSpot(seat, tile.index)).toEqual(
+          pawnSpot(seat, tile.index),
+        );
+    }
   });
 
   it("puts each cash reserve beside its corner HUD", () => {

@@ -29,6 +29,7 @@ import {
   LOT_GAP,
   LOT_TOP,
   LOT_WIDTH,
+  passingSpot,
   pawnSpot,
   ROAD_TOP,
   reserveAnchor,
@@ -85,6 +86,12 @@ const BANK_POSITION: readonly [number, number, number] = [BANK_X, 0.7, BANK_Z];
 function pawnPosition(seat: Seat, tile: number): [number, number, number] {
   const [x, z] = pawnSpot(seat, tile);
   return [x, (isCorner(tile) ? LOT_TOP : ROAD_TOP) + PAWN_LIFT, z];
+}
+
+/** Where a walking pawn touches down on a tile it passes without stopping. */
+function passingPosition(seat: Seat, tile: number): [number, number, number] {
+  const [x, z] = passingSpot(seat, tile);
+  return [x, ROAD_TOP + PAWN_LIFT, z];
 }
 
 function BoardBase({ onRendered }: { onRendered: () => void }) {
@@ -1432,14 +1439,17 @@ function SceneContent(props: BoardProps) {
               );
             } else {
               // A board-game walk: one hop per tile, a settle on the last.
+              // Corners passed on the way are turned on the road.
               const duration = DECISION_TIMING.stepAnimation / 1000;
               const count = Math.abs(steps);
               for (let step = 1; step <= count; step++) {
                 const tile =
                   (((from + step * Math.sign(steps)) % 32) + 32) % 32;
-                const [x, y, z] = pawnPosition(event.seat, tile);
-                const at = (step - 1) * duration;
                 const last = step === count;
+                const [x, y, z] = last
+                  ? pawnPosition(event.seat, tile)
+                  : passingPosition(event.seat, tile);
+                const at = (step - 1) * duration;
                 timeline.to(
                   pawn.position,
                   { x, z, duration: duration * 0.9, ease: "sine.inOut" },
