@@ -42,30 +42,10 @@ export type DecisionPanelProps = {
 type ConstructionAction = Extract<Action, { type: "Buy" | "Build" }>;
 type DestinationAction = Extract<Action, { tile: number }>;
 const COPY = {
-  roll: [
-    "À vous de jouer !",
-    "Lancez les deux dés pour avancer.",
-    "Your turn",
-    "Roll both dice to move.",
-  ],
-  buy: [
-    "Acheter cette ville",
-    "Choisissez une construction, puis confirmez l’achat.",
-    "Buy this city",
-    "Choose a building level, then confirm the purchase.",
-  ],
-  build: [
-    "Construire",
-    "Comparez le prix des travaux et le nouveau loyer.",
-    "Build",
-    "Compare the building cost and the new rent.",
-  ],
-  buyout: [
-    "Racheter cette ville",
-    "Le prix du rachat est versé au propriétaire.",
-    "Buy out this city",
-    "The buyout price is paid to the owner.",
-  ],
+  roll: ["À vous de jouer !", "", "Your turn", ""],
+  buy: ["Acheter cette ville", "", "Buy this city", ""],
+  build: ["Construire", "", "Build", ""],
+  buyout: ["Racheter cette ville", "", "Buy out this city", ""],
   sell: [
     "Une dette à régler",
     "Choisissez une propriété à vendre pour payer votre dette.",
@@ -409,7 +389,7 @@ export default function DecisionPanel({
   onSelect,
 }: DecisionPanelProps) {
   const { t } = useLocale();
-  const { busy, reducedMotion, speed } = useDirector();
+  const { busy, reducedMotion, speed, viewState } = useDirector();
   const [now, setNow] = useState(Date.now());
   const [selection, setSelection] = useState<{
     decision: string;
@@ -499,30 +479,51 @@ export default function DecisionPanel({
       pending?.kind === "rent-card")
       ? active.cash + (refund ?? -cost)
       : null;
-  const constructionIndex = constructions.findIndex(
-    (action) =>
-      selectedAction && actionKey(action) === actionKey(selectedAction),
-  );
-  const hotelNote =
-    construction &&
-    !resort &&
-    pending &&
-    "maxLevel" in pending &&
-    Math.min(
-      pending.maxLevel,
-      maxBuildLevel(state, seat, pending.tile, pending.kind === "buy"),
-    ) < 4 &&
-    !state.config.hotelsDirectly
+  // Every level up to the hotel is shown; the ones this player cannot take
+  // now stay visible but locked, so the hotel reads as "not yet".
+  const constructionKind = pending?.kind === "buy" ? "Buy" : ("Build" as const);
+  // The same cap legalActions applies; levels within it lack only cash.
+  const ruleCap =
+    pending?.kind === "buy" || pending?.kind === "build"
       ? state.config.hotelPurchaseRule === "staged-hotels"
+        ? Math.min(
+            pending.maxLevel,
+            maxBuildLevel(state, seat, pending.tile, pending.kind === "buy"),
+          )
+        : pending.maxLevel
+      : 0;
+  const levelSteps: { action: ConstructionAction; legal: boolean }[] = [];
+  if (construction && !resort && pending && "tile" in pending) {
+    const first =
+      pending.kind === "buy"
+        ? 0
+        : (getProperty(state, pending.tile)?.level ?? 0) + 1;
+    const last = Math.max(4, ruleCap);
+    for (let level = first; level <= last; level++) {
+      const legal = constructions.find((action) => action.level === level);
+      levelSteps.push({
+        action: legal ?? {
+          type: constructionKind,
+          level: level as BuildLevel,
+        },
+        legal: Boolean(legal),
+      });
+    }
+  }
+  const lockedReason = (level: BuildLevel) =>
+    level <= ruleCap
+      ? t("Pas assez d’argent", "Not enough cash")
+      : level === 4 && state.config.hotelPurchaseRule === "staged-hotels"
         ? t(
-            "Hôtel : 3 maisons, un tour complet, puis revenir ici.",
-            "Hotel: three houses, one complete lap, then land here again.",
+            "Hôtel : 3 maisons, un tour complet, puis revenir ici",
+            "Hotel: three houses, one complete lap, then land here again",
           )
-        : t(
-            "L’hôtel se débloque après votre premier tour complet du plateau.",
-            "Hotels unlock after your first complete lap of the board.",
-          )
-      : null;
+        : level === 4
+          ? t(
+              "Hôtel après votre premier tour complet",
+              "Hotel after your first complete lap",
+            )
+          : t("Pas encore disponible", "Not available yet");
   const modalOpen = Boolean(
     ownTurn &&
       pending &&
@@ -554,13 +555,7 @@ export default function DecisionPanel({
                 ),
         ]
       : pending?.kind === "buy" && resort
-        ? [
-            t("Acheter une station", "Buy a resort"),
-            t(
-              "Achetez cette station. Le loyer augmente avec le nombre de stations possédées.",
-              "Buy this resort. Owning more resorts increases their rent.",
-            ),
-          ]
+        ? [t("Acheter une station", "Buy a resort"), ""]
         : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
@@ -601,38 +596,46 @@ export default function DecisionPanel({
     )
       act(selectedAction);
   }
-  const kicker = (
-    <div className="decision-kicker">
-      <span
-        className="player-symbol"
-        style={{ color: PLAYER_COLORS[decisionSeat] }}
-      >
-        {PLAYER_SYMBOLS[decisionSeat]}
-      </span>
-      <span>
-        {ownTurn
-          ? pending?.kind === "sell"
-            ? t("Votre dette à régler", "Settle your debt")
-            : t("À vous de décider", "Your decision")
-          : t(
-              `Décision de ${active?.name ?? "…"}`,
-              `${active?.name ?? "…"}’s decision`,
+  // While animations play, name the player the board is showing, not the
+  // server's next one: a purchase still animates after the turn has passed.
+  const shownSeat =
+    busy && viewState
+      ? (viewState.pending?.seat ?? viewState.activeSeat)
+      : decisionSeat;
+  const shownName = state.players.find(
+    (player) => player.seat === shownSeat,
+  )?.name;
+  // Only what the player acts on: their own countdown, and a debt warning.
+  const debt = ownTurn && pending?.kind === "sell";
+  const timer = ownTurn && pending && !rngBusy;
+  const kicker =
+    debt || timer ? (
+      <div className="decision-kicker">
+        {debt && (
+          <>
+            <span
+              className="player-symbol"
+              style={{ color: PLAYER_COLORS[decisionSeat] }}
+            >
+              {PLAYER_SYMBOLS[decisionSeat]}
+            </span>
+            <span>{t("Votre dette à régler", "Settle your debt")}</span>
+          </>
+        )}
+        {timer && (
+          <span
+            className="decision-timer"
+            role="timer"
+            aria-label={t(
+              `${countdown} secondes restantes`,
+              `${countdown} seconds remaining`,
             )}
-      </span>
-      {pending && !rngBusy && (
-        <span
-          className="decision-timer"
-          role="timer"
-          aria-label={t(
-            `${countdown} secondes restantes`,
-            `${countdown} seconds remaining`,
-          )}
-        >
-          {countdown}s
-        </span>
-      )}
-    </div>
-  );
+          >
+            {countdown}s
+          </span>
+        )}
+      </div>
+    ) : null;
 
   if (!modalOpen)
     return (
@@ -645,39 +648,27 @@ export default function DecisionPanel({
       >
         {kicker}
         <h2 id="decision-heading">
-          {busy
-            ? t("Dernières actions…", "Playing the latest actions…")
-            : rngBusy
-              ? randomness?.status === "error"
-                ? t("Le lancer se fait attendre", "Waiting for the dice")
-                : t("Les dés se préparent", "Preparing the dice")
-              : ownTurn
-                ? copy[0]
+          {rngBusy
+            ? randomness?.status === "error"
+              ? t("Le lancer se fait attendre", "Waiting for the dice")
+              : t("Les dés se préparent", "Preparing the dice")
+            : ownTurn && !busy
+              ? copy[0]
+              : shownSeat === seat
+                ? t("Votre tour", "Your turn")
                 : t(
-                    `${active?.name ?? t("Votre adversaire", "Your opponent")} joue`,
-                    `${active?.name ?? t("Votre adversaire", "Your opponent")} is playing`,
+                    `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
+                    `${shownName ?? t("Votre adversaire", "Your opponent")} is playing`,
                   )}
         </h2>
-        <p>
-          {busy
-            ? t(
-                "Le plateau vous montre les dernières actions.",
-                "The board is showing the latest actions.",
-              )
-            : rngBusy
-              ? randomness?.commitment?.mode === "drand"
-                ? t(
-                    "Le serveur attend le signal drand annoncé et vérifie sa signature.",
-                    "Waiting for the announced drand beacon and verifying its signature.",
-                  )
-                : t("Le serveur prépare votre lancer.", "Preparing your roll.")
-              : ownTurn
-                ? copy[1]
-                : t(
-                    "Vous pouvez explorer les villes pendant son tour.",
-                    "You can inspect cities while they play.",
-                  )}
-        </p>
+        {rngBusy && randomness?.commitment?.mode === "drand" && (
+          <p>
+            {t(
+              "Le serveur attend le signal drand annoncé et vérifie sa signature.",
+              "Waiting for the announced drand beacon and verifying its signature.",
+            )}
+          </p>
+        )}
         {rngBusy && (
           <div className="rng-wait" role="status">
             <span className="spinner" />
@@ -730,7 +721,9 @@ export default function DecisionPanel({
       data-own="true"
       data-busy={blocked}
       aria-labelledby="decision-heading"
-      aria-describedby="decision-description"
+      aria-describedby={
+        bankruptcy || copy[1] ? "decision-description" : undefined
+      }
       aria-busy={blocked}
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
@@ -771,14 +764,16 @@ export default function DecisionPanel({
               ? tileName(decisionTile)
               : copy[0]}
         </h2>
-        <p id="decision-description">
-          {bankruptcy
-            ? t(
-                "Cette décision est définitive. Vos propriétés seront remises à la banque.",
-                "This decision is final. Your properties will return to the bank.",
-              )
-            : copy[1]}
-        </p>
+        {(bankruptcy || copy[1]) && (
+          <p id="decision-description">
+            {bankruptcy
+              ? t(
+                  "Cette décision est définitive. Vos propriétés seront remises à la banque.",
+                  "This decision is final. Your properties will return to the bank.",
+                )
+              : copy[1]}
+          </p>
+        )}
 
         <div className="decision-popup-story">
           <div className="decision-illustration">
@@ -790,20 +785,14 @@ export default function DecisionPanel({
                 PLAYER_SYMBOLS[construction ? seat : (owner?.seat ?? seat)]
               }
             />
-            <span className="decision-property">
-              {owner ? (
-                <>
-                  <span style={{ color: PLAYER_COLORS[owner.seat] }}>
-                    {PLAYER_SYMBOLS[owner.seat]}
-                  </span>{" "}
-                  {owner.name} · {levelName(property?.level ?? 0)}
-                </>
-              ) : decisionTile !== undefined ? (
-                t("Cette adresse est disponible", "This property is available")
-              ) : (
-                t("Votre prochaine étape", "Your next move")
-              )}
-            </span>
+            {owner && (
+              <span className="decision-property">
+                <span style={{ color: PLAYER_COLORS[owner.seat] }}>
+                  {PLAYER_SYMBOLS[owner.seat]}
+                </span>{" "}
+                {owner.name} · {levelName(property?.level ?? 0)}
+              </span>
+            )}
           </div>
           <div className="decision-preview">
             <span className="decision-preview-name">
@@ -884,119 +873,81 @@ export default function DecisionPanel({
                 </div>
               )}
             </dl>
-            {construction && (
-              <p className="construction-guide">
-                {resort
-                  ? t(
-                      "Aucune construction. Le loyer augmente avec le nombre de stations que vous possédez.",
-                      "No buildings. Rent rises with the number of resorts you own.",
-                    )
-                  : pending?.kind === "buy"
-                    ? t(
-                        "Prix tout compris : terrain + constructions.",
-                        "Total price includes land and buildings.",
-                      )
-                    : t(
-                        `Déjà construit : ${levelName(property?.level ?? 0)}. Vous payez seulement la différence.`,
-                        `Already built: ${levelName(property?.level ?? 0)}. Pay only the difference.`,
-                      )}
-              </p>
-            )}
-            {hotelNote && (
-              <p className="hotel-note">
-                <Icon name="help" size={16} />
-                {hotelNote}
-              </p>
-            )}
           </div>
         </div>
 
         <div className="decision-actions">
-          {constructions.length > 0 && !bankruptcy ? (
-            <>
+          {construction && !bankruptcy ? (
+            levelSteps.length > 0 && (
               <fieldset
                 className="decision-construction-steps"
-                style={{ "--steps": constructions.length } as CSSProperties}
+                style={{ "--steps": levelSteps.length } as CSSProperties}
                 aria-label={t(
                   "Choisir une construction",
                   "Choose a building level",
                 )}
               >
-                {constructions.map((action) => (
-                  <button
-                    type="button"
-                    className="construction-choice"
-                    key={actionKey(action)}
-                    aria-pressed={
-                      selectedAction &&
-                      actionKey(selectedAction) === actionKey(action)
-                    }
-                    aria-label={t(
-                      `${actionLabel(action, state)} · loyer futur ${money(decisionTile !== undefined ? previewPropertyRent(state, decisionTile, seat, action.level) : 0)}`,
-                      `${actionLabel(action, state)} · future rent ${money(decisionTile !== undefined ? previewPropertyRent(state, decisionTile, seat, action.level) : 0)}`,
-                    )}
-                    disabled={blocked}
-                    onClick={() => choose(action)}
-                  >
-                    <CityIllustration
-                      level={action.level}
-                      color={PLAYER_COLORS[seat]}
-                    />
-                    <span className="construction-name">
-                      {levelName(action.level)}
-                    </span>
-                    <strong className="construction-cost">
-                      {money(actionCost(state, action))}
-                    </strong>
-                    <span className="construction-rent">
-                      {t("Loyer", "Rent")}{" "}
-                      {money(
-                        decisionTile !== undefined
-                          ? previewPropertyRent(
-                              state,
-                              decisionTile,
-                              seat,
-                              action.level,
+                {levelSteps.map(({ action, legal }) => {
+                  const futureRent =
+                    decisionTile !== undefined
+                      ? previewPropertyRent(
+                          state,
+                          decisionTile,
+                          seat,
+                          action.level,
+                        )
+                      : 0;
+                  const chosen =
+                    legal &&
+                    selectedAction !== undefined &&
+                    actionKey(selectedAction) === actionKey(action);
+                  return (
+                    <button
+                      type="button"
+                      className="construction-choice"
+                      key={actionKey(action)}
+                      data-locked={!legal}
+                      aria-pressed={legal ? chosen : undefined}
+                      aria-label={
+                        legal
+                          ? t(
+                              `${actionLabel(action, state)} · loyer futur ${money(futureRent)}`,
+                              `${actionLabel(action, state)} · future rent ${money(futureRent)}`,
                             )
-                          : 0,
-                      )}
-                    </span>
-                    <span className="construction-selected" aria-hidden="true">
-                      {selectedAction &&
-                      actionKey(selectedAction) === actionKey(action) ? (
-                        <Icon name="check" size={15} />
-                      ) : null}
-                    </span>
-                  </button>
-                ))}
+                          : `${levelName(action.level)} · ${lockedReason(action.level)}`
+                      }
+                      title={legal ? undefined : lockedReason(action.level)}
+                      disabled={blocked || !legal}
+                      onClick={() => choose(action)}
+                    >
+                      <CityIllustration
+                        level={action.level}
+                        color={PLAYER_COLORS[seat]}
+                      />
+                      <span className="construction-name">
+                        {levelName(action.level)}
+                      </span>
+                      <strong className="construction-cost">
+                        {money(actionCost(state, action))}
+                      </strong>
+                      <span className="construction-rent">
+                        {t("Loyer", "Rent")} {money(futureRent)}
+                      </span>
+                      <span
+                        className="construction-selected"
+                        aria-hidden="true"
+                      >
+                        {!legal ? (
+                          <Icon name="lock" size={15} />
+                        ) : chosen ? (
+                          <Icon name="check" size={15} />
+                        ) : null}
+                      </span>
+                    </button>
+                  );
+                })}
               </fieldset>
-              {constructions.length > 1 && (
-                <label className="decision-level-slider">
-                  <span>{t("Glisser pour comparer", "Slide to compare")}</span>
-                  <input
-                    type="range"
-                    aria-label={t("Niveau de construction", "Building level")}
-                    aria-valuetext={
-                      selectedAction ? actionLabel(selectedAction, state) : ""
-                    }
-                    min={0}
-                    max={constructions.length - 1}
-                    step={1}
-                    value={Math.max(0, constructionIndex)}
-                    style={
-                      {
-                        "--decision-progress": `${(Math.max(0, constructionIndex) / (constructions.length - 1)) * 100}%`,
-                      } as CSSProperties
-                    }
-                    disabled={blocked}
-                    onChange={(event) => {
-                      const action = constructions[Number(event.target.value)];
-                      if (action) choose(action);
-                    }}
-                  />
-                </label>
-              )}
-            </>
+            )
           ) : destinations.length > 0 && !bankruptcy ? (
             <div className="destination-choice">
               <label htmlFor="destination">
@@ -1123,17 +1074,6 @@ export default function DecisionPanel({
             <Icon name="arrow" size={20} />
           </button>
         </div>
-        <p className="decision-confirm-hint">
-          {blocked
-            ? t(
-                "Votre choix sera disponible dès que la salle répond.",
-                "You can choose once the room responds.",
-              )
-            : t(
-                "Comparer ne dépense rien. Seule la confirmation engage votre choix.",
-                "Browsing does not spend cash. Confirm to commit your choice.",
-              )}
-        </p>
       </motion.div>
     </dialog>,
     document.body,

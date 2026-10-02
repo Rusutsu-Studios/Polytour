@@ -5,12 +5,17 @@ import {
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BOT_TIMING, DECISION_TIMING } from "../src/shared/board/index.js";
 import type {
   GameState,
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
-import { applyEvent } from "../src/shared/engine/index.js";
+import {
+  applyEvent,
+  botDecisionAt,
+  toPublic,
+} from "../src/shared/engine/index.js";
 import type {
   RoomCredentials,
   ServerMessage,
@@ -524,6 +529,80 @@ describe("Authoritative private rooms", () => {
     );
     expect(timers.after).toEqual(timers.before);
     expect(timers.changes).toBe(0);
+  });
+
+  it("lets a bot act only after the animations of its previous move", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    inbox.send({
+      type: "lobby",
+      id: "start",
+      op: { type: "start", fillBots: true },
+    });
+    await inbox.next("events");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    const result = await runInDurableObject(
+      stub,
+      async (instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const row = sql
+          .exec<{ seq: number; json: string }>(
+            "SELECT seq,json FROM state WHERE id=1",
+          )
+          .toArray()[0];
+        const saved = JSON.parse(row.json) as GameState;
+        // A bot followed by another bot: whatever the dice, the next
+        // decision belongs to a bot, so it is paced by the bot timer.
+        const order = saved.turnOrder;
+        const bot = order.find(
+          (seat, index) =>
+            seat !== host.seat &&
+            order[(index + 1) % order.length] !== host.seat,
+        );
+        if (bot === undefined) throw new Error("Expected two bots in a row");
+        sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            activeSeat: bot,
+            pending: { kind: "roll", seat: bot, deadline: Date.now() + 10_000 },
+          }),
+        );
+        const room = instance as unknown as {
+          beginDice(
+            seat: Seat,
+            action: { type: "Roll" },
+            intentId: null,
+            atSeq: number,
+          ): Promise<void>;
+        };
+        const rolledAt = Date.now();
+        await room.beginDice(bot, { type: "Roll" }, null, row.seq);
+        const next = JSON.parse(
+          sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState;
+        return {
+          rolledAt,
+          next,
+          timers: sql
+            .exec<{ kind: string; fire_at: number }>(
+              "SELECT kind,fire_at FROM timers WHERE kind IN ('bot','decision')",
+            )
+            .toArray(),
+        };
+      },
+    );
+    expect(result.next.pending?.seat).not.toBe(host.seat);
+    expect(result.timers).toEqual([
+      { kind: "bot", fire_at: botDecisionAt(toPublic(result.next)) },
+    ]);
+    // At least the dice throw and a pause, not a fixed 900 ms.
+    expect(result.timers[0].fire_at - result.rolledAt).toBeGreaterThanOrEqual(
+      DECISION_TIMING.diceAnimation + BOT_TIMING.roll,
+    );
   });
 
   it("measures zero SQL row writes for a timer refresh that previously rewrote five rows", async () => {

@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import gsap from "gsap";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { BOARD, DECISION_TIMING, ECONOMY } from "../../shared/board/index.js";
@@ -320,7 +320,23 @@ function TileFocus({ state, selected, preview }: BoardProps) {
   );
 }
 
-function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
+/** A construction animating on one tile: its buildings rise with progress. */
+type Growth = { tile: number; progress: number };
+type TownsHandle = {
+  draw: (state: PublicState | null, growth: Growth | null) => void;
+};
+// Each building starts slightly after the previous one, like a crew at work.
+const GROWTH_STAGGER = 0.16;
+const GROWTH_SPAN = 0.6;
+const growthEase = gsap.parseEase("back.out(2.2)");
+
+function Towns({
+  state,
+  preview,
+  handle,
+}: Pick<BoardProps, "state" | "preview"> & {
+  handle: { current: TownsHandle | null };
+}) {
   const walls = useRef<THREE.InstancedMesh>(null);
   const roofs = useRef<THREE.InstancedMesh>(null);
   const windows = useRef<THREE.InstancedMesh>(null);
@@ -341,115 +357,142 @@ function Towns({ state, preview }: Pick<BoardProps, "state" | "preview">) {
     geometry.translate(0, 0, -0.5);
     return geometry;
   }, []);
-  useEffect(() => {
-    if (
-      !walls.current ||
-      !roofs.current ||
-      !windows.current ||
-      !details.current
-    )
-      return;
-    let count = 0;
-    let windowCount = 0;
-    let detailCount = 0;
-    for (const tile of BOARD) {
-      if (tile.kind !== "city") continue;
-      const property = state ? getProperty(state, tile.index) : null;
-      const owner = property?.owner;
-      const level =
-        owner != null
-          ? (property?.level ?? 0)
-          : preview
-            ? 1 + (tile.index % 5)
-            : 0;
-      if (level === 0) continue;
-      const roofColor =
-        owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
-      const angle = tileRotation(tile.index);
-      const bandZ = buildingBandZ(tile.index);
-      const [faceX, faceZ] = visibleFaces(tile.index);
-      const building = (
-        localX: number,
-        width: number,
-        height: number,
-        depth = 0.28,
-      ) => {
-        const [x, z] = tilePoint(tile.index, localX, bandZ);
-        const base = LOT_TOP;
-        dummy.rotation.set(0, angle, 0);
-        dummy.position.set(x, base + height / 2, z);
-        dummy.scale.set(width, height, depth);
-        dummy.updateMatrix();
-        walls.current?.setMatrixAt(count, dummy.matrix);
-        walls.current?.setColorAt(count, color.set("#fffaf4"));
-        dummy.position.y = base + height;
-        dummy.scale.set(width + 0.05, level >= 4 ? 0.13 : 0.12, depth + 0.05);
-        dummy.updateMatrix();
-        roofs.current?.setMatrixAt(count, dummy.matrix);
-        roofs.current?.setColorAt(count, color.set(roofColor));
-        count += 1;
-        // An owner-colored footing and windows on the two faces the camera
-        // sees: the roof identifies a house, the height a hotel or landmark.
-        dummy.position.y = base + 0.018;
-        dummy.scale.set(width + 0.03, 0.036, depth + 0.03);
-        dummy.updateMatrix();
-        details.current?.setMatrixAt(detailCount, dummy.matrix);
-        details.current?.setColorAt(detailCount, color.set(roofColor));
-        detailCount += 1;
-        const rows = height > 0.35 ? 3 : 1;
-        const paneHeight = Math.min(0.07, height * 0.3);
-        for (let row = 0; row < rows; row++) {
-          const y = base + (height * (row + 0.55)) / rows;
-          for (const column of [-1, 1]) {
-            const [windowX, windowZ] = tilePoint(
-              tile.index,
-              localX + column * width * 0.23,
-              bandZ + faceZ * (depth / 2 + 0.004),
+  const draw = useCallback(
+    (view: PublicState | null, growth: Growth | null) => {
+      if (
+        !walls.current ||
+        !roofs.current ||
+        !windows.current ||
+        !details.current
+      )
+        return;
+      let count = 0;
+      let windowCount = 0;
+      let detailCount = 0;
+      for (const tile of BOARD) {
+        if (tile.kind !== "city") continue;
+        const growing = growth?.tile === tile.index ? growth : null;
+        let order = 0;
+        const property = view ? getProperty(view, tile.index) : null;
+        const owner = property?.owner;
+        const level =
+          owner != null
+            ? (property?.level ?? 0)
+            : preview
+              ? 1 + (tile.index % 5)
+              : 0;
+        if (level === 0) continue;
+        const roofColor =
+          owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
+        const angle = tileRotation(tile.index);
+        const bandZ = buildingBandZ(tile.index);
+        const [faceX, faceZ] = visibleFaces(tile.index);
+        const building = (
+          localX: number,
+          fullWidth: number,
+          fullHeight: number,
+          depth = 0.28,
+        ) => {
+          let width = fullWidth;
+          let height = fullHeight;
+          const [x, z] = tilePoint(tile.index, localX, bandZ);
+          const base = LOT_TOP;
+          if (growing) {
+            const start = order * GROWTH_STAGGER;
+            const progress = THREE.MathUtils.clamp(
+              (growing.progress - start) / GROWTH_SPAN,
+              0,
+              1,
             );
-            dummy.position.set(windowX, y, windowZ);
-            dummy.scale.set(width * 0.2, paneHeight, 0.01);
+            order += 1;
+            if (progress === 0) return;
+            // Overshoots, then settles: the building pops out of its plot.
+            height *= Math.max(0.02, growthEase(progress));
+            width *= 0.7 + 0.3 * Math.min(1, progress * 1.6);
+          }
+          dummy.rotation.set(0, angle, 0);
+          dummy.position.set(x, base + height / 2, z);
+          dummy.scale.set(width, height, depth);
+          dummy.updateMatrix();
+          walls.current?.setMatrixAt(count, dummy.matrix);
+          walls.current?.setColorAt(count, color.set("#fffaf4"));
+          dummy.position.y = base + height;
+          dummy.scale.set(width + 0.05, level >= 4 ? 0.13 : 0.12, depth + 0.05);
+          dummy.updateMatrix();
+          roofs.current?.setMatrixAt(count, dummy.matrix);
+          roofs.current?.setColorAt(count, color.set(roofColor));
+          count += 1;
+          // An owner-colored footing and windows on the two faces the camera
+          // sees: the roof identifies a house, the height a hotel or landmark.
+          dummy.position.y = base + 0.018;
+          dummy.scale.set(width + 0.03, 0.036, depth + 0.03);
+          dummy.updateMatrix();
+          details.current?.setMatrixAt(detailCount, dummy.matrix);
+          details.current?.setColorAt(detailCount, color.set(roofColor));
+          detailCount += 1;
+          const rows = fullHeight > 0.35 ? 3 : 1;
+          const paneHeight = Math.min(0.07, height * 0.3);
+          for (let row = 0; row < rows; row++) {
+            const y = base + (height * (row + 0.55)) / rows;
+            for (const column of [-1, 1]) {
+              const [windowX, windowZ] = tilePoint(
+                tile.index,
+                localX + column * width * 0.23,
+                bandZ + faceZ * (depth / 2 + 0.004),
+              );
+              dummy.position.set(windowX, y, windowZ);
+              dummy.scale.set(width * 0.2, paneHeight, 0.01);
+              dummy.updateMatrix();
+              windows.current?.setMatrixAt(windowCount++, dummy.matrix);
+            }
+            const [sideX, sideZ] = tilePoint(
+              tile.index,
+              localX + faceX * (width / 2 + 0.004),
+              bandZ,
+            );
+            dummy.position.set(sideX, y, sideZ);
+            dummy.scale.set(0.01, paneHeight, depth * 0.34);
             dummy.updateMatrix();
             windows.current?.setMatrixAt(windowCount++, dummy.matrix);
           }
-          const [sideX, sideZ] = tilePoint(
-            tile.index,
-            localX + faceX * (width / 2 + 0.004),
-            bandZ,
-          );
-          dummy.position.set(sideX, y, sideZ);
-          dummy.scale.set(0.01, paneHeight, depth * 0.34);
-          dummy.updateMatrix();
-          windows.current?.setMatrixAt(windowCount++, dummy.matrix);
+        };
+        if (level >= 1 && level <= 3) {
+          const offsets =
+            level === 1 ? [0] : level === 2 ? [-0.2, 0.2] : [-0.3, 0, 0.3];
+          for (const x of offsets) building(x, level === 1 ? 0.3 : 0.24, 0.22);
+        } else if (level === 4) {
+          building(0, 0.44, 0.44, 0.32);
+          building(-0.34, 0.14, 0.2);
+          building(0.34, 0.14, 0.2);
+        } else if (level === 5) {
+          building(0, 0.52, 0.6, 0.34);
+          building(-0.36, 0.12, 0.3);
+          building(0.36, 0.12, 0.3);
         }
-      };
-      if (level >= 1 && level <= 3) {
-        const offsets =
-          level === 1 ? [0] : level === 2 ? [-0.2, 0.2] : [-0.3, 0, 0.3];
-        for (const x of offsets) building(x, level === 1 ? 0.3 : 0.24, 0.22);
-      } else if (level === 4) {
-        building(0, 0.44, 0.44, 0.32);
-        building(-0.34, 0.14, 0.2);
-        building(0.34, 0.14, 0.2);
-      } else if (level === 5) {
-        building(0, 0.52, 0.6, 0.34);
-        building(-0.36, 0.12, 0.3);
-        building(0.36, 0.12, 0.3);
       }
-    }
-    walls.current.count = roofs.current.count = count;
-    windows.current.count = windowCount;
-    details.current.count = detailCount;
-    for (const object of [
-      walls.current,
-      roofs.current,
-      windows.current,
-      details.current,
-    ]) {
-      object.instanceMatrix.needsUpdate = true;
-      if (object.instanceColor) object.instanceColor.needsUpdate = true;
-      object.computeBoundingSphere();
-    }
-  }, [state, preview, dummy, color]);
+      walls.current.count = roofs.current.count = count;
+      windows.current.count = windowCount;
+      details.current.count = detailCount;
+      for (const object of [
+        walls.current,
+        roofs.current,
+        windows.current,
+        details.current,
+      ]) {
+        object.instanceMatrix.needsUpdate = true;
+        if (object.instanceColor) object.instanceColor.needsUpdate = true;
+        object.computeBoundingSphere();
+      }
+    },
+    [preview, dummy, color],
+  );
+  useEffect(() => {
+    handle.current = { draw };
+    return () => {
+      handle.current = null;
+    };
+  }, [handle, draw]);
+  useEffect(() => draw(state, null), [state, draw]);
   useEffect(() => () => roofGeometry.dispose(), [roofGeometry]);
   return (
     <>
@@ -1047,6 +1090,8 @@ function SceneContent(props: BoardProps) {
   const score = useRef<THREE.Sprite>(null);
   const scoreTextures = useRef(new Map<string, THREE.Texture>());
   const timelines = useRef(new Map<gsap.core.Timeline, () => void>());
+  const towns = useRef<TownsHandle | null>(null);
+  const growth = useMemo(() => ({ tile: 0, progress: 0 }), []);
   const pulse = useRef<THREE.Mesh>(null);
   const sparks = useRef<THREE.InstancedMesh>(null);
   const sparkTransform = useMemo(() => new THREE.Object3D(), []);
@@ -1129,6 +1174,7 @@ function SceneContent(props: BoardProps) {
       }
       paintDice(next?.lastRoll?.seat ?? null);
       showScore(next?.lastRoll ?? null);
+      towns.current?.draw(next, null);
       invalidate();
     }
     function cancel() {
@@ -1232,7 +1278,7 @@ function SceneContent(props: BoardProps) {
         timeline.to(cashProgress, {
           value: 1,
           duration: DECISION_TIMING.moneyAnimation / 1000,
-          ease: "none",
+          ease: "power1.inOut",
           onUpdate: updateCash,
         });
       }, context);
@@ -1256,10 +1302,13 @@ function SceneContent(props: BoardProps) {
         )
           return;
         if (event.type === "DiceRolled") {
-          // The dice leave from the roller's side of the board, land within
-          // the shared dice budget and then show their total.
+          // The roller shakes the dice on their side of the board, throws
+          // them high across the lawn, lets them settle, then shows the total.
           const { inward } = sideFrame(event.seat);
-          const throwTime = (DECISION_TIMING.diceAnimation / 1000) * 0.8;
+          const budget = DECISION_TIMING.diceAnimation / 1000;
+          const shake = 0.22;
+          const throwTime = budget * 0.62;
+          const reveal = shake + throwTime + 0.06;
           paintDice(event.seat);
           const sprite = score.current;
           if (sprite) sprite.visible = false;
@@ -1269,13 +1318,24 @@ function SceneContent(props: BoardProps) {
               if (!die) continue;
               const rest = DIE_REST[index];
               const target = diceRotation(event.dice[index]);
-              const start = index * 0.04;
+              const start = shake + index * 0.07;
+              const fromX = rest[0] - inward[0] * 2.6;
+              const fromZ = rest[2] - inward[1] * 2.6;
               timeline.set(
                 die.position,
+                { x: fromX, y: DIE_REST_Y + 0.55, z: fromZ },
+                0,
+              );
+              timeline.set(die.rotation, { x: 0.3, y: index, z: -0.2 }, 0);
+              timeline.to(
+                die.rotation,
                 {
-                  x: rest[0] - inward[0] * 2.1,
-                  y: DIE_REST_Y + 0.4,
-                  z: rest[2] - inward[1] * 2.1,
+                  keyframes: [
+                    { z: 0.25, duration: shake / 3 },
+                    { z: -0.25, duration: shake / 3 },
+                    { z: 0, duration: shake / 3 },
+                  ],
+                  ease: "sine.inOut",
                 },
                 0,
               );
@@ -1285,7 +1345,7 @@ function SceneContent(props: BoardProps) {
                   x: rest[0],
                   z: rest[2],
                   duration: throwTime,
-                  ease: "power2.out",
+                  ease: "power3.out",
                 },
                 start,
               );
@@ -1294,13 +1354,13 @@ function SceneContent(props: BoardProps) {
                 {
                   keyframes: [
                     {
-                      y: DIE_REST_Y + 1.45,
-                      duration: throwTime * 0.32,
+                      y: DIE_REST_Y + 2.1,
+                      duration: throwTime * 0.3,
                       ease: "power2.out",
                     },
                     {
                       y: DIE_REST_Y,
-                      duration: throwTime * 0.68,
+                      duration: throwTime * 0.7,
                       ease: "bounce.out",
                     },
                   ],
@@ -1310,17 +1370,16 @@ function SceneContent(props: BoardProps) {
               timeline.to(
                 die.rotation,
                 {
-                  x: target[0] + Math.PI * 4,
+                  x: target[0] + Math.PI * 6,
                   y: target[1] + Math.PI * 4,
-                  z: target[2] + Math.PI * 2,
+                  z: target[2] + Math.PI * 4,
                   duration: throwTime,
-                  ease: "power2.out",
+                  ease: "power3.out",
                 },
                 start,
               );
             }
             if (sprite) {
-              const reveal = throwTime + 0.04;
               timeline.call(
                 () => showScore({ seat: event.seat, dice: event.dice }),
                 [],
@@ -1332,13 +1391,15 @@ function SceneContent(props: BoardProps) {
                 {
                   x: 0.7,
                   y: 0.7,
-                  duration: 0.14,
-                  ease: "back.out(2.4)",
+                  duration: 0.3,
+                  ease: "back.out(2.6)",
                   immediateRender: false,
                 },
                 reveal,
               );
             }
+            // Hold the total long enough to read before the pawn sets off.
+            timeline.set({}, {}, budget);
           }, context);
         } else if (event.type === "PlayerMoved") {
           const pawn = pawns.current[event.seat];
@@ -1350,44 +1411,57 @@ function SceneContent(props: BoardProps) {
           const steps = event.steps ?? (event.position - from + 32) % 32;
           await play((timeline) => {
             if (Math.abs(steps) > 16 || steps === 0) {
+              // Travel and card moves: one long leap to the destination.
               const [x, y, z] = pawnPosition(event.seat, event.position);
+              const half = DECISION_TIMING.jumpAnimation / 2000;
               timeline.to(pawn.position, {
                 x,
                 z,
-                y: y + 1.05,
-                duration: 0.35,
+                duration: half * 2,
                 ease: "power2.inOut",
               });
-              timeline.to(pawn.position, {
-                y,
-                duration: 0.24,
-                ease: "bounce.out",
-              });
+              timeline.to(
+                pawn.position,
+                { y: y + 1.6, duration: half, ease: "power2.out" },
+                0,
+              );
+              timeline.to(
+                pawn.position,
+                { y, duration: half, ease: "bounce.out" },
+                half,
+              );
             } else {
+              // A board-game walk: one hop per tile, a settle on the last.
               const duration = DECISION_TIMING.stepAnimation / 1000;
-              for (let step = 1; step <= Math.abs(steps); step++) {
+              const count = Math.abs(steps);
+              for (let step = 1; step <= count; step++) {
                 const tile =
                   (((from + step * Math.sign(steps)) % 32) + 32) % 32;
                 const [x, y, z] = pawnPosition(event.seat, tile);
                 const at = (step - 1) * duration;
+                const last = step === count;
                 timeline.to(
                   pawn.position,
-                  { x, z, duration, ease: "none" },
+                  { x, z, duration: duration * 0.9, ease: "sine.inOut" },
                   at,
                 );
                 timeline.to(
                   pawn.position,
                   {
-                    y: y + 0.36,
-                    duration: duration * 0.47,
+                    y: y + 0.5,
+                    duration: duration * 0.42,
                     ease: "power2.out",
                   },
                   at,
                 );
                 timeline.to(
                   pawn.position,
-                  { y, duration: duration * 0.53, ease: "power2.in" },
-                  at + duration * 0.47,
+                  {
+                    y,
+                    duration: duration * 0.58,
+                    ease: last ? "bounce.out" : "power2.in",
+                  },
+                  at + duration * 0.42,
                 );
               }
             }
@@ -1414,8 +1488,12 @@ function SceneContent(props: BoardProps) {
             await play((timeline) => {
               timeline.fromTo(
                 pawn.position,
-                { y: landing + 1.3 },
-                { y: landing, duration: 0.5, ease: "bounce.out" },
+                { y: landing + 1.6 },
+                {
+                  y: landing,
+                  duration: DECISION_TIMING.islandAnimation / 1000,
+                  ease: "bounce.out",
+                },
               );
             }, context);
           }
@@ -1459,23 +1537,49 @@ function SceneContent(props: BoardProps) {
             }
             burst.instanceMatrix.needsUpdate = true;
           };
+          // New houses rise one after another on their plot; the view
+          // shows the next state on this tile while it is being built.
+          const builds =
+            event.type !== "BoughtOut" &&
+            BOARD[event.tile].kind === "city" &&
+            (getProperty(context.next, event.tile)?.level ?? 0) >
+              (context.previous
+                ? (getProperty(context.previous, event.tile)?.level ?? 0)
+                : 0);
+          const drawGrowth = () => towns.current?.draw(context.next, growth);
+          growth.tile = event.tile;
+          growth.progress = 0;
+          if (builds) drawGrowth();
+          const budget = DECISION_TIMING.propertyAnimation / 1000;
           await play((timeline) => {
             timeline.fromTo(
               ring.scale,
               { x: 0.1, y: 0.1, z: 0.1 },
-              { x: 1.25, y: 1.25, z: 1.25, duration: 0.4, ease: "power2.out" },
+              { x: 1.3, y: 1.3, z: 1.3, duration: 0.55, ease: "power2.out" },
             );
+            if (builds)
+              timeline.to(
+                growth,
+                {
+                  progress: 1,
+                  duration: budget * 0.85,
+                  ease: "none",
+                  onUpdate: drawGrowth,
+                },
+                0.1,
+              );
             timeline.fromTo(
               sparkProgress,
               { value: 0 },
               {
                 value: 1,
-                duration: 0.45,
+                duration: 0.6,
                 ease: "power2.out",
                 onUpdate: updateSparks,
               },
-              0,
+              builds ? 0.35 : 0,
             );
+            timeline.set({}, {}, budget);
           }, context);
           // A cancelled handler may resume after the next effect has started.
           if (effectGeneration === propertyEffectGeneration) {
@@ -1489,6 +1593,7 @@ function SceneContent(props: BoardProps) {
   }, [
     preview,
     invalidate,
+    growth,
     sparkProgress,
     sparkTransform,
     cashProgress,
@@ -1532,7 +1637,7 @@ function SceneContent(props: BoardProps) {
       {!preview && state && <CashReserves state={state} />}
       <BoardTiles {...props} />
       <TileFocus {...props} />
-      <Towns state={state} preview={preview} />
+      <Towns state={state} preview={preview} handle={towns} />
       <ResortProps />
       <FestivalFlags state={state} />
       <Landmarks />

@@ -202,7 +202,7 @@ info is added later, redact per socket using the seat in the attachment.
 | --- | --- | --- |
 | `decision` | `state.pending.deadline` (computed by the engine) | `applyTimeout` applies the rule-defined default for a human seat (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
 | `grace:<seat>` | 60 s after socket close | Seat becomes a bot seat (`botAction`, medium) until the player reconnects. |
-| `bot` | 0.8–1.5 s after a bot seat's decision opens | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
+| `bot` | `botDecisionAt`: once the events that opened the decision have played at 1×, plus 0.7 s (roll) or 1.4 s (choice); 0.9 s after a wake-up | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
 | `cleanup` | 10 min after `Finished` | `deleteAll()` storage. |
 
 The DO never computes deadlines itself: the engine sets

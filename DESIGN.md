@@ -63,10 +63,18 @@ Retain the travel progression from French cities to Tokyo, rounded pawns, flags 
 The user's later 1 October reference explicitly asks for centered illustrated
 decisions. Purchases, development, buyouts and other choices now temporarily dim
 the board and open an ivory dialog with a title ribbon. Original isometric city
-previews, selectable building stages and a comparison slider precede one final
-confirmation. Price, projected rent and remaining cash use shared engine helpers.
+previews and selectable building stages precede one final confirmation. Price,
+projected rent and remaining cash use shared engine helpers.
 Escape minimizes a decision without sending an action; the bottom prompt reopens
 it. Roll and opponent turns keep their compact bottom prompt.
+
+On 2 October 2026 the user found the game too fast and too wordy. A turn now
+reads like a tabletop game: dice shake, fly and settle, pawns hop tile by tile,
+cards hold long enough to read, and houses rise out of their plot. Bots wait for
+those animations, then pause before acting. Dialogs drop sentences that repeat
+their title or numbers; a hotel the player cannot take yet stays on screen,
+greyed out with a padlock. A healthy connection, the round counter of an
+unlimited match and secondary HUD lines stay off screen.
 
 Drawn cards have a separate illustrated reading moment, using three original
 painted image families with individual effect text. Four small banknote reserves,

@@ -384,7 +384,7 @@ rule or protocol changes.
 - Corner HUDs become a portrait tile, a player-colored name ribbon and an ivory
   cash plate. The sky gains a radial gradient and faint floating tiles.
 - Dice take the roller's color, leave from the roller's side and reveal their
-  total within the unchanged 1 s dice budget.
+  total. A later pacing pass lengthens their budget to 1.7 s (see ANIMATION.md).
 
 Verification on this machine:
 

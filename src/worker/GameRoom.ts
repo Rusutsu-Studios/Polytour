@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { BOT_TIMING } from "../shared/board/index.js";
 import type {
   Action,
   GameEvent,
@@ -10,6 +11,7 @@ import {
   applyAction,
   applyTimeout,
   botAction,
+  botDecisionAt,
   createGame,
   legalActions,
   toPublic,
@@ -770,7 +772,7 @@ export class GameRoom extends DurableObject<Env> {
         "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES('cleanup',?)",
         Date.now() + 600_000,
       );
-    // An abandoned game must not become an unattended 900 ms bot simulation.
+    // An abandoned game must not become an unattended bot simulation.
     // Keep its state, grace timers and real-time end intact; reconnect restores
     // the remaining timers without extending any engine deadline.
     const pendingDice = this.readMeta<PendingDice>("pendingDice");
@@ -798,15 +800,21 @@ export class GameRoom extends DurableObject<Env> {
         "DELETE FROM timers WHERE kind=?",
         bot ? "decision" : "bot",
       );
+      // A bot waits for the animations that opened its decision, so players
+      // can follow its turn. After a wake-up, nothing is left to watch.
+      const botAt = Math.max(
+        botDecisionAt(state) ?? 0,
+        Date.now() + (resetBot ? 0 : BOT_TIMING.resume),
+      );
       if (bot && !resetBot)
         this.ctx.storage.sql.exec(
           "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES('bot',?)",
-          Date.now() + 900,
+          botAt,
         );
       else
         this.setTimer(
           bot ? "bot" : "decision",
-          bot ? Date.now() + 900 : state.pending.deadline,
+          bot ? botAt : state.pending.deadline,
         );
     } else {
       this.ctx.storage.sql.exec(
