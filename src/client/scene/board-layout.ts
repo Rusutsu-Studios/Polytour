@@ -170,6 +170,23 @@ export function pawnSpot(seat: Seat, index: number): Vec2 {
   );
 }
 
+/**
+ * Distance from the board center, on both axes, of the point where a walking
+ * pawn turns a corner: on the road's corner square, a pawn's width inside its
+ * outer edge, clear of the pawns standing on the lots beside it.
+ */
+const CORNER_TURN = INNER_HALF - 0.2;
+
+/**
+ * Where a walking pawn touches down on a tile it only passes. A corner is
+ * counted like any tile, but the pawn keeps to the road and turns on the road's
+ * corner square instead of climbing onto the corner and back down.
+ */
+export function passingSpot(seat: Seat, index: number): Vec2 {
+  if (!isCorner(index)) return pawnSpot(seat, index);
+  return fromSide(tileSide(index), -CORNER_TURN, CORNER_TURN);
+}
+
 /** Each seat keeps its reserve beside the board edge nearest its corner HUD. */
 export function reserveAnchor(seat: Seat): {
   position: Vec2;

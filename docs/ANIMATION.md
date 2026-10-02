@@ -116,7 +116,8 @@ board, then fly high across the lawn, tumbling, and bounce to the server's value
 on the chalk circle. A small scoreboard then pops up with their total (gold for a
 double) and holds long enough to read before the pawn sets off. The shake, throw
 and reveal fit the shared 1.7 s dice budget. Pawns hop one tile per 0.3 s and
-bounce on the last; travel and card moves leap in 0.9 s. Reduced motion and skip
+bounce on the last; a corner they only pass counts as a hop but is turned on the
+road, never climbed. Travel and card moves leap in 0.9 s. Reduced motion and skip
 snap straight to the result.
 
 ## Current illustrated moments
