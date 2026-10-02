@@ -1,0 +1,144 @@
+/* The inspection card is the buy popup's title deed, shrunk to a board-side panel. */
+.city-card {
+  position: relative;
+  padding: 0;
+  border-radius: 16px;
+  background: #fffaf0;
+  color: #173b45;
+}
+.city-card-ribbon {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  translate: -50% 0;
+  top: -15px;
+  min-width: 190px;
+  max-width: calc(100% - 46px);
+  padding: 8px 20px;
+  color: #fffaf0;
+  background: #2f7f8e;
+  border-radius: 5px;
+  box-shadow: 0 4px 0 #1d5a68;
+}
+.city-card-ribbon::before,
+.city-card-ribbon::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 9px;
+  width: 17px;
+  height: 27px;
+  background: #246c7b;
+}
+.city-card-ribbon::before {
+  right: calc(100% - 3px);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 25% 50%);
+}
+.city-card-ribbon::after {
+  left: calc(100% - 3px);
+  clip-path: polygon(0 0, 100% 0, 75% 50%, 100% 100%, 0 100%);
+}
+.city-card-ribbon h3 {
+  margin: 0;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 19px;
+  line-height: 1.15;
+  font-weight: 900;
+  text-align: center;
+}
+.city-card-body {
+  padding: 28px 20px 18px;
+}
+.city-card-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.city-card-steps .small-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.city-card-kind {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #183e45;
+}
+.city-card .city-card-step {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: #eeecd9;
+}
+.city-card .city-card-step[data-back="true"] svg {
+  rotate: 180deg;
+}
+.city-card .city-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: -4px 0 -6px;
+}
+.city-card-owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: #eef0dd;
+}
+.city-card-owner[data-owned="true"] {
+  background: #e9f1e6;
+}
+.city-card-pawn {
+  width: 27px;
+  height: 27px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 14px;
+  color: #fffaf0;
+  background: #9bb09a;
+}
+.city-card-owner strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+.city-card-owner small {
+  display: block;
+  font-size: 11px;
+  color: #47666c;
+  margin-top: 2px;
+}
+.city-card-ledger {
+  display: flex;
+  gap: 24px;
+  margin: 14px 0 0;
+}
+.city-card-ledger dt {
+  font-size: 11px;
+  color: #4a6f68;
+}
+.city-card-ledger dd {
+  margin: 3px 0 0;
+  font-size: 17px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.city-card-ledger .ledger-main dd {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.city-card .festival-badge,
+.city-card .tile-rule {
+  margin-top: 13px;
+}

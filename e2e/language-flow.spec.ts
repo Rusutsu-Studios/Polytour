@@ -130,9 +130,18 @@ test("English local match switches language without rejoining or changing game s
   await page
     .getByRole("button", { name: "Explorer le plateau", exact: true })
     .click();
-  await expect(page.getByLabel("Explorer une case")).toContainText(
-    "Grand départ",
-  );
+  // The card speaks the new locale: its step controls and the space it names.
+  const card = page.locator(".city-card");
+  await expect(card).toBeVisible();
+  const nextSpace = page.getByRole("button", {
+    name: "Case suivante",
+    exact: true,
+  });
+  for (let step = 0; step <= 32; step++) {
+    if ((await card.getAttribute("data-space")) === "0") break;
+    await nextSpace.click();
+  }
+  await expect(page.locator("#city-card-title")).toHaveText("Grand départ");
   await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Lancer les dés", exact: true })

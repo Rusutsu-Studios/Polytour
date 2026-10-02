@@ -121,7 +121,7 @@
   min-width: 0;
   text-align: center;
 }
-.decision-city-art {
+.city-art {
   display: block;
   width: 100%;
   height: auto;
@@ -228,7 +228,7 @@
   opacity: 0.6;
   cursor: wait;
 }
-.decision-popup .construction-choice .decision-city-art {
+.decision-popup .construction-choice .city-art {
   width: 81px;
   height: 58px;
   margin: -4px 0 0;
@@ -269,7 +269,7 @@
   box-shadow: 0 3px 0 #d0d1c3;
   color: #6f8183;
 }
-.decision-popup .construction-choice[data-locked="true"] .decision-city-art {
+.decision-popup .construction-choice[data-locked="true"] .city-art {
   filter: grayscale(1);
   opacity: 0.45;
 }
@@ -368,7 +368,7 @@
   .decision-popup .construction-choice {
     padding: 6px 5px 8px;
   }
-  .decision-popup .construction-choice .decision-city-art {
+  .decision-popup .construction-choice .city-art {
     width: 72px;
     height: 48px;
   }
@@ -403,7 +403,7 @@
   .decision-construction-steps {
     gap: 6px;
   }
-  .decision-popup .construction-choice .decision-city-art {
+  .decision-popup .construction-choice .city-art {
     width: 60px;
     height: 42px;
   }
@@ -412,7 +412,7 @@
   .decision-popup-story {
     grid-template-columns: 1fr;
   }
-  .decision-illustration .decision-city-art {
+  .decision-illustration .city-art {
     max-width: 180px;
     margin: auto;
   }

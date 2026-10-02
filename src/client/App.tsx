@@ -9,7 +9,7 @@ import type {
   Seat,
   WinKind,
 } from "../shared/engine/index.js";
-import { getProperty, netWorth, propertyRent } from "../shared/engine/index.js";
+import { getProperty, netWorth } from "../shared/engine/index.js";
 import type {
   LobbyState,
   RandomnessStatus,
@@ -36,6 +36,7 @@ import {
   tilePrice,
 } from "./ui/board-display.js";
 import CardMoment from "./ui/CardMoment.js";
+import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import Icon from "./ui/Icon.js";
@@ -455,132 +456,6 @@ function eventText(event: GameEvent, state: PublicState): string | null {
     default:
       return null;
   }
-}
-function TileInspector({
-  state,
-  selected,
-  onSelect,
-}: {
-  state: PublicState;
-  selected: number | null;
-  onSelect: (tile: number) => void;
-}) {
-  const index =
-    selected ??
-    state.players.find((player) => player.seat === state.activeSeat)
-      ?.position ??
-    0;
-  const tile = BOARD[index];
-  const property = getProperty(state, index);
-  const owner =
-    property?.owner != null
-      ? state.players.find((player) => player.seat === property.owner)
-      : null;
-  const rent = property ? propertyRent(state, index) : null;
-  return (
-    <section className="inspector" aria-labelledby="inspector-title">
-      <div className="inspector-head">
-        <span
-          className="tile-icon"
-          style={{ backgroundColor: tileColor(index) }}
-        >
-          {TILE_ICONS[tile.kind]}
-        </span>
-        <div>
-          <span className="small-label">
-            {t(`Case ${index + 1} / 32`, `Space ${index + 1} / 32`)}
-          </span>
-          <h3 id="inspector-title">{tileName(index)}</h3>
-        </div>
-      </div>
-      <label className="sr-only" htmlFor="tile-inspection">
-        {t("Explorer une case", "Inspect a space")}
-      </label>
-      <select
-        id="tile-inspection"
-        className="tile-select"
-        value={index}
-        onChange={(event) => onSelect(Number(event.target.value))}
-      >
-        {BOARD.map((item) => (
-          <option key={item.index} value={item.index}>
-            {item.index + 1}. {tileName(item.index)}
-          </option>
-        ))}
-      </select>
-      {property ? (
-        <>
-          <div className="ownership">
-            {owner ? (
-              <>
-                <span style={{ color: PLAYER_COLORS[owner.seat] }}>
-                  {PLAYER_SYMBOLS[owner.seat]}
-                </span>{" "}
-                {owner.name} · {levelName(property.level)}
-              </>
-            ) : (
-              t("Disponible à l’achat", "Available to buy")
-            )}
-          </div>
-          <dl className="property-numbers">
-            <div>
-              <dt>{t("Terrain", "Land")}</dt>
-              <dd>{money(tilePrice(index) ?? 0)}</dd>
-            </div>
-            <div>
-              <dt>
-                {owner
-                  ? t("Loyer actuel", "Current rent")
-                  : t("Loyer terrain", "Base rent")}
-              </dt>
-              <dd>{money(rent ?? 0)}</dd>
-            </div>
-          </dl>
-          {(state.championshipHost?.tile === index ||
-            state.festivalTiles.includes(index)) && (
-            <p className="festival-badge">
-              {t("★ Festival · loyer ×", "★ Festival · rent ×")}
-              {state.championshipHost?.tile === index
-                ? state.championshipHost.multiplier
-                : 2}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="tile-rule">
-          {tile.kind === "start"
-            ? t(
-                `Recevez ${money(state.config.startSalary)} en passant par le départ.`,
-                `Receive ${money(state.config.startSalary)} when passing Start.`,
-              )
-            : tile.kind === "island"
-              ? t(
-                  "Un double ou le paiement de la traversée vous permet de repartir.",
-                  "Roll doubles or pay the fare to leave.",
-                )
-              : tile.kind === "championship"
-                ? t(
-                    "Installez un festival dans l’une de vos villes pour multiplier ses loyers.",
-                    "Host a festival in one of your cities to multiply its rent.",
-                  )
-                : tile.kind === "world-tour"
-                  ? t(
-                      "Au prochain tour, choisissez une destination plutôt que de lancer les dés.",
-                      "On your next turn, choose a destination instead of rolling.",
-                    )
-                  : tile.kind === "chance"
-                    ? t(
-                        "Piochez une carte. Fortune, voyage ou surprise au programme.",
-                        "Draw a card and follow its instructions.",
-                      )
-                    : t(
-                        "La taxe est calculée selon votre fortune.",
-                        "Tax is based on your net worth.",
-                      )}
-        </p>
-      )}
-    </section>
-  );
 }
 
 function RandomnessPanel({
@@ -1246,7 +1121,7 @@ function MatchView({
           <motion.aside
             ref={inspectorRef}
             key="inspector"
-            className="inspector-popover"
+            className="city-card-popover"
             aria-label={t("Inspection du plateau", "Board inspection")}
             initial={reducedMotion ? false : { opacity: 0, x: 8 }}
             animate={{ opacity: 1, x: 0 }}
@@ -1261,11 +1136,7 @@ function MatchView({
             >
               <Icon name="close" size={16} />
             </button>
-            <TileInspector
-              state={game}
-              selected={selected}
-              onSelect={onSelect}
-            />
+            <CityCard state={game} selected={selected} onSelect={onSelect} />
           </motion.aside>
         )}
         {tool && (
