@@ -1,5 +1,9 @@
 import { BOARD, ECONOMY, getTileLandPrice } from "../../shared/board/index.js";
-import type { Seat } from "../../shared/engine/index.js";
+import {
+  getProperty,
+  type PublicState,
+  type Seat,
+} from "../../shared/engine/index.js";
 import { getLocale, translate } from "../i18n.js";
 
 export const PLAYER_COLORS = [
@@ -120,6 +124,21 @@ export const TILE_ICONS: Record<string, string> = {
   resort: "☂",
   city: "⌂",
 };
+/** Compact "whose city, how built" marker for dense lists and option labels. */
+export function ownerTag(
+  state: PublicState,
+  index: number,
+  viewer?: Seat,
+): string | null {
+  const property = getProperty(state, index);
+  if (!property || property.owner === null) return null;
+  const owner = state.players.find((player) => player.seat === property.owner);
+  if (!owner) return null;
+  const name = owner.seat === viewer ? translate("vous", "you") : owner.name;
+  const level =
+    BOARD[index]?.kind === "city" ? ` · ${levelName(property.level)}` : "";
+  return `${PLAYER_SYMBOLS[owner.seat]} ${name}${level}`;
+}
 export function tileColor(index: number) {
   const tile = BOARD[index];
   return tile.kind === "city"

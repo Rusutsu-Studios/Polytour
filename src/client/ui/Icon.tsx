@@ -12,6 +12,7 @@ type IconName =
   | "shield"
   | "settings"
   | "search"
+  | "estate"
   | "exit"
   | "fullscreen"
   | "lock";
@@ -31,6 +32,8 @@ const paths: Record<IconName, string> = {
   shield: "m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-5 10 3 3 7-7",
   settings: "M4 7h16M4 17h16M9 4v6m6 4v6",
   search: "M21 21l-5-5m-6 2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
+  estate:
+    "M3 21h18M5 21V8l6-4v17M13 21V11h6v10M8 9h.01M8 13h.01M8 17h.01M16 15h.01",
   exit: "M9 3H3v18h6m-2-9h14m-5-5 5 5-5 5",
   fullscreen: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5V11Zm7 4v2",

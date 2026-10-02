@@ -22,6 +22,7 @@ import { translate as t, useLocale } from "../i18n.js";
 import {
   levelName,
   money,
+  ownerTag,
   PLAYER_COLORS,
   PLAYER_SYMBOLS,
   tileName,
@@ -970,14 +971,18 @@ export default function DecisionPanel({
                   if (action) choose(action);
                 }}
               >
-                {destinations.map((action) => (
-                  <option key={actionKey(action)} value={action.tile}>
-                    {tileName(action.tile)}
-                    {action.type === "Sell"
-                      ? ` · ${money(propertyRefund(state, action.tile))}`
-                      : ""}
-                  </option>
-                ))}
+                {destinations.map((action) => {
+                  const holder = ownerTag(state, action.tile, seat);
+                  return (
+                    <option key={actionKey(action)} value={action.tile}>
+                      {tileName(action.tile)}
+                      {holder ? ` · ${holder}` : ""}
+                      {action.type === "Sell"
+                        ? ` · ${money(propertyRefund(state, action.tile))}`
+                        : ""}
+                    </option>
+                  );
+                })}
               </select>
               {pending?.kind === "travel" && freeRoll && (
                 <fieldset

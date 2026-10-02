@@ -39,6 +39,7 @@ import CardMoment from "./ui/CardMoment.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import Icon from "./ui/Icon.js";
+import OwnershipPanel from "./ui/OwnershipPanel.js";
 import { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
 import "./App.css";
@@ -858,7 +859,7 @@ function MatchClock({
   );
 }
 
-type GameTool = "journal" | "proof" | "view" | "room" | null;
+type GameTool = "journal" | "holdings" | "proof" | "view" | "room" | null;
 
 // THESIS: The PC board fills the screen; the interface occupies its unused corners.
 // OWN-WORLD: sky blue, ivory toy controls, four colored pawn identities, physical buttons.
@@ -914,11 +915,13 @@ function MatchView({
   const toolsTitle =
     tool === "journal"
       ? t("Carnet de voyage", "Game log")
-      : tool === "proof"
-        ? diceToolLabel
-        : tool === "view"
-          ? t("Vue et animations", "View and animation")
-          : t("Votre salle", "Your room");
+      : tool === "holdings"
+        ? t("Qui possède quoi", "Who owns what")
+        : tool === "proof"
+          ? diceToolLabel
+          : tool === "view"
+            ? t("Vue et animations", "View and animation")
+            : t("Votre salle", "Your room");
   const latestAction = history
     .map((event) => eventText(event, game))
     .filter((text): text is string => text !== null)
@@ -1057,6 +1060,16 @@ function MatchView({
             name={config.randomnessMode === "drand" ? "shield" : "dice"}
             size={18}
           />
+        </button>
+        <button
+          type="button"
+          className="game-tool-button"
+          aria-label={t("Qui possède quoi", "Who owns what")}
+          title={t("Qui possède quoi", "Who owns what")}
+          aria-expanded={tool === "holdings"}
+          onClick={(event) => showTool("holdings", event.currentTarget)}
+        >
+          <Icon name="estate" size={18} />
         </button>
         <button
           type="button"
@@ -1325,6 +1338,13 @@ function MatchView({
                   </p>
                 )}
               </div>
+            )}
+            {tool === "holdings" && (
+              <OwnershipPanel
+                state={game}
+                seat={credentials.seat}
+                onInspect={inspectTile}
+              />
             )}
             {tool === "proof" && (
               <RandomnessPanel

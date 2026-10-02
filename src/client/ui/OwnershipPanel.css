@@ -1,0 +1,157 @@
+.ownership-board {
+  display: grid;
+  gap: 14px;
+}
+.ownership-tally {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.ownership-tally li {
+  display: grid;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border-left: 4px solid var(--player-color);
+  background: color-mix(in srgb, var(--player-color) 9%, #f0f0df);
+}
+.ownership-tally li[data-you="true"] {
+  box-shadow: 0 0 0 1.5px var(--player-color);
+}
+.ownership-tally li[data-bankrupt="true"] {
+  opacity: 0.55;
+}
+.tally-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--player-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tally-counts {
+  font-size: 11px;
+  color: var(--muted);
+}
+.ownership-group {
+  display: grid;
+  gap: 4px;
+}
+.ownership-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.group-swatch {
+  width: 18px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--region-color);
+}
+.group-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.group-owners {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.group-free {
+  color: var(--muted);
+  font-weight: 600;
+}
+.group-sweep {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a6212;
+}
+.ownership-rows {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ownership-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px 7px 0;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--player-color) 12%, #f0f0df);
+  cursor: pointer;
+}
+.ownership-row[data-free="true"] {
+  background: #f4f3e6;
+}
+.ownership-row:hover {
+  background: color-mix(in srgb, var(--player-color) 22%, #f0f0df);
+}
+.ownership-row[data-free="true"]:hover {
+  background: #eceadb;
+}
+.row-pin {
+  flex: none;
+  align-self: stretch;
+  width: 4px;
+  border-radius: 8px 0 0 8px;
+  background: var(--player-color, #c7c7b4);
+}
+.row-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.row-name {
+  font-size: 13px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-festival {
+  margin-left: 5px;
+  color: #d08a1b;
+}
+.row-owner {
+  font-size: 11px;
+  color: var(--player-color, var(--muted));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ownership-row[data-free="true"] .row-owner {
+  color: var(--muted);
+}
+.row-value {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  flex: none;
+  text-align: right;
+}
+.row-value b {
+  font-size: 13px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.row-value small {
+  font-size: 10px;
+  color: var(--muted);
+}
