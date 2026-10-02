@@ -230,6 +230,23 @@ function purchaseCost(
     ? getTileInvestedValue(tileIndex, level, economyRule(state.config))
     : ECONOMY.resortPrice;
 }
+/**
+ * What an opponent would pay to buy out this city at a level, or null when
+ * the level (reference Hotel, prototype Landmark) or a resort is protected.
+ */
+export function buyoutPriceAt(
+  state: PublicState,
+  tileIndex: number,
+  level: BuildLevel,
+): number | null {
+  const tile = getTile(tileIndex);
+  if (!tile || !isCityTile(tile) || level >= rules(state).protectedLevel)
+    return null;
+  return (
+    getTileInvestedValue(tileIndex, level, economyRule(state.config)) *
+    ECONOMY.buyoutMultiplier
+  );
+}
 /** Hosting again on the current host is free; moving the championship has a fee. */
 export function championshipCost(state: PublicState, tile: number): number {
   return state.championshipHost?.tile === tile
@@ -1064,10 +1081,8 @@ function resolver(initial: GameState, context: EngineContext) {
             property.level < rules(state).protectedLevel &&
             getTile(task.tile)?.kind === "city"
           ) {
-            const price =
-              propertyInvestedValue(state, task.tile) *
-              ECONOMY.buyoutMultiplier;
-            if (getPlayer(state, task.seat).cash >= price)
+            const price = buyoutPriceAt(state, task.tile, property.level);
+            if (price !== null && getPlayer(state, task.seat).cash >= price)
               open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
           }
           break;

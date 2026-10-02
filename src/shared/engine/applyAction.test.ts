@@ -16,6 +16,7 @@ import {
   applyTimeout,
   botAction,
   botDecisionAt,
+  buyoutPriceAt,
   CHANCE_CARDS,
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -1150,6 +1151,15 @@ describe("reference rules for new rooms", () => {
     expect(
       draw(grant(state, 6, seat, 2), "Contractor").state.pending?.kind,
     ).not.toBe("card-target");
+  });
+  it("previews the buyout price of each level, with Hotels and resorts protected", () => {
+    const state = reference();
+    // Tile 9 (Venice values): land 140 k + three houses at 100 k = 440 k.
+    expect(buyoutPriceAt(state, 9, 3)).toBe(880_000);
+    expect(buyoutPriceAt(state, 9, 0)).toBe(280_000);
+    expect(buyoutPriceAt(state, 9, 4)).toBeNull();
+    expect(buyoutPriceAt(state, 5, 0)).toBeNull();
+    expect(buyoutPriceAt(newGame(), 9, 4)).toBe(2 * 580_000);
   });
   it("charges the reference rents and adds each modifier, capped at ten", () => {
     let state = reference();

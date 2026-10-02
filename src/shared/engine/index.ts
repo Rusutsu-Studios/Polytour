@@ -11,6 +11,7 @@ export {
   applyTimeout,
   botAction,
   botDecisionAt,
+  buyoutPriceAt,
   championshipCost,
   createGame,
   DEFAULT_GAME_CONFIG,

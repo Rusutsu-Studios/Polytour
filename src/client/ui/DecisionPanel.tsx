@@ -6,6 +6,7 @@ import type { BuildLevel } from "../../shared/board/types.js";
 import {
   type Action,
   actionCost,
+  buyoutPriceAt,
   economyRule,
   getProperty,
   legalActions,
@@ -893,6 +894,23 @@ export default function DecisionPanel({
                     <dd>{money(rent)}</dd>
                   </div>
                 )}
+              {construction && decisionTile !== undefined && !bankruptcy && (
+                <div className="ledger-buyout">
+                  <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
+                  <dd>
+                    {(() => {
+                      const price = buyoutPriceAt(
+                        state,
+                        decisionTile,
+                        selectedLevel,
+                      );
+                      return price === null
+                        ? t("Protégé", "Protected")
+                        : money(price);
+                    })()}
+                  </dd>
+                </div>
+              )}
               {projectedCash !== null && !bankruptcy && (
                 <div
                   className="ledger-balance"
