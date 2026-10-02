@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DECISION_TIMING } from "../../shared/board/index.js";
 import {
   type AnimationContext,
   director,
@@ -45,8 +46,8 @@ export default function CardMoment() {
             ? document.activeElement
             : null;
         needsFocus.current = false;
-        // Catch up when several bot events arrive; never pause the server clock.
-        const readingMs = context.speed >= 3 ? 850 : 2600;
+        // The engine reserves this reading time before the next decision.
+        const readingMs = DECISION_TIMING.cardAnimation / context.speed;
         return new Promise<void>((done) => {
           resolve = done;
           setMoment({ event, context, readingMs });

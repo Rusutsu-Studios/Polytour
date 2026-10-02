@@ -51,15 +51,21 @@ flowchart LR
   soon as an event arrives, `viewState` when its animation finishes.
 - Scene handlers are `async (event, ctx) => void` and resolve within their shared
   `shared/board/timing.ts` budgets. The server includes those motion budgets in
-  decision deadlines. The current DOM card-reading hold is a bounded prototype
-  exception: up to two additional seconds come from the existing choice window,
-  without pausing or extending the server clock. Continue/skip can end it early.
-- **Speed:** a Director `speed` (1×, 1.5×, 2×) is applied to GSAP's global timeline
+  decision deadlines, including the chance card's reading hold, so a decision
+  clock never runs during an animation. Continue/skip can end the card early.
+- **Bot pacing:** a bot acts only after the events that opened its decision have
+  played at 1×, plus a short pause (`BOT_TIMING`: 0.7 s before a roll, 1.4 s
+  before a choice). The engine's `botDecisionAt` derives that moment from the
+  decision deadline, so the Durable Object never computes it, and a bot's turn
+  reads like a player's instead of a burst of events.
+- **Speed:** a Director `speed` (1× by default, 1.5×, 2×) is applied to GSAP's global timeline
   (`gsap.globalTimeline.timeScale(speed)`) **and** to DOM animation: Motion has no
   global clock, so HUD transitions and money counters read `speed` from the Director
   store and divide their durations by it. Otherwise the HUD lags behind the scene at 2×.
-- **Catch-up:** if the queue holds more than ~6 events (reconnect, tab was hidden),
-  play at 3× and skip camera moves; if > 30, snap straight to `serverState`.
+- **Catch-up:** one server action arrives as one batch and always plays at the
+  chosen speed, however many events it holds. Only a view two or more batches
+  behind the server plays at 2.5×; beyond 40 queued events, or when the tab was
+  hidden, it snaps straight to `serverState`.
 - **Tab hidden:** `document.visibilitychange` → snap on return, don't queue minutes of animation.
 - **Decision UI** appears only when the Director has drained the events that led to
   the decision — so the purchase panel never appears before the pawn lands.
@@ -92,7 +98,10 @@ Anything longer gets boring by round 10.
 ## Current construction feedback
 
 The procedural prototype uses an owner-coloured ring and eight pooled geometric
-sparks for purchase, upgrade and buyout events (0.45 seconds at 1×). The Director
+sparks for purchase, upgrade and buyout events (1.1 seconds at 1×, after the
+0.65 s cash flight). New houses, hotels and landmarks rise out of their plot one
+after another with an overshoot; during that rise the instanced town draws the
+next state for that one tile, and every other tile stays on `viewState`. The Director
 owns the GSAP timeline; skip, reset and reduced motion cancel it and hide its
 effects. A generation guard prevents a cancelled older handler from hiding a
 newly started construction effect. Building bases, cornices and entrances are
@@ -102,21 +111,28 @@ the signature-moment table above.
 
 ## Current dice feedback
 
-The dice take the roller's color and leave from the roller's side of the board,
-spinning to the server's values on the lawn's chalk circle. A small scoreboard
-then pops up with their total (gold for a double). The throw and the reveal fit
-the shared 1 s dice budget; reduced motion and skip snap straight to the result.
+The dice take the roller's color, shake briefly on the roller's side of the
+board, then fly high across the lawn, tumbling, and bounce to the server's values
+on the chalk circle. A small scoreboard then pops up with their total (gold for a
+double) and holds long enough to read before the pawn sets off. The shake, throw
+and reveal fit the shared 1.7 s dice budget. Pawns hop one tile per 0.3 s and
+bounce on the last; travel and card moves leap in 0.9 s. Reduced motion and skip
+snap straight to the result.
 
 ## Current illustrated moments
 
-Purchase, development and buyout dialogs use original isometric previews,
-selectable stages and a comparison slider. They preserve the authoritative
-decision deadline and submit only the confirmed legal action. Native dialogs
-protect keyboard focus; Escape minimizes a choice without spending money.
+Purchase, development and buyout dialogs use original isometric previews and
+selectable stages, without explanatory sentences: the title, city, price, rent
+and remaining cash say it. Every level up to the hotel is a card; a level this
+player cannot take yet (the staged hotel, or one they cannot afford) stays
+visible, greyed out with a padlock, and its reason is on hover. The dialogs
+preserve the authoritative decision deadline and submit only the confirmed legal
+action. Native dialogs protect keyboard focus; Escape minimizes a choice without
+spending money.
 
 The Director now has a separate DOM presenter alongside its scene animator.
-`CardDrawn` waits for a bounded illustrated reading moment (2.6 seconds, or
-850 ms when catching up) before the subsequent effects play. Continue and Escape
+`CardDrawn` waits for a bounded illustrated reading moment (the 3.2 s card
+budget, divided by the playback speed) before the subsequent effects play. Continue and Escape
 resolve that moment; skip, snapshot replacement and reconnect cancel it. This
 reading hold uses the existing decision clock and does not extend a server
 deadline. Reduced motion keeps a static card and its instructions. Card art and

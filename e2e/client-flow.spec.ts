@@ -291,9 +291,6 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: /^Terrain · 60 k/ }),
   ).toContainText("Loyer 24 k");
-  await expect(page.locator(".construction-guide")).toContainText(
-    "Prix tout compris",
-  );
   const popupBounds = await page
     .locator(".decision-popup")
     .evaluate((popup) => {
@@ -348,13 +345,20 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
       pending: { ...snapshot.pending, maxLevel: 4 },
     });
   });
-  await expect(page.locator(".construction-choice")).toHaveCount(4);
-  await expect(page.locator(".hotel-note")).toContainText(
-    "3 maisons, un tour complet, puis revenir ici",
+  // The hotel stays visible but locked; its rule is on hover, not in a note.
+  await expect(page.locator(".construction-choice")).toHaveCount(5);
+  const lockedHotel = page
+    .locator(".decision-actions")
+    .getByRole("button", { name: /^Hôtel/ });
+  await expect(lockedHotel).toBeDisabled();
+  await expect(lockedHotel).toHaveAttribute("data-locked", "true");
+  await expect(lockedHotel).toHaveAttribute(
+    "title",
+    /3 maisons, un tour complet, puis revenir ici/,
   );
   await expect(
-    page.locator(".decision-actions").getByRole("button", { name: /^Hôtel/ }),
-  ).toHaveCount(0);
+    page.locator(".construction-choice[data-locked='true']"),
+  ).toHaveCount(1);
   await page.screenshot({
     path: ".local/verification/desktop-staged-purchase.png",
   });
@@ -388,8 +392,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   });
   await expect(
     page.locator(".decision-actions").getByRole("button", { name: /^Hôtel/ }),
-  ).toHaveCount(1);
-  await expect(page.locator(".hotel-note")).toHaveCount(0);
+  ).toBeEnabled();
+  await expect(
+    page.locator(".construction-choice[data-locked='true']"),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /^Hôtel · 1,5 M/ }),
   ).toContainText("Loyer 1,12 M");
@@ -607,7 +613,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   ).toBeFocused();
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
-  await expect(page.locator(".match-connection")).toContainText("En ligne");
+  // A healthy connection is silent; only its state attribute shows it.
+  await expect(page.locator(".match-connection")).toHaveAttribute(
+    "data-state",
+    "online",
+  );
+  await expect(page.locator(".match-connection")).toHaveText("");
   await expect(
     page.getByRole("button", { name: "Quitter la partie", exact: true }),
   ).toBeVisible();
@@ -986,7 +997,12 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
-  await expect(page.locator(".match-connection")).toContainText("En ligne");
+  // A healthy connection is silent; only its state attribute shows it.
+  await expect(page.locator(".match-connection")).toHaveAttribute(
+    "data-state",
+    "online",
+  );
+  await expect(page.locator(".match-connection")).toHaveText("");
   expect(errors).toEqual([]);
 });
 

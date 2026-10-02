@@ -342,7 +342,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 12px 3px var(--hud-inset);
+  padding: 10px 12px 10px var(--hud-inset);
   font-size: 30px;
   font-weight: 900;
   line-height: 1;
@@ -351,7 +351,7 @@
 }
 .player-card[data-seat="2"] .player-cash,
 .player-card[data-seat="3"] .player-cash {
-  padding: 9px var(--hud-inset) 3px 12px;
+  padding: 10px var(--hud-inset) 10px 12px;
 }
 .coin-symbol {
   display: grid;
@@ -363,42 +363,6 @@
   background: #ffe08a;
   box-shadow: 0 2px 0 #b98823;
   font-size: 10px;
-}
-.player-card-body p {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 12px 8px var(--hud-inset);
-  font-size: 11px;
-  color: #5d7169;
-  line-height: 1.3;
-}
-.player-card[data-seat="2"] .player-card-body p,
-.player-card[data-seat="3"] .player-card-body p {
-  padding: 2px var(--hud-inset) 8px 12px;
-}
-.active-marker {
-  position: absolute;
-  z-index: 3;
-  left: 70px;
-  top: -13px;
-  color: #fffaf0;
-  background: var(--hud-dark);
-  font-size: 11px;
-  font-weight: 800;
-  border-radius: 999px;
-  padding: 3px 10px;
-  box-shadow: 0 2px 0 #173b4522;
-}
-.player-card[data-seat="1"] .active-marker,
-.player-card[data-seat="2"] .active-marker {
-  top: auto;
-  bottom: -13px;
-}
-.player-card[data-seat="2"] .active-marker,
-.player-card[data-seat="3"] .active-marker {
-  left: auto;
-  right: 70px;
 }
 .player-held-cards {
   position: absolute;
@@ -507,12 +471,8 @@
 .game-shell .decision-panel[data-kind="buyout"][data-busy="false"] h2 {
   display: none;
 }
-.game-shell
-  .decision-panel[data-kind="buy"][data-busy="false"]
-  > p:not(.construction-guide),
-.game-shell
-  .decision-panel[data-kind="build"][data-busy="false"]
-  > p:not(.construction-guide) {
+.game-shell .decision-panel[data-kind="buy"][data-busy="false"] > p,
+.game-shell .decision-panel[data-kind="build"][data-busy="false"] > p {
   display: none;
 }
 .game-shell .last-dice {
@@ -891,22 +851,6 @@
   font-weight: 500;
   max-width: 100%;
   text-align: center;
-}
-.game-shell .decision-panel > .construction-guide {
-  display: grid;
-  gap: 4px;
-  font-size: 14px;
-  line-height: 1.4;
-  margin-top: 11px;
-  color: #47666c;
-}
-.hotel-note {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.hotel-note svg {
-  flex-shrink: 0;
 }
 .building-miniature {
   position: relative;
@@ -2238,9 +2182,6 @@ input::placeholder {
   .player-cash {
     font-size: 31px;
   }
-  .player-card-body p {
-    font-size: 12px;
-  }
   .player-card .player-avatar {
     width: 92px;
     height: 100px;
@@ -2280,23 +2221,12 @@ input::placeholder {
   }
   .player-cash {
     font-size: 24px;
-    padding-top: 7px;
-  }
-  .player-card-body p {
-    font-size: 10px;
-    padding-bottom: 6px;
+    padding-block: 7px;
   }
   .player-card .player-avatar {
     width: 64px;
     height: 72px;
     border-width: 3px;
-  }
-  .active-marker {
-    left: 56px;
-  }
-  .player-card[data-seat="2"] .active-marker,
-  .player-card[data-seat="3"] .active-marker {
-    right: 56px;
   }
   .player-card[data-seat="0"],
   .player-card[data-seat="1"] {
@@ -2346,10 +2276,6 @@ input::placeholder {
   }
   .game-shell .construction-cost {
     font-size: 18px;
-  }
-  .game-shell .decision-panel > .construction-guide {
-    font-size: 14px;
-    margin-top: 9px;
   }
   .game-shell .match-end-panel {
     padding: 19px 22px;
@@ -2460,15 +2386,6 @@ input::placeholder {
   }
   .player-cash {
     font-size: 24px;
-  }
-  .player-card-body p {
-    font-size: 9px;
-  }
-  .active-marker,
-  .player-card[data-seat="2"] .active-marker,
-  .player-card[data-seat="3"] .active-marker {
-    left: 12px;
-    right: auto;
   }
   .contextual-action {
     width: min(580px, calc(100vw - 410px));
@@ -2582,9 +2499,6 @@ input::placeholder {
   .player-card[data-seat="0"],
   .player-card[data-seat="3"] {
     bottom: 12px;
-  }
-  .player-card-body p > span:last-child {
-    display: none;
   }
   .player-name-row > span {
     font-size: 9px;

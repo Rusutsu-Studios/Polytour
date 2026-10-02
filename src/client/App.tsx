@@ -902,27 +902,33 @@ function MatchView({
       <header className="match-topbar">
         <Logo small />
         <div className="match-time">
-          <span>{t(`Manche ${game.round}`, `Round ${game.round}`)}</span>
+          {game.config.roundLimit < 10_000 && (
+            <span>
+              {t(
+                `Manche ${game.round}/${game.config.roundLimit}`,
+                `Round ${game.round}/${game.config.roundLimit}`,
+              )}
+            </span>
+          )}
           <MatchClock
             deadline={game.matchDeadline}
             finished={game.status === "finished"}
           />
         </div>
+        {/* Only a problem is worth reading: a healthy connection stays silent. */}
         <span
           className="match-connection"
           role="status"
-          title={
-            room.connection === "online"
-              ? t("Connecté à votre salle", "Connected to your room")
-              : t("Reconnexion à la salle", "Reconnecting to the room")
-          }
+          data-state={room.connection}
         >
-          <span className="connection-dot" data-state={room.connection} />
-          {room.connection === "online"
-            ? t("En ligne", "Online")
-            : room.connection === "offline"
-              ? t("Hors ligne", "Offline")
-              : t("Reconnexion…", "Reconnecting…")}
+          {room.connection !== "online" && (
+            <>
+              <span className="connection-dot" data-state={room.connection} />
+              {room.connection === "offline"
+                ? t("Hors ligne", "Offline")
+                : t("Reconnexion…", "Reconnecting…")}
+            </>
+          )}
         </span>
       </header>
 
@@ -1054,51 +1060,34 @@ function MatchView({
               <div className="player-card-body">
                 <div className="player-name-row">
                   <strong>{player.name}</strong>
-                  <span>
-                    {player.seat === credentials.seat
-                      ? t("Vous", "You")
-                      : player.control === "bot"
-                        ? "Bot"
-                        : presence?.online
-                          ? t("En ligne", "Online")
-                          : t("Absent", "Away")}
-                  </span>
+                  {(player.seat === credentials.seat ||
+                    player.bankrupt ||
+                    player.control === "bot" ||
+                    !presence?.online) && (
+                    <span>
+                      {player.seat === credentials.seat
+                        ? t("Vous", "You")
+                        : player.bankrupt
+                          ? t("Faillite", "Bankrupt")
+                          : player.control === "bot"
+                            ? "Bot"
+                            : t("Absent", "Away")}
+                    </span>
+                  )}
                 </div>
-                <div className="player-cash">
+                <div
+                  className="player-cash"
+                  title={t(
+                    `Fortune ${money(netWorth(game, player.seat))} · ${player.properties.length} propriété${player.properties.length > 1 ? "s" : ""}`,
+                    `Net worth ${money(netWorth(game, player.seat))} · ${player.properties.length} ${player.properties.length === 1 ? "property" : "properties"}`,
+                  )}
+                >
                   <span className="coin-symbol" aria-hidden="true">
                     ●
                   </span>
                   <MoneyCounter value={player.cash} />
                 </div>
-                <p>
-                  <span>
-                    {player.bankrupt
-                      ? t("Faillite", "Bankrupt")
-                      : t(
-                          `${player.properties.length} ville${player.properties.length > 1 ? "s" : ""}`,
-                          `${player.properties.length} ${player.properties.length === 1 ? "city" : "cities"}`,
-                        )}
-                  </span>
-                  <span
-                    title={t(
-                      "Argent et valeur des propriétés",
-                      "Cash and property value",
-                    )}
-                  >
-                    {t(
-                      `Fortune ${money(netWorth(game, player.seat))}`,
-                      `Net worth ${money(netWorth(game, player.seat))}`,
-                    )}
-                  </span>
-                </p>
               </div>
-              {active && (
-                <span className="active-marker">
-                  {player.seat === credentials.seat
-                    ? t("Votre décision", "Your turn")
-                    : t("À son tour", "Their turn")}
-                </span>
-              )}
               {player.heldCards.length > 0 && (
                 <span
                   className="player-held-cards"
@@ -1350,13 +1339,7 @@ function MatchView({
       </AnimatePresence>
 
       <div className="match-caption">
-        <span>
-          {latestAction ??
-            t(
-              "La partie commence. Lancez les dés.",
-              "Game started. Roll the dice.",
-            )}
-        </span>
+        <span>{latestAction}</span>
         <button
           type="button"
           className="text-button"

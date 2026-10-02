@@ -22,18 +22,25 @@ type DirectorState = {
   history: readonly GameEvent[];
 };
 
+/** Server batches the view may trail before it plays faster to catch up. */
+const CATCH_UP_BATCHES = 2;
+const CATCH_UP_SPEED = 2.5;
+/** Beyond this backlog, snap to the server state instead of replaying it. */
+const SKIP_BACKLOG = 40;
+
 class Director {
   private value: DirectorState = {
     serverState: null,
     viewState: null,
     busy: false,
-    speed: 1.5,
+    speed: 1,
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
       .matches,
     history: [],
   };
   private listeners = new Set<() => void>();
-  private queue: GameEvent[] = [];
+  private queue: { event: GameEvent; batch: number }[] = [];
+  private batch = 0;
   private generation = 0;
   private animator: SceneAnimator | null = null;
   private presenter: SceneAnimator | null = null;
@@ -89,15 +96,20 @@ class Director {
       serverState: state,
       history: [...this.value.history, ...events].slice(-250),
     });
-    this.queue.push(...events);
-    if (this.queue.length > 30 || document.hidden) this.skip();
+    this.batch += 1;
+    for (const event of events) this.queue.push({ event, batch: this.batch });
+    if (this.queue.length > SKIP_BACKLOG || document.hidden) this.skip();
     else if (!this.value.busy) void this.drain(this.generation);
   }
   private async drain(generation: number) {
     this.update({ busy: true });
     while (this.queue.length && generation === this.generation) {
-      const event = this.queue.shift();
-      if (!event) break;
+      const entry = this.queue.shift();
+      if (!entry) break;
+      const { event } = entry;
+      // One server action arrives as one batch and plays at the chosen
+      // speed. Only a view several actions behind the server speeds up.
+      const behind = this.batch - entry.batch;
       const previous = this.value.viewState;
       const next =
         event.type === "GameCreated"
@@ -110,7 +122,10 @@ class Director {
         const context = {
           previous,
           next,
-          speed: this.queue.length > 6 ? 3 : this.value.speed,
+          speed:
+            behind >= CATCH_UP_BATCHES
+              ? Math.max(CATCH_UP_SPEED, this.value.speed)
+              : this.value.speed,
           reducedMotion: this.value.reducedMotion,
         };
         await Promise.all([
