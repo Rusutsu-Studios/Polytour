@@ -1,6 +1,14 @@
 import { AnimatePresence, animate, motion } from "motion/react";
 import type { CSSProperties, ErrorInfo, ReactNode } from "react";
-import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BOARD } from "../shared/board/index.js";
 import type {
   GameEvent,
@@ -34,6 +42,11 @@ import {
   tileName,
   tilePrice,
 } from "./ui/board-display.js";
+import {
+  boardPickActions,
+  boardPickKey,
+  isBoardPick,
+} from "./ui/board-pick.js";
 import CardMoment from "./ui/CardMoment.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
@@ -808,6 +821,30 @@ function MatchView({
   const ownPlayer = game.players.find(
     (player) => player.seat === credentials.seat,
   );
+  // Travel, festival and card choices are answered by clicking the board.
+  const decisionState = serverState ?? game;
+  const picking =
+    !busy &&
+    (room.randomness === null || room.randomness.status === "resolved") &&
+    decisionState.status === "active" &&
+    decisionState.pending?.seat === credentials.seat &&
+    !ownPlayer?.bankrupt &&
+    isBoardPick(decisionState);
+  const pickTargets = useMemo(
+    () =>
+      picking
+        ? boardPickActions(decisionState, credentials.seat).map(
+            (action) => action.tile,
+          )
+        : null,
+    [picking, decisionState, credentials.seat],
+  );
+  const pickKey = boardPickKey(decisionState);
+  const [pick, setPick] = useState<{ key: string; tile: number } | null>(null);
+  const picked =
+    pickTargets && pick?.key === pickKey && pickTargets.includes(pick.tile)
+      ? pick.tile
+      : null;
   const diceToolLabel =
     config.randomnessMode === "drand"
       ? t("Dés et preuve", "Dice and proof")
@@ -843,6 +880,14 @@ function MatchView({
     setInspectorOpen(true);
     setTool(null);
   }
+  function choosePick(tile: number) {
+    if (pickTargets?.includes(tile)) setPick({ key: pickKey, tile });
+  }
+  function selectOnBoard(tile: number) {
+    // While choosing, other spaces are inert so a misclick never opens a panel.
+    if (pickTargets) choosePick(tile);
+    else inspectTile(tile);
+  }
   useEffect(() => {
     if (!tool && !inspectorOpen) return;
     const frame = requestAnimationFrame(() => {
@@ -877,7 +922,7 @@ function MatchView({
     <>
       <div className="board-stage">
         <SceneBoundary
-          fallback={<BoardFallback state={game} onSelect={inspectTile} />}
+          fallback={<BoardFallback state={game} onSelect={selectOnBoard} />}
         >
           <Suspense
             fallback={
@@ -889,8 +934,9 @@ function MatchView({
           >
             <BoardScene
               state={game}
-              selected={selected}
-              onSelect={inspectTile}
+              selected={pickTargets ? picked : selected}
+              onSelect={selectOnBoard}
+              targets={pickTargets}
               zoom={zoom}
             />
           </Suspense>
@@ -1148,6 +1194,8 @@ function MatchView({
               randomness={room.randomness}
               selected={selected}
               onSelect={onSelect}
+              picked={picked}
+              onPick={choosePick}
             />
           </motion.div>
         )}

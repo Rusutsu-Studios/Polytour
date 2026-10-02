@@ -24,6 +24,7 @@ export {
   propertyRent,
   rentCardPayment,
   toPublic,
+  worldTourTargets,
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";
 export * from "./types.js";

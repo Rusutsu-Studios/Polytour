@@ -33,7 +33,10 @@ describe("createGame", () => {
       result: null,
       startedAt: 100,
       matchDeadline: 7_200_100,
-      config: { hotelPurchaseRule: "staged-hotels" },
+      config: {
+        hotelPurchaseRule: "staged-hotels",
+        worldTourRule: "own-free-or-start",
+      },
     });
     expect(state.pending).toEqual({
       kind: "roll",
@@ -91,6 +94,33 @@ describe("createGame", () => {
       { now: 0 },
     );
     expect(legacy.state.config.hotelPurchaseRule).toBe("legacy-lap");
+  });
+  it("freezes the restricted World Tour rule for new games and keeps an explicit legacy marker", () => {
+    const game = createGame(
+      { ...DEFAULT_GAME_CONFIG, worldTourRule: undefined },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(toPublic(game.state).config.worldTourRule).toBe("own-free-or-start");
+    const legacy = createGame(
+      { ...DEFAULT_GAME_CONFIG, worldTourRule: "legacy-any" },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(legacy.state.config.worldTourRule).toBe("legacy-any");
+    expect(() =>
+      createGame(
+        {
+          ...DEFAULT_GAME_CONFIG,
+          worldTourRule: "anywhere" as "legacy-any",
+        },
+        SEATS,
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("World Tour rule");
   });
   it("validates identities, counts, integer money, positive deadlines and supported festivals", () => {
     expect(() =>

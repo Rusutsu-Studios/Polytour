@@ -19,6 +19,8 @@ export type GameConfig = {
   readonly hotelsDirectly?: boolean;
   /** Missing on existing saves: preserve the original lap-only hotel rule. */
   readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";
+  /** Missing on existing saves: preserve the original travel-anywhere rule. */
+  readonly worldTourRule?: "own-free-or-start" | "legacy-any";
   readonly extraRollOnDouble?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;

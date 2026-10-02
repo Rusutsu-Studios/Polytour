@@ -51,6 +51,7 @@ export const DEFAULT_GAME_CONFIG = {
   tripleMonopoly: true,
   hotelsDirectly: false,
   hotelPurchaseRule: "staged-hotels",
+  worldTourRule: "own-free-or-start",
   extraRollOnDouble: true,
   botCanBuild: true,
   giftCanBankrupt: true,
@@ -175,6 +176,21 @@ export function maxBuildLevel(
   )
     return 3;
   return getPlayer(state, seat).laps > 0 ? 4 : 3;
+}
+/** World Tour destinations: the player's own or unowned properties, and Start.
+ * Saves without the marker keep their original travel-anywhere rule. */
+export function worldTourTargets(state: PublicState, seat: Seat): number[] {
+  const position = getPlayer(state, seat).position;
+  return BOARD.filter((tile) => {
+    if (tile.index === position) return false;
+    if (state.config.worldTourRule !== "own-free-or-start") return true;
+    if (tile.kind === "start") return true;
+    const property = getProperty(state, tile.index);
+    return (
+      property !== undefined &&
+      (property.owner === null || property.owner === seat)
+    );
+  }).map((tile) => tile.index);
 }
 export function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
@@ -530,9 +546,7 @@ function resolver(initial: GameState, context: EngineContext) {
         kind: "travel",
         seat: player.seat,
         fee: ECONOMY.worldTourFee,
-        targets: BOARD.filter((tile) => tile.index !== player.position).map(
-          (tile) => tile.index,
-        ),
+        targets: worldTourTargets(state, player.seat),
       });
     else open({ kind: "roll", seat: player.seat });
   };
@@ -1426,6 +1440,11 @@ export function createGame(
     !["staged-hotels", "legacy-lap"].includes(config.hotelPurchaseRule)
   )
     throw new RangeError("Unsupported hotel purchase rule");
+  if (
+    config.worldTourRule !== undefined &&
+    !["own-free-or-start", "legacy-any"].includes(config.worldTourRule)
+  )
+    throw new RangeError("Unsupported World Tour rule");
   if (!Number.isFinite(context.now))
     throw new RangeError("Game time must be finite");
   if (
@@ -1468,6 +1487,7 @@ export function createGame(
     config: {
       ...config,
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
+      worldTourRule: config.worldTourRule ?? "own-free-or-start",
     },
     players,
     properties: BOARD.filter(

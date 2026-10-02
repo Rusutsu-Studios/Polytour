@@ -10,7 +10,7 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
-import { applyEvent } from "../src/shared/engine/index.js";
+import { applyEvent, worldTourTargets } from "../src/shared/engine/index.js";
 import type {
   RoomCredentials,
   ServerMessage,
@@ -1057,10 +1057,11 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on staged hotel rules version 3", async () => {
+  it("freezes new rooms on staged hotel and restricted World Tour rules version 4", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
+    expect(game.state.config.worldTourRule).toBe("own-free-or-start");
     const rules = await runInDurableObject(
       stub,
       (_instance, durableState) =>
@@ -1068,16 +1069,21 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("3");
+    expect(rules).toBe("4");
   });
 
-  it("rejects client-supplied internal hotel rule markers at room creation", async () => {
-    for (const hotelPurchaseRule of ["staged-hotels", "legacy-lap"]) {
+  it("rejects client-supplied internal rule markers at room creation", async () => {
+    for (const config of [
+      { hotelPurchaseRule: "staged-hotels" },
+      { hotelPurchaseRule: "legacy-lap" },
+      { worldTourRule: "own-free-or-start" },
+      { worldTourRule: "legacy-any" },
+    ]) {
       const response = await exports.default.fetch(
         new Request(`${origin}/api/rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Origin: origin },
-          body: JSON.stringify({ name: "Alex", config: { hotelPurchaseRule } }),
+          body: JSON.stringify({ name: "Alex", config }),
         }),
       );
       expect(response.status).toBe(400);
@@ -1092,7 +1098,11 @@ describe("Authoritative private rooms", () => {
         .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
         .toArray()[0];
       const saved = JSON.parse(row.json) as GameState;
-      const { hotelPurchaseRule: _marker, ...oldConfig } = saved.config;
+      const {
+        hotelPurchaseRule: _marker,
+        worldTourRule: _travelMarker,
+        ...oldConfig
+      } = saved.config;
       durableState.storage.sql.exec(
         "UPDATE meta SET v='2' WHERE k='rulesVersion'",
       );
@@ -1171,6 +1181,9 @@ describe("Authoritative private rooms", () => {
     expect(
       created?.type === "GameCreated" && created.state.config.hotelPurchaseRule,
     ).toBe("legacy-lap");
+    expect(
+      created?.type === "GameCreated" && created.state.config.worldTourRule,
+    ).toBe("legacy-any");
     const rules = await runInDurableObject(
       stub,
       (_instance, durableState) =>
@@ -1184,8 +1197,8 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 999]) {
-      // Version 2 cannot use this new match's frozen staged marker; 999 is unknown.
+    for (const rulesVersion of [2, 3, 999]) {
+      // Versions 2 and 3 cannot use this match's frozen markers; 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -1203,9 +1216,64 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
+        "UPDATE meta SET v='4' WHERE k='rulesVersion'",
+      ),
+    );
+  });
+
+  it("keeps travel-anywhere World Tours for version-3 lobbies and saves", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
         "UPDATE meta SET v='3' WHERE k='rulesVersion'",
       ),
     );
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    inbox.send({
+      type: "lobby",
+      id: "version-3-lobby-start",
+      op: { type: "start", fillBots: true },
+    });
+    const events = await inbox.next("events");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    expect(
+      created?.type === "GameCreated" && created.state.config,
+    ).toMatchObject({
+      hotelPurchaseRule: "staged-hotels",
+      worldTourRule: "legacy-any",
+    });
+    await closeInbox(inbox);
+    // A version-3 save written before this rule existed has no travel marker.
+    const seat = await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      const { worldTourRule: _marker, ...oldConfig } = saved.config;
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({ ...saved, config: oldConfig }),
+      );
+      return saved.activeSeat;
+    });
+    await evictDurableObject(stub);
+    const response = await exports.default.fetch(
+      new Request(`${origin}/api/rooms/${host.roomCode}`),
+    );
+    expect(response.status).toBe(200);
+    const persisted = await runInDurableObject(
+      stub,
+      (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        return JSON.parse(row.json) as GameState;
+      },
+    );
+    expect(persisted.config).not.toHaveProperty("worldTourRule");
+    expect(worldTourTargets(persisted, seat)).toHaveLength(31);
   });
 
   it.each(["stateVersion", "rulesVersion"])(

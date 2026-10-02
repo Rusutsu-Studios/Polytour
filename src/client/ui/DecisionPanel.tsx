@@ -24,8 +24,16 @@ import {
   money,
   PLAYER_COLORS,
   PLAYER_SYMBOLS,
+  TILE_ICONS,
+  tileColor,
   tileName,
+  tilePrice,
 } from "./board-display.js";
+import {
+  type BoardPickAction,
+  boardPickActions,
+  isBoardPick,
+} from "./board-pick.js";
 import { cardName } from "./chance-display.js";
 import Icon from "./Icon.js";
 import "./DecisionPanel.css";
@@ -38,6 +46,9 @@ export type DecisionPanelProps = {
   randomness: RandomnessStatus | null;
   selected: number | null;
   onSelect: (tile: number) => void;
+  /** The space clicked on the board for a travel, festival or card choice. */
+  picked: number | null;
+  onPick: (tile: number) => void;
 };
 type ConstructionAction = Extract<Action, { type: "Buy" | "Build" }>;
 type DestinationAction = Extract<Action, { tile: number }>;
@@ -79,16 +90,16 @@ const COPY = {
     "Roll doubles to leave, or pay the fare.",
   ],
   travel: [
-    "Choisissez votre destination",
-    "Sélectionnez une case sur le plateau.",
-    "Choose a destination",
-    "Select a space on the board.",
+    "Grand voyage",
+    "Cliquez une case en surbrillance : vos villes, une case libre ou le départ.",
+    "World tour",
+    "Click a highlighted space: your cities, an unowned space or Start.",
   ],
   host: [
     "Accueillir un festival",
-    "Choisissez la ville qui accueillera le festival.",
+    "Cliquez l’une de vos villes en surbrillance sur le plateau.",
     "Host a festival",
-    "Choose the city that will host the festival.",
+    "Click one of your highlighted cities on the board.",
   ],
   "card-target": [
     "Choisir une ville",
@@ -165,6 +176,74 @@ function actionLabel(action: Action, state: PublicState): string {
             )
           : t("Passer", "Pass");
   }
+}
+function pickConfirmLabel(action: BoardPickAction, state: PublicState): string {
+  switch (action.type) {
+    case "Travel":
+      return t(
+        `Voyager à ${tileName(action.tile)} · ${money(actionCost(state, action))}`,
+        `Travel to ${tileName(action.tile)} · ${money(actionCost(state, action))}`,
+      );
+    case "ChooseHost":
+      return t(
+        `Festival à ${tileName(action.tile)}`,
+        `Festival in ${tileName(action.tile)}`,
+      );
+    case "ChooseTarget":
+      return actionLabel(action, state);
+  }
+}
+/** One line describing what the clicked space means for this decision. */
+function pickDetail(action: BoardPickAction, state: PublicState): string {
+  const tile = action.tile;
+  const property = getProperty(state, tile);
+  const owner =
+    property?.owner != null
+      ? state.players.find((player) => player.seat === property.owner)
+      : undefined;
+  const resort = BOARD[tile].kind === "resort";
+  if (action.type === "ChooseHost") {
+    const multiplier =
+      state.championshipHost?.tile === tile
+        ? Math.min(5, state.championshipHost.multiplier + 1)
+        : 2;
+    const hosted = propertyRent(
+      { ...state, championshipHost: { tile, multiplier } },
+      tile,
+    );
+    return t(
+      `Loyer ${money(propertyRent(state, tile))} → ${money(hosted)} · ×${multiplier}`,
+      `Rent ${money(propertyRent(state, tile))} → ${money(hosted)} · ×${multiplier}`,
+    );
+  }
+  if (action.type === "ChooseTarget")
+    return owner
+      ? `${owner.name} · ${levelName(property?.level ?? 0)}`
+      : levelName(property?.level ?? 0);
+  if (BOARD[tile].kind === "start")
+    return t(
+      `Salaire de ${money(state.config.startSalary)} à l’arrivée`,
+      `Collect ${money(state.config.startSalary)} on arrival`,
+    );
+  if (owner)
+    return resort
+      ? t(
+          `Votre station · loyer ${money(propertyRent(state, tile))}`,
+          `Your resort · rent ${money(propertyRent(state, tile))}`,
+        )
+      : t(
+          `Votre ville · ${levelName(property?.level ?? 0)} · construire`,
+          `Your city · ${levelName(property?.level ?? 0)} · build`,
+        );
+  return resort
+    ? t(
+        `Station libre · ${money(tilePrice(tile) ?? 0)}`,
+        `Unowned resort · ${money(tilePrice(tile) ?? 0)}`,
+      )
+    : t(
+        `Ville libre · terrain ${money(tilePrice(tile) ?? 0)}`,
+        `Unowned city · land ${money(tilePrice(tile) ?? 0)}`,
+      );
 }
 function confirmLabel(action: Action, state: PublicState): string {
   switch (action.type) {
@@ -407,6 +486,8 @@ export default function DecisionPanel({
   randomness,
   selected,
   onSelect,
+  picked,
+  onPick,
 }: DecisionPanelProps) {
   const { t } = useLocale();
   const { busy, reducedMotion, speed } = useDirector();
@@ -436,6 +517,9 @@ export default function DecisionPanel({
     (action): action is DestinationAction => "tile" in action,
   );
   const freeRoll = actions.find((action) => action.type === "Roll");
+  const boardPick = ownTurn && isBoardPick(state);
+  const pickActions = boardPick ? boardPickActions(state, seat) : [];
+  const pickedAction = pickActions.find((action) => action.tile === picked);
   const destinationChoice =
     destinations.find((action) => action.tile === selected) ?? destinations[0];
   const choices = constructions.length
@@ -527,6 +611,7 @@ export default function DecisionPanel({
     ownTurn &&
       pending &&
       pending.kind !== "roll" &&
+      !boardPick &&
       !busy &&
       !rngBusy &&
       dismissed !== decisionKey,
@@ -633,6 +718,158 @@ export default function DecisionPanel({
       )}
     </div>
   );
+
+  if (boardPick && pending && !busy && !rngBusy) {
+    const travel = pending.kind === "travel";
+    const pickLabel = travel
+      ? t("Destination", "Destination")
+      : pending.kind === "host"
+        ? t("Ville du festival", "Festival city")
+        : t("Ville ciblée", "Target city");
+    const hint =
+      travel && pickActions.length === 0
+        ? t(
+            `Il faut ${money(pending.fee)} pour voyager. Lancez les dés pour continuer.`,
+            `Travel costs ${money(pending.fee)}. Roll the dice to continue.`,
+          )
+        : pending.kind === "card-target"
+          ? `${copy[1]} ${t("Cliquez-la sur le plateau.", "Click it on the board.")}`
+          : copy[1];
+    return (
+      <motion.section
+        className="decision-panel decision-compact decision-pick"
+        data-kind={pending.kind}
+        data-own="true"
+        data-busy="false"
+        data-picked={Boolean(pickedAction)}
+        aria-labelledby="decision-heading"
+        aria-describedby="decision-description"
+        initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reducedMotion ? 0 : 0.22 / speed }}
+      >
+        <div className="pick-head">
+          <span
+            className="player-symbol"
+            style={{ color: PLAYER_COLORS[decisionSeat] }}
+            aria-hidden="true"
+          >
+            {PLAYER_SYMBOLS[decisionSeat]}
+          </span>
+          <h2 id="decision-heading">
+            {pending.kind === "card-target" ? cardName(pending.card) : copy[0]}
+          </h2>
+          {pickActions.length > 0 && (
+            <select
+              className="pick-list"
+              aria-label={pickLabel}
+              value={pickedAction?.tile ?? ""}
+              disabled={blocked}
+              onChange={(event) => {
+                if (event.target.value !== "")
+                  onPick(Number(event.target.value));
+              }}
+            >
+              <option value="" disabled>
+                {t(
+                  `Liste des cases (${pickActions.length})`,
+                  `List of spaces (${pickActions.length})`,
+                )}
+              </option>
+              {pickActions.map((action) => (
+                <option key={actionKey(action)} value={action.tile}>
+                  {tileName(action.tile)}
+                </option>
+              ))}
+            </select>
+          )}
+          <span
+            className="decision-timer"
+            role="timer"
+            aria-label={t(
+              `${countdown} secondes restantes`,
+              `${countdown} seconds remaining`,
+            )}
+          >
+            {countdown}s
+          </span>
+        </div>
+        <div className="pick-body">
+          <div className="pick-summary" data-empty={!pickedAction}>
+            {pickedAction ? (
+              <>
+                <span
+                  className="pick-chip"
+                  style={{ backgroundColor: tileColor(pickedAction.tile) }}
+                  aria-hidden="true"
+                >
+                  {TILE_ICONS[BOARD[pickedAction.tile].kind]}
+                </span>
+                <span className="pick-name">
+                  <strong>{tileName(pickedAction.tile)}</strong>
+                  <small>{pickDetail(pickedAction, state)}</small>
+                </span>
+                {travel && active && (
+                  <span className="ledger-balance pick-balance">
+                    {t("Il vous restera", "You keep")}
+                    <b>
+                      {money(active.cash - actionCost(state, pickedAction))}
+                    </b>
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="pick-empty">
+                <Icon name="pin" size={19} />
+                <span id="decision-description">{hint}</span>
+              </span>
+            )}
+          </div>
+          <div className="pick-actions">
+            {freeRoll && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={blocked}
+                onClick={() => act(freeRoll)}
+              >
+                <Icon name="dice" size={18} />
+                {t("Lancer les dés", "Roll the dice")}
+              </button>
+            )}
+            {decline && (
+              <button
+                type="button"
+                className="button quiet"
+                disabled={blocked}
+                onClick={() => act(decline)}
+              >
+                {actionLabel(decline, state)}
+              </button>
+            )}
+            {pickedAction && (
+              <button
+                type="button"
+                className="button primary decision-confirm"
+                disabled={blocked}
+                onClick={() => act(pickedAction)}
+              >
+                {blocked
+                  ? t("Veuillez patienter…", "Please wait…")
+                  : pickConfirmLabel(pickedAction, state)}
+                <Icon name="arrow" size={20} />
+              </button>
+            )}
+          </div>
+        </div>
+        {pickedAction && (
+          <p id="decision-description" className="sr-only">
+            {hint}
+          </p>
+        )}
+      </motion.section>
+    );
+  }
 
   if (!modalOpen)
     return (

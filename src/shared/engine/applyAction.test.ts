@@ -27,6 +27,7 @@ import {
   propertyRent,
   rentCardPayment,
   toPublic,
+  worldTourTargets,
 } from "./index.js";
 
 const SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
@@ -405,6 +406,46 @@ describe("dice, Island, laps and World Tour", () => {
     expect(travelled.pending?.kind).toBe("buy");
     const finished = act(travelled, { type: "Decline" }).state;
     expect(finished.activeSeat).not.toBe(seat);
+  });
+  it("World Tour reaches only the traveller's own or unowned properties and Start", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    const rival = other(state);
+    state = grant(grant(grant(state, 1, seat, 2), 2, rival), 5, rival);
+    let next = land(state, 24).state;
+    while (next.pending?.seat !== seat)
+      next = act(
+        next,
+        next.pending?.kind === "roll" ? { type: "Roll" } : { type: "Decline" },
+        [3, 4],
+      ).state;
+    expect(next.pending).toMatchObject({ kind: "travel", seat });
+    const targets = next.pending?.kind === "travel" ? next.pending.targets : [];
+    // Chance, Island, Festival, tax, World Tour and the rival's spaces are excluded.
+    expect(targets).toEqual([
+      0, 1, 4, 6, 7, 9, 10, 11, 12, 13, 15, 17, 18, 20, 21, 22, 23, 25, 26, 27,
+      28, 30, 31,
+    ]);
+    expect(legalActions(next, seat)).not.toContainEqual({
+      type: "Travel",
+      tile: 2,
+    });
+    for (const tile of [2, 3, 8, 16])
+      expect(
+        applyAction(next, seat, { type: "Travel", tile }, { now: 1 }).ok,
+      ).toBe(false);
+    const home = act(next, { type: "Travel", tile: 0 }).state;
+    expect(getPlayer(home, seat)).toMatchObject({
+      position: 0,
+      laps: 1,
+      cash: 2_350_000,
+      travelPending: false,
+    });
+    // A save without the marker keeps its original travel-anywhere rule.
+    const { worldTourRule: _marker, ...legacyConfig } = next.config;
+    expect(
+      worldTourTargets({ ...toPublic(next), config: legacyConfig }, seat),
+    ).toHaveLength(31);
   });
 });
 describe("forced sales and bankruptcy", () => {
