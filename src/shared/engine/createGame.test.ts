@@ -33,7 +33,7 @@ describe("createGame", () => {
       result: null,
       startedAt: 100,
       matchDeadline: 7_200_100,
-      config: { hotelPurchaseRule: "staged-hotels" },
+      config: { hotelPurchaseRule: "staged-hotels", economyRule: "reference" },
     });
     expect(state.pending).toEqual({
       kind: "roll",

@@ -1,5 +1,9 @@
 import { BOARD, ECONOMY, getTileLandPrice } from "../../shared/board/index.js";
-import type { Seat } from "../../shared/engine/index.js";
+import {
+  economyRule,
+  type PublicState,
+  type Seat,
+} from "../../shared/engine/index.js";
 import { getLocale, translate } from "../i18n.js";
 
 export const PLAYER_COLORS = [
@@ -37,7 +41,7 @@ export const TILE_NAMES = [
   "Milan",
   "Surprise",
   "Berlin",
-  "Festival",
+  "Championnat",
   "Prague",
   "Vienne",
   "Surprise",
@@ -79,7 +83,7 @@ const ENGLISH_TILE_NAMES = [
   "Milan",
   "Chance",
   "Berlin",
-  "Festival",
+  "Championship",
   "Prague",
   "Vienna",
   "Chance",
@@ -130,10 +134,17 @@ export function tileColor(index: number) {
         ? "#e7b24c"
         : "#78bda7";
 }
-export function tilePrice(index: number) {
+/** Land price under the match's frozen rules; new rooms use the reference grid. */
+export function tilePrice(
+  index: number,
+  state: Pick<PublicState, "config"> | null = null,
+) {
   const tile = BOARD[index];
   return tile.kind === "city"
-    ? getTileLandPrice(tile.index)
+    ? getTileLandPrice(
+        tile.index,
+        state ? economyRule(state.config) : "reference",
+      )
     : tile.kind === "resort"
       ? ECONOMY.resortPrice
       : null;

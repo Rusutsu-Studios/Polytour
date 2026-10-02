@@ -13,6 +13,7 @@ import {
   CHANCE_CARDS,
   createGame,
   DEFAULT_GAME_CONFIG,
+  economyRule,
   getProperty,
   getTileBaseRent,
   legalActions,
@@ -160,7 +161,8 @@ export function simulateGame(
         if (property?.level === 5) landmarkRent += event.amount;
         else if (
           property?.level === 4 &&
-          propertyRent(replay, event.tile) > getTileBaseRent(event.tile, 4)
+          propertyRent(replay, event.tile) >
+            getTileBaseRent(event.tile, 4, economyRule(replay.config))
         )
           modifiedHotelRent += event.amount;
       }

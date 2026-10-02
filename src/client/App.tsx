@@ -1,7 +1,7 @@
 import { AnimatePresence, animate, motion } from "motion/react";
 import type { CSSProperties, ErrorInfo, ReactNode } from "react";
 import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
-import { BOARD, ECONOMY } from "../shared/board/index.js";
+import { BOARD, ECONOMY, ruleEconomy } from "../shared/board/index.js";
 import type {
   GameEvent,
   PlayerState,
@@ -9,7 +9,12 @@ import type {
   Seat,
   WinKind,
 } from "../shared/engine/index.js";
-import { getProperty, netWorth, propertyRent } from "../shared/engine/index.js";
+import {
+  economyRule,
+  getProperty,
+  netWorth,
+  propertyRent,
+} from "../shared/engine/index.js";
 import type {
   LobbyState,
   RandomnessStatus,
@@ -367,8 +372,8 @@ function BoardFallback({
           <b>
             {state && getProperty(state, tile.index)?.owner != null
               ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
-              : tilePrice(tile.index) != null
-                ? money(tilePrice(tile.index) ?? 0)
+              : tilePrice(tile.index, state) != null
+                ? money(tilePrice(tile.index, state) ?? 0)
                 : TILE_ICONS[tile.kind]}
           </b>
         </button>
@@ -438,8 +443,8 @@ function eventText(event: GameEvent, state: PublicState): string | null {
     case "ChampionshipChanged":
       return event.host
         ? t(
-            `Festival à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
-            `Festival in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
+            `Championnat à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
+            `Championship in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
           )
         : null;
     case "MoneyTransferred":
@@ -477,6 +482,10 @@ function TileInspector({
       ? state.players.find((player) => player.seat === property.owner)
       : null;
   const rent = property ? propertyRent(state, index) : null;
+  const rules = ruleEconomy(economyRule(state.config));
+  const host =
+    state.championshipHost?.tile === index ? state.championshipHost : null;
+  const festival = state.festivalTiles.includes(index);
   return (
     <section className="inspector" aria-labelledby="inspector-title">
       <div className="inspector-head">
@@ -525,7 +534,7 @@ function TileInspector({
           <dl className="property-numbers">
             <div>
               <dt>{t("Terrain", "Land")}</dt>
-              <dd>{money(tilePrice(index) ?? 0)}</dd>
+              <dd>{money(tilePrice(index, state) ?? 0)}</dd>
             </div>
             <div>
               <dt>
@@ -536,13 +545,17 @@ function TileInspector({
               <dd>{money(rent ?? 0)}</dd>
             </div>
           </dl>
-          {(state.championshipHost?.tile === index ||
-            state.festivalTiles.includes(index)) && (
+          {festival && (
             <p className="festival-badge">
-              {t("★ Festival · loyer ×", "★ Festival · rent ×")}
-              {state.championshipHost?.tile === index
-                ? state.championshipHost.multiplier
-                : 2}
+              {t("Festival · loyer ×2", "Festival · rent ×2")}
+            </p>
+          )}
+          {host && (
+            <p className="festival-badge">
+              {t(
+                `★ Championnat · loyer ×${host.multiplier}`,
+                `★ Championship · rent ×${host.multiplier}`,
+              )}
             </p>
           )}
         </>
@@ -555,28 +568,43 @@ function TileInspector({
               )
             : tile.kind === "island"
               ? t(
-                  "Un double ou le paiement de la traversée vous permet de repartir.",
-                  "Roll doubles or pay the fare to leave.",
+                  `Un double ou ${money(rules.islandReleaseFee)} vous permettent de repartir ; sinon vous êtes libéré après ${rules.islandMaxFailedEscapes} tentatives.`,
+                  `Roll doubles or pay ${money(rules.islandReleaseFee)} to leave; otherwise you are released after ${rules.islandMaxFailedEscapes} attempts.`,
                 )
               : tile.kind === "championship"
-                ? t(
-                    "Installez un festival dans l’une de vos villes pour multiplier ses loyers.",
-                    "Host a festival in one of your cities to multiply its rent.",
-                  )
-                : tile.kind === "world-tour"
+                ? rules.championshipFee > 0
                   ? t(
-                      "Au prochain tour, choisissez une destination plutôt que de lancer les dés.",
-                      "On your next turn, choose a destination instead of rolling.",
+                      `Organisez le championnat dans une de vos villes : ${money(rules.championshipFee)} pour le déplacer, gratuit pour le renouveler. Chaque édition ajoute ×1 au loyer, jusqu’à ×${rules.maxHostMultiplier}.`,
+                      `Host the championship in one of your cities: ${money(rules.championshipFee)} to move it, free to renew it. Each edition adds ×1 to the rent, up to ×${rules.maxHostMultiplier}.`,
                     )
+                  : t(
+                      "Installez le championnat dans l’une de vos villes pour multiplier ses loyers.",
+                      "Host the championship in one of your cities to multiply its rent.",
+                    )
+                : tile.kind === "world-tour"
+                  ? rules.travelToFreeProperties
+                    ? t(
+                        `Au prochain tour, payez ${money(ECONOMY.worldTourFee)} pour rejoindre une propriété libre plutôt que de lancer les dés.`,
+                        `On your next turn, pay ${money(ECONOMY.worldTourFee)} to fly to an unowned property instead of rolling.`,
+                      )
+                    : t(
+                        "Au prochain tour, choisissez une destination plutôt que de lancer les dés.",
+                        "On your next turn, choose a destination instead of rolling.",
+                      )
                   : tile.kind === "chance"
                     ? t(
                         "Piochez une carte. Fortune, voyage ou surprise au programme.",
                         "Draw a card and follow its instructions.",
                       )
-                    : t(
-                        `Payez ${ECONOMY.taxPercent} % de la valeur de vos terrains et bâtiments, pas de votre argent liquide (minimum ${money(ECONOMY.minimumTax)}).`,
-                        `Pay ${ECONOMY.taxPercent}% of the value of your land and buildings, not of your cash (minimum ${money(ECONOMY.minimumTax)}).`,
-                      )}
+                    : rules.minimumTax > 0
+                      ? t(
+                          `Payez ${ECONOMY.taxPercent} % de la valeur de vos terrains et bâtiments, pas de votre argent liquide (minimum ${money(rules.minimumTax)}).`,
+                          `Pay ${ECONOMY.taxPercent}% of the value of your land and buildings, not of your cash (minimum ${money(rules.minimumTax)}).`,
+                        )
+                      : t(
+                          `Payez ${ECONOMY.taxPercent} % de la valeur de vos terrains et bâtiments, pas de votre argent liquide.`,
+                          `Pay ${ECONOMY.taxPercent}% of the value of your land and buildings, not of your cash.`,
+                        )}
         </p>
       )}
     </section>
@@ -789,8 +817,8 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
           <b>{t("Achetez et construisez", "Buy and build")}</b>
           <span>
             {t(
-              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes et les festivals l’augmentent.",
-              "Choose land or a building. Other players pay rent when they land there; complete city groups and festivals increase the rent.",
+              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes, les festivals et le championnat l’augmentent.",
+              "Choose land or a building. Other players pay rent when they land there; complete city groups, festivals and the championship increase the rent.",
             )}
           </span>
         </li>

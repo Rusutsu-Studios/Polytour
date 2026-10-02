@@ -33,9 +33,9 @@ short tests, independently of the real-time limit.
 
 This is a rules prototype. Paid items, luck stats, paid rerolls, or an
 outcome-biased power gauge will not be reproduced. Initial festivals are selected
-from city tiles using the private shuffle, carry a visible ×2 rent modifier, and
-are separate from the corner's championship host. Their full reference behavior
-is still a balance comparison item.
+with the private shuffle, carry a visible ×2 rent modifier, and are separate from
+the corner's championship host. New rooms draw them among cities and resorts; see
+the adopted rules below.
 
 The user wants inexpensive French cities near Start and a worldwide progression
 ending at Osaka and Tokyo. These are game prices, not claims about real-world
@@ -48,10 +48,10 @@ than copying the inconsistent 22-city list from the pasted conversation.
 | Tokyo | 400 k | 200 k | 500 k | 1.5 M |
 | Any of the four resorts | 200 k | Not available | Not available | 200 k |
 
-Those captured endpoint costs are implemented directly in the tile economy.
-Intermediate cities and rent tables are provisional, not verified reference
-values. A sixth Landmark level remains an original Polytour mechanic from the
-repository rules; it is not claimed to be shown in the supplied editor captures.
+Those captured endpoint costs are implemented directly in both tile economies.
+New rooms use the reference rent table and three-house totals compared below; a
+few totals and the hotel costs remain interpolated. The sixth Landmark level is
+an original Polytour mechanic that only saved prototype rooms keep.
 
 ## Hotel progression and source checks — 1 October 2026
 
@@ -100,7 +100,7 @@ read as data, not as instructions. None of them is a complete official rulebook.
 
 ### Rules
 
-| Topic | Reference (evidence) | Polytour now |
+| Topic | Reference (evidence) | Prototype rooms (rules versions 2–3) |
 | --- | --- | --- |
 | Tax | 10 % of the value of all owned property (Mail.ru, Steam beginner guide). Cash is not taxed, and it is not a fixed amount per property: 700 k of property costs 70 k even with 1 k in cash. No minimum is mentioned | 10 % of invested value (land plus buildings), cash excluded, **minimum 50 k**. The engine already follows the reference principle. The tile help said "based on net worth", which suggested cash counted; it was corrected on 2 October 2026 |
 | Buyout | After paying rent, pay the owner twice what they invested (2022, 2023 guides). Cities only: hotels and resorts are protected | 2 × invested value after rent. A **Hotel can be bought out**; only the extra Landmark level is protected |
@@ -122,7 +122,7 @@ The reference rent pattern: bare land earns very little (2–50 k). House I earn
 (20/60/100/140/280 %). Amounts are in thousands. "3 houses" means the land plus
 three houses. A blank reference cell is still unknown.
 
-| Rank | Polytour tile | 3 houses | Rent L/1/2/3/H | Reference city | 3 houses | Rent L/1/2/3/H |
+| Rank | Polytour tile | Prototype 3 houses | Prototype rent L/1/2/3/H | Reference city | 3 houses | Rent L/1/2/3/H |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 1 | 210 | 12/36/60/84/168 | Granada | 210 | 2/25/50/75/150 |
 | 2 | 2 | 220 | 14/42/70/98/196 | Seville | 210 | 2/28/55/83/165 |
@@ -160,24 +160,50 @@ Findings:
 - The split between land and house cost is still unknown between the two
   captured endpoints. The sale dialog suggests a 240 k bare plot for the 13th city.
 
-### Possible parity changes (not applied)
+### Adopted in rules version 4 — 2 October 2026
 
-Each change below needs a new `rulesVersion`, engine tests and a `pnpm sim` run.
-Rooms already saved must keep their frozen rules.
+The user approved every proposed change, with one exception: Earthquake can still
+damage a Hotel. New rooms freeze `rulesVersion: 4` with
+`economyRule: "reference"`; rooms saved under versions 2–3 keep the prototype
+economy. Room settings cannot choose the marker.
 
-1. Protect the Hotel from buyout and Earthquake. Remove Landmark from a
-   reference preset; this also settles the Landmark balance question in
-   GAME_DESIGN.md.
-2. Use the reference rent table and the reference three-house totals. Keep the
-   unknown land/house split provisional.
-3. Make multipliers add up (+1 per effect, ×10 cap) instead of taking the largest.
-4. Championship: 50 k to move it, optional, a global counter that never resets,
-   ×10 cap. Rename the corner in the UI so it no longer shares "Festival" with
-   the starting festivals.
-5. Resorts: 25/50/100 k, and allow a festival on a resort.
-6. Selling to the bank refunds 100 % of the invested value.
-7. Island 200 k with three turns; World Tour limited to unowned cities.
-8. Tax: drop the 50 k minimum, which no source mentions.
+1. **Hotel.** A Hotel cannot be bought out or taken by Land Swap. Earthquake can
+   still remove one of its levels. There is no Landmark. The staged construction
+   and its completed-lap condition are unchanged.
+2. **Grid.** The reference values are laid side by side, so each side of the board
+   keeps its price tier. The table below names the reference city each tile takes:
+   the first side drops Madrid, and tile 27 interpolates between Paris and Osaka.
+   A house costs 50/100/150/200 k on sides 1–4, which matches the three captured
+   splits (first city, Sydney's bare plot at 240 k, Tokyo). Hotel costs are
+   interpolated: 150/250/375/500 k by side. The Hong Kong, London, Las Vegas and
+   Paris totals are interpolated (230, 650, 720 and 920 k).
+3. **Modifiers.** A full country, a festival and the championship each add their
+   bonus (×2 adds ×1), capped at ×10.
+4. **Championship.** The corner is named Championship (Championnat), apart from the
+   starting festivals. Hosting is optional: renewing the current host is free and
+   moving it costs 50 k. Every hosting adds ×1 up to ×10. Interpretation: the
+   championship stays on its tile through buyouts, swaps, sales and bankruptcies,
+   so its multiplier never restarts. A timed-out choice renews a host the player
+   owns, otherwise passes.
+5. **Resorts.** 25/50/100 k per resort, and festivals can fall on resorts.
+6. **Sales** refund 100 % of the invested value.
+7. **Island** release costs 200 k; the third failed escape releases the player.
+   **World Tour** reaches unowned cities and resorts, or the player's own
+   properties when none is free.
+8. **Tax** has no minimum.
+
+| Polytour tiles | Reference cities |
+| --- | --- |
+| 1, 2 · 4, 6, 7 | Granada, Seville · Hong Kong, Beijing, Shanghai |
+| 9, 10, 11 · 13, 15 | Venice, Milan, Rome · Hamburg, Berlin |
+| 17, 18, 20 · 22, 23 | London, Sydney, Chicago · Las Vegas, New York |
+| 25, 26, 27 · 30, 31 | Lyon, Paris, interpolated · Osaka, Tokyo |
+
+Simulations with 1,000 four-bot matches (`tools/sim/reference.json`) keep every
+invariant. With a 60-round cap, matches last a median of 44 rounds (prototype:
+42). Monopolies still decide most matches. Bankruptcies are rarer (9.6 % against
+15 %) because sales refund the full investment. The last player in turn order
+wins 20.7 % of matches instead of 15.3 %.
 
 ## Capture from the running reference before adding an exact preset
 
@@ -186,10 +212,10 @@ Rooms already saved must keep their frozen rules.
 | Lobby | Every available starting capital and duration value | User preset and 20m/1h/2h choices confirmed; full slider ranges partially captured |
 | Modes | Individual/teams, seat count, bot options, map choices | Four individual seats implemented; remaining modes deferred |
 | Start | Crossing vs exact landing payout, per-lap unlocks | Salary 400 k user confirmed; exact landing behavior remains Polytour |
-| Board | All 32 positions, purchase prices, country groups | France to Tokyo progression; reference order and three-house totals compared 2 Oct 2026, land/house split pending |
-| Buildings | Every level's incremental price and rent | First-city/Tokyo costs captured; community rent table compared 2 Oct 2026, not adopted |
-| Buyout | Cost formula, protection, payout recipient | 2× to the owner matches; reference protects hotels, Polytour only Landmarks |
-| Specials | Island, travel, championship, resorts, tax | Compared 2 Oct 2026; tax principle matches, other gaps listed above |
+| Board | All 32 positions, purchase prices, country groups | France to Tokyo progression; reference grid laid side by side in rules version 4; land/house split partly interpolated |
+| Buildings | Every level's incremental price and rent | Reference rent table adopted in rules version 4; hotel costs interpolated |
+| Buyout | Cost formula, protection, payout recipient | 2× to the owner; Hotels protected in rules version 4 |
+| Specials | Island, travel, championship, resorts, tax | Reference values adopted in rules version 4 (see above) |
 | Cards | Deck contents, targeting, held cards | Original 16-card deck; reference comparison pending |
 | End conditions | Monopolies, bankruptcy, duration tie-breaks | User monopoly switches plus last standing/resorts and real-time/round limits |
 

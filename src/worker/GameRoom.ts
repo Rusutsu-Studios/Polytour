@@ -139,7 +139,7 @@ export class GameRoom extends DurableObject<Env> {
     if (
       (row || this.readMeta("room") !== null) &&
       (this.readMeta<number>("stateVersion") !== 1 ||
-        (rulesVersion !== 2 && rulesVersion !== 3))
+        (rulesVersion !== 2 && rulesVersion !== 3 && rulesVersion !== 4))
     ) {
       throw new Error(
         "Unsupported saved match version; this room cannot use different rules silently",
@@ -148,14 +148,19 @@ export class GameRoom extends DurableObject<Env> {
     if (!row) return null;
     const state = JSON.parse(row.json) as GameState;
     const hotelRule = state.config.hotelPurchaseRule;
+    const economy = state.config.economyRule;
+    const prototypeEconomy = economy === undefined || economy === "prototype";
     if (
-      (rulesVersion === 3 && hotelRule !== "staged-hotels") ||
+      (rulesVersion === 4 &&
+        (hotelRule !== "staged-hotels" || economy !== "reference")) ||
+      (rulesVersion === 3 &&
+        (hotelRule !== "staged-hotels" || !prototypeEconomy)) ||
       (rulesVersion === 2 &&
-        hotelRule !== undefined &&
-        hotelRule !== "legacy-lap")
+        ((hotelRule !== undefined && hotelRule !== "legacy-lap") ||
+          !prototypeEconomy))
     ) {
       throw new Error(
-        "Saved match hotel rule does not match its frozen rules version",
+        "Saved match rules do not match its frozen rules version",
       );
     }
     return { seq: row.seq, state };
@@ -184,7 +189,9 @@ export class GameRoom extends DurableObject<Env> {
         createdAt: Date.now(),
       } satisfies RoomMeta);
       this.writeMeta("stateVersion", 1);
-      this.writeMeta("rulesVersion", 3);
+      // 4: reference economy and staged hotels; 3: prototype economy, staged
+      // hotels; 2: prototype economy, lap-only hotels.
+      this.writeMeta("rulesVersion", 4);
       this.ctx.storage.sql.exec(
         "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
         name,
@@ -597,14 +604,13 @@ export class GameRoom extends DurableObject<Env> {
     });
     const seed = crypto.getRandomValues(new Uint32Array(1))[0];
     const startedAt = Date.now();
+    const rulesVersion = this.readMeta<number>("rulesVersion");
     const result = createGame(
       {
         ...room.config,
         gameId: room.roomCode,
-        hotelPurchaseRule:
-          this.readMeta<number>("rulesVersion") === 2
-            ? "legacy-lap"
-            : "staged-hotels",
+        hotelPurchaseRule: rulesVersion === 2 ? "legacy-lap" : "staged-hotels",
+        economyRule: rulesVersion === 4 ? "reference" : "prototype",
       },
       allSeats,
       seed,

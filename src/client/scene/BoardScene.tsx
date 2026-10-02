@@ -255,7 +255,7 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
             amount={
               owner != null && state
                 ? propertyRent(state, tile.index)
-                : tilePrice(tile.index)
+                : tilePrice(tile.index, state)
             }
             onSelect={onSelect}
             preview={preview}

@@ -1,8 +1,9 @@
-import { CHANCE_AMOUNTS } from "../../shared/board/index.js";
-import type {
-  ChanceCard,
-  GameEvent,
-  PublicState,
+import { CHANCE_AMOUNTS, ruleEconomy } from "../../shared/board/index.js";
+import {
+  type ChanceCard,
+  economyRule,
+  type GameEvent,
+  type PublicState,
 } from "../../shared/engine/index.js";
 import { translate as t } from "../i18n.js";
 import { money } from "./board-display.js";
@@ -11,7 +12,7 @@ export const CARD_NAMES: Record<ChanceCard, string> = {
   "Grand Tour": "Grand tour",
   Stranded: "Naufrage",
   "Jet Set": "Jet-set",
-  "Stadium Call": "À vous le festival",
+  "Stadium Call": "Direction le championnat",
   Windfall: "Bonne fortune",
   "Parking Fine": "Stationnement",
   Birthday: "Anniversaire",
@@ -29,7 +30,7 @@ const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   "Grand Tour": "Grand Tour",
   Stranded: "Stranded",
   "Jet Set": "Jet Set",
-  "Stadium Call": "Festival invitation",
+  "Stadium Call": "Championship call",
   Windfall: "Windfall",
   "Parking Fine": "Parking fine",
   Birthday: "Birthday",
@@ -65,6 +66,9 @@ export function describeCard(
     art: "fortune" as const,
     tone: "gain" as const,
   };
+  const rules = ruleEconomy(economyRule(state.config));
+  // Landmarks guard prototype rooms; Hotels guard reference rooms from transfers.
+  const reference = rules.topLevel === 4;
   switch (event.card) {
     case "Grand Tour":
       return {
@@ -104,11 +108,16 @@ export function describeCard(
         ...base,
         art: "city",
         tone: "travel",
-        badge: t("Direction le festival", "Go to the Festival"),
-        text: t(
-          `Rejoignez le Festival. Une ville éligible, hors monuments, peut l’accueillir : son loyer sera multiplié jusqu’à ×${CHANCE_AMOUNTS.maxHostMultiplier}.`,
-          `Move to the Festival. An eligible city without a landmark can host it, multiplying its rent up to ×${CHANCE_AMOUNTS.maxHostMultiplier}.`,
-        ),
+        badge: t("Direction le championnat", "Go to the Championship"),
+        text: reference
+          ? t(
+              `Rejoignez le Championnat. Organisez-le dans une de vos villes : ${money(rules.championshipFee)} pour le déplacer, gratuit pour le renouveler. Chaque édition ajoute ×1 au loyer, jusqu’à ×${rules.maxHostMultiplier}.`,
+              `Move to the Championship. Host it in one of your cities: ${money(rules.championshipFee)} to move it, free to renew it. Each edition adds ×1 to the rent, up to ×${rules.maxHostMultiplier}.`,
+            )
+          : t(
+              `Rejoignez le Championnat. Une ville éligible, hors monuments, peut l’accueillir : son loyer sera multiplié jusqu’à ×${rules.maxHostMultiplier}.`,
+              `Move to the Championship. An eligible city without a landmark can host it, multiplying its rent up to ×${rules.maxHostMultiplier}.`,
+            ),
       };
     case "Windfall":
       return {
@@ -194,10 +203,15 @@ export function describeCard(
         art: "city",
         tone: "cost",
         badge: t("Un bâtiment en moins", "Remove one building level"),
-        text: t(
-          "Si une ville adverse est éligible, choisissez-la pour retirer un niveau de construction. Les monuments sont protégés.",
-          "Choose an eligible opponent’s city to remove one building level. Landmarks are protected.",
-        ),
+        text: reference
+          ? t(
+              "Choisissez une ville adverse construite pour lui retirer un niveau, hôtels compris.",
+              "Choose an opponent’s built city to remove one building level, Hotels included.",
+            )
+          : t(
+              "Si une ville adverse est éligible, choisissez-la pour retirer un niveau de construction. Les monuments sont protégés.",
+              "Choose an eligible opponent’s city to remove one building level. Landmarks are protected.",
+            ),
       };
     case "Land Swap":
       return {
@@ -205,10 +219,15 @@ export function describeCard(
         art: "city",
         tone: "travel",
         badge: t("Échange de propriétés", "Swap properties"),
-        text: t(
-          "Votre ville éligible la moins chère peut être échangée contre une ville adverse de prix égal ou inférieur, hors monuments.",
-          "Swap your cheapest eligible city for an opponent’s city of equal or lower land price. Landmarks are excluded.",
-        ),
+        text: reference
+          ? t(
+              "Votre ville éligible la moins chère peut être échangée contre une ville adverse de prix égal ou inférieur, hors hôtels.",
+              "Swap your cheapest eligible city for an opponent’s city of equal or lower land price. Hotels are excluded.",
+            )
+          : t(
+              "Votre ville éligible la moins chère peut être échangée contre une ville adverse de prix égal ou inférieur, hors monuments.",
+              "Swap your cheapest eligible city for an opponent’s city of equal or lower land price. Landmarks are excluded.",
+            ),
       };
     case "Detour":
       return {

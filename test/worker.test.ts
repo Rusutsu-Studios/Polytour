@@ -1293,10 +1293,11 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on staged hotel rules version 3", async () => {
+  it("freezes new rooms on the reference rules version 4", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
+    expect(game.state.config.economyRule).toBe("reference");
     const rules = await runInDurableObject(
       stub,
       (_instance, durableState) =>
@@ -1304,20 +1305,105 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("3");
+    expect(rules).toBe("4");
   });
 
-  it("rejects client-supplied internal hotel rule markers at room creation", async () => {
-    for (const hotelPurchaseRule of ["staged-hotels", "legacy-lap"]) {
+  it("rejects client-supplied internal rule markers at room creation", async () => {
+    for (const config of [
+      { hotelPurchaseRule: "staged-hotels" },
+      { hotelPurchaseRule: "legacy-lap" },
+      { economyRule: "reference" },
+      { economyRule: "prototype" },
+    ]) {
       const response = await exports.default.fetch(
         new Request(`${origin}/api/rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Origin: origin },
-          body: JSON.stringify({ name: "Alex", config: { hotelPurchaseRule } }),
+          body: JSON.stringify({ name: "Alex", config }),
         }),
       );
       expect(response.status).toBe(400);
     }
+  });
+
+  it("loads an existing version-3 active save without a marker on the prototype economy", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      const { economyRule: _marker, ...oldConfig } = saved.config;
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='3' WHERE k='rulesVersion'",
+      );
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          config: oldConfig,
+          players: saved.players.map((player) =>
+            player.seat === saved.activeSeat
+              ? { ...player, position: 4 }
+              : player,
+          ),
+          pending: {
+            kind: "buy",
+            seat: saved.activeSeat,
+            tile: 4,
+            maxLevel: 3,
+            deadline: Date.now() + 30_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
+      );
+    });
+    await evictDurableObject(stub);
+    const resumed = await connect(game.credentials[game.state.activeSeat]);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.snapshot?.config).not.toHaveProperty("economyRule");
+    resumed.send({
+      type: "intent",
+      id: "prototype-land-purchase",
+      atSeq: welcome.seq,
+      action: { type: "Buy", level: 0 },
+    });
+    const events = await resumed.next("events");
+    // Prototype land on tile 4 costs 90 k; the reference grid charges 80 k.
+    expect(events.events).toContainEqual(
+      expect.objectContaining({
+        type: "PropertyBought",
+        tile: 4,
+        level: 0,
+        amount: 90_000,
+      }),
+    );
+  });
+
+  it("starts preexisting version-3 lobbies with the prototype economy", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='3' WHERE k='rulesVersion'",
+      ),
+    );
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    inbox.send({
+      type: "lobby",
+      id: "prototype-lobby-start",
+      op: { type: "start", fillBots: true },
+    });
+    const events = await inbox.next("events");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    expect(
+      created?.type === "GameCreated" ? created.state.config : null,
+    ).toMatchObject({
+      hotelPurchaseRule: "staged-hotels",
+      economyRule: "prototype",
+    });
   });
 
   it("loads an existing version-2 active save without changing its legal Hotel purchase", async () => {
@@ -1328,7 +1414,12 @@ describe("Authoritative private rooms", () => {
         .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
         .toArray()[0];
       const saved = JSON.parse(row.json) as GameState;
-      const { hotelPurchaseRule: _marker, ...oldConfig } = saved.config;
+      // A real version-2 save predates both rule markers.
+      const {
+        hotelPurchaseRule: _marker,
+        economyRule: _economy,
+        ...oldConfig
+      } = saved.config;
       durableState.storage.sql.exec(
         "UPDATE meta SET v='2' WHERE k='rulesVersion'",
       );
@@ -1405,8 +1496,11 @@ describe("Authoritative private rooms", () => {
     const events = await inbox.next("events");
     const created = events.events.find((event) => event.type === "GameCreated");
     expect(
-      created?.type === "GameCreated" && created.state.config.hotelPurchaseRule,
-    ).toBe("legacy-lap");
+      created?.type === "GameCreated" ? created.state.config : null,
+    ).toMatchObject({
+      hotelPurchaseRule: "legacy-lap",
+      economyRule: "prototype",
+    });
     const rules = await runInDurableObject(
       stub,
       (_instance, durableState) =>
@@ -1420,8 +1514,8 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 999]) {
-      // Version 2 cannot use this new match's frozen staged marker; 999 is unknown.
+    for (const rulesVersion of [2, 3, 999]) {
+      // Versions 2 and 3 cannot use this new match's reference markers; 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -1439,7 +1533,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='3' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='4' WHERE k='rulesVersion'",
       ),
     );
   });
@@ -1522,7 +1616,7 @@ describe("Authoritative private rooms", () => {
         await runInDurableObject(stub, (_instance, durableState) =>
           durableState.storage.sql.exec(
             "UPDATE meta SET v=? WHERE k=?",
-            versionKey === "stateVersion" ? "1" : "3",
+            versionKey === "stateVersion" ? "1" : "4",
             versionKey,
           ),
         );
