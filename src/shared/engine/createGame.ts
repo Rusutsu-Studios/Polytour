@@ -93,7 +93,8 @@ export function netWorth(state: PublicState, seat: Seat | PlayerState): number {
     )
   );
 }
-function resortCount(state: PublicState, seat: Seat): number {
+/** How many resorts a seat owns; a resort's rent grows with the owner's count. */
+export function resortCount(state: PublicState, seat: Seat): number {
   return state.properties.filter(
     (property) =>
       property.owner === seat && getTile(property.tile)?.kind === "resort",
@@ -121,18 +122,79 @@ export function propertyRent(state: PublicState, tileIndex: number): number {
   if (!tile || !isCityTile(tile) || !property) return 0;
   const rent = getTileBaseRent(tileIndex, property.level);
   if (property.level === 5) return rent;
-  const country =
-    property.owner !== null && ownsCountry(state, property.owner, tile.country)
-      ? CHANCE_AMOUNTS.countryMultiplier
-      : 1;
-  const host =
-    state.championshipHost?.tile === tileIndex
-      ? state.championshipHost.multiplier
-      : 1;
-  const festival = state.festivalTiles.includes(tileIndex)
-    ? CHANCE_AMOUNTS.initialHostMultiplier
-    : 1;
-  return rent * Math.max(country, host, festival);
+  return rent * (rentBoost(state, tileIndex)?.multiplier ?? 1);
+}
+export type RentBoost = {
+  readonly multiplier: number;
+  readonly source: "championship" | "festival" | "country";
+};
+/**
+ * The bonus multiplying a city's rent below the landmark: the hosted
+ * championship, an initial festival or a complete country. Bonuses never
+ * stack; the largest applies. Resorts and other spaces earn none.
+ */
+export function rentBoost(
+  state: PublicState,
+  tileIndex: number,
+): RentBoost | null {
+  const tile = getTile(tileIndex);
+  const property = getProperty(state, tileIndex);
+  if (!tile || !isCityTile(tile) || !property) return null;
+  const boosts: RentBoost[] = [];
+  if (state.championshipHost?.tile === tileIndex)
+    boosts.push({
+      multiplier: state.championshipHost.multiplier,
+      source: "championship",
+    });
+  if (state.festivalTiles.includes(tileIndex))
+    boosts.push({
+      multiplier: CHANCE_AMOUNTS.initialHostMultiplier,
+      source: "festival",
+    });
+  if (
+    property.owner !== null &&
+    ownsCountry(state, property.owner, tile.country)
+  )
+    boosts.push({
+      multiplier: CHANCE_AMOUNTS.countryMultiplier,
+      source: "country",
+    });
+  return boosts.reduce<RentBoost | null>(
+    (best, boost) =>
+      best && best.multiplier >= boost.multiplier ? best : boost,
+    null,
+  );
+}
+/** Rent this space would charge at another build level, owner and bonuses unchanged. */
+export function propertyRentAt(
+  state: PublicState,
+  tile: number,
+  level: BuildLevel,
+): number {
+  return propertyRent(
+    {
+      ...state,
+      properties: state.properties.map((candidate) =>
+        candidate.tile === tile ? { ...candidate, level } : candidate,
+      ),
+    },
+    tile,
+  );
+}
+/** What a visitor pays to take an owned city, or null when it cannot be bought out. */
+export function buyoutPrice(
+  state: PublicState,
+  tileIndex: number,
+): number | null {
+  const property = getProperty(state, tileIndex);
+  if (
+    !property ||
+    property.owner === null ||
+    property.level >= 5 ||
+    getTile(tileIndex)?.kind !== "city"
+  )
+    return null;
+  return propertyInvestedValue(state, tileIndex) * ECONOMY.buyoutMultiplier;
 }
 /** Projects a single purchase or upgrade through the same rent rules as live play. */
 export function previewPropertyRent(
@@ -960,21 +1022,14 @@ function resolver(initial: GameState, context: EngineContext) {
           payment(task.from, task.to, task.amount, "Rent", task.tile);
           break;
         case "buyout": {
-          const property = getProperty(state, task.tile);
+          const price = buyoutPrice(state, task.tile);
           if (
+            price !== null &&
             !getPlayer(state, task.seat).bankrupt &&
-            property &&
-            property.owner !== null &&
-            property.owner !== task.seat &&
-            property.level < 5 &&
-            getTile(task.tile)?.kind === "city"
-          ) {
-            const price =
-              propertyInvestedValue(state, task.tile) *
-              ECONOMY.buyoutMultiplier;
-            if (getPlayer(state, task.seat).cash >= price)
-              open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
-          }
+            propertyOwner(state, task.tile) !== task.seat &&
+            getPlayer(state, task.seat).cash >= price
+          )
+            open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
           break;
         }
         case "wins":

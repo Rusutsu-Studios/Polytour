@@ -11,6 +11,7 @@ export {
   applyTimeout,
   botAction,
   botDecisionAt,
+  buyoutPrice,
   createGame,
   DEFAULT_GAME_CONFIG,
   getPlayer,
@@ -23,7 +24,11 @@ export {
   propertyOwner,
   propertyRefund,
   propertyRent,
+  propertyRentAt,
+  type RentBoost,
+  rentBoost,
   rentCardPayment,
+  resortCount,
   toPublic,
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";

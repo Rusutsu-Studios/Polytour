@@ -577,7 +577,11 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .click();
   await inspectSpace(page, 31);
   await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
-  await expect(page.locator(".city-card-ledger")).toContainText("400 k");
+  // The deed lists every building level with its cost and its rent.
+  const deedRows = page.locator(".city-card-table tbody tr");
+  await expect(deedRows).toHaveCount(6);
+  await expect(deedRows.first()).toContainText("400 k");
+  await expect(deedRows.nth(4)).toContainText("+500 k");
   // An explicitly inspected city stays selected when another pawn moves.
   // Presentation-only snapshot, restored before the real reconnect below.
   const beforeMovement = await page.evaluate(async () => {
@@ -607,7 +611,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   });
   await expect(page.locator(".city-card")).toHaveAttribute("data-space", "31");
   await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
-  await expect(page.locator(".city-card-ledger")).toContainText("400 k");
+  await expect(deedRows.first()).toContainText("400 k");
   await page.evaluate(async (snapshot) => {
     const modulePath =
       performance

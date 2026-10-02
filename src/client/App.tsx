@@ -776,7 +776,6 @@ function MatchView({
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const overlayTrigger = useRef<HTMLButtonElement | null>(null);
-  const inspectorRef = useRef<HTMLElement | null>(null);
   const toolRef = useRef<HTMLElement | null>(null);
   const decidingSeat = game.pending?.seat ?? game.activeSeat;
   const ownPlayer = game.players.find(
@@ -818,13 +817,12 @@ function MatchView({
     setTool(null);
   }
   useEffect(() => {
-    if (!tool && !inspectorOpen) return;
+    if (!tool) return;
     const frame = requestAnimationFrame(() => {
-      const panel = tool ? toolRef.current : inspectorRef.current;
-      panel?.querySelector<HTMLButtonElement>("button")?.focus();
+      toolRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [tool, inspectorOpen]);
+  }, [tool]);
   useEffect(() => {
     const closeOverlays = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -1116,29 +1114,16 @@ function MatchView({
         )}
       </AnimatePresence>
 
+      {inspectorOpen && (
+        <CityCard
+          state={game}
+          seat={credentials.seat}
+          selected={selected}
+          onSelect={onSelect}
+          onClose={closeTools}
+        />
+      )}
       <AnimatePresence>
-        {inspectorOpen && (
-          <motion.aside
-            ref={inspectorRef}
-            key="inspector"
-            className="city-card-popover"
-            aria-label={t("Inspection du plateau", "Board inspection")}
-            initial={reducedMotion ? false : { opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 / speed }}
-          >
-            <button
-              type="button"
-              className="popover-close icon-button"
-              aria-label={t("Fermer l’inspection", "Close inspection")}
-              onClick={closeTools}
-            >
-              <Icon name="close" size={16} />
-            </button>
-            <CityCard state={game} selected={selected} onSelect={onSelect} />
-          </motion.aside>
-        )}
         {tool && (
           <motion.section
             ref={toolRef}

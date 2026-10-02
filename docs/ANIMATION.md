@@ -130,6 +130,15 @@ preserve the authoritative decision deadline and submit only the confirmed legal
 action. Native dialogs protect keyboard focus; Escape minimizes a choice without
 spending money.
 
+Inspecting a space opens a large title-deed dialog over the board. It shows the
+owner, the rent due there now, and the buyout price or purchase price. A table
+gives the cost and rent of every building level, with the current one marked. A
+city's festival or full-country bonus adds its own column. Resorts list their
+rent by how many resorts the owner holds. Every figure comes from the shared
+engine (`propertyRentAt`, `rentBoost`, `buyoutPrice`), never from UI arithmetic.
+Every space opens at the same size, so the step arrows stay under the pointer.
+Escape, the close button or a backdrop click closes it.
+
 The Director now has a separate DOM presenter alongside its scene animator.
 `CardDrawn` waits for a bounded illustrated reading moment (the 3.2 s card
 budget, divided by the playback speed) before the subsequent effects play. Continue and Escape

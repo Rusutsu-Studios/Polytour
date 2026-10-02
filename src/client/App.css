@@ -566,37 +566,6 @@
 .game-shell .destination-choice select {
   min-height: 42px;
 }
-.city-card-popover {
-  position: absolute;
-  z-index: 8;
-  right: 24px;
-  bottom: 155px;
-  width: 296px;
-  border-radius: 16px;
-  box-shadow:
-    0 6px 0 #488aa380,
-    0 10px 30px #17485926;
-}
-.popover-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  width: 25px;
-  height: 25px;
-  background: #f0efdd;
-}
-/* The deed's ribbon owns the card's top edge, so its close chip steps outside. */
-.city-card-popover .popover-close {
-  top: -10px;
-  right: -9px;
-  z-index: 2;
-  width: 27px;
-  height: 27px;
-  border-radius: 50%;
-  background: #fffaf0;
-  box-shadow: 0 2px 0 #4c7b86a6;
-}
 .tool-drawer {
   position: absolute;
   z-index: 9;
@@ -2331,9 +2300,6 @@ button.seat-open:disabled {
     top: 92px;
     max-height: calc(100svh - 220px);
   }
-  .city-card-popover {
-    bottom: 132px;
-  }
   .match-caption {
     left: 245px;
     right: 245px;
@@ -2524,11 +2490,6 @@ button.seat-open:disabled {
   .game-shell
     .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {
     width: min(320px, 100%);
-  }
-  .city-card-popover {
-    width: min(280px, calc(100vw - 24px));
-    bottom: 118px;
-    right: 16px;
   }
   .tool-drawer {
     top: 92px;
