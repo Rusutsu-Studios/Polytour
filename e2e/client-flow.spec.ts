@@ -239,13 +239,13 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
       number,
       { owner: Seat; level: 0 | 1 | 2 | 3 | 4 | 5 }
     > = {
-      4: { owner: 0, level: 1 },
+      3: { owner: 0, level: 1 },
       7: { owner: 1, level: 2 },
       11: { owner: 2, level: 3 },
       15: { owner: 3, level: 4 },
-      20: { owner: 0, level: 5 },
-      25: { owner: 1, level: 4 },
-      30: { owner: 2, level: 5 },
+      19: { owner: 0, level: 5 },
+      26: { owner: 1, level: 4 },
+      29: { owner: 2, level: 5 },
       31: { owner: 3, level: 3 },
     };
     const properties = snapshot.properties.map((property) => ({
@@ -1158,10 +1158,10 @@ test("travel, rent protections and exchanges show the complete legal choice", as
       },
     });
   });
-  await expect(page.locator("#decision-description")).toContainText("Rome");
+  await expect(page.locator("#decision-description")).toContainText("Lisbonne");
   await page.getByLabel("Ville ciblée", { exact: true }).selectOption("9");
   await expect(page.locator(".decision-confirm")).toContainText(
-    "Échanger Rome contre Porto",
+    "Échanger Lisbonne contre Faro",
   );
   await page.screenshot({
     path: ".local/verification/decision-exchange-regression.png",

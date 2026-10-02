@@ -27,8 +27,8 @@ export type Tile =
   | { readonly kind: "island"; readonly index: 8 }
   | { readonly kind: "championship"; readonly index: 16 }
   | { readonly kind: "world-tour"; readonly index: 24 }
-  | { readonly kind: "chance"; readonly index: 3 | 14 | 19 }
-  | { readonly kind: "tax"; readonly index: 29 };
+  | { readonly kind: "chance"; readonly index: 12 | 20 | 28 }
+  | { readonly kind: "tax"; readonly index: 30 };
 
 export type BuildLevelConfig = {
   readonly level: BuildLevel;

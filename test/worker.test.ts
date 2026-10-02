@@ -15,7 +15,6 @@ import {
   applyEvent,
   botDecisionAt,
   toPublic,
-  worldTourTargets,
 } from "../src/shared/engine/index.js";
 import type {
   RoomCredentials,
@@ -1327,108 +1326,26 @@ describe("Authoritative private rooms", () => {
     }
   });
 
-  it("loads an existing version-2 active save without changing its legal Hotel purchase", async () => {
-    const game = await startFour();
-    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    await runInDurableObject(stub, (_instance, durableState) => {
-      const row = durableState.storage.sql
-        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
-        .toArray()[0];
-      const saved = JSON.parse(row.json) as GameState;
-      const {
-        hotelPurchaseRule: _marker,
-        worldTourRule: _travelMarker,
-        ...oldConfig
-      } = saved.config;
-      durableState.storage.sql.exec(
-        "UPDATE meta SET v='2' WHERE k='rulesVersion'",
+  it("refuses lobbies created before the country-grouped board", async () => {
+    // Version 4 moved Chance, resort and tax squares, so an older room cannot
+    // start or resume on squares that no longer mean the same thing.
+    for (const rulesVersion of [2, 3]) {
+      const host = await create();
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(rulesVersion),
+        ),
       );
-      durableState.storage.sql.exec(
-        "UPDATE state SET json=? WHERE id=1",
-        JSON.stringify({
-          ...saved,
-          config: oldConfig,
-          players: saved.players.map((player) =>
-            player.seat === saved.activeSeat
-              ? { ...player, laps: 1, position: 6 }
-              : player,
-          ),
-          pending: {
-            kind: "buy",
-            seat: saved.activeSeat,
-            tile: 6,
-            maxLevel: 4,
-            deadline: Date.now() + 30_000,
-          },
-          resolutionQueue: [{ kind: "finish" }],
-        }),
+      const response = await exports.default.fetch(
+        new Request(`${origin}/api/rooms/${host.roomCode}`),
       );
-    });
-    await evictDurableObject(stub);
-    const resumed = await connect(game.credentials[game.state.activeSeat]);
-    const welcome = await resumed.next("welcome");
-    expect(welcome.snapshot?.config).not.toHaveProperty("hotelPurchaseRule");
-    resumed.send({
-      type: "intent",
-      id: "legacy-hotel-purchase",
-      atSeq: welcome.seq,
-      action: { type: "Buy", level: 4 },
-    });
-    const events = await resumed.next("events");
-    expect(
-      events.events.some(
-        (event) =>
-          event.type === "PropertyBought" &&
-          event.tile === 6 &&
-          event.level === 4,
-      ),
-    ).toBe(true);
-    const persisted = await runInDurableObject(
-      stub,
-      (_instance, durableState) => {
-        const row = durableState.storage.sql
-          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
-          .toArray()[0];
-        return JSON.parse(row.json) as GameState;
-      },
-    );
-    expect(persisted.config).not.toHaveProperty("hotelPurchaseRule");
-    expect(
-      persisted.properties.find((property) => property.tile === 6),
-    ).toMatchObject({ owner: game.state.activeSeat, level: 4 });
-  });
-
-  it("starts preexisting version-2 lobbies with their original lap-only hotel rule", async () => {
-    const host = await create();
-    const stub = env.GAME_ROOM.getByName(host.roomCode);
-    await runInDurableObject(stub, (_instance, durableState) =>
-      durableState.storage.sql.exec(
-        "UPDATE meta SET v='2' WHERE k='rulesVersion'",
-      ),
-    );
-    const inbox = await connect(host);
-    await inbox.next("welcome");
-    inbox.send({
-      type: "lobby",
-      id: "legacy-lobby-start",
-      op: { type: "start", fillBots: true },
-    });
-    const events = await inbox.next("events");
-    const created = events.events.find((event) => event.type === "GameCreated");
-    expect(
-      created?.type === "GameCreated" && created.state.config.hotelPurchaseRule,
-    ).toBe("legacy-lap");
-    expect(
-      created?.type === "GameCreated" && created.state.config.worldTourRule,
-    ).toBe("legacy-any");
-    const rules = await runInDurableObject(
-      stub,
-      (_instance, durableState) =>
-        durableState.storage.sql
-          .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
-          .toArray()[0]?.v,
-    );
-    expect(rules).toBe("2");
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: "incompatible-saved-match",
+      });
+    }
   });
 
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
@@ -1456,61 +1373,6 @@ describe("Authoritative private rooms", () => {
         "UPDATE meta SET v='4' WHERE k='rulesVersion'",
       ),
     );
-  });
-
-  it("keeps travel-anywhere World Tours for version-3 lobbies and saves", async () => {
-    const host = await create();
-    const stub = env.GAME_ROOM.getByName(host.roomCode);
-    await runInDurableObject(stub, (_instance, durableState) =>
-      durableState.storage.sql.exec(
-        "UPDATE meta SET v='3' WHERE k='rulesVersion'",
-      ),
-    );
-    const inbox = await connect(host);
-    await inbox.next("welcome");
-    inbox.send({
-      type: "lobby",
-      id: "version-3-lobby-start",
-      op: { type: "start", fillBots: true },
-    });
-    const events = await inbox.next("events");
-    const created = events.events.find((event) => event.type === "GameCreated");
-    expect(
-      created?.type === "GameCreated" && created.state.config,
-    ).toMatchObject({
-      hotelPurchaseRule: "staged-hotels",
-      worldTourRule: "legacy-any",
-    });
-    await closeInbox(inbox);
-    // A version-3 save written before this rule existed has no travel marker.
-    const seat = await runInDurableObject(stub, (_instance, durableState) => {
-      const row = durableState.storage.sql
-        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
-        .toArray()[0];
-      const saved = JSON.parse(row.json) as GameState;
-      const { worldTourRule: _marker, ...oldConfig } = saved.config;
-      durableState.storage.sql.exec(
-        "UPDATE state SET json=? WHERE id=1",
-        JSON.stringify({ ...saved, config: oldConfig }),
-      );
-      return saved.activeSeat;
-    });
-    await evictDurableObject(stub);
-    const response = await exports.default.fetch(
-      new Request(`${origin}/api/rooms/${host.roomCode}`),
-    );
-    expect(response.status).toBe(200);
-    const persisted = await runInDurableObject(
-      stub,
-      (_instance, durableState) => {
-        const row = durableState.storage.sql
-          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
-          .toArray()[0];
-        return JSON.parse(row.json) as GameState;
-      },
-    );
-    expect(persisted.config).not.toHaveProperty("worldTourRule");
-    expect(worldTourTargets(persisted, seat)).toHaveLength(31);
   });
 
   it.each(["stateVersion", "rulesVersion"])(

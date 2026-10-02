@@ -63,19 +63,24 @@ the lowest tile index wins the tie.
 ## Board (32 tiles)
 
 Corners at 0, 8, 16, 24. Each side has 7 tiles between corners. Prices rise clockwise.
+Each colour group is one country. Like the classic tour board, a group stays together
+on its side; a two-city group may frame a resort or the tax office.
 
 | # | Side 1 | # | Side 2 | # | Side 3 | # | Side 4 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 | **Start** | 8 | **Island** | 16 | **Championship** | 24 | **World Tour** |
-| 1 | A1 | 9 | C1 | 17 | E1 | 25 | G1 |
-| 2 | A2 | 10 | C2 | 18 | E2 | 26 | G2 |
-| 3 | Chance | 11 | C3 | 19 | Chance | 27 | G3 |
-| 4 | B1 | 12 | Resort 2 | 20 | E3 | 28 | Resort 4 |
-| 5 | Resort 1 | 13 | D1 | 21 | Resort 3 | 29 | Tax |
-| 6 | B2 | 14 | Chance | 22 | F1 | 30 | H1 |
-| 7 | B3 | 15 | D2 | 23 | F2 | 31 | H2 |
+| 1 | A1 | 9 | C1 | 17 | E1 | 25 | Resort 4 |
+| 2 | A2 | 10 | C2 | 18 | Resort 3 | 26 | G1 |
+| 3 | A3 | 11 | C3 | 19 | E2 | 27 | G2 |
+| 4 | Resort 1 | 12 | Chance | 20 | Chance | 28 | Chance |
+| 5 | B1 | 13 | D1 | 21 | F1 | 29 | H1 |
+| 6 | B2 | 14 | Resort 2 | 22 | F2 | 30 | Tax |
+| 7 | B3 | 15 | D2 | 23 | F3 | 31 | H2 |
 
-8 countries (A–H), 20 cities, 4 resorts, 3 Chance, 1 Tax.
+8 countries (A–H), 20 cities, 4 resorts, 3 Chance, 1 Tax. The current names run
+France (A), Spain (B), Portugal (C), Italy (D), United Kingdom (E), United States
+(F), South Korea (G) and Japan (H); the resorts are the French Riviera, Cyprus,
+Dubai and Bali.
 
 ## Economy (starting values)
 
@@ -133,10 +138,9 @@ their own Hotel. An action is legal only when its full cost leaves the buyer wit
 cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
-Existing version-2 rooms keep `"legacy-lap"` (or an absent marker on older active
-saves), so their hotel still unlocks after a lap, including on initial purchase.
-The server loads both versions and cannot accept an internal rule marker through
-room settings. A stale pending choice cannot bypass the new cap. See
+The engine still honours `"legacy-lap"` for simulations, but the server only
+creates version-4 rooms and cannot accept an internal rule marker through room
+settings. A stale pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
 
@@ -181,7 +185,8 @@ buying it while unowned and its owner selling it to the bank.
 - **World Tour:** landing here **ends the turn immediately**, forfeiting any pending
   doubles roll, and gives that player a travel option for their next turn. At its
   start they may pay 50,000 (legal only with enough cash) to travel clockwise to
-  any other tile, resolving the destination normally; otherwise, or on timeout, they
+  one of their own properties, an unowned property or Start, chosen by clicking it
+  on the board, resolving the destination normally; otherwise, or on timeout, they
   roll normally. The option expires after that choice. A World Tour move neither
   counts as a dice roll nor creates a doubles bonus.
 - **Tax:** pay 10% of your total invested property value, rounded up (minimum 50,000).

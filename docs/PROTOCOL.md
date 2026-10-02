@@ -28,10 +28,10 @@ debug socket has been removed; `/api/health` remains.
   rejected with `players-required` below two. Each player keeps its lobby seat
   number (colour and corner) in the match, so a smaller match can have gaps such
   as seats 0, 1 and 3. Settings are validated and freeze when the match starts.
-- New-room hotel progression is frozen by the server in the optional public config
-  marker `hotelPurchaseRule: "staged-hotels"`. Older saves may omit it or use
-  `"legacy-lap"`. This is not an accepted room-setting input; clients must derive
-  legal construction choices from the engine. Action/event shapes and the protocol
+- New-room hotel and World Tour rules are frozen by the server in the public config
+  markers `hotelPurchaseRule: "staged-hotels"` and
+  `worldTourRule: "own-free-or-start"`. Neither is an accepted room-setting input;
+  clients must derive legal construction and travel choices from the engine. Action/event shapes and the protocol
   version remain compatible.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
