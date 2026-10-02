@@ -165,61 +165,14 @@ export const FESTIVAL_COLORS = [
   "#fffaf0",
 ] as const;
 
-/** A printed fête: gold ground, fixed confetti and a scalloped garland edge. */
-function paintFestival(
-  context: Context,
-  index: number,
-  width: number,
-  band: number,
-) {
-  const ground = context.createLinearGradient(0, 0, 0, band);
-  ground.addColorStop(0, "#ffe39a");
-  ground.addColorStop(1, "#ffcd5c");
-  context.fillStyle = ground;
-  context.fillRect(0, 0, width, band);
-  // Deterministic positions: a texture repaint never reshuffles the confetti.
-  for (let piece = 0; piece < 22; piece++) {
-    const x = 14 + ((piece * 137 + index * 59) % (width - 28));
-    const y = 12 + ((piece * 89 + index * 31) % (band - 60));
-    context.save();
-    context.translate(x, y);
-    context.rotate(((piece * 47) % 180) * (Math.PI / 180));
-    context.fillStyle = FESTIVAL_COLORS[piece % FESTIVAL_COLORS.length];
-    if (piece % 3 === 0) {
-      context.beginPath();
-      context.arc(0, 0, 6, 0, Math.PI * 2);
-      context.fill();
-    } else context.fillRect(-8, -3.5, 16, 7);
-    context.restore();
-  }
-  const flags = 8;
-  for (let flag = 0; flag < flags; flag++) {
-    const left = (flag * width) / flags;
-    context.fillStyle = FESTIVAL_COLORS[(flag + index) % 5];
-    context.beginPath();
-    context.moveTo(left, band - 46);
-    context.lineTo(left + width / flags, band - 46);
-    context.lineTo(left + width / flags / 2, band - 24);
-    context.closePath();
-    context.fill();
-  }
-}
-
 /** The colored plot printed at the screen-top end of a lot. */
 function paintPlot(
   context: Context,
   index: number,
   width: number,
   band: number,
-  festival: boolean,
 ) {
   const tile = BOARD[index];
-  if (tile.kind === "city" && festival) {
-    paintFestival(context, index, width, band);
-    context.fillStyle = tileColor(index);
-    context.fillRect(0, band - 24, width, 24);
-    return;
-  }
   if (tile.kind === "city") {
     const color = tileColor(index);
     context.fillStyle = mix(PAPER, color, 0.68);
@@ -288,15 +241,13 @@ export type LotPrint = {
   readonly amount: number | null;
   readonly owner: Seat | null;
   readonly locale: Locale;
-  /** Festival cities print a gold fête band in their building plot. */
-  readonly festival?: boolean;
 };
 
 export function lotTexture(index: number, print: LotPrint) {
   const width = LOT_WIDTH * PIXELS_PER_UNIT;
   const height = LOT_DEPTH * PIXELS_PER_UNIT;
   const band = Math.round((BUILDING_BAND / LOT_DEPTH) * height);
-  const { amount, owner, locale, festival = false } = print;
+  const { amount, owner, locale } = print;
   return canvasTexture(width, height, (context) => {
     const tile = BOARD[index];
     const ownerColor = owner == null ? null : PLAYER_COLORS[owner];
@@ -320,7 +271,7 @@ export function lotTexture(index: number, print: LotPrint) {
       );
       return;
     }
-    paintPlot(context, index, width, band, festival);
+    paintPlot(context, index, width, band);
     context.fillStyle = INK;
     fitText(
       context,

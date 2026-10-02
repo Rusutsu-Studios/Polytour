@@ -1068,7 +1068,7 @@ test("travel, rent protections and exchanges show the complete legal choice", as
   // Board choices stay non-modal: nothing travels until a space is picked,
   // on the board or through the keyboard list of the same legal spaces.
   const pick = page.locator(".decision-pick");
-  await expect(pick).toContainText("Grand voyage");
+  await expect(pick).toContainText("Tour du monde");
   await expect(page.locator("dialog[open]")).toHaveCount(0);
   await expect(pick.locator(".decision-confirm")).toHaveCount(0);
   await expect(

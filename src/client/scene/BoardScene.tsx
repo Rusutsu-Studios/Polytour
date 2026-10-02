@@ -152,7 +152,6 @@ function TileFace({
   amount,
   owner,
   salary,
-  festival,
   onSelect,
   preview,
   dimmed,
@@ -162,7 +161,6 @@ function TileFace({
   amount: number | null;
   owner: Seat | null;
   salary: number;
-  festival: boolean;
   onSelect: (tile: number) => void;
   preview?: boolean;
   dimmed: boolean;
@@ -173,8 +171,8 @@ function TileFace({
     () =>
       isCorner(index)
         ? cornerTexture(index, locale, salary)
-        : lotTexture(index, { amount, owner, locale, festival }),
-    [index, amount, owner, locale, salary, festival],
+        : lotTexture(index, { amount, owner, locale }),
+    [index, amount, owner, locale, salary],
   );
   useEffect(() => () => texture.dispose(), [texture]);
   const [x, z] = tileCenter(index);
@@ -284,11 +282,6 @@ function BoardTiles({
             index={tile.index}
             owner={owner}
             salary={salary}
-            festival={Boolean(
-              state &&
-                (state.festivalTiles.includes(tile.index) ||
-                  state.championshipHost?.tile === tile.index),
-            )}
             dimmed={Boolean(targets && !targets.includes(tile.index))}
             pickable={Boolean(targets?.includes(tile.index))}
             amount={
@@ -739,7 +732,7 @@ function buntingZ(index: number) {
   return screenTop(index) * (LOT_DEPTH / 2 - 0.05);
 }
 
-/** Festival cities: a printed fête band, a garland on two masts and a medallion. */
+/** Festival cities keep their country colour; a garland and a medallion mark the fête. */
 function FestivalMarkers({ state }: { state: PublicState | null }) {
   const masts = useRef<THREE.InstancedMesh>(null);
   const cords = useRef<THREE.InstancedMesh>(null);

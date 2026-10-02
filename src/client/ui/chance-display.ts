@@ -93,9 +93,9 @@ export function describeCard(
         ...base,
         art: "travel",
         tone: "travel",
-        badge: t("Grand voyage", "World tour"),
+        badge: t("Tour du monde", "World tour"),
         text: t(
-          "Rejoignez le Grand voyage. À votre prochain tour, choisissez une destination.",
+          "Rejoignez le Tour du monde. À votre prochain tour, choisissez une destination.",
           "Move to World tour. On your next turn, choose a destination.",
         ),
       };

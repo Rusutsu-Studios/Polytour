@@ -70,7 +70,7 @@ const COPY = {
     "Roll doubles to leave, or pay the fare.",
   ],
   travel: [
-    "Grand voyage",
+    "Tour du monde",
     "Cliquez une case en surbrillance : vos villes, une case libre ou le départ.",
     "World tour",
     "Click a highlighted space: your cities, an unowned space or Start.",

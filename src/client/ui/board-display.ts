@@ -45,7 +45,7 @@ export const TILE_NAMES = [
   "Dubaï",
   "Montréal",
   "New York",
-  "Grand voyage",
+  "Tour du monde",
   "Sydney",
   "Singapour",
   "Séoul",
