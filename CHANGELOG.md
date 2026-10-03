@@ -9,7 +9,7 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.4.3] - 2026-10-04
+## [0.4.4] - 2026-10-04
 
 ### Fixed
 
@@ -23,6 +23,12 @@ has been published, and it does not reconstruct earlier development history.
   keyboard activation on the start screen (#43).
 - Use a minimize icon on decision windows and a compact bottom tab that keeps
   the countdown and reopens the same selection (#50).
+
+## [0.4.3] - 2026-10-03
+
+### Fixed
+
+- The room lobby board fills its preview instead of shrinking into a short canvas (#82).
 
 ## [0.4.2] - 2026-10-03
 
