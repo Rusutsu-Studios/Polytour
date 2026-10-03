@@ -36,15 +36,16 @@ turn timers. Everything that outlives a match (accounts, results, ratings) goes 
 
 ## Browser diagnostics
 
-The pause menu's Debug tab measures the full HTTP round trip to the same-origin
-static asset `GET /connection-probe.txt`, without browser caching, every second while
-the Debug panel and browser page are visible and the browser is online. Only
+The match HUD measures the full HTTP round trip to the same-origin static asset
+`GET /connection-probe.txt`, without browser caching, every five seconds while
+the match is connected, the browser page is visible and the browser is online. Only
 one request can be pending; a five-second timeout releases it even if the
 transport never settles after cancellation. Browser connectivity changes,
 game reconnects and returning to a visible page immediately restart measurement,
 discarding superseded responses. Commit-phase teardown removes timers and listeners
-and aborts pending work. A small bottom-right `AMS · 42 ms` indicator retains the
-last successful sample outside Debug. The probe validates its complete sentinel
+and aborts pending work. A small bottom-right `AMS · 42 ms` indicator and the
+Debug tab share this stream; closing Debug leaves the static HUD probe running.
+Leaving the match stops it. The probe validates its complete sentinel
 body before accepting a sample, so an SPA fallback cannot look like a successful
 measurement. The response's `Cf-Ray` suffix identifies the current Cloudflare
 entry point, and its URL identifies the contacted hostname, including a branch
@@ -75,8 +76,8 @@ five seconds, after the server advertises the optional debug capability in
 `welcome`. A fixed `setWebSocketAutoResponse` pair responds without waking
 hibernating game JavaScript, touching SQLite or scheduling a DO alarm. A bounded
 per-socket FIFO keeps expired attempts across menu/visibility changes so late
-constant replies cannot produce a false fresh latency. Closing Debug stops all
-client timers. At this cadence, 720 incoming messages per hour correspond to
+constant replies cannot produce a false fresh latency. Closing Debug stops the
+room-diagnostic timers. At this cadence, 720 incoming messages per hour correspond to
 36 DO compute-request equivalents per hour per active debugger under the
 [20:1 WebSocket billing ratio](https://developers.cloudflare.com/durable-objects/platform/pricing/#compute-billing).
 Outgoing messages are free; these pings add no Worker HTTP requests. They are not
@@ -93,7 +94,8 @@ initial measurement was interrupted, without continuous metadata polling.
 
 The route diagram joins those player entry points to one shared `GameRoom` with
 its local SQLite database. A DO's exact execution POP and physical server hostname
-have no documented runtime getters; the UI says they are not exposed by Cloudflare.
+have no documented runtime getters; their unhelpful placeholder rows are omitted
+from the UI, along with the jurisdiction row.
 `ctx.id.jurisdiction` is an enforced restriction, not the execution DC, and is null
 for the current unrestricted rooms. `request.cf.colo` is ingress metadata and must
 never be substituted for a DO's location. HTTP and WebSocket round trips are

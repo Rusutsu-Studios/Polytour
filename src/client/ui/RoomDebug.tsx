@@ -111,12 +111,6 @@ export default function RoomDebug({
             "En attente de connexion à la salle.",
             "Waiting for the room connection.",
           );
-  const jurisdiction =
-    diagnostics?.room.jurisdiction === "eu"
-      ? t("Union européenne", "European Union")
-      : diagnostics?.room.jurisdiction === "fedramp"
-        ? "FedRAMP"
-        : t("Non définie", "Not specified");
   const clock = (at: number) =>
     new Date(at).toLocaleTimeString(locale === "fr" ? "fr-CH" : "en-GB");
 
@@ -172,16 +166,6 @@ export default function RoomDebug({
               <div>
                 <dt>{t("Votre entrée WebSocket", "Your WebSocket entry")}</dt>
                 <dd>{socketEntry(diagnostics.worker, t)}</dd>
-              </div>
-              <div>
-                <dt>{t("Juridiction", "Jurisdiction")}</dt>
-                <dd>{jurisdiction}</dd>
-              </div>
-              <div>
-                <dt>{t("Hôte / centre de données", "Host / data center")}</dt>
-                <dd>
-                  {t("Non exposé par Cloudflare", "Not exposed by Cloudflare")}
-                </dd>
               </div>
             </dl>
           </>

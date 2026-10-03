@@ -75,7 +75,7 @@ export default function PauseMenu({
         : unavailable;
   const regionLabel = translatedRegion(sample?.region ?? null, t);
 
-  // Commit the probe gate before browser timers or network events can see a closed tab.
+  // Stop room-diagnostic traffic before timers or events can see a closed tab.
   useLayoutEffect(() => {
     onDebugActiveChange(debugActive);
     return () => onDebugActiveChange(false);
@@ -459,7 +459,7 @@ export default function PauseMenu({
                                     locale === "fr" ? "fr-CH" : "en-GB",
                                   )}
                                 </time>
-                                {t(" · Chaque seconde.", " · Every second.")}
+                                {t(" · Toutes les 5 s.", " · Every 5 s.")}
                               </>
                             ) : ping.status === "error" ? (
                               t(
@@ -468,8 +468,8 @@ export default function PauseMenu({
                               )
                             ) : (
                               t(
-                                "Actualisation chaque seconde.",
-                                "Updated every second.",
+                                "Actualisation toutes les 5 s.",
+                                "Updated every 5 s.",
                               )
                             )}
                           </p>

@@ -198,6 +198,8 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
       }
     });
   });
+  // Track timers before the always-on match probe creates its first cadence.
+  await page.clock.install({ time: Date.now() });
   await page.goto("/");
   if (options.observePongs) {
     // The route mock is installed during navigation; observe it before joining.
@@ -262,9 +264,16 @@ async function openSettings(page: Page) {
 }
 
 async function freezeClock(page: Page) {
-  const frozenAt = Date.now();
-  await page.clock.install({ time: frozenAt });
+  const frozenAt = await page.evaluate(() => Date.now());
   await page.clock.pauseAt(frozenAt + 1000);
+}
+
+async function completeProbe(page: Page, trigger: () => Promise<unknown>) {
+  const response = page.waitForResponse(
+    (value) => new URL(value.url()).pathname === "/connection-probe.txt",
+  );
+  await trigger();
+  await (await response).finished();
 }
 
 async function setBrowserOnline(page: Page, online: boolean) {
@@ -443,13 +452,15 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     page.getByRole("button", { name: "Pause menu", exact: true }),
   ).toBeFocused();
   expect(match.connections()).toBe(1);
-  expect(probeRequests).toBe(0);
+  expect(probeRequests).toBeGreaterThanOrEqual(1);
+  expect(match.metadataRequests()).toBe(0);
+  expect(match.pingRequests()).toBe(0);
   expect(
     await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
   ).toBe(roomCredentials);
 });
 
-test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when leaving", async ({
+test("Cloudflare HTTP ping refreshes every five seconds throughout a visible online match", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -471,23 +482,30 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
     };
   });
   let requests = 0;
+  let response: ProbeResponse | null = FRANKFURT_PROBE;
   const probeURLs: string[] = [];
   await page.route("**/connection-probe.txt**", (route) => {
     requests += 1;
     probeURLs.push(route.request().url());
-    if (requests === 1) return route.fulfill(FRANKFURT_PROBE);
-    if (requests === 2)
-      return route.fulfill({
-        status: 503,
-        body: "fixture-unavailable",
-      });
-    // Later measurements wait for the browser's timeout or tab cleanup to abort.
+    if (response) return route.fulfill(response);
+    // A held measurement lets suspension and leaving exercise cancellation.
   });
   const match = await enterMatch(page);
+  const badge = page.locator(".match-network");
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
   await freezeClock(page);
+  const initialRequests = requests;
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(initialRequests + 1);
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
   await openSettings(page);
-  await page.clock.runFor(30_000);
-  expect(requests).toBe(0);
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(initialRequests + 2);
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
+  await page.getByRole("tab", { name: "Audio", exact: true }).click();
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(initialRequests + 3);
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   const debugPanel = page.locator(".pause-debug");
   const status = debugPanel.getByRole("status");
@@ -543,39 +561,59 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
     });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.clock.runFor(1000);
+  response = { status: 503, body: "fixture-unavailable" };
+  const beforeFailure = requests;
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(beforeFailure + 1);
   await expect(status).toHaveText("Indisponible");
-  expect(requests).toBe(2);
+  response = null;
+  const beforeHeld = requests;
+  await page.clock.runFor(5000);
+  await expect.poll(() => requests).toBe(beforeHeld + 1);
+  const aborts = () =>
+    page
+      .locator("html")
+      .evaluate((element) =>
+        Number((element as HTMLElement).dataset.debugPingAborts ?? "0"),
+      );
+  const beforeClosing = await aborts();
   await page.getByRole("tab", { name: "Audio", exact: true }).click();
-  await page.clock.runFor(30_000);
-  expect(requests).toBe(2);
-  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
-  await expect(status).toHaveText("Mesure en cours…");
-  await expect.poll(() => requests).toBe(3);
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-debug-ping-aborts",
-    "1",
-  );
-  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
-  await expect.poll(() => requests).toBe(4);
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-debug-ping-aborts",
-    "2",
-  );
-  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
-  await expect.poll(() => requests).toBe(5);
   await page
     .getByRole("button", { name: "Revenir au plateau", exact: true })
     .click();
   await expect(page.locator(".pause-dialog")).toHaveCount(0);
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-debug-ping-aborts",
-    "3",
-  );
-  await page.clock.runFor(30_000);
-  expect(requests).toBe(5);
+  expect(await aborts()).toBe(beforeClosing);
+  await setDocumentVisibility(page, false);
+  await expect.poll(aborts).toBe(beforeClosing + 1);
+  const whileHidden = requests;
+  await page.clock.runFor(20_000);
+  expect(requests).toBe(whileHidden);
+  await setDocumentVisibility(page, true);
+  await expect.poll(() => requests).toBe(whileHidden + 1);
+  await setBrowserOnline(page, false);
+  await expect.poll(aborts).toBe(beforeClosing + 2);
+  const whileOffline = requests;
+  await page.clock.runFor(20_000);
+  expect(requests).toBe(whileOffline);
+  response = FRANKFURT_PROBE;
+  await setBrowserOnline(page, true);
+  await expect.poll(() => requests).toBe(whileOffline + 1);
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
+  response = null;
+  await setBrowserOnline(page, true);
+  await expect.poll(() => requests).toBe(whileOffline + 2);
+  await page.getByRole("button", { name: "Menu pause", exact: true }).click();
+  await page.getByRole("button", { name: "Quitter", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Quitter la partie", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Jouer avec 3 bots" }),
+  ).toBeVisible();
+  await expect.poll(aborts).toBe(beforeClosing + 3);
+  const afterLeaving = requests;
+  await page.clock.runFor(20_000);
+  expect(requests).toBe(afterLeaving);
   expect(match.connections()).toBe(1);
   expect(
     match.messages.map((raw) =>
@@ -584,7 +622,7 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
   ).toEqual(["sync"]);
 });
 
-test("Debug immediately refreshes the Cloudflare entry after online or network changes and sleeps while hidden", async ({
+test("the match probe immediately refreshes after network changes and pauses while hidden or reconnecting", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -607,69 +645,88 @@ test("Debug immediately refreshes the Cloudflare entry after online or network c
   const entry = diagnosticValue(panel, "Point d’entrée Cloudflare");
   await expect(entry).toContainText("FRA");
   await expectSharedPing(panel, "FRA");
-  expect(requests).toBe(1);
-  await page.clock.runFor(999);
-  expect(requests).toBe(1);
-  await page.clock.runFor(1);
-  await expect.poll(() => requests).toBe(2);
+  let expectedRequests = requests;
+  await completeProbe(page, () => page.clock.runFor(5000));
+  expectedRequests += 1;
+  await expect.poll(() => requests).toBe(expectedRequests);
   response = ZURICH_PROBE;
-  await setBrowserOnline(page, true);
+  await completeProbe(page, () => setBrowserOnline(page, true));
   await expect(entry).toContainText("ZRH");
   await expectSharedPing(panel, "ZRH");
   await expect(diagnosticValue(panel, "Service de jeu")).toHaveText("polytour");
   await expect(diagnosticValue(panel, "Hôte")).toHaveText("127.0.0.1");
-  expect(requests).toBe(3);
+  expectedRequests += 1;
+  expect(requests).toBe(expectedRequests);
   response = FRANKFURT_PROBE;
-  await page.evaluate(() => {
-    const connection = (navigator as Navigator & { connection: EventTarget })
-      .connection;
-    connection.dispatchEvent(new Event("change"));
-  });
+  await completeProbe(page, () =>
+    page.evaluate(() => {
+      const connection = (navigator as Navigator & { connection: EventTarget })
+        .connection;
+      connection.dispatchEvent(new Event("change"));
+    }),
+  );
   await expect(entry).toContainText("FRA");
-  expect(requests).toBe(4);
+  expectedRequests += 1;
+  expect(requests).toBe(expectedRequests);
   await setBrowserOnline(page, false);
-  await page.clock.runFor(5000);
-  expect(requests).toBe(4);
+  await page.clock.runFor(20_000);
+  expect(requests).toBe(expectedRequests);
   response = ZURICH_PROBE;
-  await setBrowserOnline(page, true);
+  await completeProbe(page, () => setBrowserOnline(page, true));
   await expect(entry).toContainText("ZRH");
-  expect(requests).toBe(5);
+  expectedRequests += 1;
+  expect(requests).toBe(expectedRequests);
   await setDocumentVisibility(page, false);
-  await page.clock.runFor(5000);
-  expect(requests).toBe(5);
+  await page.clock.runFor(20_000);
+  expect(requests).toBe(expectedRequests);
   response = FRANKFURT_PROBE;
-  await setDocumentVisibility(page, true);
+  await completeProbe(page, () => setDocumentVisibility(page, true));
   await expect(entry).toContainText("FRA");
-  expect(requests).toBe(6);
+  expectedRequests += 1;
+  expect(requests).toBe(expectedRequests);
   response = ZURICH_PROBE;
   await match.disconnect();
-  await expect(entry).toContainText("ZRH");
-  expect(requests).toBe(7);
-  await page.clock.runFor(1000);
+  await expect(diagnosticValue(panel, "Connexion de la partie")).toHaveText(
+    "Reconnexion en cours…",
+  );
+  await page.clock.runFor(999);
+  expect(requests).toBe(expectedRequests);
+  await completeProbe(page, () => page.clock.runFor(1));
   await expect.poll(() => match.connections()).toBe(2);
   await expect(diagnosticValue(panel, "Connexion de la partie")).toHaveText(
     "Connectée",
   );
-  await expect.poll(() => requests).toBeGreaterThanOrEqual(8);
-  const beforeClosing = requests;
+  expectedRequests += 1;
+  await expect.poll(() => requests).toBe(expectedRequests);
+  await expect(entry).toContainText("ZRH");
+  response = FRANKFURT_PROBE;
   await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  await setBrowserOnline(page, true);
-  await page.evaluate(() =>
-    (
-      navigator as Navigator & { connection: EventTarget }
-    ).connection.dispatchEvent(new Event("change")),
+  await completeProbe(page, () => setBrowserOnline(page, true));
+  await completeProbe(page, () =>
+    page.evaluate(() =>
+      (
+        navigator as Navigator & { connection: EventTarget }
+      ).connection.dispatchEvent(new Event("change")),
+    ),
   );
-  await page.clock.runFor(5000);
-  expect(requests).toBe(beforeClosing);
+  expectedRequests += 2;
+  expect(requests).toBe(expectedRequests);
+  await completeProbe(page, () => page.clock.runFor(5000));
+  expectedRequests += 1;
+  expect(requests).toBe(expectedRequests);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  await setBrowserOnline(page, true);
-  await page.clock.runFor(5000);
-  expect(requests).toBe(beforeClosing);
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await completeProbe(page, () => setBrowserOnline(page, true));
+  expectedRequests += 1;
+  await expect(page.locator(".match-network")).toHaveText(/^FRA · \d+ ms$/);
+  await completeProbe(page, () => page.clock.runFor(5000));
+  expectedRequests += 1;
+  expect(requests).toBe(expectedRequests);
   expect(match.connections()).toBe(2);
 });
 
-test("an abort-ignoring request cannot latch Debug polling or replace a newer entry point", async ({
+test("an abort-ignoring request cannot latch match polling or replace a newer entry point", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -704,38 +761,49 @@ test("an abort-ignoring request cannot latch Debug polling or replace a newer en
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   const panel = page.locator(".pause-debug");
   const entry = diagnosticValue(panel, "Point d’entrée Cloudflare");
-  await expect.poll(() => pending.length).toBe(1);
+  await expect.poll(() => pending.length).toBeGreaterThanOrEqual(1);
+  const superseded = pending.length;
+  await setBrowserOnline(page, true);
+  await expect.poll(() => pending.length).toBe(superseded + 1);
   await page.clock.runFor(4999);
-  expect(pending).toHaveLength(1);
-  // Timeout must free the slot independently of the first fetch settling.
-  await page.clock.runFor(1001);
-  await expect.poll(() => pending.length).toBe(2);
-  await pending[1].fulfill(ZURICH_PROBE);
+  expect(pending).toHaveLength(superseded + 1);
+  // A five-second timeout frees the slot even when abort never settles.
+  // The next five-second cadence must start a replacement by ten seconds.
+  await page.clock.runFor(5001);
+  await expect.poll(() => pending.length).toBe(superseded + 2);
+  await pending[superseded + 1].fulfill(ZURICH_PROBE);
   await expect(entry).toContainText("ZRH");
-  await pending[0].fulfill(FRANKFURT_PROBE);
-  // The obsolete request's body has been parsed before asserting the current UI.
+  for (const oldRequest of pending.slice(0, superseded + 1))
+    await oldRequest.fulfill(FRANKFURT_PROBE);
+  // Every obsolete body has been parsed before asserting the current UI.
   await expect(page.locator("html")).toHaveAttribute(
     "data-debug-bodies-read",
-    "2",
+    String(superseded + 2),
   );
   await expect(entry).toContainText("ZRH");
   await expect(diagnosticValue(panel, "Service de jeu")).toHaveText("polytour");
   await expectSharedPing(panel, "ZRH");
-  await page.clock.runFor(1000);
-  await expect.poll(() => pending.length).toBe(3);
+  const nextRequest = pending.length;
+  await page.clock.runFor(5000);
+  await expect.poll(() => pending.length).toBe(nextRequest + 1);
   await setBrowserOnline(page, true);
-  await expect.poll(() => pending.length).toBe(4);
-  await pending[3].fulfill(ZURICH_PROBE);
+  await expect.poll(() => pending.length).toBe(nextRequest + 2);
+  await pending[nextRequest + 1].fulfill(ZURICH_PROBE);
   await expect(entry).toContainText("ZRH");
-  await pending[2].fulfill(FRANKFURT_PROBE);
+  await pending[nextRequest].fulfill(FRANKFURT_PROBE);
   await expect(page.locator("html")).toHaveAttribute(
     "data-debug-bodies-read",
-    "4",
+    String(nextRequest + 2),
   );
   await expect(entry).toContainText("ZRH");
   await page.getByRole("tab", { name: "Audio", exact: true }).click();
-  await page.clock.runFor(10_000);
-  expect(pending).toHaveLength(4);
+  const outsideDebug = pending.length;
+  await page.clock.runFor(5000);
+  await expect.poll(() => pending.length).toBe(outsideDebug + 1);
+  await setDocumentVisibility(page, false);
+  const whileHidden = pending.length;
+  await page.clock.runFor(20_000);
+  expect(pending).toHaveLength(whileHidden);
 });
 
 test("Cloudflare probe details translate and distinguish local or unmapped entry points", async ({
@@ -748,6 +816,7 @@ test("Cloudflare probe details translate and distinguish local or unmapped entry
     return route.fulfill(probeResponse);
   });
   const match = await enterMatch(page);
+  await freezeClock(page);
   await openSettings(page);
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   const panel = page.locator(".pause-debug");
@@ -782,6 +851,7 @@ test("Cloudflare probe details translate and distinguish local or unmapped entry
   };
   await page.getByRole("tab", { name: "Video", exact: true }).click();
   await page.getByRole("tab", { name: "Debug", exact: true }).click();
+  await completeProbe(page, () => setBrowserOnline(page, true));
   await expect(panel).toHaveAttribute("data-runtime", "local");
   await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
   await expect(diagnosticValue(panel, "Cloudflare entry point")).toHaveText(
@@ -798,6 +868,7 @@ test("Cloudflare probe details translate and distinguish local or unmapped entry
   };
   await page.getByRole("tab", { name: "Video", exact: true }).click();
   await page.getByRole("tab", { name: "Debug", exact: true }).click();
+  await completeProbe(page, () => setBrowserOnline(page, true));
   await expect(panel).toHaveAttribute("data-runtime", "cloudflare");
   await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
   await expect(diagnosticValue(panel, "Cloudflare entry point")).toHaveText(
@@ -808,39 +879,47 @@ test("Cloudflare probe details translate and distinguish local or unmapped entry
   await expect(diagnosticValue(panel, "Host")).toHaveText("127.0.0.1");
   await expectSharedPing(panel, "ZZZ");
   await expect(panel).not.toContainText("FRA");
-  expect(requests.length).toBeGreaterThanOrEqual(4);
+  expect(requests.length).toBeGreaterThanOrEqual(3);
   for (const url of requests)
     expect(new URL(url).pathname).toBe("/connection-probe.txt");
   expect(match.connections()).toBe(1);
 });
 
-test("the tiny match badge retains its shared sample outside Debug without more static requests", async ({
+test("the tiny match badge refreshes its shared sample every five seconds outside Debug", async ({
   page,
 }) => {
   let requests = 0;
+  let response: ProbeResponse = FRANKFURT_PROBE;
   await page.route("**/connection-probe.txt**", (route) => {
     requests += 1;
-    return route.fulfill(FRANKFURT_PROBE);
+    return route.fulfill(response);
   });
-  await enterMatch(page);
-  await freezeClock(page);
+  const match = await enterMatch(page);
   const badge = page.locator(".match-network");
-  await expect(badge).toHaveText("— · — ms");
-  expect(requests).toBe(0);
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
+  await freezeClock(page);
+  const initialRequests = requests;
+  response = ZURICH_PROBE;
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(initialRequests + 1);
+  await expect(badge).toHaveText(/^ZRH · \d+ ms$/);
+  expect(match.metadataRequests()).toBe(0);
+  expect(match.pingRequests()).toBe(0);
   await openSettings(page);
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   const panel = page.locator(".pause-debug");
   await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
-  await expectSharedPing(panel, "FRA");
-  const measured = await badge.textContent();
-  expect(requests).toBe(1);
+  await expectSharedPing(panel, "ZRH");
+  const beforeClosing = requests;
   await page
     .getByRole("button", { name: "Revenir au plateau", exact: true })
     .click();
   await expect(page.locator(".pause-dialog")).toHaveCount(0);
-  await page.clock.runFor(3000);
-  await expect(badge).toHaveText(measured ?? "");
-  expect(requests).toBe(1);
+  response = FRANKFURT_PROBE;
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(beforeClosing + 1);
+  await expect(badge).toHaveText(/^FRA · \d+ ms$/);
+  const beforeScreenshots = requests;
   for (const viewport of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
@@ -888,8 +967,10 @@ test("the tiny match badge retains its shared sample outside Debug without more 
     await page.screenshot({
       path: `.local/verification/match-network-${viewport.width}.png`,
     });
-    expect(requests).toBe(1);
   }
+  expect(requests - beforeScreenshots).toBeLessThanOrEqual(1);
+  expect(match.metadataRequests()).toBe(0);
+  expect(match.pingRequests()).toBe(0);
 });
 
 test("room diagnostics show connected ingress routes and SQLite with bounded measured latency history", async ({
@@ -933,12 +1014,10 @@ test("room diagnostics show connected ingress routes and SQLite with bounded mea
   await expect(diagnosticValue(route, "Votre entrée WebSocket")).toContainText(
     "FRA",
   );
-  await expect(diagnosticValue(route, "Juridiction")).toHaveText(
-    "Union européenne",
-  );
-  await expect(diagnosticValue(route, "Hôte / centre de données")).toHaveText(
-    "Non exposé par Cloudflare",
-  );
+  await expect(route.getByText("Juridiction", { exact: true })).toHaveCount(0);
+  await expect(
+    route.getByText("Hôte / centre de données", { exact: true }),
+  ).toHaveCount(0);
   await expect(route.locator(".room-debug-object")).not.toContainText("IAD");
   await page.clock.runFor(120);
   match.pong(0);
@@ -1030,9 +1109,10 @@ test("room diagnostics show connected ingress routes and SQLite with bounded mea
   await expect(route.locator(".room-debug-object")).toContainText(
     "SQLite inside this object",
   );
-  await expect(diagnosticValue(route, "Host / data center")).toHaveText(
-    "Not exposed by Cloudflare",
-  );
+  await expect(route.getByText("Jurisdiction", { exact: true })).toHaveCount(0);
+  await expect(
+    route.getByText("Host / data center", { exact: true }),
+  ).toHaveCount(0);
   await expect(
     latency.getByRole("img", { name: /Game ping history/ }),
   ).toHaveAccessibleName(/60 samples/);

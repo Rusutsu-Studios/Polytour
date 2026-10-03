@@ -46,16 +46,17 @@ it updates board labels, cards, decisions and tools without reconnecting the roo
 The toolbar's pause icon opens Continue, Settings and Leave while the match
 continues. Personal settings use Game, Video, Audio and Debug tabs. Game holds
 language; Video holds reduced motion and board size; Audio is marked coming soon.
-Debug measures the HTTP round trip to a static Cloudflare asset each second only while its
-panel and browser page are visible and online, restarting on connectivity changes,
+The match HUD measures the HTTP round trip to a static Cloudflare asset every five
+seconds while the match is connected and the browser page is visible and online,
+restarting on connectivity changes. Debug shares this stream,
 with the contacted host and Cloudflare entry point (code, location and region).
-A tiny bottom-right `AMS · 42 ms` indicator retains the last sample outside Debug,
+A tiny bottom-right `AMS · 42 ms` indicator keeps refreshing outside Debug,
 without a background card or extra controls. Probes bypass Worker execution.
 The expanded Debug sheet draws connected players' ingress routes toward one
 shared GameRoom with local SQLite and plots real room WebSocket round trips.
-Room pings run every five seconds only while this view is visible. Unknown DO
-DC/server identity is explicitly not exposed by Cloudflare; diagrams do not infer
-it from an ingress POP or show SQLite as a remote network hop.
+Room pings run every five seconds only while this view is visible. Jurisdiction
+and unknown DO DC/server rows are omitted. Diagrams do not infer the object's
+location from an ingress POP or show SQLite as a remote network hop.
 New decisions and cards keep progressing without replacing the menu's focus.
 The sliders icon separately displays the fixed room rules, and the invitation
 icon displays the room code. Playback has normal pacing and automatic recovery;

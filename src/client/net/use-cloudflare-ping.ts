@@ -4,7 +4,7 @@ import {
   measureCloudflarePing,
 } from "./cloudflare-ping.js";
 
-const PING_INTERVAL_MS = 1_000;
+const PING_INTERVAL_MS = 5_000;
 const PING_TIMEOUT_MS = 5_000;
 
 export type PingState = (

@@ -493,6 +493,29 @@ zero health calls and zero page errors. This verifies one connection to a branch
 Preview, not a geographically distributed group or production deployment. The
 previously recorded remote SQLite quota blockage is no longer present in this check.
 
+## Five-second match HUD and concise room details — 3 October 2026
+
+The user's follow-up makes the static HTTP badge a live match indicator: it
+refreshes every five seconds even with Debug closed, while the game connection is
+online and the page is visible. Debug shares that same stream. Hiding the page,
+going offline or leaving the match stops the probe; connectivity changes still
+refresh it immediately. These requests remain asset-first and do not execute
+Worker or DO code. The room WebSocket graph and its metadata stay Debug-only.
+
+The jurisdiction and physical DO host/DC rows are removed from the FR/EN interface,
+along with their unused formatting. The protocol retains its compatible metadata
+shape. This supersedes the earlier one-second Debug-only HTTP probe and the
+explicit unavailable DO location rows described above.
+
+TypeScript, Biome, 162 unit/Worker tests, production build and bundle budgets pass.
+All 26 non-live browser scenarios pass in one run, including the real production
+gameplay/reconnection flow and 11 pause/settings/debug cases. HTTP checks cover
+five-second cadence outside Debug, one shared stream, hidden/offline/leave cleanup,
+network refresh and timeout recovery. Room diagnostics remain Debug-only. The
+removed labels are absent in FR/EN; captures at 1280x720, 1440x900, 1920x1080 and
+390x844 retain usable layout without horizontal overflow. Some clock-controlled
+fixtures leave the 3D backdrop unrendered; their diagnostic values are illustrative.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,
