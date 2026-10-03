@@ -85,7 +85,7 @@ export function mix(color: string, other: string, amount: number) {
 }
 /** Road markings stay close to the asphalt so they never compete with the tiles. */
 const ASPHALT = "#86929a";
-const ROAD_PAINT = mix(ASPHALT, "#eef1ea", 0.4);
+const ROAD_PAINT = mix(ASPHALT, "#eef1ea", 0.6);
 const ROAD_CURB = mix(ASPHALT, "#dfe4dc", 0.55);
 
 /** Board prints use the compact amounts of a printed board: 350K, 1,2M. */
