@@ -232,11 +232,11 @@ type Point = readonly [number, number];
 /** A raised paving stone: lit along its top edge, shaded along its lower one. */
 function stone(context: Context, path: () => void, face: string) {
   context.save();
-  context.fillStyle = mix(face, INK, 0.07);
+  context.fillStyle = mix(face, INK, 0.12);
   context.translate(1.5, 2);
   path();
   context.fill();
-  context.fillStyle = mix(face, "#ffffff", 0.3);
+  context.fillStyle = mix(face, "#ffffff", 0.35);
   context.translate(-2.5, -3);
   path();
   context.fill();
@@ -271,7 +271,7 @@ function polygon(context: Context, points: readonly Point[]) {
 /** The joints between stones: only a little deeper than the stones, so the
  * pattern stays a texture and never competes with names and prices. */
 function joint(color: string) {
-  return mix(PAPER, color, 0.58);
+  return mix(mix(PAPER, color, 0.7), INK, 0.1);
 }
 
 /** One stone's face in the country's color, varied from stone to stone. */
@@ -299,7 +299,7 @@ const lawn: Pavement = (context, color, width, height, next) => {
   for (let blade = 0; blade < blades; blade++) {
     const [x, y, length] = [next() * width, next() * height, 4 + next() * 5];
     context.strokeStyle =
-      next() < 0.6 ? mix(base, INK, 0.07) : mix(base, "#ffffff", 0.2);
+      next() < 0.6 ? mix(base, INK, 0.1) : mix(base, "#ffffff", 0.24);
     context.beginPath();
     context.moveTo(x, y);
     context.lineTo(x + (next() - 0.5) * 4, y - length);
@@ -328,7 +328,7 @@ const flagstones: Pavement = (context, color, width, height, next) => {
 const mosaic: Pavement = (context, color, width, height) => {
   context.fillStyle = joint(color);
   context.fillRect(0, 0, width, height);
-  const [light, dark] = [mix(PAPER, color, 0.4), mix(PAPER, color, 0.58)];
+  const [light, dark] = [mix(PAPER, color, 0.4), mix(PAPER, color, 0.66)];
   for (let y = 0; y < height; y += 16)
     for (let x = 0; x < width; x += 16) {
       const wave = (y + 208 + Math.sin((x + 8) / 34) * 20) % 80;
@@ -435,7 +435,7 @@ const deck: Pavement = (context, color, width, height, next) => {
         rect(context, from + 2, row * 40 + 2.5, to - from - 4, 35, 3),
         plank,
       );
-      context.strokeStyle = mix(plank, INK, 0.04);
+      context.strokeStyle = mix(plank, INK, 0.07);
       for (const offset of [12, 25]) {
         const y = row * 40 + offset + next() * 3;
         context.beginPath();
