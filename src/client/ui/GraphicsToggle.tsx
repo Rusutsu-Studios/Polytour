@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useLocale } from "../i18n.js";
 import Icon from "./Icon.js";
 
@@ -11,6 +12,32 @@ export default function GraphicsToggle({
   compact?: boolean;
 }) {
   const { t } = useLocale();
+  const name = useId();
+  if (!compact) {
+    return (
+      <fieldset className="graphics-quality">
+        <legend>{t("Graphismes", "Graphics")}</legend>
+        <div className="graphics-quality-options">
+          {([false, true] as const).map((low) => (
+            <label
+              key={low ? "low" : "high"}
+              className="graphics-quality-option"
+              data-selected={lowGraphics === low}
+            >
+              <input
+                type="radio"
+                name={name}
+                value={low ? "low" : "high"}
+                checked={lowGraphics === low}
+                onChange={() => onChange(low)}
+              />
+              <span>{low ? t("Faible", "Low") : t("Élevé", "High")}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    );
+  }
   const label = lowGraphics
     ? t(
         "Graphismes : Faibles. Passer aux graphismes élevés.",
@@ -22,7 +49,6 @@ export default function GraphicsToggle({
       );
   return (
     <div className="graphics-setting">
-      {!compact && <span>{t("Graphismes", "Graphics")}</span>}
       <button
         type="button"
         className="graphics-toggle"

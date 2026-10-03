@@ -60,7 +60,7 @@
   font-weight: 900;
   text-align: center;
 }
-/* One height for every space, so the step arrows stay under the pointer. */
+/* Keep the deed comfortable to read for properties and special spaces. */
 .city-card {
   display: flex;
   flex-direction: column;
@@ -76,17 +76,15 @@
   justify-content: space-between;
   gap: 12px;
 }
-.city-card-steps {
+.city-card-space {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-/* A fixed width keeps the next arrow in place while stepping. */
 .city-card-place {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 124px;
   font-size: 13px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
@@ -108,15 +106,11 @@
   font-size: 14px;
   color: #183e45;
 }
-.city-card .city-card-step,
 .city-card .city-card-close {
   width: 32px;
   height: 32px;
   border-radius: 8px;
   background: #eeecd9;
-}
-.city-card .city-card-step[data-back="true"] svg {
-  rotate: 180deg;
 }
 .city-card-columns {
   display: grid;

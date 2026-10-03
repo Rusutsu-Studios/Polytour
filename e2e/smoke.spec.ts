@@ -40,7 +40,9 @@ test.describe("production app shell", () => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
-    await expect(page).toHaveTitle("Polytour");
+    await expect(page).toHaveTitle(
+      "Polytour — Jeu de plateau multijoueur en ligne",
+    );
     await expect(
       page.getByRole("button", { name: "Jouer", exact: true }),
     ).toBeVisible();
