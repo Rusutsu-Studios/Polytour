@@ -93,7 +93,8 @@ pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
 pnpm check:version # package version/changelog agreement; --tag vX.Y.Z; --base <git-ref>
 pnpm test:version  # focused release-tooling tests
-pnpm version:bump patch # or minor/major; moves Unreleased notes, updates package version; no Git operations
+pnpm version:prepare patch --base origin/main # patch is the default; prepare this PR's version and notes
+pnpm version:bump patch # low-level manual bump; use version:prepare for pull requests
 pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4;
                     # --rules reference|prototype, default reference; --rounds N, default 20)
 pnpm check:drand    # live future-round verification; local proof evidence
@@ -255,6 +256,8 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 
 ## Verification before calling something done
 
+- Prepare the application version and changelog for every pull request using the
+  workflow below, including documentation-only and maintenance changes.
 - `pnpm typecheck && pnpm lint && pnpm test` pass.
 - Engine/rules change → engine tests + a quick `pnpm sim` run to catch balance/termination regressions.
 - DO/protocol change → a `@cloudflare/vitest-plugin` test covering the message flow
@@ -265,6 +268,48 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - Worker routing, `wrangler.jsonc`, or app shell change → `pnpm test:e2e`, and
   `pnpm check:wrangler` for `wrangler.jsonc`.
 
+## Application version: required for every pull request
+
+Codex and Claude Code must manage version preparation themselves. Every pull
+request, including documentation-only changes, must advance the application
+version above its current base. CI enforces this on pull requests and the merge
+queue. `package.json` remains the sole source of `APP_VERSION`; do not hardcode a
+version in the UI or Worker, and do not change protocol/state/rules counters
+unless their own compatibility contract requires it.
+
+Before the final commit or creating/updating a pull request:
+
+1. Add concrete notes for this change under `## [Unreleased]` in `CHANGELOG.md`,
+   using `### Added`, `### Changed` or `### Fixed`. Include useful issue or pull
+   request references when available. Preserve all dated entries inherited from
+   the base; record corrections in the new notes.
+2. Fetch the latest base with `git fetch origin main`, then run
+   `pnpm version:prepare patch --base origin/main`. Patch is the default for fixes,
+   maintenance and documentation; choose `minor` for a feature or substantial
+   compatible improvement. Choose `major` only for a deliberate stable launch or
+   an incompatible stable public API change. During prototype development,
+   breaking prototype changes use `minor` and must be explained in the notes.
+3. Review `package.json` and `CHANGELOG.md`, then run
+   `pnpm check:version --base origin/main --require-bump`, `pnpm test:version`, and the checks
+   required for the change. Include these files in the same pull request.
+
+The preparation command reads the fetched base and defaults to `patch`. It
+requires real `Unreleased` notes for a fresh bump and moves them into a dated
+release section. It is safe to rerun: when this pull request already has a
+prepared version above the base, it keeps that version and folds any additional
+`Unreleased` notes into that pull request's existing section. Iterations of the
+same open pull request may share its prepared version; every merged pull request
+must advance beyond the latest base. If the scope grows, explicitly preparing
+`minor` or `major` promotes the prepared section to at least the corresponding
+next version of the base without losing its date or notes or downgrading a higher
+version. If another pull request makes the prepared version stale, rebase or
+merge the latest base, resolve conflicts, and run
+preparation and checks again before merging. If targeting another branch, fetch
+that branch and pass its remote ref instead of `origin/main`.
+
+Preparation never commits, tags, publishes or deploys. Follow the normal review
+workflow; release publication is covered in [docs/RELEASING.md](docs/RELEASING.md).
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request, push to `main`, and merge
@@ -272,15 +317,16 @@ queue. `verify` is the one check to require: it fails if any job fails.
 
 | Job | What fails it |
 | --- | --- |
-| `lint` | CLAUDE.md lost `@AGENTS.md`; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
+| `lint` | CLAUDE.md lost `@AGENTS.md`; release version/changelog mismatch or altered dated base history; a PR/merge-queue version that does not exceed its base; a tag that does not match the package version; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
 | `typecheck` | `pnpm typecheck`, covering `src/`, `test/`, `e2e/` and `tools/` |
-| `test` | `pnpm test` |
+| `test` | `pnpm test:version`, `pnpm test` or the quick bot simulation |
 | `build` | `vite build`, `pnpm check:bundle` (job summary shows the sizes), `wrangler deploy --dry-run` |
-| `changes` | Decides whether `e2e` runs: skipped only for pull requests that change nothing but `.md` files |
+| `changes` | Decides whether `e2e` runs: skipped only for pull requests that change nothing but `.md` files; a required package-version update also triggers it |
 | `e2e` | `pnpm test:e2e`; on failure the Playwright report and traces are uploaded |
 | `cloudflare` | `pnpm check:wrangler` against the PR's base commit |
 | `secrets` | gitleaks over the full history and the tree |
 | `dependency-review` | PRs only: a new dependency or action with a high/critical advisory |
+| `authorship` | PRs only: a commit authored or committed by an agent account |
 
 If an architecture rule fires on code that genuinely needs the exception, add a
 `// biome-ignore lint/<group>/<rule>: <reason>` comment on that line; don't loosen

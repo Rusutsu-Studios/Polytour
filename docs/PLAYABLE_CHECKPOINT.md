@@ -738,7 +738,9 @@ Local verification on the branch based on `2d27b37`:
 - Room and Video captures fit 1280×720, 1440×900 and 1920×1080. Existing sale,
   decision and menu layout scenarios also cover 2560×1440 and 3840×2160.
 - The production build, bundle budgets, Wrangler configuration, version check
-  and deployment dry run pass. The initial lobby JavaScript is 197.6 kB gzip.
+  and deployment dry run pass. The initial lobby JavaScript is 197.7 kB gzip.
+- After integrating the `d9e1c82` release-workflow update from main, version 0.2.1
+  is prepared and validated against that base; all 28 release-tooling tests pass.
 
 The mechanical design detector retains advisories about the established toy-game
 palette, compact typography and physical-control styling. Browser captures provide
