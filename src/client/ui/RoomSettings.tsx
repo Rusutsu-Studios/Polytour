@@ -3,6 +3,7 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import { money } from "./board-display.js";
+import DiceExplanation from "./DiceExplanation.js";
 import "./RoomSettings.css";
 
 export type RoomSettingsProps = {
@@ -338,21 +339,20 @@ export function RoomSettings({
       </fieldset>
       <details className="room-settings-fairness">
         <summary>{t("Dés et économie", "Dice and economy")}</summary>
-        <p>
-          {config.randomnessMode === "drand"
-            ? t(
-                "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
-                "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
-              )
-            : t(
-                "Les deux dés sont tirés sur le serveur avec un générateur cryptographique. Aucun achat ne modifie les résultats.",
-                "Both dice are rolled on the server with a cryptographic generator. Purchases cannot alter the results.",
-              )}{" "}
-          {t(
-            "Les loyers et effets sont encore en cours d’équilibrage.",
-            "Rents and card effects are still being balanced.",
-          )}
-        </p>
+        {config.randomnessMode === "drand" ? (
+          <p>
+            {t(
+              "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
+              "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
+            )}{" "}
+            {t(
+              "Les loyers et effets sont encore en cours d’équilibrage.",
+              "Rents and card effects are still being balanced.",
+            )}
+          </p>
+        ) : (
+          <DiceExplanation />
+        )}
       </details>
       {save && (
         <button
