@@ -19,8 +19,8 @@ has been published, and it does not reconstruct earlier development history.
 - Keep Surprise cards visible for eight seconds and show tax payments to every
   player in a matching six-second popup; reserve reading time before the next
   decision and bot action (#31).
-- Show the current language as FR or EN, with a compact menu on hover, click or
-  keyboard activation on the start screen (#43).
+- Show the current language as a simple globe-and-text FR/EN button beside How
+  to play; click or keyboard activation switches directly to the other language (#43).
 - Use a minimize icon on decision windows and a compact bottom tab that keeps
   the countdown and reopens the same selection (#50).
 

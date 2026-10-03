@@ -12,7 +12,6 @@ import {
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
 import { clickBoardSpace } from "./board-interactions.js";
-import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -185,33 +184,46 @@ test("cash shortages have their own explanation", async ({ page }) => {
   await expect(house).toBeDisabled();
 });
 
-test("language menu opens on hover and keyboard and persists its short label", async ({
+test("globe and language text switch directly on click and keyboard and persist", async ({
   page,
 }) => {
   await page.goto("/");
-  const trigger = page.getByRole("button", {
-    name: "Langue / Language",
-    exact: true,
-  });
-  await expect(trigger).toContainText("FR");
+  const trigger = page.locator(".language-trigger");
+  await expect(trigger).toHaveText("FR");
+  await expect(trigger).toHaveAccessibleName("FR · Passer en anglais");
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect(trigger.locator("svg")).toBeVisible();
+    const help = await page
+      .getByRole("button", { name: "Comment jouer", exact: true })
+      .boundingBox();
+    const language = await trigger.boundingBox();
+    expect(language).not.toBeNull();
+    expect(help).not.toBeNull();
+    expect(Math.abs((language?.y ?? 0) - (help?.y ?? 0))).toBeLessThan(2);
+    expect(
+      (help?.x ?? 0) - ((language?.x ?? 0) + (language?.width ?? 0)),
+    ).toBeLessThan(25);
+    await page.screenshot({
+      path: `.local/verification/language-button-${size.width}.png`,
+    });
+  }
   await trigger.hover();
-  await expect(page.locator(".language-menu")).toBeVisible();
-  await page.getByRole("button", { name: "English", exact: true }).hover();
-  await expect(page.locator(".language-menu")).toBeVisible();
-  await page.screenshot({ path: ".local/verification/language-menu.png" });
-  await page.mouse.move(20, 300);
-  await expect(page.locator(".language-menu")).not.toBeVisible();
-  await trigger.focus();
-  await trigger.press("ArrowDown");
-  await expect(
-    page.getByRole("button", { name: "Français", exact: true }),
-  ).toBeFocused();
-  await page.keyboard.press("Escape");
-  await chooseLanguage(page, "en");
+  await expect(trigger).toHaveText("FR");
+  await trigger.click();
+  await expect(trigger).toHaveText("EN");
+  await expect(trigger).toHaveAccessibleName("EN · Switch to French");
   await expect(trigger).toBeFocused();
-  await expect(trigger).toContainText("EN");
+  await trigger.press("Space");
+  await expect(trigger).toHaveText("FR");
+  await trigger.press("Enter");
+  await expect(trigger).toHaveText("EN");
   await page.reload();
-  await expect(trigger).toContainText("EN");
+  await expect(trigger).toHaveText("EN");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 

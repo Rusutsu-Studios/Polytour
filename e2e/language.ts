@@ -1,14 +1,9 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 export async function chooseLanguage(page: Page, language: "fr" | "en") {
-  await page
-    .getByRole("button", { name: "Langue / Language", exact: true })
-    .click();
-  await page
-    .locator(".language-menu")
-    .getByRole("button", {
-      name: language === "fr" ? "Français" : "English",
-      exact: true,
-    })
-    .click();
+  const button = page.locator(".language-trigger");
+  await expect(button).toHaveText(/^(FR|EN)$/);
+  if ((await button.innerText()) !== language.toUpperCase())
+    await button.click();
+  await expect(page.locator("html")).toHaveAttribute("lang", language);
 }

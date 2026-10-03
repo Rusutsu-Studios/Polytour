@@ -10,6 +10,7 @@ type IconName =
   | "minimize"
   | "bank"
   | "help"
+  | "globe"
   | "journal"
   | "shield"
   | "settings"
@@ -37,6 +38,8 @@ const paths: Record<IconName, string> = {
   bank: "m3 8 9-5 9 5H3Zm2 3v7m5-7v7m4-7v7m5-7v7M3 21h18M2 18h20",
   close: "m6 6 12 12M18 6 6 18",
   help: "M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4m.1 3h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z",
+  globe:
+    "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM2 12h20M12 2a18 18 0 0 1 0 20 18 18 0 0 1 0-20Z",
   journal: "M4 3h14a2 2 0 0 1 2 2v16H6a2 2 0 0 1-2-2V3Zm0 14h16M8 7h8M8 11h6",
   shield: "m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-5 10 3 3 7-7",
   settings: "M4 7h16M4 17h16M9 4v6m6 4v6",

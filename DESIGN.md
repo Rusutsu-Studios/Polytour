@@ -71,7 +71,8 @@ it. Roll and opponent turns keep their compact bottom prompt.
 Unavailable choices explain their prerequisite in a small ivory popup with a
 gold heading, on hover or keyboard focus. Minimized decisions use a bottom tab
 with their title and live countdown. The welcome screen's language control shows
-FR or EN and opens an ivory language menu on hover, click or keyboard activation.
+FR or EN beside a small globe, using the same text-button style as How to play.
+Clicking it switches directly to the other language; Enter and Space do the same.
 Chance cards hold for eight seconds; tax payments use the same reading window
 for six seconds, visible to all players. Continue or Escape ends a reading hold.
 

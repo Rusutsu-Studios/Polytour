@@ -1796,12 +1796,12 @@ function App() {
           </span>
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
-            <LanguagePicker />
             <GraphicsToggle
               lowGraphics={lowGraphics}
               onChange={changeGraphics}
               compact
             />
+            <LanguagePicker />
             <button
               type="button"
               className="text-button help-button"
