@@ -346,6 +346,41 @@ test.describe("low graphics", () => {
   });
 });
 
+test("room lobby board fills its preview across desktop sizes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Votre nom de joueur").fill("Lobby preview");
+  await openLobby(page);
+  const preview = page.locator(".room-preview");
+  const scene = preview.locator(".canvas-layer");
+  await expect(scene).toHaveAttribute("data-scene-ready", "true");
+  for (const size of DESKTOP_SIZES) {
+    await page.setViewportSize(size);
+    await expect
+      .poll(async () => {
+        const container = await preview.boundingBox();
+        const canvas = await scene.locator("canvas").boundingBox();
+        return Math.abs((canvas?.height ?? 0) - (container?.height ?? 0));
+      })
+      .toBeLessThan(2);
+    const canvas = await scene.locator("canvas").boundingBox();
+    expect(canvas?.height).toBeGreaterThan(500);
+    expect((canvas?.x ?? 0) + (canvas?.width ?? 0)).toBeLessThanOrEqual(
+      size.width,
+    );
+    await page.screenshot({
+      path: `.local/verification/lobby-board-${size.width}.png`,
+      fullPage: true,
+    });
+  }
+  await page.locator(".settings-trigger").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".settings-dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".settings-trigger")).toBeFocused();
+});
+
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {

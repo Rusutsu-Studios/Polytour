@@ -1882,6 +1882,9 @@ button.seat-open:disabled {
   height: 630px;
   margin-top: 40px;
 }
+.room-preview > .canvas-layer {
+  height: 100%;
+}
 .waiting-host {
   display: flex;
   gap: 12px;
