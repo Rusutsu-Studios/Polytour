@@ -13,6 +13,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Changed
 
+- The version in the welcome footer opens a scrollable release history sourced
+  directly from CHANGELOG.md, with localized controls and keyboard navigation.
 - The Championship corner is now a stadium with a spinning gold trophy; it
   lights up in the host's colour while a championship runs. The World Tour
   corner is now a jet port with a terminal, a control tower and an airliner
