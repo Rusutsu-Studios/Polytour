@@ -9,6 +9,16 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
+### Changed
+
+- The Championship corner is now a stadium with a spinning gold trophy; it
+  lights up in the host's colour while a championship runs. The World Tour
+  corner is now a jet port with a terminal, a control tower and an airliner
+  taking off. Both share the town's ambient motion and keep the draw-call
+  budget (#77).
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
@@ -53,11 +63,6 @@ has been published, and it does not reconstruct earlier development history.
   championship host flies a gold banner (#57).
 - Players are identified by color only; per-player symbols are removed from
   the board, pawns, corner HUDs, cards and menus (#57).
-- The Championship corner is now a stadium with a spinning gold trophy; it
-  lights up in the host's colour while a championship runs. The World Tour
-  corner is now a jet port with a terminal, a control tower and an airliner
-  taking off. Both share the town's ambient motion and keep the draw-call
-  budget.
 
 ### Fixed
 
