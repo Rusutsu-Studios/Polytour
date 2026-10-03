@@ -1868,8 +1868,8 @@ function App() {
               <h1>{t("Nouvelle partie", "New game")}</h1>
               <p className="welcome-intro">
                 {t(
-                  "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
-                  "Buy the cities you land on, build and collect rent.",
+                  "Achetez. Construisez. Améliorez. Encaissez.",
+                  "Buy. Build. Upgrade. Collect.",
                 )}
               </p>
               <div className="welcome-form">
@@ -2194,9 +2194,9 @@ function App() {
       {!isGame && (
         <footer className="lobby-footer">
           <span>
-            {t("2 à 4 joueurs · 32 cases", "2 to 4 players · 32 spaces")}
+            {t("Crée par Poli & GJJS", "Made by Poli & GJJS")}
           </span>
-          <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
+          <a href="https://github.com/Rusutsu-Studios/Polytour/" target="_blank" rel="noopener">{t("Voir sur GitHub", "View on GitHub")}</a>
           <Changelog />
         </footer>
       )}
