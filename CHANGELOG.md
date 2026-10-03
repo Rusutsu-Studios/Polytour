@@ -9,6 +9,11 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Fixed
+
+- Invitation links ask only for a nickname and join the invited room, with
+  retryable errors, saved-seat recovery and a return to the start screen (#54).
+
 ## [0.1.0] - 2026-10-03
 
 ### Added
