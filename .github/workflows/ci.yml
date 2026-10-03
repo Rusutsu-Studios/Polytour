@@ -46,8 +46,18 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           REQUIRE_BUMP: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         run: |
+          # A feature branch's previous prepared release is still a draft.
+          # Check shipped history against main, especially after resolving a
+          # version collision with another merged PR.
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
+            git fetch --no-tags --depth=1 origin main
+            BASE_SHA=origin/main
+            REQUIRE_BUMP=true
+          fi
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
-            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            if [ "$BASE_SHA" != "origin/main" ]; then
+              git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            fi
             if [ "$REQUIRE_BUMP" = "true" ]; then
               pnpm check:version --base "$BASE_SHA" --require-bump
             else
