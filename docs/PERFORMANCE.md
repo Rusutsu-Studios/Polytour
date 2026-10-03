@@ -98,11 +98,12 @@ material programs when switching modes on an existing Canvas.
 
 These are local checks. No deployment or target-hardware FPS claim is made.
 
-One early SwiftShader capture showed dark house walls and roofs in Low after
-switching quality. Repeated live bot-game captures and controlled construction
-with the first buildings created in either High or Low did not reproduce it.
-The populated draws had the expected instance colors and lighting. The isolated
-capture remains unexplained; no speculative renderer workaround was added.
+Occasional SwiftShader captures showed dark lot or town building walls and roofs
+in Low after switching quality. Other live bot-game captures and controlled
+construction with the first buildings created in either High or Low rendered
+correctly. Instrumented successful draws had matching CPU/GPU instance colors
+and the expected lighting. The intermittent software-rendering issue remains
+unexplained; no speculative renderer workaround was added.
 
 ## Further work worth considering
 
