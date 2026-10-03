@@ -377,13 +377,19 @@ function Towns({
       let windowCount = 0;
       let detailCount = 0;
       for (const tile of BOARD) {
-        if (tile.kind !== "city") continue;
+        const resort = tile.kind === "resort";
+        if (tile.kind !== "city" && !resort) continue;
         const growing = growth?.tile === tile.index ? growth : null;
         let order = 0;
         const property = view ? getProperty(view, tile.index) : null;
         const owner = property?.owner;
-        const level =
-          owner != null
+        // A beach never builds: it either stands empty or carries the one
+        // bungalow that says it has been bought.
+        const level = resort
+          ? owner != null || preview
+            ? 1
+            : 0
+          : owner != null
             ? (property?.level ?? 0)
             : preview
               ? 1 + (tile.index % 5)
@@ -399,6 +405,8 @@ function Towns({
           fullWidth: number,
           fullHeight: number,
           depth = 0.28,
+          overhang = 0.05,
+          roofHeight = level >= 4 ? 0.13 : 0.12,
         ) => {
           let width = fullWidth;
           let height = fullHeight;
@@ -424,7 +432,7 @@ function Towns({
           walls.current?.setMatrixAt(count, dummy.matrix);
           walls.current?.setColorAt(count, color.set("#fffaf4"));
           dummy.position.y = base + height;
-          dummy.scale.set(width + 0.05, level >= 4 ? 0.13 : 0.12, depth + 0.05);
+          dummy.scale.set(width + overhang, roofHeight, depth + overhang);
           dummy.updateMatrix();
           roofs.current?.setMatrixAt(count, dummy.matrix);
           roofs.current?.setColorAt(count, color.set(roofColor));
@@ -463,7 +471,10 @@ function Towns({
             windows.current?.setMatrixAt(windowCount++, dummy.matrix);
           }
         };
-        if (level >= 1 && level <= 3) {
+        if (resort) {
+          // A low bungalow under a wide thatch roof, beside the parasol.
+          building(0.2, 0.36, 0.14, 0.26, 0.1, 0.14);
+        } else if (level >= 1 && level <= 3) {
           const offsets =
             level === 1 ? [0] : level === 2 ? [-0.2, 0.2] : [-0.3, 0, 0.3];
           for (const x of offsets) building(x, level === 1 ? 0.3 : 0.24, 0.22);
@@ -526,13 +537,15 @@ function Towns({
   );
 }
 
+// The parasol keeps its coral canvas on every beach: it says "beach", and the
+// bungalow beside it says who bought it.
 function ResortProps() {
   return (
     <>
       {BOARD.filter((tile) => tile.kind === "resort").map((tile) => {
         const [x, z] = tilePoint(
           tile.index,
-          -0.24,
+          -0.28,
           buildingBandZ(tile.index) + screenTop(tile.index) * 0.04,
         );
         return (
@@ -1547,15 +1560,18 @@ function SceneContent(props: BoardProps) {
             }
             burst.instanceMatrix.needsUpdate = true;
           };
-          // New houses rise one after another on their plot; the view
-          // shows the next state on this tile while it is being built.
+          // New houses rise one after another on their plot, and a beach
+          // raises its bungalow the moment it is taken; the view shows the
+          // next state on this tile while it is being built.
           const builds =
-            event.type !== "BoughtOut" &&
-            BOARD[event.tile].kind === "city" &&
-            (getProperty(context.next, event.tile)?.level ?? 0) >
-              (context.previous
-                ? (getProperty(context.previous, event.tile)?.level ?? 0)
-                : 0);
+            BOARD[event.tile].kind === "resort"
+              ? getProperty(context.next, event.tile)?.owner != null
+              : event.type !== "BoughtOut" &&
+                BOARD[event.tile].kind === "city" &&
+                (getProperty(context.next, event.tile)?.level ?? 0) >
+                  (context.previous
+                    ? (getProperty(context.previous, event.tile)?.level ?? 0)
+                    : 0);
           const drawGrowth = () => towns.current?.draw(context.next, growth);
           growth.tile = event.tile;
           growth.progress = 0;
