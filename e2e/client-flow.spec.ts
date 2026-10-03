@@ -56,6 +56,13 @@ async function expectDiceHelp(panel: Locator) {
   await expect(documentation).toHaveAttribute("target", "_blank");
 }
 
+// Play opens a lobby with three bots; the room starts once its leader says so.
+async function playWithBots(page: Page) {
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
+  await expect(page.locator(".lobby-seats")).toContainText("Atlas");
+  await page.getByRole("button", { name: "Démarrer la partie" }).click();
+}
+
 async function minimizeOwnDecision(page: Page) {
   // Director completion and React's native dialog opening are separate steps.
   // Wait for the current decision to be represented before opening a board tool.
@@ -107,7 +114,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await expect(
-    page.getByRole("button", { name: "Jouer avec 3 bots" }),
+    page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Comment jouer", exact: true })
@@ -160,7 +167,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     page.locator(".settings-dialog .room-settings"),
   ).not.toContainText("Web Crypto");
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await playWithBots(page);
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
@@ -700,7 +707,7 @@ test("a real pointer click skips a controlled presentation queue synchronously",
 }) => {
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Skip QA");
-  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await playWithBots(page);
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeEnabled({ timeout: 60_000 });
@@ -820,9 +827,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     .getByRole("radio", { name: "20 min", exact: true })
     .check();
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".lobby-seats")).toBeVisible();
   const code = await page.locator(".room-code-block strong").innerText();
   const friend = await browser.newContext({
@@ -903,7 +908,14 @@ test("desktop room controls fit, create and join preserve the host settings", as
       .getByRole("button", { name: "Fermer les réglages" })
       .click();
     await second.getByRole("button", { name: "Revenir au plateau" }).click();
-    // The host seats a bot on the open card, then sends it away again.
+    // Friends took the first two bots' places. Only the leader sends the last
+    // bot away or seats one again on the open card.
+    await expect(second.locator(".lobby-seats")).toContainText("Atlas");
+    await expect(
+      second.getByRole("button", { name: "Retirer le bot Atlas" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Retirer le bot Atlas" }).click();
+    await expect(second.locator(".lobby-seats")).not.toContainText("Atlas");
     await expect(
       second.getByRole("button", { name: /Ajouter un bot/ }),
     ).toHaveCount(0);
@@ -912,9 +924,6 @@ test("desktop room controls fit, create and join preserve the host settings", as
       .click();
     await expect(page.locator(".lobby-seats")).toContainText("Atlas");
     await expect(second.locator(".lobby-seats")).toContainText("Atlas");
-    await expect(
-      second.getByRole("button", { name: "Retirer le bot Atlas" }),
-    ).toHaveCount(0);
     await page.getByRole("button", { name: "Retirer le bot Atlas" }).click();
     await expect(
       page.getByRole("button", { name: "Ajouter un bot à la place 4" }),
@@ -994,7 +1003,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await expect(capital).toHaveValue("2000000");
   await page.screenshot({ path: ".local/verification/settings-sliders.png" });
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await playWithBots(page);
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
     "data-scene-ready",
     "true",
@@ -1152,7 +1161,7 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     .getByRole("radio", { name: "60 s", exact: true })
     .check();
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await playWithBots(page);
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeEnabled({ timeout: 60_000 });
@@ -1358,4 +1367,112 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     const { director } = await import(modulePath);
     director.reset(state);
   }, original);
+});
+
+test("the room leader seats a local player, admits a friend and brings everyone back", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.getByLabel("Votre nom de joueur").fill("Alice");
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
+  const seats = page.locator(".lobby-seats");
+  await expect(seats).toContainText("Milo");
+  await expect(seats.locator(".host-label")).toHaveCount(1);
+  // Someone next to Alice takes Milo's place on this screen.
+  await page.getByRole("button", { name: "Retirer le bot Milo" }).click();
+  await page
+    .getByRole("button", {
+      name: "Ajouter un joueur sur ce PC à la place 2",
+    })
+    .click();
+  await page.getByLabel("Joueur sur ce PC").fill("Bea");
+  await page.getByRole("button", { name: "Ajouter", exact: true }).click();
+  const local = page.locator(".lobby-seat[data-local]");
+  await expect(local).toContainText("Bea");
+  await expect(local).toContainText("Sur votre PC");
+  await page.getByLabel(/Verrouiller la salle/).check();
+  await expect(page.getByLabel(/Verrouiller la salle/)).toBeChecked();
+  const code = await page.locator(".room-code-block strong").innerText();
+  const friendContext = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    reducedMotion: "reduce",
+  });
+  try {
+    const friend = await friendContext.newPage();
+    await friend.goto(`/?room=${code}`);
+    await friend.getByLabel("Votre nom de joueur").fill("Cora");
+    await friend
+      .getByRole("button", { name: "Rejoindre", exact: false })
+      .click();
+    // A locked room keeps the newcomer waiting until the leader decides.
+    await expect(friend.locator(".waiting-notice")).toContainText(
+      "Alice doit accepter votre entrée.",
+    );
+    await expect(friend.locator(".lobby-seats")).toContainText("Bea");
+    await page.getByRole("button", { name: "Accepter Cora" }).click();
+    await expect(friend.locator(".waiting-host")).toContainText(
+      "En attente du démarrage par Alice.",
+    );
+    await expect(seats).toContainText("Cora");
+    await expect(seats).not.toContainText("Nova");
+    // The role goes to Cora, then back to Alice.
+    await page
+      .getByRole("button", { name: "Nommer Cora chef de salle" })
+      .click();
+    await expect(
+      friend.getByRole("button", { name: "Démarrer la partie" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Démarrer la partie" }),
+    ).toHaveCount(0);
+    await friend
+      .getByRole("button", { name: "Nommer Alice chef de salle" })
+      .click();
+    await page.getByRole("button", { name: "Démarrer la partie" }).click();
+    await expect(page.locator(".player-card")).toHaveCount(4);
+    await expect(page.locator('.player-card[data-seat="1"]')).toContainText(
+      "Ce PC",
+    );
+    await expect(friend.locator('.player-card[data-seat="2"]')).toContainText(
+      "Vous",
+    );
+    // Ending the match asks first, then every screen returns to the lobby.
+    await page
+      .getByRole("button", { name: "Inviter et voir les réglages" })
+      .click();
+    await page
+      .getByRole("button", { name: "Ramener tout le monde au salon" })
+      .click();
+    const end = page.getByRole("button", {
+      name: "Terminer et revenir au salon",
+    });
+    await expect(end).toBeFocused();
+    await end.click();
+    await expect(seats).toContainText("Bea");
+    await expect(friend.locator(".lobby-seats")).toContainText("Alice");
+    await expect(page.getByLabel(/Verrouiller la salle/)).toBeChecked();
+    await expect(
+      page.getByRole("button", { name: "Démarrer la partie" }),
+    ).toBeEnabled();
+    for (const size of DESKTOP_SIZES) {
+      await page.setViewportSize(size);
+      const bounds = await page.evaluate(() => ({
+        width: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+      expect(bounds.scrollWidth).toBe(bounds.width);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({
+      path: ".local/verification/room-leader-lobby.png",
+      fullPage: true,
+    });
+  } finally {
+    await friendContext.close();
+  }
+  expect(errors).toEqual([]);
 });

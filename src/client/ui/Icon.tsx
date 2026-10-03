@@ -15,7 +15,10 @@ type IconName =
   | "exit"
   | "fullscreen"
   | "lock"
-  | "pin";
+  | "pin"
+  | "crown"
+  | "screen"
+  | "bot";
 const paths: Record<IconName, string> = {
   dice: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 7h.01M17 7h.01M12 12h.01M7 17h.01M17 17h.01",
   arrow: "M4 12h16m-6-6 6 6-6 6",
@@ -36,6 +39,9 @@ const paths: Record<IconName, string> = {
   fullscreen: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5V11Zm7 4v2",
   pin: "M12 22s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12Zm0-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  crown: "M4 18h16M4 7l4 4 4-6 4 6 4-4-1.5 11h-13L4 7Z",
+  screen: "M3 4h18v12H3V4Zm5 17h8m-4-5v5",
+  bot: "M12 3v4M6 7h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm3 5h.01M15 12h.01M9 16h6",
 };
 export default function Icon({
   name,

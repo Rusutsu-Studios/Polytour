@@ -45,7 +45,10 @@ import "./DecisionPanel.css";
 
 export type DecisionPanelProps = {
   state: PublicState;
-  seat: Seat;
+  /** The seat this screen acts for now; null for someone watching. */
+  seat: Seat | null;
+  /** Names the deciding player when several people share this screen. */
+  playerName?: string;
   act: (action: Action) => void;
   blocked: boolean;
   randomness: RandomnessStatus | null;
@@ -275,7 +278,8 @@ function confirmLabel(action: Action, state: PublicState): string {
 
 export default function DecisionPanel({
   state,
-  seat,
+  seat: viewer,
+  playerName,
   act,
   blocked,
   randomness,
@@ -300,9 +304,16 @@ export default function DecisionPanel({
   const previousFocus = useRef<HTMLElement | null>(null);
   const pending = state.pending;
   const decisionSeat = pending?.seat ?? state.activeSeat;
+  // Previews take the deciding player's view for someone only watching.
+  const seat = viewer ?? decisionSeat;
   const active = state.players.find((player) => player.seat === decisionSeat);
   const ownTurn =
-    decisionSeat === seat && !active?.bankrupt && state.status === "active";
+    viewer !== null &&
+    decisionSeat === viewer &&
+    !active?.bankrupt &&
+    state.status === "active";
+  const named = (text: string) =>
+    playerName ? `${playerName} · ${text}` : text;
   const rngBusy = randomness !== null && randomness.status !== "resolved";
   const decisionKey = `${pending?.kind ?? "roll"}:${decisionSeat}:${pending?.deadline ?? 0}:${pending && "tile" in pending ? pending.tile : ""}`;
   const actions = ownTurn ? legalActions(state, seat) : [];
@@ -598,9 +609,11 @@ export default function DecisionPanel({
       >
         <div className="sale-topline">
           <h2 id="decision-heading">
-            {bankruptcy
-              ? t("Déclarer faillite ?", "Declare bankruptcy?")
-              : t("Vendre une ville", "Sell a city")}
+            {named(
+              bankruptcy
+                ? t("Déclarer faillite ?", "Declare bankruptcy?")
+                : t("Vendre une ville", "Sell a city"),
+            )}
           </h2>
           <dl className="sale-ledger">
             <div>
@@ -737,7 +750,9 @@ export default function DecisionPanel({
             {PLAYER_SYMBOLS[decisionSeat]}
           </span>
           <h2 id="decision-heading">
-            {pending.kind === "card-target" ? cardName(pending.card) : copy[0]}
+            {named(
+              pending.kind === "card-target" ? cardName(pending.card) : copy[0],
+            )}
           </h2>
           {pickActions.length > 0 && (
             <select
@@ -897,8 +912,8 @@ export default function DecisionPanel({
       ? t("Le lancer se fait attendre", "Waiting for the dice")
       : t("Les dés se préparent", "Preparing the dice")
     : ownTurn && !busy
-      ? copy[0]
-      : shownSeat === seat
+      ? named(copy[0])
+      : viewer !== null && shownSeat === viewer
         ? t("Votre tour", "Your turn")
         : t(
             `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
@@ -1012,7 +1027,7 @@ export default function DecisionPanel({
       }}
     >
       <div className="decision-popup-ribbon">
-        <span>{copy[0]}</span>
+        <span>{named(copy[0])}</span>
       </div>
       <motion.div
         className="decision-popup-inner"

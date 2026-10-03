@@ -139,9 +139,7 @@ async function enterSaleRoom(
   });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Sale fixture");
-  await page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".match-connection")).toHaveAttribute(
     "data-state",
     "online",

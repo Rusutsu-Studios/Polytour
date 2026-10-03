@@ -15,7 +15,6 @@ import type {
   GameEvent,
   PlayerState,
   PublicState,
-  Seat,
   WinKind,
 } from "../shared/engine/index.js";
 import {
@@ -26,7 +25,6 @@ import {
   propertyRefund,
 } from "../shared/engine/index.js";
 import type {
-  LobbyState,
   RandomnessStatus,
   RoomConfig,
   RoomCredentials,
@@ -62,6 +60,15 @@ import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
 import Icon from "./ui/Icon.js";
+import {
+  deviceSeats,
+  LobbySeats,
+  PlayerAvatar,
+  ReturnToLobby,
+  RoomLock,
+  WaitingNotice,
+  WaitingRoom,
+} from "./ui/RoomPeople.js";
 import { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
 import "./App.css";
@@ -134,121 +141,6 @@ function MoneyCounter({ value }: { value: number }) {
   return <>{fullMoney(display)}</>;
 }
 
-function PlayerAvatar({ seat }: { seat: Seat }) {
-  return (
-    <div
-      className="player-avatar"
-      aria-hidden="true"
-      style={{ "--player-color": PLAYER_COLORS[seat] } as CSSProperties}
-    >
-      <i className="avatar-head">
-        <i className="avatar-cap" />
-        <i className="avatar-eyes" />
-      </i>
-      <i className="avatar-body" />
-      <span>{PLAYER_SYMBOLS[seat]}</span>
-    </div>
-  );
-}
-
-// Four table places, like the cards of a tabletop lobby: the host fills an
-// open place with a bot by clicking it, and can send that bot away again.
-function LobbySeats({
-  lobby,
-  you,
-  host,
-  disabled,
-  onAddBot,
-  onRemoveBot,
-}: {
-  lobby: LobbyState | null;
-  you: Seat;
-  host: boolean;
-  disabled: boolean;
-  onAddBot: (seat: Seat) => void;
-  onRemoveBot: (seat: Seat) => void;
-}) {
-  return (
-    <ul className="lobby-seats">
-      {([0, 1, 2, 3] as const).map((seat) => {
-        const player = lobby?.seats.find((item) => item.seat === seat);
-        const style = {
-          "--player-color": PLAYER_COLORS[seat],
-        } as CSSProperties;
-        if (!player?.control)
-          return (
-            <li key={seat} className="lobby-seat empty" style={style}>
-              {host ? (
-                <button
-                  type="button"
-                  className="seat-open"
-                  disabled={disabled}
-                  aria-label={t(
-                    `Ajouter un bot à la place ${seat + 1}`,
-                    `Add a bot to seat ${seat + 1}`,
-                  )}
-                  onClick={() => onAddBot(seat)}
-                >
-                  <span className="seat-plus" aria-hidden="true">
-                    +
-                  </span>
-                  <strong>{t("Ajouter un bot", "Add a bot")}</strong>
-                  <span>{t("ou attendez un ami", "or wait for a friend")}</span>
-                </button>
-              ) : (
-                <div className="seat-open">
-                  <span className="seat-plus" aria-hidden="true">
-                    {PLAYER_SYMBOLS[seat]}
-                  </span>
-                  <strong>{t("Place libre", "Open seat")}</strong>
-                  <span>
-                    {t("En attente d’un joueur", "Waiting for a player")}
-                  </span>
-                </div>
-              )}
-            </li>
-          );
-        return (
-          <li
-            key={seat}
-            className={`lobby-seat filled ${player.control}`}
-            style={style}
-          >
-            <PlayerAvatar seat={seat} />
-            <strong>{player.name}</strong>
-            <span className="seat-status">
-              {player.control === "bot"
-                ? "Bot"
-                : !player.online
-                  ? t("Connexion…", "Connecting…")
-                  : seat === you
-                    ? t("Vous", "You")
-                    : t("En ligne", "Online")}
-            </span>
-            {seat === lobby?.hostSeat && (
-              <span className="host-label">{t("Hôte", "Host")}</span>
-            )}
-            {host && player.control === "bot" && (
-              <button
-                type="button"
-                className="seat-remove"
-                disabled={disabled}
-                aria-label={t(
-                  `Retirer le bot ${player.name}`,
-                  `Remove bot ${player.name}`,
-                )}
-                onClick={() => onRemoveBot(seat)}
-              >
-                <Icon name="close" size={15} />
-              </button>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 function victoryReason(kind: WinKind) {
   const reasons: Record<WinKind, string> = {
     "last-standing": t(
@@ -282,13 +174,20 @@ function victoryReason(kind: WinKind) {
 function MatchResults({
   players,
   result,
-  onReplay,
+  leader,
+  leaderName,
+  disabled,
+  onLobby,
   onLeave,
   onJournal,
 }: {
   players: readonly PlayerState[];
   result: NonNullable<PublicState["result"]>;
-  onReplay: () => void;
+  /** Only the room leader brings everyone back for another game. */
+  leader: boolean;
+  leaderName: string | undefined;
+  disabled: boolean;
+  onLobby: () => void;
   onLeave: () => void;
   onJournal: (button: HTMLButtonElement) => void;
 }) {
@@ -345,12 +244,18 @@ function MatchResults({
           </li>
         ))}
       </ol>
-      <button type="button" className="button primary" onClick={onReplay}>
-        {t("Rejouer avec des bots", "Play again with bots")}
-        <Icon name="arrow" />
-      </button>
+      {leader ? (
+        <ReturnToLobby finished disabled={disabled} onConfirm={onLobby} />
+      ) : (
+        <p className="results-leader-note">
+          {t(
+            `${leaderName ?? "Le chef de salle"} peut ramener tout le monde au salon pour une autre partie.`,
+            `${leaderName ?? "The room leader"} can bring everyone back to the lobby for another game.`,
+          )}
+        </p>
+      )}
       <button type="button" className="button secondary" onClick={onLeave}>
-        {t("Nouvelle salle entre amis", "New room with friends")}
+        {t("Quitter la salle", "Leave the room")}
       </button>
       <button
         type="button"
@@ -872,7 +777,6 @@ function MatchView({
   copyRoom,
   onLeave,
   onHelp,
-  onReplay,
   debug,
 }: {
   game: PublicState;
@@ -887,7 +791,6 @@ function MatchView({
   copyRoom: () => Promise<void>;
   onLeave: () => void;
   onHelp: () => void;
-  onReplay: () => void;
   debug: boolean;
 }) {
   const { serverState, busy, speed, history, reducedMotion } = useDirector();
@@ -906,20 +809,36 @@ function MatchView({
   const overlayTrigger = useRef<HTMLButtonElement | null>(null);
   const toolRef = useRef<HTMLElement | null>(null);
   const decidingSeat = game.pending?.seat ?? game.activeSeat;
-  const ownPlayer = game.players.find(
-    (player) => player.seat === credentials.seat,
-  );
   const authoritative = serverState ?? game;
+  // This screen plays its own seat and any local players sharing it. Whoever
+  // of them decides now is the seat it acts for; someone waiting acts for none.
+  const own = room.you?.seat ?? null;
+  const mySeats = deviceSeats(room.lobby, own);
+  const authoritativeSeat =
+    authoritative.pending?.seat ?? authoritative.activeSeat;
+  const controlSeat = mySeats.includes(authoritativeSeat)
+    ? authoritativeSeat
+    : own;
+  const sharedScreen = mySeats.length > 1;
+  const leader = own !== null && own === room.lobby?.hostSeat;
+  const leaderName = room.lobby?.seats.find(
+    (entry) => entry.seat === room.lobby?.hostSeat,
+  )?.name;
+  const askingToJoin = leader
+    ? (room.lobby?.waiting.filter((member) => !member.approved).length ?? 0)
+    : 0;
+  const ownPlayer = game.players.find((player) => player.seat === controlSeat);
   const salePending =
+    controlSeat !== null &&
     authoritative.status === "active" &&
     authoritative.pending?.kind === "sell" &&
-    authoritative.pending.seat === credentials.seat &&
-    !authoritative.players.find((player) => player.seat === credentials.seat)
+    authoritative.pending.seat === controlSeat &&
+    !authoritative.players.find((player) => player.seat === controlSeat)
       ?.bankrupt
       ? authoritative.pending
       : null;
   const saleTargets = salePending
-    ? legalActions(authoritative, credentials.seat).flatMap((action) =>
+    ? legalActions(authoritative, salePending.seat).flatMap((action) =>
         action.type === "Sell" ? [action.tile] : [],
       )
     : [];
@@ -943,19 +862,20 @@ function MatchView({
   const decisionState = serverState ?? game;
   const picking =
     !busy &&
+    controlSeat !== null &&
     (room.randomness === null || room.randomness.status === "resolved") &&
     decisionState.status === "active" &&
-    decisionState.pending?.seat === credentials.seat &&
+    decisionState.pending?.seat === controlSeat &&
     !ownPlayer?.bankrupt &&
     isBoardPick(decisionState);
   const pickTargets = useMemo(
     () =>
-      picking
-        ? boardPickActions(decisionState, credentials.seat).map(
+      picking && controlSeat !== null
+        ? boardPickActions(decisionState, controlSeat).map(
             (action) => action.tile,
           )
         : null,
-    [picking, decisionState, credentials.seat],
+    [picking, decisionState, controlSeat],
   );
   const pickKey = boardPickKey(decisionState);
   const [pick, setPick] = useState<{
@@ -1114,10 +1034,10 @@ function MatchView({
               targets={pickTargets}
               picked={picked}
               pickKey={pickKey}
-              pickSeat={credentials.seat}
+              pickSeat={controlSeat ?? undefined}
               zoom={zoom}
               onRollAnchor={setRollAnchor}
-              saleSeat={salePending ? credentials.seat : undefined}
+              saleSeat={salePending ? salePending.seat : undefined}
               saleBlocked={saleBlocked}
             />
           </Suspense>
@@ -1213,15 +1133,24 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t(
-            "Inviter et voir les réglages",
-            "Invite and view settings",
-          )}
+          aria-label={
+            askingToJoin
+              ? t(
+                  `Votre salle · ${askingToJoin} demande${askingToJoin > 1 ? "s" : ""} d’entrée`,
+                  `Your room · ${askingToJoin} asking to join`,
+                )
+              : t("Inviter et voir les réglages", "Invite and view settings")
+          }
           title={t("Inviter et voir les réglages", "Invite and view settings")}
           aria-expanded={tool === "room"}
           onClick={(event) => showTool("room", event.currentTarget)}
         >
           <Icon name="people" size={18} />
+          {askingToJoin > 0 && (
+            <span className="tool-badge" aria-hidden="true">
+              {askingToJoin}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -1287,18 +1216,20 @@ function MatchView({
               <div className="player-card-body">
                 <div className="player-name-row">
                   <strong>{player.name}</strong>
-                  {(player.seat === credentials.seat ||
+                  {(mySeats.includes(player.seat) ||
                     player.bankrupt ||
                     player.control === "bot" ||
                     !presence?.online) && (
                     <span>
-                      {player.seat === credentials.seat
+                      {player.seat === own
                         ? t("Vous", "You")
                         : player.bankrupt
                           ? t("Faillite", "Bankrupt")
-                          : player.control === "bot"
-                            ? "Bot"
-                            : t("Absent", "Away")}
+                          : mySeats.includes(player.seat)
+                            ? t("Ce PC", "This PC")
+                            : player.control === "bot"
+                              ? "Bot"
+                              : t("Absent", "Away")}
                     </span>
                   )}
                 </div>
@@ -1350,7 +1281,10 @@ function MatchView({
             <MatchResults
               players={game.players}
               result={game.result}
-              onReplay={onReplay}
+              leader={leader}
+              leaderName={leaderName}
+              disabled={room.pending || room.connection !== "online"}
+              onLobby={room.returnToLobby}
               onLeave={onLeave}
               onJournal={(button) => showTool("journal", button)}
             />
@@ -1371,10 +1305,32 @@ function MatchView({
             initial={false}
             animate={{ opacity: 1 }}
           >
+            {own === null && (
+              <div className="spectator-note">
+                <WaitingNotice
+                  lobby={room.lobby}
+                  member={room.you?.member ?? null}
+                />
+              </div>
+            )}
             <DecisionPanel
               state={serverState ?? game}
-              seat={credentials.seat}
-              act={room.act}
+              seat={controlSeat}
+              playerName={
+                sharedScreen && controlSeat !== null
+                  ? authoritative.players.find(
+                      (player) => player.seat === controlSeat,
+                    )?.name
+                  : undefined
+              }
+              act={(action) =>
+                room.act(
+                  action,
+                  controlSeat !== null && controlSeat !== own
+                    ? controlSeat
+                    : undefined,
+                )
+              }
               blocked={saleBlocked}
               randomness={room.randomness}
               selected={decisionSelected}
@@ -1389,7 +1345,7 @@ function MatchView({
       {inspectorOpen && (
         <CityCard
           state={game}
-          seat={credentials.seat}
+          seat={controlSeat}
           selected={selected}
           onSelect={onSelect}
           onClose={closeTools}
@@ -1563,6 +1519,86 @@ function MatchView({
                   )}
                 </p>
                 <RoomSettings config={config} disabled onChange={() => {}} />
+                <WaitingRoom
+                  lobby={room.lobby}
+                  // The match knows the real bots: a seat a bot only covers
+                  // for an absent person stays theirs.
+                  bots={
+                    authoritative.status === "active"
+                      ? authoritative.players.filter(
+                          (player) =>
+                            player.control === "bot" && !player.bankrupt,
+                        )
+                      : []
+                  }
+                  leader={leader}
+                  disabled={room.pending || room.connection !== "online"}
+                  onAdmit={room.admit}
+                  onDeny={room.deny}
+                  onReplaceBot={room.replaceBot}
+                />
+                {leader ? (
+                  <div className="leader-tools">
+                    <h3>{t("Vous menez la salle", "You lead this room")}</h3>
+                    <RoomLock
+                      locked={room.lobby?.locked ?? false}
+                      disabled={room.pending || room.connection !== "online"}
+                      onChange={room.lock}
+                    />
+                    {(room.lobby?.seats ?? []).some(
+                      (entry) =>
+                        entry.control === "human" &&
+                        entry.controller === null &&
+                        entry.seat !== own,
+                    ) && (
+                      <ul className="leader-transfer">
+                        {(room.lobby?.seats ?? [])
+                          .filter(
+                            (entry) =>
+                              entry.control === "human" &&
+                              entry.controller === null &&
+                              entry.seat !== own,
+                          )
+                          .map((entry) => (
+                            <li key={entry.seat}>
+                              <span>{entry.name}</span>
+                              <button
+                                type="button"
+                                className="seat-promote"
+                                disabled={
+                                  room.pending || room.connection !== "online"
+                                }
+                                aria-label={t(
+                                  `Nommer ${entry.name} chef de salle`,
+                                  `Make ${entry.name} the room leader`,
+                                )}
+                                onClick={() => room.transferHost(entry.seat)}
+                              >
+                                <Icon name="crown" size={13} />
+                                {t("Nommer chef", "Make leader")}
+                              </button>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                    <ReturnToLobby
+                      finished={game.status === "finished"}
+                      disabled={room.pending || room.connection !== "online"}
+                      onConfirm={() => {
+                        closeTools();
+                        room.returnToLobby();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <p className="leader-note">
+                    <Icon name="crown" size={14} />
+                    {t(
+                      `Chef de salle : ${leaderName ?? "—"}`,
+                      `Room leader: ${leaderName ?? "—"}`,
+                    )}
+                  </p>
+                )}
               </div>
             )}
           </motion.section>
@@ -1609,7 +1645,6 @@ function App() {
   const [loading, setLoading] = useState(false);
   const entering = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [autoStart, setAutoStart] = useState(false);
   // Null follows the active pawn; an explicit inspection stays pinned.
   const [selected, setSelected] = useState<number | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -1617,17 +1652,6 @@ function App() {
   const [zoom, setZoom] = useState(1);
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
-  useEffect(() => {
-    if (
-      !autoStart ||
-      room.lobby?.status !== "lobby" ||
-      room.connection !== "online" ||
-      room.pending
-    )
-      return;
-    setAutoStart(false);
-    room.start(true);
-  }, [autoStart, room.lobby, room.connection, room.pending, room.start]);
   const serverConfigKey = room.lobby ? JSON.stringify(room.lobby.config) : null;
   const activePosition = viewState?.players.find(
     (player) => player.seat === viewState.activeSeat,
@@ -1638,7 +1662,8 @@ function App() {
   }, [serverConfigKey]);
   const settingsDirty =
     serverConfigKey !== null && JSON.stringify(config) !== serverConfigKey;
-  async function enter(solo: boolean, join = false) {
+  // Play opens a lobby with three bots; a code joins a friend's room instead.
+  async function enter(join = false) {
     if (entering.current) return;
     const cleanName = name.trim();
     const code = joinCode.trim().toUpperCase();
@@ -1669,11 +1694,11 @@ function App() {
         cleanName,
         join ? config : { ...config, randomnessMode: "secure" },
         join ? code : undefined,
+        join ? 0 : 3,
       );
       localStorage.setItem("polytour-name", cleanName);
       director.reset(null);
       setCredentials(entered);
-      setAutoStart(solo);
       window.history.replaceState(
         null,
         "",
@@ -1696,7 +1721,6 @@ function App() {
   function leave() {
     forgetCredentials();
     setCredentials(null);
-    setAutoStart(false);
     setConfig((current) => ({ ...current, randomnessMode: "secure" }));
     director.reset(null);
     setSelected(null);
@@ -1726,7 +1750,11 @@ function App() {
     hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
     sellBackPercent: room.lobby?.sellBackPercent ?? 100,
   };
-  const host = credentials?.seat === room.lobby?.hostSeat;
+  const you = room.you?.seat ?? null;
+  const leader = you !== null && you === room.lobby?.hostSeat;
+  const leaderName = room.lobby?.seats.find(
+    (entry) => entry.seat === room.lobby?.hostSeat,
+  )?.name;
   const seated =
     room.lobby?.seats.filter((seat) => seat.control !== null).length ?? 0;
   return (
@@ -1784,14 +1812,14 @@ function App() {
                 placeholder={t("Votre pseudo", "Your nickname")}
                 onChange={(event) => setName(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") void enter(true);
+                  if (event.key === "Enter") void enter();
                 }}
               />
               <button
                 type="button"
                 className="button primary welcome-play"
                 disabled={loading}
-                onClick={() => void enter(true)}
+                onClick={() => void enter()}
               >
                 {loading ? (
                   <span className="spinner" />
@@ -1799,19 +1827,16 @@ function App() {
                   <Icon name="dice" size={24} />
                 )}
                 {loading
-                  ? t("Préparation du plateau…", "Preparing board…")
-                  : t("Jouer avec 3 bots", "Play with 3 bots")}
+                  ? t("Préparation du salon…", "Preparing the lobby…")
+                  : t("Jouer", "Play")}
                 <Icon name="arrow" />
               </button>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={loading}
-                onClick={() => void enter(false)}
-              >
-                <Icon name="people" />
-                {t("Créer une salle entre amis", "Create a room with friends")}
-              </button>
+              <p className="field-note welcome-play-note">
+                {t(
+                  "Votre salon s’ouvre avec 3 bots. Retirez-les, invitez des amis ou ajoutez un joueur sur ce PC.",
+                  "Your lobby opens with 3 bots. Remove them, invite friends or add a player on this PC.",
+                )}
+              </p>
               <div className="join-form">
                 <label htmlFor="room-code">
                   {t("Vous avez un code ?", "Have a room code?")}
@@ -1829,14 +1854,14 @@ function App() {
                       setJoinCode(event.target.value.toUpperCase())
                     }
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") void enter(false, true);
+                      if (event.key === "Enter") void enter(true);
                     }}
                   />
                   <button
                     type="button"
                     className="button ink"
                     disabled={loading}
-                    onClick={() => void enter(false, true)}
+                    onClick={() => void enter(true)}
                   >
                     {t("Rejoindre", "Join")}
                     <Icon name="arrow" size={18} />
@@ -1898,8 +1923,8 @@ function App() {
             <h1>{t("Joueurs", "Players")}</h1>
             <p className="welcome-intro">
               {t(
-                "De 2 à 4 joueurs. Invitez vos amis avec ce code ou cliquez sur une place libre pour ajouter un bot.",
-                "2 to 4 players. Invite friends using this code, or click an open seat to add a bot.",
+                "De 2 à 4 joueurs. Vos amis prennent la place d’un bot en entrant ce code ; un joueur assis à côté de vous peut jouer sur ce PC.",
+                "2 to 4 players. Friends take a bot’s seat by entering this code; someone next to you can play on this PC.",
               )}
             </p>
             <div className="room-code-block">
@@ -1920,13 +1945,31 @@ function App() {
             </div>
             <LobbySeats
               lobby={room.lobby}
-              you={credentials.seat}
-              host={host}
+              you={you}
+              leader={leader}
               disabled={blockActions}
               onAddBot={room.addBot}
               onRemoveBot={room.removeBot}
+              onAddLocal={room.addLocal}
+              onRemoveLocal={room.removeLocal}
+              onTransferHost={room.transferHost}
             />
-            {host && (
+            <WaitingRoom
+              lobby={room.lobby}
+              leader={leader}
+              disabled={blockActions}
+              onAdmit={room.admit}
+              onDeny={room.deny}
+              onReplaceBot={room.replaceBot}
+            />
+            {leader && (
+              <RoomLock
+                locked={room.lobby?.locked ?? false}
+                disabled={blockActions}
+                onChange={room.lock}
+              />
+            )}
+            {leader && (
               <>
                 <p className="lobby-count" role="status">
                   {seated < ECONOMY.minimumPlayers
@@ -1959,21 +2002,24 @@ function App() {
                 </button>
               </>
             )}
-            {!host && (
+            {!leader && you !== null && (
               <p className="waiting-host">
                 <span className="spinner" />
                 {t(
-                  "En attente du démarrage par l’hôte.",
-                  "Waiting for the host to start.",
+                  `En attente du démarrage par ${leaderName ?? "le chef de salle"}.`,
+                  `Waiting for ${leaderName ?? "the room leader"} to start.`,
                 )}
               </p>
             )}
+            {you === null && room.you && (
+              <WaitingNotice lobby={room.lobby} member={room.you.member} />
+            )}
             <RoomSettings
               config={config}
-              disabled={!host || blockActions}
+              disabled={!leader || blockActions}
               onChange={setConfig}
               save={
-                host
+                leader
                   ? {
                       dirty: settingsDirty,
                       onSave: () => room.settings(config),
@@ -1981,7 +2027,7 @@ function App() {
                   : undefined
               }
             />
-            {host && settingsDirty && (
+            {leader && settingsDirty && (
               <p className="field-note settings-unsaved" role="status">
                 {t(
                   "Enregistrez vos réglages ci-dessus avant de démarrer. Vos modifications restent un brouillon jusque-là.",
@@ -2032,10 +2078,6 @@ function App() {
           copyRoom={copyRoom}
           onLeave={leave}
           onHelp={() => setHelpOpen(true)}
-          onReplay={() => {
-            leave();
-            void enter(true);
-          }}
           debug={debug}
         />
       )}

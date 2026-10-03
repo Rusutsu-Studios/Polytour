@@ -3,8 +3,8 @@ import type { BoardRule, EconomyRule } from "../board/index.js";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 
-// Layout, prices and sale quotes depend on frozen room rules; stale clients reload.
-export const PROTOCOL_VERSION = 3;
+// Version 4 adds room leaders, waiting members and local players; stale clients reload.
+export const PROTOCOL_VERSION = 4;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -33,11 +33,15 @@ export const CreateRoomSchema = z
   .object({
     name: NameSchema,
     config: RoomConfigSchema.optional(),
+    /** Server bots seated after the creator. Play opens a lobby with three. */
+    bots: z.number().int().min(0).max(3).default(0),
   })
   .strict();
 export const JoinRoomSchema = z.object({ name: NameSchema }).strict();
 
 const seat = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
+/** A waiting member's public id: random, and never a capability. */
+export const MemberIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
 const tile = z.number().int().min(0).max(31);
 const level = z.number().int().min(0).max(5);
 export const ActionSchema = z.discriminatedUnion("type", [
@@ -76,6 +80,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
       id,
       atSeq: z.number().int().nonnegative(),
       action: ActionSchema,
+      seat: seat.optional(),
     })
     .strict(),
   z
@@ -89,36 +94,92 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
           .strict(),
         z.object({ type: z.literal("add-bot"), seat }).strict(),
         z.object({ type: z.literal("remove-bot"), seat }).strict(),
+        z
+          .object({ type: z.literal("add-local"), seat, name: NameSchema })
+          .strict(),
+        z.object({ type: z.literal("remove-local"), seat }).strict(),
+        z.object({ type: z.literal("transfer-host"), seat }).strict(),
+        z.object({ type: z.literal("lock"), locked: z.boolean() }).strict(),
+        z.object({ type: z.literal("admit"), member: MemberIdSchema }).strict(),
+        z.object({ type: z.literal("deny"), member: MemberIdSchema }).strict(),
+        z
+          .object({
+            type: z.literal("replace-bot"),
+            member: MemberIdSchema,
+            seat,
+          })
+          .strict(),
+        z.object({ type: z.literal("return-to-lobby") }).strict(),
       ]),
     })
     .strict(),
   z.object({ type: z.literal("ping"), t: z.number().finite() }).strict(),
 ]);
 /**
- * Host-only lobby operations. `start` with `fillBots` seats bots in every empty
- * place; without it, the room starts with its occupied seats (two or more).
+ * Room operations. The room leader (`hostSeat`) owns all of them except the
+ * local-player pair: any seated device may add a player sharing its screen,
+ * and remove that player again. `start` with `fillBots` seats bots in every
+ * empty place; without it, the room starts with its occupied seats (two or
+ * more). `start`, `settings`, the bot pair and the local pair are lobby-only;
+ * `replace-bot` needs a match in progress and `return-to-lobby` a match.
  */
 export type LobbyOp =
   | { type: "start"; fillBots: boolean }
   | { type: "settings"; config: RoomConfig }
   | { type: "add-bot"; seat: Seat }
-  | { type: "remove-bot"; seat: Seat };
+  | { type: "remove-bot"; seat: Seat }
+  | { type: "add-local"; seat: Seat; name: string }
+  | { type: "remove-local"; seat: Seat }
+  | { type: "transfer-host"; seat: Seat }
+  | { type: "lock"; locked: boolean }
+  | { type: "admit"; member: string }
+  | { type: "deny"; member: string }
+  | { type: "replace-bot"; member: string; seat: Seat }
+  | { type: "return-to-lobby" };
 export type ClientMessage =
   | { type: "sync"; lastSeq: number | null }
-  | { type: "intent"; id: string; atSeq: number; action: Action }
+  | {
+      type: "intent";
+      id: string;
+      atSeq: number;
+      action: Action;
+      /** A local player's seat on this device; the device's own seat if absent. */
+      seat?: Seat;
+    }
   | { type: "lobby"; id: string; op: LobbyOp }
   | { type: "ping"; t: number };
 
-export type RoomCredentials = { roomCode: string; seat: Seat; token: string };
+/** `seat` is null for someone who joined a waiting room instead of a place. */
+export type RoomCredentials = {
+  roomCode: string;
+  seat: Seat | null;
+  token: string;
+};
 export type LobbySeat = {
   seat: Seat;
   name: string;
   control: "human" | "bot" | null;
   online: boolean;
+  /** A local player shares this seat's device and screen. */
+  controller: Seat | null;
+};
+/**
+ * Someone without a place: they joined during a match, found every place
+ * taken, or wait for the leader to admit them into a locked room.
+ */
+export type LobbyMember = {
+  id: string;
+  name: string;
+  approved: boolean;
+  online: boolean;
 };
 export type LobbyState = {
   roomCode: string;
+  /** The room leader's seat. The leader can hand the role to another person. */
   hostSeat: Seat;
+  /** A locked room holds new arrivals until the leader admits them. */
+  locked: boolean;
+  waiting: LobbyMember[];
   status: "lobby" | "playing" | "finished";
   config: RoomConfig;
   readonly boardRule: BoardRule;
@@ -137,7 +198,8 @@ export type ServerMessage =
   | {
       type: "welcome";
       protocolVersion: number;
-      you: { seat: Seat };
+      /** A seated device has a seat; a waiting member has an id instead. */
+      you: { seat: Seat | null; member: string | null };
       seq: number;
       snapshot: PublicState | null;
       lobby: LobbyState;

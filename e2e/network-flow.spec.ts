@@ -56,9 +56,7 @@ async function enterMockRoom(page: Page) {
     };
   });
   await page.getByLabel("Votre nom de joueur").fill("Network fixture");
-  await page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
 }
 
 test("shows an HTTP failure clearly and never stores failed room credentials", async ({
@@ -75,9 +73,7 @@ test("shows an HTTP failure clearly and never stores failed room credentials", a
   });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Network fixture");
-  await page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("HTTP 500");
   await expect(page.getByRole("alert")).not.toContainText("Unexpected token");
   expect(requests).toHaveLength(1);
@@ -122,9 +118,7 @@ test("repeated Enter creates only one pending room request and permits retry aft
   try {
     await name.press("Enter");
     await expect.poll(() => requests).toBe(1);
-    await expect(
-      page.getByRole("button", { name: "Créer une salle entre amis" }),
-    ).toBeDisabled();
+    await expect(page.locator(".welcome-play")).toBeDisabled();
     for (let index = 0; index < 5; index += 1) await name.press("Enter");
     expect(requests).toBe(1);
   } finally {
@@ -132,7 +126,7 @@ test("repeated Enter creates only one pending room request and permits retry aft
   }
   await expect(page.getByRole("alert")).toContainText("HTTP 500");
   await expect(
-    page.getByRole("button", { name: "Créer une salle entre amis" }),
+    page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeEnabled();
   await name.press("Enter");
   await expect(page.getByRole("alert")).toContainText("HTTP 503");

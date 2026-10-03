@@ -300,9 +300,7 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
       new URL(response.url()).pathname === "/api/rooms" &&
       response.request().method() === "POST",
   );
-  await actor.page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await actor.page.getByRole("button", { name: "Jouer", exact: true }).click();
   const created = await createdResponse;
   expect(created.status()).toBe(201);
   expect(created.request().postDataJSON().config.randomnessMode).toBe("secure");

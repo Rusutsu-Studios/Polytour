@@ -99,9 +99,7 @@ test("home sliders, language persistence and readable HTTP failure", async ({
     });
   }
   await page.getByLabel("Player name").fill("Language check");
-  await page
-    .getByRole("button", { name: "Create a room with friends" })
-    .click();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Cloudflare");
   await expect(page.getByRole("alert")).not.toContainText("Unexpected token");
   await page.reload();
@@ -131,7 +129,9 @@ test("English local match switches language without rejoining or changing game s
   await page.goto("/");
   await page.getByLabel("Langue / Language").selectOption("en");
   await page.getByLabel("Player name").fill("English player");
-  await page.getByRole("button", { name: "Play with 3 bots" }).click();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.locator(".lobby-seats")).toContainText("Atlas");
+  await page.getByRole("button", { name: "Start game" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
   // Bots before this seat play their turns at a readable pace first.
   await expect(

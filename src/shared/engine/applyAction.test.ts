@@ -19,6 +19,7 @@ import {
   buyoutPrice,
   buyoutPriceAt,
   CHANCE_CARDS,
+  changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,
   economyRule,
@@ -965,6 +966,57 @@ describe("configurable captured room options", () => {
         seat,
       ),
     ).toContainEqual({ type: "Buy", level: 3 });
+  });
+  it("hands a bot's place to a late player with its money, turn and secrets intact", () => {
+    let state = newGame(4, { ...CONFIG, botCanBuild: false });
+    const seat = state.activeSeat;
+    state = setPlayer(state, seat, { control: "bot", name: "Iris" });
+    const bot = land(state, 6).state;
+    const handed = changeControl(bot, seat, "human", "Bo");
+    if (!handed.ok) throw new Error(handed.error.message);
+    expect(handed.events).toEqual([
+      { type: "PlayerControlChanged", seat, control: "human", name: "Bo" },
+    ]);
+    expect(handed.events.reduce(applyEvent, toPublic(bot))).toEqual(
+      toPublic(handed.state),
+    );
+    expect(getPlayer(handed.state, seat)).toEqual({
+      ...getPlayer(bot, seat),
+      name: "Bo",
+      control: "human",
+    });
+    expect(handed.state.pending).toBe(bot.pending);
+    expect(handed.state.rngState).toBe(bot.rngState);
+    expect(handed.state.deck).toBe(bot.deck);
+    expect(money(handed.state)).toBe(money(bot));
+    // The person, unlike the bot it replaces, may build in this room.
+    expect(legalActions(handed.state, seat)).toContainEqual({
+      type: "Buy",
+      level: 3,
+    });
+    const back = changeControl(handed.state, seat, "bot");
+    expect(back.ok && getPlayer(back.state, seat)).toMatchObject({
+      name: "Bo",
+      control: "bot",
+    });
+  });
+  it("only hands over a seat that is still playing, and only to a named player", () => {
+    const state = newGame(4);
+    const seat = other(state);
+    expect(changeControl(state, seat, "human", "  ")).toMatchObject({
+      ok: false,
+      error: { code: "illegal-action" },
+    });
+    expect(
+      changeControl(setPlayer(state, seat, { bankrupt: true }), seat, "human"),
+    ).toMatchObject({ ok: false, error: { code: "illegal-action" } });
+    expect(
+      changeControl({ ...state, status: "finished" }, seat, "human"),
+    ).toMatchObject({ ok: false, error: { code: "game-over" } });
+    expect(changeControl(newGame(2), 3 as Seat, "human", "Bo")).toMatchObject({
+      ok: false,
+      error: { code: "illegal-action" },
+    });
   });
   it("caps gift payments at available cash when gifts may not bankrupt a player", () => {
     let state = newGame(4, { ...CONFIG, giftCanBankrupt: false });

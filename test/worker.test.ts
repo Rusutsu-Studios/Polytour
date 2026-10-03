@@ -13,6 +13,7 @@ import {
   isResortTile,
 } from "../src/shared/board/index.js";
 import type {
+  GameEvent,
   GameState,
   PublicState,
   Seat,
@@ -23,6 +24,7 @@ import {
   toPublic,
 } from "../src/shared/engine/index.js";
 import type {
+  LobbyState,
   RoomCredentials,
   ServerMessage,
 } from "../src/shared/protocol/index.js";
@@ -62,19 +64,64 @@ class Inbox {
     }
   }
 }
-async function create(mode?: "secure" | "drand"): Promise<RoomCredentials> {
-  const response = await exports.default.fetch(
+function createRoom(body: Record<string, unknown>): Promise<Response> {
+  return exports.default.fetch(
     new Request(`${origin}/api/rooms`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: origin },
-      body: JSON.stringify({
-        name: "Alex",
-        ...(mode === undefined ? {} : { config: { randomnessMode: mode } }),
-      }),
+      body: JSON.stringify(body),
     }),
   );
+}
+async function create(
+  mode?: "secure" | "drand",
+  bots?: number,
+): Promise<RoomCredentials> {
+  const response = await createRoom({
+    name: "Alex",
+    ...(mode === undefined ? {} : { config: { randomnessMode: mode } }),
+    ...(bots === undefined ? {} : { bots }),
+  });
   expect(response.status).toBe(201);
   return response.json<RoomCredentials>();
+}
+async function lobbyOf(code: string): Promise<LobbyState> {
+  const response = await exports.default.fetch(
+    new Request(`${origin}/api/rooms/${code}`),
+  );
+  return (await response.json<{ lobby: LobbyState }>()).lobby;
+}
+/** Resolves with "ack" or the rejection reason for one room message. */
+async function answer(inbox: Inbox, id: string): Promise<string> {
+  for (;;) {
+    const reply = inbox.messages.find(
+      (message) =>
+        (message.type === "ack" || message.type === "reject") &&
+        message.id === id,
+    );
+    if (reply) {
+      inbox.messages.splice(inbox.messages.indexOf(reply), 1);
+      return reply.type === "reject" ? reply.reason : "ack";
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+function roomOp(
+  inbox: Inbox,
+  id: string,
+  op: Record<string, unknown>,
+): Promise<string> {
+  inbox.send({ type: "lobby", id, op });
+  return answer(inbox, id);
+}
+async function eventsWith(
+  inbox: Inbox,
+  type: GameEvent["type"],
+): Promise<Extract<ServerMessage, { type: "events" }>> {
+  for (;;) {
+    const message = await inbox.next("events");
+    if (message.events.some((event) => event.type === type)) return message;
+  }
 }
 async function join(code: string, name: string): Promise<RoomCredentials> {
   const response = await exports.default.fetch(
@@ -874,13 +921,15 @@ describe("Authoritative private rooms", () => {
     expect(
       created?.type === "GameCreated" ? created.state.players.length : 0,
     ).toBe(4);
-    const rejectedJoin = await exports.default.fetch(
+    // A late arrival waits without a seat: for a bot's place or the next game.
+    const lateJoin = await exports.default.fetch(
       new Request(`${origin}/api/rooms/${host.roomCode}/join`, {
         method: "POST",
         body: JSON.stringify({ name: "Late" }),
       }),
     );
-    expect(rejectedJoin.status).toBe(409);
+    expect(lateJoin.status).toBe(200);
+    expect((await lateJoin.json<RoomCredentials>()).seat).toBeNull();
   });
 
   it("lets the host add and remove bots, then start with only the filled seats", async () => {
@@ -988,7 +1037,11 @@ describe("Authoritative private rooms", () => {
         body: JSON.stringify({ name: "Late" }),
       }),
     );
-    expect(lateJoin.status).toBe(409);
+    expect(lateJoin.status).toBe(200);
+    expect((await lateJoin.json<RoomCredentials>()).seat).toBeNull();
+    expect((await lobbyOf(host.roomCode)).waiting).toEqual([
+      { id: expect.any(String), name: "Late", approved: true, online: false },
+    ]);
   });
 
   it("starts a one-human room against a single bot and advances its first turn", async () => {
@@ -1861,5 +1914,426 @@ describe("Authoritative private rooms", () => {
     expect(failed.status).toBe("error");
     expect(await readPending()).toBe(before);
     expect(failed.commitment).toEqual(committed.commitment);
+  });
+});
+
+describe("Room leader, waiting room and shared screens", () => {
+  it("opens a lobby with the bots Play asks for and seats friends in their places", async () => {
+    const host = await create(undefined, 3);
+    const lobby = await lobbyOf(host.roomCode);
+    expect(lobby).toMatchObject({ hostSeat: 0, locked: false, waiting: [] });
+    expect(lobby.seats.map((seat) => [seat.name, seat.control])).toEqual([
+      ["Alex", "human"],
+      ["Milo", "bot"],
+      ["Nova", "bot"],
+      ["Atlas", "bot"],
+    ]);
+    // Each friend takes the next bot's place, in seat order.
+    for (const [name, seat] of [
+      ["Bo", 1],
+      ["Cam", 2],
+      ["Dee", 3],
+    ] as const)
+      expect((await join(host.roomCode, name)).seat).toBe(seat);
+    const full = await exports.default.fetch(
+      new Request(`${origin}/api/rooms/${host.roomCode}/join`, {
+        method: "POST",
+        body: JSON.stringify({ name: "Eve" }),
+      }),
+    );
+    expect(full.status).toBe(409);
+    expect(await full.json()).toEqual({ error: "room-full" });
+    expect(
+      (await lobbyOf(host.roomCode)).seats.map((seat) => [
+        seat.name,
+        seat.control,
+      ]),
+    ).toEqual([
+      ["Alex", "human"],
+      ["Bo", "human"],
+      ["Cam", "human"],
+      ["Dee", "human"],
+    ]);
+    for (const bots of [4, -1, 1.5])
+      expect((await createRoom({ name: "Alex", bots })).status).toBe(400);
+  });
+
+  it("hands the leader role to another person, who then runs the room", async () => {
+    const host = await create();
+    const bo = await join(host.roomCode, "Bo");
+    const hostSocket = await connect(host);
+    const boSocket = await connect(bo);
+    await hostSocket.next("welcome");
+    await boSocket.next("welcome");
+    expect(
+      await roomOp(boSocket, "bo-lock", { type: "lock", locked: true }),
+    ).toBe("host-only");
+    // Only another person with a device of their own can lead.
+    expect(
+      await roomOp(hostSocket, "self", { type: "transfer-host", seat: 0 }),
+    ).toBe("not-transferable");
+    expect(
+      await roomOp(hostSocket, "empty", { type: "transfer-host", seat: 2 }),
+    ).toBe("not-transferable");
+    expect(await roomOp(hostSocket, "bot", { type: "add-bot", seat: 2 })).toBe(
+      "ack",
+    );
+    expect(
+      await roomOp(hostSocket, "to-bot", { type: "transfer-host", seat: 2 }),
+    ).toBe("not-transferable");
+    expect(
+      await roomOp(hostSocket, "to-bo", { type: "transfer-host", seat: 1 }),
+    ).toBe("ack");
+    expect((await lobbyOf(host.roomCode)).hostSeat).toBe(1);
+    expect(
+      await roomOp(hostSocket, "old-start", {
+        type: "start",
+        fillBots: false,
+      }),
+    ).toBe("host-only");
+    expect(
+      await roomOp(boSocket, "start", { type: "start", fillBots: false }),
+    ).toBe("ack");
+    // The role carries into the match: only the leader can end it.
+    expect(
+      await roomOp(hostSocket, "old-return", { type: "return-to-lobby" }),
+    ).toBe("host-only");
+    expect(
+      await roomOp(boSocket, "back", { type: "transfer-host", seat: 0 }),
+    ).toBe("ack");
+    expect(await lobbyOf(host.roomCode)).toMatchObject({
+      hostSeat: 0,
+      status: "playing",
+    });
+  });
+
+  it("holds newcomers to a locked room until the leader admits or turns them away", async () => {
+    const host = await create(undefined, 2);
+    const hostSocket = await connect(host);
+    await hostSocket.next("welcome");
+    expect(
+      await roomOp(hostSocket, "lock", { type: "lock", locked: true }),
+    ).toBe("ack");
+    const bo = await join(host.roomCode, "Bo");
+    expect(bo.seat).toBeNull();
+    let lobby = await lobbyOf(host.roomCode);
+    expect(lobby.locked).toBe(true);
+    expect(lobby.waiting).toEqual([
+      { id: expect.any(String), name: "Bo", approved: false, online: false },
+    ]);
+    const boSocket = await connect(bo);
+    const waiting = await boSocket.next("welcome");
+    expect(waiting.you).toEqual({ seat: null, member: lobby.waiting[0].id });
+    expect(
+      await roomOp(boSocket, "self-admit", {
+        type: "admit",
+        member: lobby.waiting[0].id,
+      }),
+    ).toBe("not-seated");
+    expect(
+      await roomOp(hostSocket, "admit", {
+        type: "admit",
+        member: lobby.waiting[0].id,
+      }),
+    ).toBe("ack");
+    // The open place comes before a bot's place.
+    expect((await boSocket.next("welcome")).you).toEqual({
+      seat: 3,
+      member: null,
+    });
+    lobby = await lobbyOf(host.roomCode);
+    expect(lobby.seats[3]).toMatchObject({
+      name: "Bo",
+      control: "human",
+      online: true,
+    });
+    expect(lobby.waiting).toEqual([]);
+
+    // Turned away: the socket closes and the capability stops working.
+    const cam = await join(host.roomCode, "Cam");
+    const camSocket = await connect(cam);
+    const camWaiting = await camSocket.next("welcome");
+    const closed = new Promise<number>((resolve) =>
+      camSocket.socket.addEventListener("close", (event) =>
+        resolve(event.code),
+      ),
+    );
+    expect(
+      await roomOp(hostSocket, "deny", {
+        type: "deny",
+        member: camWaiting.you.member,
+      }),
+    ).toBe("ack");
+    expect(await closed).toBe(4003);
+    const refused = await exports.default.fetch(
+      new Request(`${origin}/ws/room/${cam.roomCode}`, {
+        headers: {
+          Upgrade: "websocket",
+          Origin: origin,
+          "Sec-WebSocket-Protocol": `polytour, seat.${cam.token}`,
+        },
+      }),
+    );
+    expect(refused.status).toBe(401);
+
+    // Opening the door admits whoever still waited at it.
+    const dee = await join(host.roomCode, "Dee");
+    const deeSocket = await connect(dee);
+    await deeSocket.next("welcome");
+    expect(
+      await roomOp(hostSocket, "unlock", { type: "lock", locked: false }),
+    ).toBe("ack");
+    expect((await deeSocket.next("welcome")).you.seat).toBe(1);
+    lobby = await lobbyOf(host.roomCode);
+    expect(lobby.locked).toBe(false);
+    expect(lobby.seats.map((seat) => [seat.name, seat.control])).toEqual([
+      ["Alex", "human"],
+      ["Dee", "human"],
+      ["Nova", "bot"],
+      ["Bo", "human"],
+    ]);
+  });
+
+  it("lets a late arrival watch, take a bot's place, and seats the rest for the next game", async () => {
+    const host = await create();
+    const bo = await join(host.roomCode, "Bo");
+    const hostSocket = await connect(host);
+    const boSocket = await connect(bo);
+    await hostSocket.next("welcome");
+    await boSocket.next("welcome");
+    expect(
+      await roomOp(hostSocket, "start", { type: "start", fillBots: true }),
+    ).toBe("ack");
+    await hostSocket.next("events");
+    const late = await join(host.roomCode, "Late");
+    expect(late.seat).toBeNull();
+    const lateSocket = await connect(late);
+    const watching = await lateSocket.next("welcome");
+    expect(watching.snapshot?.players).toHaveLength(4);
+    const member = watching.you.member;
+    expect(watching.you.seat).toBeNull();
+    expect(member).toMatch(/^[a-f0-9]{16}$/);
+    lateSocket.send({
+      type: "intent",
+      id: "peek",
+      atSeq: watching.seq,
+      action: { type: "Roll" },
+    });
+    expect(await answer(lateSocket, "peek")).toBe("not-seated");
+    const next = await join(host.roomCode, "Next");
+    const nextSocket = await connect(next);
+    await nextSocket.next("welcome");
+
+    // Only the leader hands out a place, and only a bot's place.
+    expect(
+      await roomOp(boSocket, "bo-replace", {
+        type: "replace-bot",
+        member,
+        seat: 2,
+      }),
+    ).toBe("host-only");
+    expect(
+      await roomOp(hostSocket, "human", {
+        type: "replace-bot",
+        member,
+        seat: 1,
+      }),
+    ).toBe("not-a-bot");
+    expect(
+      await roomOp(hostSocket, "nobody", {
+        type: "replace-bot",
+        member: "0000000000000000",
+        seat: 2,
+      }),
+    ).toBe("member-not-found");
+    expect(
+      await roomOp(hostSocket, "replace", {
+        type: "replace-bot",
+        member,
+        seat: 2,
+      }),
+    ).toBe("ack");
+    const handed = await eventsWith(boSocket, "PlayerControlChanged");
+    expect(handed.events).toContainEqual({
+      type: "PlayerControlChanged",
+      seat: 2,
+      control: "human",
+      name: "Late",
+    });
+    // The same socket is welcomed again, now in the bot's old seat.
+    const seated = await lateSocket.next("welcome");
+    expect(seated.you).toEqual({ seat: 2, member: null });
+    expect(
+      seated.snapshot?.players.find((player) => player.seat === 2),
+    ).toMatchObject({ name: "Late", control: "human" });
+    let lobby = await lobbyOf(host.roomCode);
+    expect(lobby.seats[2]).toMatchObject({
+      name: "Late",
+      control: "human",
+      online: true,
+    });
+    expect(lobby.waiting.map((entry) => entry.name)).toEqual(["Next"]);
+
+    // Back to the lobby: the match is discarded, places and bots remain, and
+    // whoever waited takes the next bot's place.
+    expect(
+      await roomOp(boSocket, "bo-return", { type: "return-to-lobby" }),
+    ).toBe("host-only");
+    expect(
+      await roomOp(hostSocket, "return", { type: "return-to-lobby" }),
+    ).toBe("ack");
+    for (const inbox of [hostSocket, boSocket, lateSocket]) {
+      const back = await inbox.next("welcome");
+      expect(back).toMatchObject({ seq: 0, snapshot: null });
+      expect(back.lobby.status).toBe("lobby");
+    }
+    expect((await nextSocket.next("welcome")).you).toEqual({
+      seat: 3,
+      member: null,
+    });
+    lobby = await lobbyOf(host.roomCode);
+    expect(lobby.status).toBe("lobby");
+    expect(lobby.waiting).toEqual([]);
+    expect(lobby.seats.map((seat) => [seat.name, seat.control])).toEqual([
+      ["Alex", "human"],
+      ["Bo", "human"],
+      ["Late", "human"],
+      ["Next", "human"],
+    ]);
+    const storage = await runInDurableObject(
+      env.GAME_ROOM.getByName(host.roomCode),
+      (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        return {
+          state: sql.exec("SELECT id FROM state").toArray().length,
+          events: sql.exec("SELECT seq FROM events").toArray().length,
+          timers: sql
+            .exec<{ kind: string }>("SELECT kind FROM timers")
+            .toArray()
+            .map((timer) => timer.kind),
+        };
+      },
+    );
+    expect(storage).toEqual({ state: 0, events: 0, timers: ["cleanup"] });
+    expect(
+      await roomOp(hostSocket, "again", { type: "start", fillBots: false }),
+    ).toBe("ack");
+    const again = await eventsWith(hostSocket, "GameCreated");
+    const created = again.events.find((event) => event.type === "GameCreated");
+    expect(again.fromSeq).toBe(1);
+    expect(
+      created?.type === "GameCreated" &&
+        created.state.players.map((player) => player.name),
+    ).toEqual(["Alex", "Bo", "Late", "Next"]);
+  });
+
+  it("seats a player who shares a device and lets only that device act for them", async () => {
+    const host = await create();
+    const hostSocket = await connect(host);
+    await hostSocket.next("welcome");
+    expect(
+      await roomOp(hostSocket, "sam", {
+        type: "add-local",
+        seat: 1,
+        name: "Sam",
+      }),
+    ).toBe("ack");
+    expect((await lobbyOf(host.roomCode)).seats[1]).toEqual({
+      seat: 1,
+      name: "Sam",
+      control: "human",
+      online: true,
+      controller: 0,
+    });
+    for (const seat of [0, 1])
+      expect(
+        await roomOp(hostSocket, `taken-${seat}`, {
+          type: "add-local",
+          seat,
+          name: "Twin",
+        }),
+      ).toBe("seat-taken");
+    const bo = await join(host.roomCode, "Bo");
+    expect(bo.seat).toBe(2);
+    const boSocket = await connect(bo);
+    await boSocket.next("welcome");
+    // Any player may seat someone at their own screen; only that screen or
+    // the leader removes them.
+    expect(
+      await roomOp(boSocket, "not-mine", { type: "remove-local", seat: 1 }),
+    ).toBe("host-only");
+    expect(
+      await roomOp(boSocket, "kim", {
+        type: "add-local",
+        seat: 3,
+        name: "Kim",
+      }),
+    ).toBe("ack");
+    expect((await lobbyOf(host.roomCode)).seats[3].controller).toBe(2);
+    expect(
+      await roomOp(hostSocket, "drop-kim", { type: "remove-local", seat: 3 }),
+    ).toBe("ack");
+    expect(
+      await roomOp(hostSocket, "not-local", { type: "remove-local", seat: 2 }),
+    ).toBe("not-local");
+    expect(
+      await roomOp(hostSocket, "lead-sam", { type: "transfer-host", seat: 1 }),
+    ).toBe("not-transferable");
+    expect(
+      await roomOp(hostSocket, "start", { type: "start", fillBots: false }),
+    ).toBe("ack");
+    const started = await hostSocket.next("events");
+    const created = started.events.find(
+      (event) => event.type === "GameCreated",
+    );
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(
+      created.state.players.map((player) => [player.name, player.control]),
+    ).toEqual([
+      ["Alex", "human"],
+      ["Sam", "human"],
+      ["Bo", "human"],
+    ]);
+    const state = started.events.reduce(applyEvent, created.state);
+    // The host's screen may act for Sam; Bo's screen may not.
+    boSocket.send({
+      type: "intent",
+      id: "steal",
+      atSeq: started.toSeq,
+      action: { type: "Roll" },
+      seat: 1,
+    });
+    expect(await answer(boSocket, "steal")).toBe("not-your-seat");
+    hostSocket.send({
+      type: "intent",
+      id: "sam-roll",
+      atSeq: started.toSeq,
+      action: { type: "Roll" },
+      seat: 1,
+    });
+    expect(await answer(hostSocket, "sam-roll")).toBe(
+      state.activeSeat === 1 ? "ack" : "not-your-turn",
+    );
+    // Sam leaves with the screen Sam shares, so both seats get their grace.
+    await closeInbox(hostSocket);
+    const lobby = await lobbyOf(host.roomCode);
+    expect(lobby.seats.map((seat) => seat.online)).toEqual([
+      false,
+      false,
+      true,
+      false,
+    ]);
+    const timers = await runInDurableObject(
+      env.GAME_ROOM.getByName(host.roomCode),
+      (_instance, durableState) =>
+        durableState.storage.sql
+          .exec<{ kind: string }>(
+            "SELECT kind FROM timers WHERE kind LIKE 'grace:%' ORDER BY kind",
+          )
+          .toArray()
+          .map((timer) => timer.kind),
+    );
+    expect(timers).toEqual(["grace:0", "grace:1"]);
   });
 });
