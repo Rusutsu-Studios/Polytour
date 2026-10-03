@@ -144,14 +144,22 @@ test.describe("low graphics", () => {
     }
 
     await page.goto("/");
-    const graphics = page.getByRole("combobox", {
-      name: "Graphismes",
-      exact: true,
-    });
-    await expect(graphics).toHaveValue("standard");
-    await graphics.selectOption("low");
+    const highLabel = "Graphismes : Élevés. Passer aux graphismes faibles.";
+    const lowLabel = "Graphismes : Faibles. Passer aux graphismes élevés.";
+    const homeGraphics = page.locator(".topbar-right [data-graphics-quality]");
+    await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "high");
+    await expect(homeGraphics).toHaveAccessibleName(highLabel);
+    await expect(homeGraphics).toHaveText("Élevés");
+    await homeGraphics.click();
     await page.reload();
-    await expect(graphics).toHaveValue("low");
+    await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "low");
+    await expect(homeGraphics).toHaveAccessibleName(lowLabel);
+    await page.getByLabel("Langue / Language").selectOption("en");
+    await expect(homeGraphics).toHaveAccessibleName(
+      "Graphics: Low. Switch to High.",
+    );
+    await expect(homeGraphics).toHaveText("Low");
+    await page.getByLabel("Langue / Language").selectOption("fr");
     await page.getByLabel("Votre nom de joueur").fill("Graphics QA");
     await page.locator(".settings-trigger").click();
     await page
@@ -177,10 +185,31 @@ test.describe("low graphics", () => {
       const canvas = element as HTMLCanvasElement;
       return { canvas, context: canvas.getContext("webgl2") };
     });
+    const toolbarGraphics = page.locator(
+      "nav.game-tools [data-graphics-quality]",
+    );
+    await expect(toolbarGraphics).toHaveAttribute(
+      "data-graphics-quality",
+      "low",
+    );
+    await expect(toolbarGraphics).toHaveAccessibleName(lowLabel);
     await page
       .getByRole("button", { name: "Vue et animations", exact: true })
       .click();
-    await graphics.selectOption("standard");
+    const drawerGraphics = page.locator(
+      ".view-settings [data-graphics-quality]",
+    );
+    await expect(drawerGraphics).toHaveAttribute(
+      "data-graphics-quality",
+      "low",
+    );
+    await toolbarGraphics.press("Enter");
+    await expect(toolbarGraphics).toHaveAccessibleName(highLabel);
+    await expect(drawerGraphics).toHaveAccessibleName(highLabel);
+    await expect(drawerGraphics).toHaveAttribute(
+      "data-graphics-quality",
+      "high",
+    );
     await expect.poll(rendering).toMatchObject({
       dpr: 1.5,
       shadows: true,
@@ -192,7 +221,13 @@ test.describe("low graphics", () => {
     expect(standard.width).toBe(Math.floor(low.width * 1.5));
     expect(standard.height).toBe(Math.floor(low.height * 1.5));
     expect(standard.frustum).toEqual(low.frustum);
-    await graphics.selectOption("low");
+    await drawerGraphics.press("Space");
+    await expect(drawerGraphics).toHaveAccessibleName(lowLabel);
+    await expect(toolbarGraphics).toHaveAccessibleName(lowLabel);
+    await expect(toolbarGraphics).toHaveAttribute(
+      "data-graphics-quality",
+      "low",
+    );
     await expect.poll(rendering).toEqual(low);
     await expect.poll(() => rendering(true)).toMatchObject({ idleFrames: 0 });
     expect(
@@ -205,7 +240,7 @@ test.describe("low graphics", () => {
       }, original),
     ).toBe(true);
     await original.dispose();
-    await graphics.press("Escape");
+    await drawerGraphics.press("Escape");
     await roll.click();
     await expect
       .poll(
@@ -233,6 +268,10 @@ test.describe("low graphics", () => {
     await page.reload();
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    await expect(toolbarGraphics).toHaveAttribute(
+      "data-graphics-quality",
+      "low",
+    );
     await expect(page.locator(".match-connection")).toHaveAttribute(
       "data-state",
       "online",
@@ -1395,7 +1434,9 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     });
   }, original);
   await expect(page.locator(".decision-pick")).toContainText("Championnat");
-  await expect(page.getByRole("button", { name: "Passer" })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Passer", exact: true }),
+  ).toBeEnabled();
   const hostCity = page.getByLabel("Ville hôte", { exact: true });
   await expect(hostCity.locator("option:not([disabled])")).toHaveText([
     "Roubaix · ×4 · 50 k",

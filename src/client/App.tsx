@@ -85,7 +85,7 @@ function LanguagePicker() {
     </label>
   );
 }
-function GraphicsPicker({
+function GraphicsToggle({
   lowGraphics,
   onChange,
   compact = false,
@@ -94,19 +94,30 @@ function GraphicsPicker({
   onChange: (low: boolean) => void;
   compact?: boolean;
 }) {
+  const label = lowGraphics
+    ? t(
+        "Graphismes : Faibles. Passer aux graphismes élevés.",
+        "Graphics: Low. Switch to High.",
+      )
+    : t(
+        "Graphismes : Élevés. Passer aux graphismes faibles.",
+        "Graphics: High. Switch to Low.",
+      );
   return (
-    <label className="language-picker">
-      <span className={compact ? "sr-only" : undefined}>
-        {t("Graphismes", "Graphics")}
-      </span>
-      <select
-        value={lowGraphics ? "low" : "standard"}
-        onChange={(event) => onChange(event.currentTarget.value === "low")}
+    <div className="graphics-setting">
+      {!compact && <span>{t("Graphismes", "Graphics")}</span>}
+      <button
+        type="button"
+        className="graphics-toggle"
+        data-graphics-quality={lowGraphics ? "low" : "high"}
+        aria-label={label}
+        title={label}
+        onClick={() => onChange(!lowGraphics)}
       >
-        <option value="standard">{t("3D · Standard", "3D · Standard")}</option>
-        <option value="low">{t("3D · Léger", "3D · Low")}</option>
-      </select>
-    </label>
+        <Icon name="graphics" size={18} />
+        {lowGraphics ? t("Faibles", "Low") : t("Élevés", "High")}
+      </button>
+    </div>
   );
 }
 class SceneBoundary extends Component<
@@ -1239,6 +1250,11 @@ function MatchView({
         >
           <Icon name="settings" size={18} />
         </button>
+        <GraphicsToggle
+          lowGraphics={lowGraphics}
+          onChange={onGraphicsChange}
+          compact
+        />
         <button
           type="button"
           className="game-tool-button"
@@ -1497,7 +1513,7 @@ function MatchView({
             {tool === "view" && (
               <div className="view-settings">
                 <LanguagePicker />
-                <GraphicsPicker
+                <GraphicsToggle
                   lowGraphics={lowGraphics}
                   onChange={onGraphicsChange}
                 />
@@ -1790,7 +1806,7 @@ function App() {
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
             <LanguagePicker />
-            <GraphicsPicker
+            <GraphicsToggle
               lowGraphics={lowGraphics}
               onChange={changeGraphics}
               compact

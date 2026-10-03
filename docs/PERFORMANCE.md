@@ -64,10 +64,13 @@ uses those invalid samples. No animation-scheduler bug was established.
 
 ## Implemented change
 
-One local, persistent **Low graphics** choice is available before joining and in
-**View and animation** during a match. It fixes DPR at 1 and disables live shadows.
+One compact monitor-icon button shows **High** or **Low** before joining and in
+the match toolbar. Clicking switches the quality immediately; the tooltip names
+the current quality and the next choice. **View and animation** shows the same
+saved local preference. High is the default for a browser without a saved choice.
+Low fixes DPR at 1 and disables live shadows.
 It also keeps decorative town life and selection highlights still so the board
-can idle between game events. Standard retains the existing rendering settings,
+can idle between game events. High retains the existing rendering settings,
 including the town's capped 30 FPS ambient loop added after the benchmark revision.
 MSAA, materials, geometry and game-event choreography are preserved. There is no
 hardware detector or new library.
@@ -86,17 +89,24 @@ material programs when switching modes on an existing Canvas.
   The three production scenarios also pass against the actual built Worker/client,
   including a complete four-seat match and reconnect.
 - The new browser regression runs with normal motion and verifies persistence,
-  DPR and live shadow-light settings, Low idle drawing versus Standard ambient
+  default High, bilingual button labels, keyboard switching and synchronized controls,
+  DPR and live shadow-light settings, Low idle drawing versus High ambient
   drawing, unchanged Canvas/WebGL context and camera frustum, a real roll and reconnect.
-- Standard and Low welcome/match rendering is checked at 1280 × 720, 1440 × 900
+- High and Low welcome/match rendering is checked at 1280 × 720, 1440 × 900
   and 1920 × 1080, with no page overflow or runtime errors. Reduced motion and a
   normal-motion Low roll are checked.
 
 These are local checks. No deployment or target-hardware FPS claim is made.
 
+One early SwiftShader capture showed dark house walls and roofs in Low after
+switching quality. Repeated live bot-game captures and controlled construction
+with the first buildings created in either High or Low did not reproduce it.
+The populated draws had the expected instance colors and lighting. The isolated
+capture remains unexplained; no speculative renderer workaround was added.
+
 ## Further work worth considering
 
-Test Standard and Low on a physical older integrated-GPU PC with an ordinary roll
+Test High and Low on a physical older integrated-GPU PC with an ordinary roll
 and a developed board. Record frame times and hardware/browser versions. A smaller
 standard shadow map is a possible later compromise, but its default visual quality
 has not been changed. Pawn mesh merging, texture atlases, automatic quality tiers

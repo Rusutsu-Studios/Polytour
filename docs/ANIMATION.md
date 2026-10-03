@@ -243,8 +243,9 @@ Consistency matters more than any single animation: reuse these presets from
   Low graphics, reduced motion and lobby previews skip it and render only on demand.
 - The prototype's optional **Low graphics** setting uses DPR 1 and disables live
   shadows and pauses decorative town and selection motion. Game-event animations
-  remain enabled. Standard keeps DPR ≤ 1.5 and a 2048² shadow map. It is a local
-  browser preference available before joining and in View and animation. See
+  remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. The compact monitor
+  button shows High/Low and switches in one click before joining and in the match
+  toolbar; View and animation shows the same saved local preference. See
   [PERFORMANCE.md](PERFORMANCE.md) for the software-rendering comparison and limits.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated
