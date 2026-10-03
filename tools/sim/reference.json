@@ -1,0 +1,47 @@
+{
+  "games": 1000,
+  "economyRule": "reference",
+  "config": "four medium bots, 20-round limit, 3 seeded festivals; reference grid and fees",
+  "medianRounds": 20,
+  "p90Rounds": 20,
+  "wins": {
+    "round-limit": 950,
+    "resort-monopoly": 38,
+    "last-standing": 3,
+    "triple-monopoly": 8,
+    "line-monopoly": 1
+  },
+  "seatWins": [240, 245, 273, 242],
+  "turnPositionWins": [318, 256, 254, 172],
+  "landmarkBuilds": 0,
+  "landmarkRent": 0,
+  "modifiedHotelRent": 459947000,
+  "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+  "note": "Reference rules (rules version 4) have no Landmark. The 20-round cap mirrors baseline.json and staged-hotels.json; the 60-round runs approach a two-hour match: matches end by monopoly or bankruptcy about as often as prototype rooms, bankruptcies are rarer because sales refund 100 %, and turn order matters less.",
+  "sixtyRoundComparison": {
+    "reference": {
+      "medianRounds": 47,
+      "p90Rounds": 60,
+      "wins": {
+        "triple-monopoly": 390,
+        "resort-monopoly": 217,
+        "round-limit": 282,
+        "last-standing": 77,
+        "line-monopoly": 34
+      },
+      "turnPositionWins": [293, 263, 251, 193]
+    },
+    "prototype": {
+      "medianRounds": 42,
+      "p90Rounds": 60,
+      "wins": {
+        "triple-monopoly": 342,
+        "resort-monopoly": 262,
+        "round-limit": 206,
+        "last-standing": 150,
+        "line-monopoly": 40
+      },
+      "turnPositionWins": [333, 281, 233, 153]
+    }
+  }
+}

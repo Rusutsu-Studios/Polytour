@@ -1,0 +1,10 @@
+.dice-explanation-link {
+  color: #236cce;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dice-explanation-link:focus-visible {
+  outline: 3px solid #236cce;
+  outline-offset: 3px;
+}

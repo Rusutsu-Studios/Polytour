@@ -16,11 +16,14 @@ a stylized 3D board with juicy, choreographed animations.
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
-> 120 minutes. New rooms use staged hotels: buy up to three houses, then return
-> after a completed lap to upgrade an owned three-house city. Direct hotels are
-> an explicit custom exception; saved version-2 rooms retain their earlier rule.
-> Intermediate economy remains provisional. Keep these instructions
-> current when changing commands or paths.
+> 120 minutes. New rooms (rules version 5) use the reference economy: its rent
+> grid laid side by side on the board, additive rent modifiers up to ×10, a paid
+> championship, Hotels that cannot be bought out and no Landmark. Two houses
+> before a first completed lap, three after; the Hotel follows on a later
+> visit to a three-house city. Direct
+> hotels are an explicit custom exception; saved version-2/3 rooms keep their original board and the
+> prototype economy. Keep these instructions current when changing commands or
+> paths.
 
 ## Read before working
 
@@ -84,7 +87,8 @@ pnpm test:e2e       # desktop UI plus production Worker/socket flows
                     # first run: pnpm exec playwright install chromium
 pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
-pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4)
+pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4;
+                    # --rules reference|prototype, default reference; --rounds N, default 20)
 pnpm check:drand    # live future-round verification; local proof evidence
 pnpm verify:dice path/to/proof.json # independent beacon/dice verification
 ```
@@ -189,8 +193,10 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - The board owns the desktop viewport. Four compact player HUDs frame it at the
   corners; the current choice sits near the lower center. Keep history, fairness
   proofs and help behind secondary controls, and show city details on inspection.
-- Validate 1280×720, 1440×900 and 1920×1080 desktop layouts. Mobile is best effort
-  and must not force the desktop match into a dashboard or scrolling card stack.
+- Validate 1280×720, 1440×900 and 1920×1080 desktop layouts. The e2e layout
+  checks also cover 2560×1440 and 3840×2160 (`e2e/desktop-sizes.ts`). Mobile is
+  best effort and must not force the desktop match into a dashboard or scrolling
+  card stack.
 - Two animation systems with a hard boundary: **GSAP** for anything inside the R3F
   scene (camera, pawns, dice, buildings, particles) and for sequencing; **Motion** for
   DOM UI (HUD, dialogs, menus). Don't mix them on the same element.
@@ -247,6 +253,7 @@ queue. `verify` is the one check to require: it fails if any job fails.
 | `typecheck` | `pnpm typecheck`, covering `src/`, `test/`, `e2e/` and `tools/` |
 | `test` | `pnpm test` |
 | `build` | `vite build`, `pnpm check:bundle` (job summary shows the sizes), `wrangler deploy --dry-run` |
+| `changes` | Decides whether `e2e` runs: skipped only for pull requests that change nothing but `.md` files |
 | `e2e` | `pnpm test:e2e`; on failure the Playwright report and traces are uploaded |
 | `cloudflare` | `pnpm check:wrangler` against the PR's base commit |
 | `secrets` | gitleaks over the full history and the tree |

@@ -28,6 +28,31 @@ describe("rules invariants for generated matches", () => {
       { numRuns: 100, seed: 20261001 },
     );
   });
+  it("keeps the same guarantees for saved prototype rooms", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 0x7fff_ffff }),
+        fc.integer({ min: 1, max: 20 }),
+        fc.array(fc.nat(1000), { minLength: 1, maxLength: 100 }),
+        (seed, roundLimit, selections) => {
+          const result = simulateGame(
+            seed,
+            {
+              ...SIM_CONFIG,
+              economyRule: "prototype",
+              boardRule: "legacy",
+              sellBackPercent: 50,
+              roundLimit,
+            },
+            (_state, actions, index) =>
+              actions[selections[index % selections.length] % actions.length],
+          );
+          expect(result.rounds).toBeLessThanOrEqual(roundLimit);
+        },
+      ),
+      { numRuns: 50, seed: 20261003 },
+    );
+  });
   it("plays two- and three-player rooms on any table seats, including gaps", () => {
     fc.assert(
       fc.property(

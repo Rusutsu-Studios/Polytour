@@ -15,6 +15,7 @@ import {
   toPublic,
 } from "../src/shared/engine/index.js";
 import {
+  PROTOCOL_VERSION,
   RoomConfigSchema,
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
@@ -23,6 +24,7 @@ import {
   DEBUG_PING_RESPONSE,
   type RoomDiagnostics,
 } from "../src/shared/protocol/room-diagnostics.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -175,7 +177,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
       if (message.type === "sync") {
         const welcome: ServerMessage = {
           type: "welcome",
-          protocolVersion: 1,
+          protocolVersion: PROTOCOL_VERSION,
           you: { seat: 0 },
           seq: sequence,
           snapshot,
@@ -186,6 +188,10 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
             hostSeat: 0,
             status: "playing",
             config: RoomConfigSchema.parse({ decisionSeconds: 60 }),
+            boardRule: DEFAULT_GAME_CONFIG.boardRule,
+            economyRule: DEFAULT_GAME_CONFIG.economyRule,
+            hotelPurchaseRule: DEFAULT_GAME_CONFIG.hotelPurchaseRule,
+            sellBackPercent: DEFAULT_GAME_CONFIG.sellBackPercent,
             seats: snapshot.players.map((player) => ({
               seat: player.seat,
               name: player.name,
@@ -331,7 +337,7 @@ test("pause keeps the clock and authoritative updates running without losing mod
         kind: "buy",
         seat: 0,
         tile: 1,
-        maxLevel: 3,
+        maxLevel: 2,
         deadline: Date.now() + 60_000,
       },
     },
@@ -341,7 +347,7 @@ test("pause keeps the clock and authoritative updates running without losing mod
   await expect(continueButton).toBeFocused();
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toContainText("2,15 M");
+  ).toContainText(/2\s150\s000/);
   await expect(continueButton).toBeFocused();
   await continueButton.click();
   await expect(modal).toHaveCount(0);
@@ -399,11 +405,7 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
   const panel = page.getByRole("tabpanel");
   await expect(panel).toContainText("Bientôt disponible");
   await expect(panel.getByRole("slider")).toHaveCount(0);
-  for (const viewport of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const viewport of DESKTOP_SIZES) {
     await page.setViewportSize(viewport);
     await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
     const layout = await page.locator(".pause-dialog").evaluate((element) => {
@@ -533,11 +535,7 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
     diagnosticValue(debugPanel, "Connexion de la partie"),
   ).toHaveText("Connectée");
   await page.screenshot({ path: ".local/verification/pause-debug.png" });
-  for (const viewport of [
-    { width: 1280, height: 720 },
-    { width: 1920, height: 1080 },
-    { width: 390, height: 844 },
-  ]) {
+  for (const viewport of [...DESKTOP_SIZES, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     // Resizing clears the WebGL buffer; let the paused animation clock redraw it.
     await page.clock.runFor(250);
@@ -920,12 +918,7 @@ test("the tiny match badge refreshes its shared sample every five seconds outsid
   await expect.poll(() => requests).toBe(beforeClosing + 1);
   await expect(badge).toHaveText(/^FRA · \d+ ms$/);
   const beforeScreenshots = requests;
-  for (const viewport of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-    { width: 390, height: 844 },
-  ]) {
+  for (const viewport of [...DESKTOP_SIZES, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await page.clock.runFor(250);
     const rect = await badge.boundingBox();
@@ -1051,12 +1044,7 @@ test("room diagnostics show connected ingress routes and SQLite with bounded mea
   expect(match.metadataRequests()).toBe(1);
   await expect(debugTab).toBeFocused();
   await expect(page.locator(".match-clock")).not.toHaveText(previousTime);
-  for (const viewport of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-    { width: 390, height: 844 },
-  ]) {
+  for (const viewport of [...DESKTOP_SIZES, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await page.clock.runFor(50);
     const layout = await page
@@ -1080,7 +1068,7 @@ test("room diagnostics show connected ingress routes and SQLite with bounded mea
     }
   }
   // The chart retains at most sixty actual replies, even after a long open menu.
-  let sinceLastCadence = 260;
+  let sinceLastCadence = 60 + (DESKTOP_SIZES.length + 1) * 50;
   for (let pingIndex = 4; pingIndex < 64; pingIndex += 1) {
     await page.clock.runFor(5000 - sinceLastCadence);
     await expect.poll(() => match.pingRequests()).toBe(pingIndex + 1);

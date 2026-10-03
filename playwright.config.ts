@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-const remoteBaseURL = process.env.POLYTOUR_BASE_URL;
+const remoteBaseURL = process.env.POLYTOUR_BASE_URL?.trim() || undefined;
 const isCI = Boolean(process.env.CI);
 const devPort = process.env.POLYTOUR_DEV_PORT ?? "5173";
 const previewPort = process.env.POLYTOUR_PREVIEW_PORT ?? "4173";
@@ -28,6 +28,7 @@ export default defineConfig({
         "network-flow.spec.ts",
         "language-flow.spec.ts",
         "pause-menu.spec.ts",
+        "sale-flow.spec.ts",
       ],
       use: { baseURL: remoteBaseURL ?? devURL },
     },

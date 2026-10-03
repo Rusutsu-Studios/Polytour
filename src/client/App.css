@@ -303,6 +303,65 @@
   margin: 0 -18px 0 0;
   border-radius: 14px 0 0 14px;
 }
+/* The deciding player's clock, right under their ribbon. Bottom seats carry
+   the ribbon below the cash plate, so the bar moves with it. */
+.player-timer {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  background: #173b4514;
+}
+.player-card[data-seat="0"] .player-timer,
+.player-card[data-seat="3"] .player-timer {
+  order: 2;
+}
+.player-timer-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: #3fae6c;
+  animation: timer-drain var(--timer-window) linear var(--timer-delay) both;
+}
+.player-card[data-seat="2"] .player-timer-fill,
+.player-card[data-seat="3"] .player-timer-fill {
+  transform-origin: right center;
+}
+@keyframes timer-drain {
+  0%,
+  55% {
+    background: #3fae6c;
+  }
+  78% {
+    background: #f0b83a;
+  }
+  to {
+    transform: scaleX(0);
+    background: #d63f28;
+  }
+}
+.player-card {
+  transition:
+    scale 220ms,
+    filter 220ms;
+}
+.player-card[data-seat="0"] {
+  transform-origin: left bottom;
+}
+.player-card[data-seat="1"] {
+  transform-origin: left top;
+}
+.player-card[data-seat="2"] {
+  transform-origin: right top;
+}
+.player-card[data-seat="3"] {
+  transform-origin: right bottom;
+}
+.player-card.active {
+  scale: 1.05;
+  filter: drop-shadow(
+    0 0 14px color-mix(in srgb, var(--player-color) 65%, transparent)
+  );
+}
 .player-name-row {
   display: flex;
   align-items: center;
@@ -386,6 +445,25 @@
 .player-card[data-seat="3"] .player-held-cards {
   bottom: auto;
   top: -12px;
+}
+/* On large screens the HUD, choices and dialogs grow with the board, as on a
+   1920×1080 screen. Only DOM layers zoom: the WebGL canvas keeps its own size. */
+.game-shell
+:is(
+  .match-topbar,
+  .game-tools,
+  .player-card,
+  .contextual-action,
+  .inspector-popover,
+  .tool-drawer,
+  .match-end-panel
+),
+.decision-popup,
+.chance-dialog,
+.settings-dialog,
+.help-dialog,
+.city-card-dialog {
+  zoom: var(--ui-zoom);
 }
 .contextual-action {
   position: absolute;
@@ -491,25 +569,41 @@
 .game-shell .dice-total {
   font-size: 11px;
 }
+/* Your roll: a push button lying on the lawn, in front of the dice. The
+   scene reports that spot in pixels; the screen center is the fallback. */
+.contextual-action:has(
+  .decision-compact[data-kind="roll"][data-own="true"][data-busy="false"]
+) {
+  zoom: 1;
+  top: var(--roll-y, 50%);
+  bottom: auto;
+  left: var(--roll-x, 50%);
+  translate: -50% -50%;
+  width: auto;
+  max-height: none;
+}
 .game-shell
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {
-  width: 320px;
-  margin: 0 auto;
-  padding: 0;
+  width: auto;
+  margin: 0;
+  padding: 0 0 8px;
   background: none;
   box-shadow: none;
   overflow: visible;
+  zoom: var(--ui-zoom);
+  animation: roll-pop 360ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
+/* The button says it all; the heading stays for screen readers. */
 .game-shell
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"]
-  .decision-kicker {
-  justify-content: center;
-  color: #214e54;
-  text-shadow: 0 1px 0 #fffaf099;
+  h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
-.game-shell
-  .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"]
-  h2,
 .game-shell
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"]
   > p,
@@ -521,16 +615,84 @@
 .game-shell .decision-panel[data-kind="roll"] .decision-actions {
   display: flex;
   justify-content: center;
+  margin-top: 0;
 }
+/* A physical blue key: a glossy cap on a dark base that sinks when pressed. */
 .game-shell .decision-panel .roll-button {
-  width: 100%;
-  min-height: 57px;
-  font-size: 17px;
-  padding: 14px 22px;
-  justify-content: flex-start;
+  --push: 7px;
+  position: relative;
+  width: auto;
+  min-height: 0;
+  padding: 12px 40px 11px;
+  gap: 10px;
+  border-radius: 14px;
+  background: linear-gradient(#5bbcf8, #2d8fe2 70%);
+  color: #fff;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 #1c64a8;
+  box-shadow:
+    inset 0 2px 0 #ffffff70,
+    inset 0 -3px 0 #1f78c780,
+    0 var(--push) 0 #1a5c9c,
+    0 calc(var(--push) + 7px) 16px #0f2d4a52;
+  transition:
+    translate 70ms ease-out,
+    box-shadow 70ms ease-out,
+    filter 120ms;
 }
-.game-shell .roll-button svg:last-child {
-  margin-left: auto;
+.game-shell .decision-panel .roll-button:hover:not(:disabled) {
+  background: linear-gradient(#5bbcf8, #2d8fe2 70%);
+  transform: none;
+  filter: brightness(1.07);
+  box-shadow:
+    inset 0 2px 0 #ffffff70,
+    inset 0 -3px 0 #1f78c780,
+    0 var(--push) 0 #1a5c9c,
+    0 calc(var(--push) + 7px) 16px #0f2d4a52;
+}
+.game-shell .decision-panel .roll-button:active:not(:disabled) {
+  transform: none;
+  translate: 0 calc(var(--push) - 1px);
+  box-shadow:
+    inset 0 2px 0 #ffffff50,
+    inset 0 -2px 0 #1f78c780,
+    0 1px 0 #1a5c9c,
+    0 3px 6px #0f2d4a40;
+}
+.game-shell .decision-panel .roll-button:disabled {
+  opacity: 0.7;
+  translate: 0 calc(var(--push) - 1px);
+  box-shadow: 0 1px 0 #1a5c9c;
+}
+.game-shell .decision-panel .roll-button svg {
+  filter: drop-shadow(0 2px 0 #1c64a8);
+}
+/* A ring that keeps swelling off the key so the eye lands on it. */
+.game-shell .decision-panel .roll-button:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: roll-ring 1.8s ease-out infinite;
+}
+@keyframes roll-pop {
+  from {
+    opacity: 0;
+    scale: 0.85;
+  }
+}
+@keyframes roll-ring {
+  from {
+    box-shadow: 0 0 0 0 #fffaf0cc;
+  }
+  to {
+    box-shadow: 0 0 0 18px #fffaf000;
+  }
 }
 .game-shell .decision-panel[data-own="false"] {
   max-width: 360px;
@@ -546,6 +708,133 @@
 .game-shell .decision-panel[data-busy="true"] {
   max-width: 420px;
   margin: 0 auto;
+}
+/* Board choices stay non-modal and low: the board is the control, this strip
+   confirms it without covering the spaces nearest the bottom of the diamond. */
+.contextual-action:has(.decision-pick) {
+  width: min(780px, calc(100vw - 540px));
+}
+.game-shell .decision-pick {
+  margin: 0 auto;
+  padding: 10px 12px 12px 15px;
+}
+.pick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.game-shell .decision-pick h2 {
+  font-size: 21px;
+  margin-right: auto;
+}
+.game-shell .decision-pick .decision-timer {
+  margin-left: 0;
+}
+.pick-list {
+  max-width: 190px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid #c4c9b8;
+  border-radius: 7px;
+  background: #f6f3e7;
+  color: #173b45;
+  font-size: 14px;
+}
+.pick-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 8px;
+}
+.pick-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px 6px 7px;
+  border-radius: 10px;
+  background: #f1eedf;
+}
+.pick-summary[data-empty="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 11px;
+  background: #f8f4e8;
+  outline: 1.5px dashed #bfc3ae;
+  outline-offset: -1.5px;
+}
+.pick-chip {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  color: #fffaf0;
+  font-size: 19px;
+  font-weight: 900;
+  box-shadow: inset 0 -3px 0 #173b4524;
+}
+.pick-name {
+  display: grid;
+  min-width: 0;
+  line-height: 1.18;
+}
+.pick-name strong {
+  overflow: hidden;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-name small {
+  overflow: hidden;
+  color: #47666c;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-balance {
+  display: grid;
+  justify-items: end;
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.pick-balance b {
+  color: #173b45;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.pick-empty {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #33545a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.pick-empty svg {
+  flex: none;
+  color: var(--coral);
+}
+.pick-actions {
+  display: flex;
+  gap: 8px;
+}
+.game-shell .decision-pick .pick-actions .button {
+  min-height: 52px;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+.game-shell .decision-pick .pick-actions .decision-confirm {
+  min-width: 210px;
+  justify-content: space-between;
 }
 .game-shell .rng-wait {
   background: #ecefdd;
@@ -565,55 +854,6 @@
 }
 .game-shell .destination-choice select {
   min-height: 42px;
-}
-.inspector-popover {
-  position: absolute;
-  z-index: 8;
-  right: 24px;
-  bottom: 155px;
-  width: 280px;
-  border-radius: 14px;
-  box-shadow:
-    0 6px 0 #488aa380,
-    0 10px 30px #17485926;
-}
-.popover-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  width: 25px;
-  height: 25px;
-  background: #f0efdd;
-}
-.game-shell .inspector {
-  padding: 20px;
-  border-radius: 14px;
-  background: #fffaf0;
-}
-.game-shell .inspector-head {
-  padding-right: 17px;
-}
-.game-shell .inspector h3 {
-  font-size: 17px;
-}
-.game-shell .tile-select {
-  font-size: 12px;
-  background: #f0f0df;
-  border-color: #bcc4b1;
-  margin-top: 13px;
-}
-.game-shell .ownership {
-  font-size: 11px;
-}
-.game-shell .property-numbers {
-  gap: 30px;
-}
-.game-shell .property-numbers dd {
-  font-size: 21px;
-}
-.game-shell .tile-rule {
-  color: #4d6b66;
 }
 .tool-drawer {
   position: absolute;
@@ -1144,14 +1384,21 @@
   color: #5e7c7c;
   opacity: 0.65;
 }
+/* Large screens zoom the lobby panels; the preview canvas never zooms, so its
+   area grows through --ui-zoom instead. */
+.lobby-shell
+:is(.topbar, .welcome-copy, .welcome-quick-settings, .lobby-footer) {
+  zoom: var(--ui-zoom);
+}
 .welcome-grid {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 28px;
-  min-height: calc(100svh - 122px);
-  max-width: 1510px;
+  grid-template-columns: calc(360px * var(--ui-zoom)) minmax(0, 1fr);
+  gap: calc(28px * var(--ui-zoom));
+  min-height: calc(100svh - 122px * var(--ui-zoom));
+  max-width: calc(1510px * var(--ui-zoom));
   margin: auto;
-  padding: 8px 48px 24px;
+  padding: calc(8px * var(--ui-zoom)) calc(48px * var(--ui-zoom))
+    calc(24px * var(--ui-zoom));
   align-items: center;
 }
 .welcome-copy {
@@ -1207,8 +1454,7 @@
 .welcome-form > input,
 .join-form input,
 .settings-fields select,
-.destination-choice select,
-.tile-select {
+.destination-choice select {
   width: 100%;
   border: 1px solid #5eaca4;
   background: #c8eee4;
@@ -1382,7 +1628,11 @@ input::placeholder {
   line-height: 1.6;
 }
 .welcome-world {
-  height: clamp(530px, calc(100svh - 154px), 780px);
+  height: clamp(
+    calc(530px * var(--ui-zoom)),
+    calc(100svh - 154px * var(--ui-zoom)),
+    calc(780px * var(--ui-zoom))
+  );
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1821,65 +2071,10 @@ button.seat-open:disabled {
   border-radius: 8px;
   margin-top: 18px;
 }
-.inspector {
-  padding: 20px 22px;
-  border-radius: 16px;
-  background: #c4e7d7;
-}
-.inspector-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.tile-icon {
-  width: 41px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  font-size: 26px;
-  color: #183e45;
-}
 .small-label {
   font-size: 10px;
   font-weight: 650;
   color: #4e6b66;
-}
-.inspector h3 {
-  font-size: 17px;
-  font-weight: 850;
-  margin-top: 3px;
-}
-.tile-select {
-  padding: 7px 9px;
-  font-size: 11px;
-  margin-top: 16px;
-  background: #dcf0e2;
-  border-color: #88bbaa;
-}
-.ownership {
-  font-size: 11px;
-  color: #3e605b;
-  margin-top: 14px;
-}
-.ownership span {
-  font-size: 13px;
-  margin-right: 4px;
-}
-.property-numbers {
-  display: flex;
-  gap: 30px;
-  margin: 14px 0 0;
-}
-.property-numbers dt {
-  font-size: 10px;
-  color: #4a6f68;
-}
-.property-numbers dd {
-  margin: 4px 0 0;
-  font-size: 18px;
-  font-weight: 850;
-  font-variant-numeric: tabular-nums;
 }
 .festival-badge {
   margin-top: 13px;
@@ -2063,7 +2258,9 @@ button.seat-open:disabled {
 }
 .help-dialog {
   width: min(550px, calc(100vw - 36px));
+  max-height: calc(100svh - 48px);
   padding: 28px;
+  overflow-y: auto;
   background: var(--paper);
   color: var(--ink);
   border: 0;
@@ -2084,11 +2281,20 @@ button.seat-open:disabled {
   font-size: 31px;
   letter-spacing: -0.03em;
 }
-.help-dialog > p {
+.help-dialog > p,
+.help-dice > p {
   font-size: 14px;
   line-height: 1.6;
   margin-top: 12px;
   color: #4d6968;
+}
+.help-dice {
+  padding-top: 16px;
+  border-top: 1px solid #bfd0cf;
+}
+.help-dice h3 {
+  margin: 0;
+  font-size: 16px;
 }
 .rules-list {
   padding: 0;
@@ -2375,9 +2581,6 @@ button.seat-open:disabled {
     top: 92px;
     max-height: calc(100svh - 220px);
   }
-  .inspector-popover {
-    bottom: 132px;
-  }
   .match-caption {
     left: 245px;
     right: 245px;
@@ -2570,15 +2773,7 @@ button.seat-open:disabled {
   .game-shell .decision-actions[data-construction="true"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .game-shell
-    .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {
-    width: min(320px, 100%);
-  }
-  .inspector-popover {
-    width: min(280px, calc(100vw - 24px));
-    bottom: 118px;
-    right: 12px;
-  }
+
   .tool-drawer {
     top: 92px;
     max-height: calc(100svh - 205px);
@@ -2660,7 +2855,10 @@ button.seat-open:disabled {
     transition-duration: 0s;
     animation-duration: 0s;
   }
-  .spinner {
+  .spinner,
+  .game-shell
+    .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"],
+  .game-shell .decision-panel .roll-button:not(:disabled)::after {
     animation: none;
   }
   .button:hover:not(:disabled),
@@ -2668,4 +2866,35 @@ button.seat-open:disabled {
   .game-tool-button:hover {
     transform: none;
   }
+}
+
+/* An essential deadline retains real time when decorative motion is reduced. */
+.game-shell[data-reduced-motion="true"] .player-card,
+.game-shell[data-reduced-motion="true"] .roll-button {
+  transition: none;
+}
+.game-shell[data-reduced-motion="true"]
+  .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"],
+.game-shell[data-reduced-motion="true"]
+  .decision-panel
+  .roll-button:not(:disabled)::after {
+  animation: none;
+}
+.flat-board button[data-pick="true"] {
+  outline: 3px solid #287aa7;
+  outline-offset: -3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-timer-fill {
+    animation: timer-drain var(--timer-window) linear var(--timer-delay) both;
+  }
+}
+
+.pick-host-ledger {
+  margin: 0 0 0 auto;
+  min-width: 160px;
+  font-size: 14px;
+}
+.pick-host-ledger > div {
+  gap: 12px;
 }

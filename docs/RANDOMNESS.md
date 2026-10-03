@@ -20,8 +20,9 @@ The result, events and receipt are persisted before broadcasting. Refresh and
 reconnect read that saved result rather than throwing again. Server receipts use
 `mode: "secure"`, `verified: false`, and null round, chain, signature and beacon
 randomness fields. They are not an independently verifiable public proof. The
-closed dice-information tool explains the equal chances and shows the last roll
-without a beacon-verification badge or proof download.
+How to play help explains the equal chances and links the Cloudflare Web Crypto
+documentation. The dice-information tool shows the last roll and a shortcut to
+that help, without a beacon-verification badge or proof download.
 
 This is a cryptographically secure pseudorandom source backed by runtime entropy,
 not a claim of measured physical entropy for every throw. Server operation remains

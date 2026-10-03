@@ -1,10 +1,11 @@
 import { z } from "zod";
-
+import type { BoardRule, EconomyRule } from "../board/index.js";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-export const PROTOCOL_VERSION = 1;
+// Layout, prices and sale quotes depend on frozen room rules; stale clients reload.
+export const PROTOCOL_VERSION = 3;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -123,6 +124,10 @@ export type LobbyState = {
   hostSeat: Seat;
   status: "lobby" | "playing" | "finished";
   config: RoomConfig;
+  readonly boardRule: BoardRule;
+  readonly economyRule: EconomyRule;
+  readonly hotelPurchaseRule: "staged-hotels" | "legacy-lap";
+  readonly sellBackPercent: 50 | 100;
   seats: LobbySeat[];
 };
 export type RandomnessStatus = {

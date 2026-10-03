@@ -1,11 +1,60 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type {
   GameEvent,
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
+
+// Board inspection steps space by space; the card is the deed, not a list.
+async function inspectSpace(page: Page, index: number) {
+  const card = page.locator(".city-card");
+  await expect(card).toBeVisible();
+  for (let step = 0; step <= 32; step++) {
+    const current = Number(
+      await card.getAttribute("data-space", { timeout: 5000 }),
+    );
+    if (current === index) return;
+    const direction = (index - current + 32) % 32 <= 16 ? 1 : -1;
+    await page
+      .getByRole("button", {
+        name: direction === 1 ? "Case suivante" : "Case précédente",
+        exact: true,
+      })
+      .click();
+    await expect(card).toHaveAttribute(
+      "data-space",
+      String((current + direction + 32) % 32),
+    );
+  }
+  throw new Error(`The inspection card never reached space ${index}`);
+}
+
+async function expectDiceHelp(panel: Locator) {
+  await expect(
+    panel.getByRole("heading", { name: "Comment jouer", exact: true }),
+  ).toBeVisible();
+  const dice = panel.locator(".help-dice");
+  await expect(dice).toBeVisible();
+  await expect(dice).toContainText(
+    "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six.",
+  );
+  await expect(panel).not.toContainText(
+    /Aucun achat|bonus payant|équilibrage|loyers à ajuster/,
+  );
+  const documentation = dice.getByRole("link", {
+    name: "Documentation Web Crypto de Cloudflare (nouvel onglet)",
+    exact: true,
+  });
+  await expect(documentation).toBeVisible();
+  await expect(documentation).toHaveAttribute(
+    "href",
+    "https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#methods",
+  );
+  await expect(documentation).toHaveAttribute("target", "_blank");
+}
 
 async function minimizeOwnDecision(page: Page, timeout = 30_000) {
   // Director completion and React's native dialog opening are separate steps.
@@ -52,6 +101,7 @@ async function minimizeOwnDecision(page: Page, timeout = 30_000) {
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {
+  // Real bot rounds and the five desktop viewport checks share this budget.
   test.setTimeout(240_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -59,6 +109,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Jouer avec 3 bots" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Comment jouer", exact: true })
+    .click();
+  await expectDiceHelp(page.locator(".help-dialog"));
+  await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
+  await page.getByRole("button", { name: "C’est parti" }).click();
   await page.getByLabel("Votre nom de joueur").fill("Raimundo");
   await page.locator(".settings-trigger").click();
   await expect(
@@ -97,9 +153,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.locator(".settings-dialog .room-settings"),
   ).not.toContainText("drand");
-  await expect(page.locator(".settings-dialog .room-settings")).toContainText(
-    "Les deux dés sont tirés sur le serveur avec un générateur cryptographique.",
-  );
+  await expect(
+    page.locator(".settings-dialog .room-settings-fairness"),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".settings-dialog .room-settings"),
+  ).not.toContainText("Web Crypto");
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
@@ -116,9 +175,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page
     .getByRole("button", { name: "À propos des dés", exact: true })
     .click();
-  await expect(page.locator(".proof-panel")).toContainText(
-    "Chaque face a une chance sur six",
-  );
+  await expect(page.locator(".proof-panel")).not.toContainText("Web Crypto");
+  await expect(
+    page.locator('.proof-panel a[href*="developers.cloudflare.com"]'),
+  ).toHaveCount(0);
   await expect(page.locator(".proof-panel")).not.toContainText("drand");
   await expect(
     page.getByRole("button", { name: "Télécharger la preuve" }),
@@ -165,12 +225,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     });
     return snapshot;
   });
-  await expect(page.locator(".decision-panel")).toContainText(
-    "Votre dette à régler",
-  );
-  await expect(
-    page.locator(".decision-panel").getByRole("button", { name: /Vendre/ }),
-  ).toBeEnabled();
+  await expect(page.locator(".decision-sale")).toContainText("Dette");
+  await expect(page.locator(".sale-confirm")).toBeDisabled();
+  await page.locator('.sale-tile-quote[data-tile="1"]').click();
+  await expect(page.locator(".sale-confirm")).toBeEnabled();
   await page.evaluate(async (snapshot) => {
     const modulePath =
       performance
@@ -185,11 +243,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // Every secondary panel starts closed; a match needs no page scrolling.
   await expect(page.locator(".journal")).not.toBeVisible();
   await expect(page.locator(".inspector")).not.toBeVisible();
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     await expect(page.locator(".board-stage")).toHaveCSS(
       "height",
@@ -243,13 +297,13 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
       number,
       { owner: Seat; level: 0 | 1 | 2 | 3 | 4 | 5 }
     > = {
-      4: { owner: 0, level: 1 },
+      3: { owner: 0, level: 1 },
       7: { owner: 1, level: 2 },
       11: { owner: 2, level: 3 },
       15: { owner: 3, level: 4 },
-      20: { owner: 0, level: 5 },
-      25: { owner: 1, level: 4 },
-      30: { owner: 2, level: 5 },
+      19: { owner: 0, level: 5 },
+      26: { owner: 1, level: 4 },
+      29: { owner: 2, level: 5 },
       31: { owner: 3, level: 3 },
     };
     const properties = snapshot.properties.map((property) => ({
@@ -259,7 +313,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     }));
     director.reset({
       ...snapshot,
-      config: { ...snapshot.config, hotelPurchaseRule: "legacy-lap" },
+      // Landmarks exist only in saved prototype rooms (rules versions 2–3).
+      config: {
+        ...snapshot.config,
+        hotelPurchaseRule: "legacy-lap",
+        economyRule: "prototype",
+      },
       activeSeat: 0,
       pending: {
         kind: "buy",
@@ -447,11 +506,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator(".standings-label")).toContainText(
     "Classement final",
   );
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     const resultBounds = await page
       .locator(".match-end-panel")
@@ -537,7 +592,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
             ).length > ownRolls
           );
         }, previousOwnRolls),
-      { timeout: 30_000 },
+      // Keep main's server-paced roll allowance; the next own decision is
+      // checked separately below when this roll hands the turn to the bots.
+      { timeout: 60_000 },
     )
     .toBe(true);
   // A legal roll may hand the turn to the bots. Let their server-paced turns
@@ -556,9 +613,13 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page
     .getByRole("button", { name: "Explorer le plateau", exact: true })
     .click();
-  await page.getByLabel("Explorer une case").selectOption("31");
-  await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
-  await expect(page.locator(".property-numbers")).toContainText("400 k");
+  await inspectSpace(page, 31);
+  await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
+  // The deed lists every building level with its cost and its rent.
+  const deedRows = page.locator(".city-card-table tbody tr");
+  await expect(deedRows).toHaveCount(5);
+  await expect(deedRows.first()).toContainText("400 k");
+  await expect(deedRows.nth(4)).toContainText("+500 k");
   // An explicitly inspected city stays selected when another pawn moves.
   // Presentation-only snapshot, restored before the real reconnect below.
   const beforeMovement = await page.evaluate(async () => {
@@ -586,9 +647,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     });
     return snapshot;
   });
-  await expect(page.getByLabel("Explorer une case")).toHaveValue("31");
-  await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
-  await expect(page.locator(".property-numbers")).toContainText("400 k");
+  await expect(page.locator(".city-card")).toHaveAttribute("data-space", "31");
+  await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
+  await expect(deedRows.first()).toContainText("400 k");
   await page.evaluate(async (snapshot) => {
     const modulePath =
       performance
@@ -599,8 +660,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     const { director } = await import(modulePath);
     director.reset(snapshot);
   }, beforeMovement);
-  await page.getByLabel("Explorer une case").press("Escape");
-  await expect(page.locator(".inspector")).not.toBeVisible();
+  await page
+    .getByRole("button", { name: "Case suivante", exact: true })
+    .press("Escape");
+  await expect(page.locator(".city-card")).not.toBeVisible();
   await expect(
     page.getByRole("button", { name: "Explorer le plateau", exact: true }),
   ).toBeFocused();
@@ -617,7 +680,8 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   ).toBeVisible();
   await minimizeOwnDecision(page, 120_000);
   await page.getByRole("button", { name: "Comment jouer" }).click();
-  await expect(page.locator("dialog")).toBeVisible();
+  await expectDiceHelp(page.locator(".help-dialog"));
+  await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
   await page.getByRole("button", { name: "C’est parti" }).click();
   await expect(page.locator("dialog")).not.toBeVisible();
   expect(errors).toEqual([]);
@@ -739,6 +803,10 @@ test("desktop room controls fit, create and join preserve the host settings", as
     viewport: { width: 1280, height: 720 },
     reducedMotion: "reduce",
   });
+  const newcomer = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    reducedMotion: "reduce",
+  });
   try {
     const second = await friend.newPage();
     await second.goto(`/?room=${code}`);
@@ -777,14 +845,13 @@ test("desktop room controls fit, create and join preserve the host settings", as
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeDisabled();
     // A new room presence must not overwrite the host's unsaved draft.
-    await second.evaluate(async (roomCode) => {
-      const response = await fetch(`/api/rooms/${roomCode}/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Cam" }),
-      });
-      if (!response.ok) throw new Error("Expected a third seat");
-    }, code);
+    const third = await newcomer.newPage();
+    await third.goto(`/?room=${code}`);
+    await third.getByLabel("Votre nom de joueur").fill("Cam");
+    await third
+      .getByRole("button", { name: "Rejoindre", exact: false })
+      .click();
+    await expect(third.locator(".lobby-seats")).toContainText("Alice");
     await expect(page.locator(".lobby-seats")).toContainText("Cam");
     await expect(
       page.getByRole("slider", { name: "Capital de départ", exact: true }),
@@ -834,8 +901,36 @@ test("desktop room controls fit, create and join preserve the host settings", as
     // Three players keep their lobby colours; the fourth corner stays empty.
     await expect(page.locator(".player-card")).toHaveCount(3);
     await expect(second.locator(".player-card")).toHaveCount(3);
+    await expect(third.locator(".player-card")).toHaveCount(3);
     await expect(page.locator('.player-card[data-seat="3"]')).toHaveCount(0);
-    await expect(page.locator(".decision-panel")).toBeVisible();
+    // The first player is randomized; only that player's tab owns the choice.
+    const activeSeat = Number(
+      await page.locator(".player-card.active").getAttribute("data-seat"),
+    );
+    expect([0, 1, 2]).toContain(activeSeat);
+    const players = [page, second, third];
+    const names = ["Alice", "Bo", "Cam"];
+    for (const [seat, participant] of players.entries()) {
+      await expect(participant.locator(".player-card.active")).toHaveAttribute(
+        "data-seat",
+        String(activeSeat),
+      );
+      const roll = participant.getByRole("button", {
+        name: "Lancer les dés",
+        exact: true,
+      });
+      if (seat === activeSeat) {
+        await expect(
+          participant.locator('.decision-panel[data-own="true"]'),
+        ).toBeVisible();
+        await expect(roll).toBeEnabled();
+      } else {
+        await expect(
+          participant.locator('.contextual-action [role="status"]'),
+        ).toHaveText(`${names[activeSeat]} joue`);
+        await expect(roll).toHaveCount(0);
+      }
+    }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBe(1280);
@@ -845,6 +940,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     });
   } finally {
     await friend.close();
+    await newcomer.close();
   }
 });
 
@@ -853,6 +949,7 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.clock.install();
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Camille");
   await page.locator(".settings-trigger").click();
@@ -882,6 +979,8 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
   await page
     .getByRole("button", { name: "Lancer les dés", exact: true })
     .focus();
+  // Keep the bounded reading timer from expiring during assertions and screenshots.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 2000));
   // Authored presentation events only. This tab never sends these to the Worker.
   const original = await page.evaluate(async () => {
     const modulePath =
@@ -906,6 +1005,7 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
     ]);
     return state;
   });
+  await page.clock.runFor(750);
   await expect(page.locator("#chance-title")).toHaveText("Bonne fortune");
   await expect(page.locator(".chance-impact")).toHaveText("+ 150 k");
   await expect(page.locator(".chance-art")).toHaveJSProperty(
@@ -927,10 +1027,11 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
   expect(balances).toEqual([2_000_000, 2_150_000]);
   await page.screenshot({ path: ".local/verification/card-fortune.png" });
   await page.getByRole("button", { name: "Continuer", exact: false }).click();
+  await page.clock.runFor(1500);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toContainText("2,15 M");
+  ).toHaveText(/2\s150\s000/);
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeFocused();
@@ -947,6 +1048,7 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
       { type: "CardDrawn", seat: 0, card: "Jet Set", kept: false },
     ]);
   });
+  await page.clock.runFor(750);
   await expect(page.locator("#chance-title")).toHaveText("Jet-set");
   await page.evaluate(async () => {
     const modulePath =
@@ -961,6 +1063,9 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
       { type: "CardDrawn", seat: 1, card: "Guardian Angel", kept: true },
     ]);
   });
+  await page.clock.runFor(750);
+  // Cross the skipped card's old deadline while the new card is still reading.
+  await page.clock.runFor(2000);
   await expect(page.locator("#chance-title")).toHaveText("Ange gardien");
   await expect(page.locator(".chance-impact")).toHaveText("Gardez cette carte");
   await page.keyboard.press("Escape");
@@ -990,6 +1095,7 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
   await page.screenshot({ path: ".local/verification/card-construction.png" });
   // Reduced motion keeps the reading moment, with a stationary illustration.
   await expect(page.locator(".chance-reading")).not.toBeVisible();
+  await page.clock.resume();
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
@@ -1031,8 +1137,18 @@ test("travel, rent protections and exchanges show the complete legal choice", as
           entry.name.includes("/src/client/director/director.ts"),
         )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
-    const state = director.getSnapshot().serverState as PublicState | null;
-    if (!state) throw new Error("Expected a match");
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (!snapshot) throw new Error("Expected a match");
+    // Authored legacy snapshots exercise retained prices and travel fees.
+    // Selection never sends these presentation fixtures to the server.
+    const state = {
+      ...snapshot,
+      config: {
+        ...snapshot.config,
+        boardRule: "legacy" as const,
+        economyRule: "prototype" as const,
+      },
+    };
     director.reset({
       ...state,
       activeSeat: 0,
@@ -1046,21 +1162,83 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     });
     return state;
   });
+  // Board choices stay non-modal: nothing travels until a space is picked,
+  // on the board or through the keyboard list of the same legal spaces.
+  const pick = page.locator(".decision-pick");
+  await expect(pick).toContainText("Choisissez votre destination");
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await expect(pick.locator(".decision-confirm")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Choisir le lancer gratuit" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".decision-confirm")).toContainText(
-    "Lancer les dés",
-  );
+    pick.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page
+      .getByLabel("Destination", { exact: true })
+      .locator("option:not([disabled])"),
+  ).toHaveCount(2);
   await page.getByLabel("Destination", { exact: true }).selectOption("31");
-  await expect(page.locator(".decision-confirm")).toContainText("Voyager ici");
-  await expect(page.locator(".ledger-balance")).toContainText("1,95 M");
-  await page.getByRole("button", { name: "Choisir le lancer gratuit" }).click();
-  await expect(page.locator(".decision-confirm")).toContainText(
-    "Lancer les dés",
+  await expect(pick.locator(".decision-confirm")).toContainText(
+    "Voyager à Tokyo · 50 k",
   );
+  await expect(pick.locator(".ledger-balance")).toContainText("1,95 M");
   await page.screenshot({
     path: ".local/verification/decision-travel-regression.png",
+  });
+  // A reference room charges to move the championship and lets a player pass.
+  await page.evaluate(async (state) => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const owned = [1, 31];
+    const properties = state.properties.map((property) => ({
+      ...property,
+      owner: owned.includes(property.tile) ? (0 as const) : null,
+      level: property.tile === 31 ? (3 as const) : (0 as const),
+    }));
+    director.reset({
+      ...state,
+      config: { ...state.config, economyRule: "reference" },
+      activeSeat: 0,
+      properties,
+      championshipHost: { tile: 31, multiplier: 3 },
+      festivalTiles: [],
+      players: state.players.map((player) => ({
+        ...player,
+        cash: player.seat === 0 ? 1_000_000 : player.cash,
+        properties: player.seat === 0 ? owned : [],
+      })),
+      pending: {
+        kind: "host",
+        seat: 0,
+        targets: owned,
+        deadline: Date.now() + 60_000,
+      },
+    });
+  }, original);
+  await expect(page.locator(".decision-pick")).toContainText("Championnat");
+  await expect(page.getByRole("button", { name: "Passer" })).toBeEnabled();
+  const hostCity = page.getByLabel("Ville hôte", { exact: true });
+  await expect(hostCity.locator("option:not([disabled])")).toHaveText([
+    "Roubaix · ×4 · 50 k",
+    "Tokyo · ×4",
+  ]);
+  await hostCity.selectOption("31");
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Renouveler le championnat",
+  );
+  // Tokyo with three houses: 600 k, with a ×4 championship.
+  await expect(page.locator(".decision-ledger")).toContainText("2,4 M");
+  await hostCity.selectOption("1");
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Organiser le championnat · 50 k",
+  );
+  await expect(page.locator(".ledger-balance")).toContainText("950 k");
+  await page.screenshot({
+    path: ".local/verification/decision-championship.png",
   });
   await page.evaluate(async (state) => {
     const modulePath =
@@ -1134,6 +1312,7 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     });
   });
   await expect(page.locator("#decision-description")).toContainText("Rome");
+  await page.getByLabel("Ville ciblée", { exact: true }).selectOption("9");
   await expect(page.locator(".decision-confirm")).toContainText(
     "Échanger Rome contre Porto",
   );

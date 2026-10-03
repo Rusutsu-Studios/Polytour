@@ -3,6 +3,14 @@ export const COUNTRY_IDS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 export type CountryId = (typeof COUNTRY_IDS)[number];
 export type BoardSide = 1 | 2 | 3 | 4;
 export type BuildLevel = 0 | 1 | 2 | 3 | 4 | 5;
+/** Frozen layout of a match; old saves without a marker use "legacy". */
+export type BoardRule = "country" | "legacy";
+/**
+ * Frozen economy of a match. "reference" (rules version 4) follows the
+ * reference game's grid and fees; "prototype" (rules versions 2–3, and saves
+ * without a marker) keeps the original Polytour economy and its Landmark.
+ */
+export type EconomyRule = "reference" | "prototype";
 export type ResortId = 1 | 2 | 3 | 4;
 
 export type CityTile = {
@@ -27,8 +35,8 @@ export type Tile =
   | { readonly kind: "island"; readonly index: 8 }
   | { readonly kind: "championship"; readonly index: 16 }
   | { readonly kind: "world-tour"; readonly index: 24 }
-  | { readonly kind: "chance"; readonly index: 3 | 14 | 19 }
-  | { readonly kind: "tax"; readonly index: 29 };
+  | { readonly kind: "chance"; readonly index: 3 | 12 | 14 | 19 | 20 | 28 }
+  | { readonly kind: "tax"; readonly index: 29 | 30 };
 
 export type BuildLevelConfig = {
   readonly level: BuildLevel;

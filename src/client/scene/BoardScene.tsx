@@ -1,19 +1,40 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import gsap from "gsap";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { BOARD, DECISION_TIMING, ECONOMY } from "../../shared/board/index.js";
+import {
+  BOARD_SIZE,
+  type BoardRule,
+  DECISION_TIMING,
+  ECONOMY,
+  getBoard,
+} from "../../shared/board/index.js";
 import type {
+  GameConfig,
   GameEvent,
   PublicState,
   Seat,
 } from "../../shared/engine/index.js";
-import { getProperty, propertyRent } from "../../shared/engine/index.js";
+import {
+  boardRule,
+  economyRule,
+  getProperty,
+  legalActions,
+  propertyRefund,
+  propertyRent,
+} from "../../shared/engine/index.js";
 import type { AnimationContext } from "../director/director.js";
-import { director } from "../director/director.js";
+import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
-import { PLAYER_COLORS, tileColor, tilePrice } from "../ui/board-display.js";
+import {
+  money,
+  PLAYER_COLORS,
+  tileColor,
+  tileName,
+  tilePrice,
+} from "../ui/board-display.js";
+import "./BoardScene.css";
 import {
   BOARD_BOTTOM,
   BOARD_HALF,
@@ -43,23 +64,52 @@ import {
 } from "./board-layout.js";
 import {
   cornerTexture,
+  FESTIVAL_COLORS,
   lawnTexture,
   lotTexture,
-  markerTexture,
+  medallionTexture,
   noteTexture,
   roadTexture,
   scoreTexture,
   seatBadgeTexture,
 } from "./board-textures.js";
+import { Downtown, type DowntownHandle } from "./Downtown.js";
 import { BeachUmbrella, Landmarks } from "./Landmarks.js";
 
 type BoardProps = {
   state: PublicState | null;
+  /** Frozen room rules for a lobby preview before the first game snapshot. */
+  config?: GameConfig;
   selected: number | null;
   onSelect: (tile: number) => void;
+  /** Legal spaces while the player answers a decision by clicking the board. */
+  targets?: readonly number[] | null;
+  picked?: number | null;
+  pickKey?: string;
+  pickSeat?: Seat;
   preview?: boolean;
   zoom?: number;
+  /** Where the roll button sits on screen, in canvas pixels. */
+  onRollAnchor?: (point: { x: number; y: number }) => void;
+  saleSeat?: Seat;
+  saleBlocked?: boolean;
 };
+
+function saleTargets(state: PublicState | null, seat?: Seat): number[] {
+  if (seat === undefined || state?.pending?.kind !== "sell") return [];
+  return legalActions(state, seat).flatMap((action) =>
+    action.type === "Sell" ? [action.tile] : [],
+  );
+}
+
+/** Null is inspection mode; even an empty array keeps a decision in choice mode. */
+function choiceTargets(props: BoardProps): readonly number[] | null {
+  if (props.preview) return null;
+  if (props.targets != null) return props.targets;
+  if (props.saleSeat !== undefined && props.state?.pending?.kind === "sell")
+    return saleTargets(props.state, props.saleSeat);
+  return null;
+}
 
 // THESIS: a printed property board seen from its Start corner, like the classic tabletop.
 // OWN-WORLD: ivory lots with colored plots, big printed prices, a mown lawn, toy buildings.
@@ -77,6 +127,8 @@ const DIE_REST: readonly [number, number, number][] = [
   [-0.56, DIE_REST_Y, 0.56],
   [0.56, DIE_REST_Y, -0.56],
 ];
+// The roll button lies on the lawn between the resting dice and Start.
+const ROLL_SPOT: readonly [number, number, number] = [1.05, LAWN_TOP, 1.05];
 const DICE_DEFAULT_COLOR = "#d9473a";
 // The dice take the roller's color, brighter than the pawn so pips stay crisp.
 const DICE_COLORS = ["#e0533b", "#3a87e2", "#9564d3", "#2f9b5f"] as const;
@@ -94,16 +146,17 @@ function passingPosition(seat: Seat, tile: number): [number, number, number] {
   return [x, ROAD_TOP + PAWN_LIFT, z];
 }
 
-function BoardBase({ onRendered }: { onRendered: () => void }) {
-  const lawn = useMemo(lawnTexture, []);
+function BoardBase({
+  onRendered,
+  boardRule,
+}: {
+  onRendered: () => void;
+  boardRule: BoardRule;
+}) {
+  const lawn = useMemo(() => lawnTexture(boardRule), [boardRule]);
   const road = useMemo(roadTexture, []);
-  useEffect(
-    () => () => {
-      lawn.dispose();
-      road.dispose();
-    },
-    [lawn, road],
-  );
+  useEffect(() => () => lawn.dispose(), [lawn]);
+  useEffect(() => () => road.dispose(), [road]);
   // A two-tone edge: a darker base under a lighter rim that frames the lots.
   const lower = BOARD_HALF * 2 + 0.16;
   const upper = BOARD_HALF * 2 + 0.08;
@@ -158,6 +211,10 @@ function TileFace({
   salary,
   onSelect,
   preview,
+  dimmed,
+  pickable,
+  forSale,
+  boardRule,
 }: {
   index: number;
   amount: number | null;
@@ -165,14 +222,24 @@ function TileFace({
   salary: number;
   onSelect: (tile: number) => void;
   preview?: boolean;
+  dimmed: boolean;
+  pickable: boolean;
+  forSale: boolean;
+  boardRule: BoardRule;
 }) {
   const { locale } = useLocale();
   const texture = useMemo(
     () =>
       isCorner(index)
-        ? cornerTexture(index, locale, salary)
-        : lotTexture(index, { amount, owner, locale }),
-    [index, amount, owner, locale, salary],
+        ? cornerTexture(index, locale, salary, boardRule)
+        : lotTexture(index, {
+            amount,
+            owner,
+            locale,
+            forSale,
+            boardRule,
+          }),
+    [index, amount, owner, locale, salary, forSale, boardRule],
   );
   useEffect(() => () => texture.dispose(), [texture]);
   const [x, z] = tileCenter(index);
@@ -183,26 +250,60 @@ function TileFace({
       rotation={[-Math.PI / 2, 0, faceRotation(index)]}
       receiveShadow
       onPointerDown={(event) => {
-        if (preview) return;
+        if (preview || !pickable) return;
         event.stopPropagation();
         onSelect(index);
+      }}
+      onPointerOver={(event) => {
+        if (!pickable) return;
+        event.stopPropagation();
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        if (pickable) document.body.style.cursor = "";
       }}
     >
       {/* Canvas width runs along play and its height toward the center. */}
       <planeGeometry args={[along - LOT_GAP, depth - LOT_GAP]} />
-      <meshBasicMaterial map={texture} toneMapped={false} />
+      {/* Multiplying the print keeps one texture per tile while choices dim others. */}
+      <meshBasicMaterial
+        map={texture}
+        color={dimmed ? "#9d98a4" : "#ffffff"}
+        toneMapped={false}
+      />
     </mesh>
   );
 }
 
-function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
+function BoardTiles({
+  state,
+  config,
+  selected,
+  onSelect,
+  targets,
+  preview,
+  saleSeat,
+  saleBlocked,
+}: BoardProps) {
+  const boardConfig = state?.config ?? config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const board = getBoard(rule);
   const mesh = useRef<THREE.InstancedMesh>(null);
   const transforms = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const neutral = useMemo(() => new THREE.Color("#ece6ef"), []);
   useEffect(() => {
+    if (targets == null || saleBlocked) document.body.style.cursor = "";
+  }, [targets, saleBlocked]);
+  useEffect(
+    () => () => {
+      document.body.style.cursor = "";
+    },
+    [],
+  );
+  useEffect(() => {
     if (!mesh.current) return;
-    for (const tile of BOARD) {
+    for (const tile of board) {
       const [x, z] = tileCenter(tile.index);
       const [along, depth] = tileSize(tile.index);
       transforms.position.set(x, (BOARD_TOP + LOT_TOP) / 2, z);
@@ -215,7 +316,9 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
       transforms.updateMatrix();
       mesh.current.setMatrixAt(tile.index, transforms.matrix);
       const owner = state ? getProperty(state, tile.index)?.owner : null;
-      if (tile.index === selected) color.set("#ffd45e");
+      if (targets != null)
+        color.set(targets.includes(tile.index) ? "#ffffff" : "#747983");
+      else if (tile.index === selected) color.set("#ffd45e");
       else if (owner != null)
         color.set(PLAYER_COLORS[owner]).lerp(neutral, 0.35);
       else color.copy(neutral);
@@ -225,17 +328,23 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
     mesh.current.computeBoundingSphere();
     if (mesh.current.instanceColor)
       mesh.current.instanceColor.needsUpdate = true;
-  }, [state, selected, transforms, color, neutral]);
-  const salary = state?.config.startSalary ?? ECONOMY.startSalary;
+  }, [state, selected, targets, transforms, color, neutral, board]);
+  const salary = boardConfig?.startSalary ?? ECONOMY.startSalary;
   return (
     <>
       <instancedMesh
         ref={mesh}
-        args={[undefined, undefined, BOARD.length]}
+        args={[undefined, undefined, board.length]}
         receiveShadow
         castShadow
         onPointerDown={(event) => {
-          if (preview || event.instanceId === undefined) return;
+          if (
+            preview ||
+            event.instanceId === undefined ||
+            (targets != null &&
+              (saleBlocked || !targets.includes(event.instanceId)))
+          )
+            return;
           event.stopPropagation();
           onSelect(event.instanceId);
         }}
@@ -243,7 +352,7 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
         <boxGeometry />
         <meshStandardMaterial roughness={1} />
       </instancedMesh>
-      {BOARD.map((tile) => {
+      {board.map((tile) => {
         const property = state ? getProperty(state, tile.index) : null;
         const owner = property?.owner ?? null;
         return (
@@ -252,10 +361,20 @@ function BoardTiles({ state, selected, onSelect, preview }: BoardProps) {
             index={tile.index}
             owner={owner}
             salary={salary}
+            dimmed={Boolean(targets && !targets.includes(tile.index))}
+            pickable={
+              !preview &&
+              (targets == null ||
+                (!saleBlocked && targets.includes(tile.index)))
+            }
+            forSale={
+              saleSeat !== undefined && Boolean(targets?.includes(tile.index))
+            }
+            boardRule={rule}
             amount={
               owner != null && state
                 ? propertyRent(state, tile.index)
-                : tilePrice(tile.index)
+                : tilePrice(tile.index, state ?? (config ? { config } : null))
             }
             onSelect={onSelect}
             preview={preview}
@@ -283,7 +402,7 @@ function outlineGeometry(width: number, depth: number, border: number) {
   return new THREE.ShapeGeometry(shape);
 }
 
-function TileFocus({ state, selected, preview }: BoardProps) {
+function TileFocus({ state, selected, preview, targets }: BoardProps) {
   const outlines = useMemo(
     () => ({
       lot: outlineGeometry(LOT_WIDTH, LOT_DEPTH, 0.06),
@@ -301,14 +420,15 @@ function TileFocus({ state, selected, preview }: BoardProps) {
   if (preview) return null;
   const pending = state?.pending;
   const decisionTile = pending && "tile" in pending ? pending.tile : null;
+  const focused = targets != null ? [] : [decisionTile, selected];
   return (
     <>
-      {[decisionTile, selected].map((tile, index) => {
+      {focused.map((tile, index) => {
         if (tile == null || (index === 1 && tile === decisionTile)) return null;
         const [x, z] = tileCenter(tile);
         return (
           <mesh
-            key={index === 0 ? "decision" : "inspection"}
+            key={tile}
             geometry={isCorner(tile) ? outlines.corner : outlines.lot}
             position={[x, LOT_TOP + 0.004, z]}
             rotation={[-Math.PI / 2, 0, tileRotation(tile)]}
@@ -339,11 +459,17 @@ const growthEase = gsap.parseEase("back.out(2.2)");
 
 function Towns({
   state,
+  config,
   preview,
   handle,
-}: Pick<BoardProps, "state" | "preview"> & {
+}: Pick<BoardProps, "state" | "preview" | "config"> & {
   handle: { current: TownsHandle | null };
 }) {
+  const boardConfig = state?.config ?? config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const board = getBoard(rule);
+  const maxLevel =
+    boardConfig && economyRule(boardConfig) === "prototype" ? 5 : 4;
   const walls = useRef<THREE.InstancedMesh>(null);
   const roofs = useRef<THREE.InstancedMesh>(null);
   const windows = useRef<THREE.InstancedMesh>(null);
@@ -376,21 +502,29 @@ function Towns({
       let count = 0;
       let windowCount = 0;
       let detailCount = 0;
-      for (const tile of BOARD) {
-        if (tile.kind !== "city") continue;
+      for (const tile of board) {
+        const resort = tile.kind === "resort";
+        if (tile.kind !== "city" && !resort) continue;
         const growing = growth?.tile === tile.index ? growth : null;
         let order = 0;
         const property = view ? getProperty(view, tile.index) : null;
         const owner = property?.owner;
-        const level =
-          owner != null
+        // A beach never builds: it either stands empty or carries the one
+        // bungalow that says it has been bought.
+        const level = resort
+          ? owner != null || preview
+            ? 1
+            : 0
+          : owner != null
             ? (property?.level ?? 0)
             : preview
-              ? 1 + (tile.index % 5)
+              ? 1 + (tile.index % maxLevel)
               : 0;
         if (level === 0) continue;
         const roofColor =
-          owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
+          owner != null
+            ? PLAYER_COLORS[owner]
+            : tileColor(tile.index, { boardRule: rule });
         const angle = tileRotation(tile.index);
         const bandZ = buildingBandZ(tile.index);
         const [faceX, faceZ] = visibleFaces(tile.index);
@@ -399,6 +533,8 @@ function Towns({
           fullWidth: number,
           fullHeight: number,
           depth = 0.28,
+          overhang = 0.05,
+          roofHeight = level >= 4 ? 0.13 : 0.12,
         ) => {
           let width = fullWidth;
           let height = fullHeight;
@@ -424,7 +560,7 @@ function Towns({
           walls.current?.setMatrixAt(count, dummy.matrix);
           walls.current?.setColorAt(count, color.set("#fffaf4"));
           dummy.position.y = base + height;
-          dummy.scale.set(width + 0.05, level >= 4 ? 0.13 : 0.12, depth + 0.05);
+          dummy.scale.set(width + overhang, roofHeight, depth + overhang);
           dummy.updateMatrix();
           roofs.current?.setMatrixAt(count, dummy.matrix);
           roofs.current?.setColorAt(count, color.set(roofColor));
@@ -463,7 +599,10 @@ function Towns({
             windows.current?.setMatrixAt(windowCount++, dummy.matrix);
           }
         };
-        if (level >= 1 && level <= 3) {
+        if (resort) {
+          // A low bungalow under a wide thatch roof, beside the parasol.
+          building(0.2, 0.36, 0.14, 0.26, 0.1, 0.14);
+        } else if (level >= 1 && level <= 3) {
           const offsets =
             level === 1 ? [0] : level === 2 ? [-0.2, 0.2] : [-0.3, 0, 0.3];
           for (const x of offsets) building(x, level === 1 ? 0.3 : 0.24, 0.22);
@@ -491,7 +630,7 @@ function Towns({
         object.computeBoundingSphere();
       }
     },
-    [preview, dummy, color],
+    [preview, dummy, color, board, rule, maxLevel],
   );
   useEffect(() => {
     handle.current = { draw };
@@ -526,106 +665,350 @@ function Towns({
   );
 }
 
-function ResortProps() {
+// The parasol keeps its coral canvas on every beach: it says "beach", and the
+// bungalow beside it says who bought it.
+function ResortProps({ boardRule }: { boardRule: BoardRule }) {
   return (
     <>
-      {BOARD.filter((tile) => tile.kind === "resort").map((tile) => {
-        const [x, z] = tilePoint(
-          tile.index,
-          -0.24,
-          buildingBandZ(tile.index) + screenTop(tile.index) * 0.04,
+      {getBoard(boardRule)
+        .filter((tile) => tile.kind === "resort")
+        .map((tile) => {
+          const [x, z] = tilePoint(
+            tile.index,
+            -0.28,
+            buildingBandZ(tile.index) + screenTop(tile.index) * 0.04,
+          );
+          return (
+            <BeachUmbrella
+              key={tile.index}
+              position={[x, LOT_TOP, z]}
+              scale={0.8}
+            />
+          );
+        })}
+    </>
+  );
+}
+
+function unitFrameGeometry(inset: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.5, -0.5);
+  shape.lineTo(0.5, -0.5);
+  shape.lineTo(0.5, 0.5);
+  shape.lineTo(-0.5, 0.5);
+  shape.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(-inset, -inset);
+  hole.lineTo(-inset, inset);
+  hole.lineTo(inset, inset);
+  hole.lineTo(inset, -inset);
+  hole.closePath();
+  shape.holes.push(hole);
+  return new THREE.ShapeGeometry(shape);
+}
+
+/** Legal spaces glow in the chooser's colour; the clicked one carries a pin. */
+function PickHighlights({
+  targets,
+  picked,
+  color,
+}: {
+  targets: readonly number[];
+  picked: number | null;
+  color: string;
+}) {
+  const { reducedMotion } = useDirector();
+  const { invalidate } = useThree();
+  const frames = useRef<THREE.InstancedMesh>(null);
+  const fills = useRef<THREE.InstancedMesh>(null);
+  const pin = useRef<THREE.Group>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const frame = useMemo(() => unitFrameGeometry(0.47), []);
+  const fillMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      frame.dispose();
+      fillMaterial.dispose();
+    },
+    [frame, fillMaterial],
+  );
+  useEffect(() => {
+    fillMaterial.color.set(color);
+    const outlines = frames.current;
+    const glow = fills.current;
+    if (!outlines || !glow) return;
+    targets.forEach((tile, index) => {
+      const [x, z] = tileCenter(tile);
+      const [along, depth] = tileSize(tile);
+      transform.position.set(x, LOT_TOP + 0.0045, z);
+      transform.rotation.set(-Math.PI / 2, 0, tileRotation(tile));
+      transform.scale.set(along - LOT_GAP, depth - LOT_GAP, 1);
+      transform.updateMatrix();
+      outlines.setMatrixAt(index, transform.matrix);
+      transform.position.y = LOT_TOP + 0.003;
+      transform.updateMatrix();
+      glow.setMatrixAt(index, transform.matrix);
+    });
+    outlines.count = glow.count = targets.length;
+    outlines.instanceMatrix.needsUpdate = true;
+    glow.instanceMatrix.needsUpdate = true;
+    outlines.computeBoundingSphere();
+    glow.computeBoundingSphere();
+    invalidate();
+  }, [targets, color, transform, fillMaterial, invalidate]);
+  useFrame((frameState) => {
+    const time = frameState.clock.elapsedTime;
+    fillMaterial.opacity = reducedMotion
+      ? 0.14
+      : 0.06 + 0.13 * (0.5 + 0.5 * Math.sin(time * 4));
+    if (pin.current) {
+      pin.current.position.y = reducedMotion ? 0 : Math.sin(time * 3) * 0.06;
+      pin.current.rotation.y = reducedMotion ? 0 : time * 1.4;
+    }
+    // The board renders on demand; keep frames coming only while choosing.
+    if (!reducedMotion) frameState.invalidate();
+  });
+  const [pinX, pinZ] = picked === null ? [0, 0] : tileCenter(picked);
+  return (
+    <>
+      <instancedMesh
+        ref={fills}
+        args={[undefined, fillMaterial, BOARD_SIZE]}
+        frustumCulled={false}
+        renderOrder={1}
+      >
+        <planeGeometry />
+      </instancedMesh>
+      <instancedMesh
+        ref={frames}
+        args={[frame, undefined, BOARD_SIZE]}
+        frustumCulled={false}
+        renderOrder={2}
+      >
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </instancedMesh>
+      {picked !== null && (
+        <group position={[pinX, LOT_TOP, pinZ]}>
+          <group ref={pin}>
+            <group position={[0, 0.82, 0]}>
+              <mesh
+                position={[0, -0.17, 0]}
+                rotation={[Math.PI, 0, 0]}
+                castShadow
+              >
+                <coneGeometry args={[0.105, 0.32, 16]} />
+                <meshStandardMaterial color={color} roughness={0.55} />
+              </mesh>
+              <mesh castShadow>
+                <sphereGeometry args={[0.15, 18, 14]} />
+                <meshStandardMaterial color={color} roughness={0.55} />
+              </mesh>
+              <mesh>
+                <torusGeometry args={[0.152, 0.026, 8, 24]} />
+                <meshStandardMaterial color="#fffaf0" roughness={0.6} />
+              </mesh>
+            </group>
+          </group>
+        </group>
+      )}
+    </>
+  );
+}
+
+function pennantGeometry() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.5, 0);
+  shape.lineTo(0.5, 0);
+  shape.lineTo(0, -1);
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+const BUNTING_FLAGS = 7;
+const BUNTING_HEIGHT = 0.62;
+const BUNTING_SAG = 0.08;
+const BUNTING_HALF = 0.46;
+
+/** Tile-local z of a festival garland: the screen-top edge of the plot. */
+function buntingZ(index: number) {
+  return screenTop(index) * (LOT_DEPTH / 2 - 0.05);
+}
+
+/** Festival cities keep their country colour; a garland and a medallion mark the fête. */
+function FestivalMarkers({ state }: { state: PublicState | null }) {
+  const masts = useRef<THREE.InstancedMesh>(null);
+  const cords = useRef<THREE.InstancedMesh>(null);
+  const flags = useRef<THREE.InstancedMesh>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+  const pennant = useMemo(pennantGeometry, []);
+  const festivalKey = state
+    ? [
+        ...new Set([
+          ...state.festivalTiles,
+          ...(state.championshipHost ? [state.championshipHost.tile] : []),
+        ]),
+      ].join(",")
+    : "";
+  const festivals = useMemo(
+    () => (festivalKey ? festivalKey.split(",").map(Number) : []),
+    [festivalKey],
+  );
+  const hostTile = state?.championshipHost?.tile ?? null;
+  const hostMultiplier = state?.championshipHost?.multiplier ?? 2;
+  const hostOwner =
+    state && hostTile !== null
+      ? (getProperty(state, hostTile)?.owner ?? null)
+      : null;
+  const initialKey = state?.festivalTiles.join(",") ?? "";
+  const medals = useMemo(() => {
+    const initial = initialKey ? initialKey.split(",").map(Number) : [];
+    return festivals.map((tile) => {
+      const hosted = hostTile === tile;
+      const multiplier = Math.max(
+        initial.includes(tile) ? 2 : 1,
+        hosted ? hostMultiplier : 1,
+      );
+      return {
+        tile,
+        hosted,
+        texture: medallionTexture(
+          Math.min(10, multiplier),
+          hosted && hostOwner !== null ? PLAYER_COLORS[hostOwner] : "#f0a92e",
+        ),
+      };
+    });
+  }, [festivals, initialKey, hostTile, hostMultiplier, hostOwner]);
+  useEffect(
+    () => () => {
+      for (const medal of medals) medal.texture.dispose();
+    },
+    [medals],
+  );
+  useEffect(() => () => pennant.dispose(), [pennant]);
+  useEffect(() => {
+    const mastMesh = masts.current;
+    const cordMesh = cords.current;
+    const flagMesh = flags.current;
+    if (!mastMesh || !cordMesh || !flagMesh) return;
+    let mastCount = 0;
+    let cordCount = 0;
+    let flagCount = 0;
+    for (const tile of festivals) {
+      const angle = tileRotation(tile);
+      const z = buntingZ(tile);
+      for (const side of [-1, 1]) {
+        const [x, worldZ] = tilePoint(tile, side * BUNTING_HALF, z);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT / 2, worldZ);
+        transform.rotation.set(0, 0, 0);
+        transform.scale.set(1, BUNTING_HEIGHT, 1);
+        transform.updateMatrix();
+        mastMesh.setMatrixAt(mastCount++, transform.matrix);
+      }
+      // Two straight cord halves meet at the sagging middle of the garland.
+      for (const side of [-1, 1]) {
+        const [x, worldZ] = tilePoint(tile, (side * BUNTING_HALF) / 2, z);
+        transform.position.set(
+          x,
+          LOT_TOP + BUNTING_HEIGHT - BUNTING_SAG / 2,
+          worldZ,
         );
+        transform.rotation.set(
+          0,
+          angle,
+          side * Math.atan2(BUNTING_SAG, BUNTING_HALF),
+        );
+        transform.scale.set(Math.hypot(BUNTING_HALF, BUNTING_SAG), 1, 1);
+        transform.updateMatrix();
+        cordMesh.setMatrixAt(cordCount++, transform.matrix);
+      }
+      for (let flag = 0; flag < BUNTING_FLAGS; flag++) {
+        const along =
+          -BUNTING_HALF * 0.86 +
+          (flag * BUNTING_HALF * 1.72) / (BUNTING_FLAGS - 1);
+        const [x, worldZ] = tilePoint(tile, along, z);
+        const drop = BUNTING_SAG * (1 - Math.abs(along) / BUNTING_HALF);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT - drop, worldZ);
+        transform.rotation.set(0, angle, 0);
+        transform.scale.set(0.085, 0.11, 1);
+        transform.updateMatrix();
+        flagMesh.setMatrixAt(flagCount, transform.matrix);
+        flagMesh.setColorAt(
+          flagCount++,
+          color.set(FESTIVAL_COLORS[(flag + tile) % 5]),
+        );
+      }
+    }
+    mastMesh.count = mastCount;
+    cordMesh.count = cordCount;
+    flagMesh.count = flagCount;
+    for (const mesh of [mastMesh, cordMesh, flagMesh]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+  }, [festivals, transform, color]);
+  return (
+    <>
+      <instancedMesh ref={masts} args={[undefined, undefined, 48]} castShadow>
+        <cylinderGeometry args={[0.012, 0.014, 1, 6]} />
+        <meshStandardMaterial color="#b98a3e" roughness={0.8} />
+      </instancedMesh>
+      <instancedMesh ref={cords} args={[undefined, undefined, 48]}>
+        <boxGeometry args={[1, 0.006, 0.006]} />
+        <meshBasicMaterial color="#6d5a3c" />
+      </instancedMesh>
+      <instancedMesh
+        ref={flags}
+        args={[pennant, undefined, 24 * BUNTING_FLAGS]}
+        castShadow
+      >
+        <meshStandardMaterial side={THREE.DoubleSide} roughness={0.9} />
+      </instancedMesh>
+      {medals.map(({ tile, hosted, texture }) => {
+        const [x, z] = tilePoint(tile, 0, buntingZ(tile));
         return (
-          <BeachUmbrella
-            key={tile.index}
-            position={[x, LOT_TOP, z]}
-            scale={0.8}
-          />
+          <group key={tile} position={[x, LOT_TOP, z]}>
+            <sprite position={[0, 0.92, 0]} scale={hosted ? 0.44 : 0.38}>
+              <spriteMaterial map={texture} toneMapped={false} />
+            </sprite>
+            {hosted && <FestivalBeams />}
+          </group>
         );
       })}
     </>
   );
 }
 
-function FestivalFlags({ state }: { state: PublicState | null }) {
-  const badges = useMemo(
-    () =>
-      Array.from({ length: 11 }, (_, multiplier) =>
-        markerTexture(`×${multiplier}`, "#ffcf59", "#634711"),
-      ),
-    [],
-  );
-  const starGeometry = useMemo(() => {
-    const shape = new THREE.Shape();
-    for (let point = 0; point < 10; point++) {
-      const angle = Math.PI / 2 + (point * Math.PI) / 5;
-      const radius = point % 2 === 0 ? 0.11 : 0.048;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      if (point === 0) shape.moveTo(x, y);
-      else shape.lineTo(x, y);
-    }
-    shape.closePath();
-    return new THREE.ShapeGeometry(shape);
-  }, []);
-  useEffect(
-    () => () => {
-      for (const texture of badges) texture.dispose();
-      starGeometry.dispose();
-    },
-    [badges, starGeometry],
-  );
-  const festivals = state
-    ? [
-        ...new Set([
-          ...state.festivalTiles,
-          ...(state.championshipHost ? [state.championshipHost.tile] : []),
-        ]),
-      ]
-    : [];
+/** Two crossed searchlights mark the city that a player chose to host. */
+function FestivalBeams() {
   return (
     <>
-      {festivals.map((index) => {
-        const [x, z] = tilePoint(
-          index,
-          0.4,
-          buildingBandZ(index) + screenTop(index) * 0.17,
-        );
-        const multiplier = Math.max(
-          state?.festivalTiles.includes(index) ? 2 : 1,
-          state?.championshipHost?.tile === index
-            ? state.championshipHost.multiplier
-            : 1,
-        );
-        return (
-          <group key={index} position={[x, LOT_TOP, z]}>
-            <mesh position={[0, 0.2, 0]} castShadow>
-              <cylinderGeometry args={[0.01, 0.01, 0.4, 6]} />
-              <meshStandardMaterial color="#bc8b30" />
-            </mesh>
-            <mesh position={[0.12, 0.33, -0.12]} rotation={[0, Math.PI / 4, 0]}>
-              <planeGeometry args={[0.3, 0.19]} />
-              <meshBasicMaterial
-                map={badges[Math.min(10, multiplier)]}
-                side={THREE.DoubleSide}
-                toneMapped={false}
-              />
-            </mesh>
-            <mesh
-              geometry={starGeometry}
-              position={[0, 0.46, 0]}
-              rotation={[0, Math.PI / 4, 0]}
-              scale={0.6}
-            >
-              <meshStandardMaterial
-                color="#ffdc6e"
-                emissive="#664a12"
-                emissiveIntensity={0.12}
-              />
-            </mesh>
-          </group>
-        );
-      })}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[side * 0.16, 0.95, 0]}
+          rotation={[0, Math.PI / 4, side * -0.32]}
+        >
+          <cylinderGeometry args={[0.2, 0.025, 1.9, 14, 1, true]} />
+          <meshBasicMaterial
+            color="#fff1b0"
+            transparent
+            opacity={0.2}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
     </>
   );
 }
@@ -1037,6 +1420,14 @@ function cashTransfer(event: GameEvent) {
 }
 
 /** Fit the whole board between the HUD's reserved top and bottom bands. */
+/** The DOM interface zoom set by CSS media steps on large screens. */
+function interfaceZoom() {
+  const value = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--ui-zoom"),
+  );
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
 function frameBoard(
   camera: THREE.OrthographicCamera,
   width: number,
@@ -1044,12 +1435,14 @@ function frameBoard(
   preview: boolean,
   zoom: number,
 ) {
+  // The HUD grows on large screens, so its reserved bands grow with it.
+  const ui = interfaceZoom();
   const insets = preview
     ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }
     : {
         // The match title and tools above, the current choice below.
-        top: THREE.MathUtils.clamp(height * 0.11, 78, 118),
-        bottom: THREE.MathUtils.clamp(height * 0.125, 86, 134),
+        top: THREE.MathUtils.clamp(height * 0.11, 78 * ui, 118 * ui),
+        bottom: THREE.MathUtils.clamp(height * 0.125, 86 * ui, 134 * ui),
         side: width * 0.04,
       };
   const bounds = new THREE.Box3();
@@ -1065,9 +1458,9 @@ function frameBoard(
       add(x, LOT_TOP, z);
     }
   // Landmarks and buildings rise above the far corner and the back lots.
-  for (const tile of BOARD) {
-    const [x, z] = tileCenter(tile.index);
-    add(x, LOT_TOP + (isCorner(tile.index) ? 0.95 : 0.8), z);
+  for (let tile = 0; tile < BOARD_SIZE; tile++) {
+    const [x, z] = tileCenter(tile);
+    add(x, LOT_TOP + (isCorner(tile) ? 0.95 : 0.8), z);
   }
   const availableWidth = Math.max(1, width - insets.side * 2);
   const availableHeight = Math.max(1, height - insets.top - insets.bottom);
@@ -1089,7 +1482,11 @@ function frameBoard(
 }
 
 function SceneContent(props: BoardProps) {
-  const { state, preview, zoom = 1 } = props;
+  const { state, preview, zoom = 1, onRollAnchor } = props;
+  const boardConfig = state?.config ?? props.config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const chosen =
+    props.saleSeat !== undefined ? props.selected : (props.picked ?? null);
   const { camera, invalidate, size, gl } = useThree();
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
@@ -1098,6 +1495,7 @@ function SceneContent(props: BoardProps) {
   const scoreTextures = useRef(new Map<string, THREE.Texture>());
   const timelines = useRef(new Map<gsap.core.Timeline, () => void>());
   const towns = useRef<TownsHandle | null>(null);
+  const downtown = useRef<DowntownHandle | null>(null);
   const growth = useMemo(() => ({ tile: 0, progress: 0 }), []);
   const pulse = useRef<THREE.Mesh>(null);
   const sparks = useRef<THREE.InstancedMesh>(null);
@@ -1132,8 +1530,23 @@ function SceneContent(props: BoardProps) {
     camera.updateMatrixWorld();
     if (camera instanceof THREE.OrthographicCamera)
       frameBoard(camera, size.width, size.height, Boolean(preview), zoom);
+    if (onRollAnchor) {
+      const spot = new THREE.Vector3(...ROLL_SPOT).project(camera);
+      onRollAnchor({
+        x: ((spot.x + 1) / 2) * size.width,
+        y: ((1 - spot.y) / 2) * size.height,
+      });
+    }
     invalidate();
-  }, [camera, size.width, size.height, zoom, preview, invalidate]);
+  }, [
+    camera,
+    size.width,
+    size.height,
+    zoom,
+    preview,
+    invalidate,
+    onRollAnchor,
+  ]);
 
   useEffect(() => {
     if (preview) return;
@@ -1182,6 +1595,7 @@ function SceneContent(props: BoardProps) {
       paintDice(next?.lastRoll?.seat ?? null);
       showScore(next?.lastRoll ?? null);
       towns.current?.draw(next, null);
+      downtown.current?.draw(next, null);
       invalidate();
     }
     function cancel() {
@@ -1547,19 +1961,32 @@ function SceneContent(props: BoardProps) {
             }
             burst.instanceMatrix.needsUpdate = true;
           };
-          // New houses rise one after another on their plot; the view
-          // shows the next state on this tile while it is being built.
+          // New houses rise one after another on their plot, and a beach
+          // raises its bungalow the moment it is taken; the view shows the
+          // next state on this tile while it is being built.
           const builds =
-            event.type !== "BoughtOut" &&
-            BOARD[event.tile].kind === "city" &&
-            (getProperty(context.next, event.tile)?.level ?? 0) >
-              (context.previous
-                ? (getProperty(context.previous, event.tile)?.level ?? 0)
-                : 0);
-          const drawGrowth = () => towns.current?.draw(context.next, growth);
+            getBoard(context.next.config)[event.tile].kind === "resort"
+              ? getProperty(context.next, event.tile)?.owner != null
+              : event.type !== "BoughtOut" &&
+                getBoard(context.next.config)[event.tile].kind === "city" &&
+                (getProperty(context.next, event.tile)?.level ?? 0) >
+                  (context.previous
+                    ? (getProperty(context.previous, event.tile)?.level ?? 0)
+                    : 0);
+          // The town plot answers every change of owner or level.
+          const before = context.previous
+            ? getProperty(context.previous, event.tile)
+            : null;
+          const after = getProperty(context.next, event.tile);
+          const rebuilds =
+            before?.owner !== after?.owner || before?.level !== after?.level;
+          const drawGrowth = () => {
+            if (builds) towns.current?.draw(context.next, growth);
+            if (rebuilds) downtown.current?.draw(context.next, growth);
+          };
           growth.tile = event.tile;
           growth.progress = 0;
-          if (builds) drawGrowth();
+          drawGrowth();
           const budget = DECISION_TIMING.propertyAnimation / 1000;
           await play((timeline) => {
             timeline.fromTo(
@@ -1567,7 +1994,7 @@ function SceneContent(props: BoardProps) {
               { x: 0.1, y: 0.1, z: 0.1 },
               { x: 1.3, y: 1.3, z: 1.3, duration: 0.55, ease: "power2.out" },
             );
-            if (builds)
+            if (builds || rebuilds)
               timeline.to(
                 growth,
                 {
@@ -1635,6 +2062,7 @@ function SceneContent(props: BoardProps) {
         shadow-radius={3}
       />
       <BoardBase
+        boardRule={rule}
         onRendered={() => {
           if (rendered.current) return;
           rendered.current = true;
@@ -1647,10 +2075,31 @@ function SceneContent(props: BoardProps) {
       {!preview && state && <CashReserves state={state} />}
       <BoardTiles {...props} />
       <TileFocus {...props} />
-      <Towns state={state} preview={preview} handle={towns} />
-      <ResortProps />
-      <FestivalFlags state={state} />
-      <Landmarks />
+      {!preview && props.targets && (
+        <PickHighlights
+          key={props.pickKey}
+          targets={props.targets}
+          picked={
+            chosen != null && props.targets.includes(chosen) ? chosen : null
+          }
+          color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
+        />
+      )}
+      <Towns
+        state={state}
+        config={boardConfig}
+        preview={preview}
+        handle={towns}
+      />
+      <Downtown
+        state={state}
+        config={boardConfig}
+        preview={preview}
+        handle={downtown}
+      />
+      <ResortProps boardRule={rule} />
+      <FestivalMarkers state={state} />
+      <Landmarks boardRule={rule} />
       {(state && !preview
         ? state.players.map((player) => player.seat)
         : ([0, 1, 2, 3] as const)
@@ -1756,9 +2205,98 @@ function FrameMonitor() {
   return null;
 }
 
-export default function BoardScene(props: BoardProps) {
+// Quotes live on the actual lots, so mouse and keyboard choose the same city.
+// The projection uses the scene's fixed camera and framing, including user zoom.
+function SaleLabels({
+  state,
+  selected,
+  onSelect,
+  saleSeat,
+  saleBlocked,
+  zoom = 1,
+  width,
+  height,
+}: BoardProps & { width: number; height: number }) {
+  const { t } = useLocale();
+  const targets = saleTargets(state, saleSeat);
+  const camera = useMemo(() => {
+    const value = new THREE.OrthographicCamera();
+    value.position.set(...CAMERA_OFFSET);
+    value.lookAt(0, LOT_TOP, 0);
+    value.updateMatrixWorld();
+    frameBoard(value, width, height, false, zoom);
+    return value;
+  }, [width, height, zoom]);
+  if (!state || !targets.length || !width || !height) return null;
   return (
-    <div className="canvas-layer" data-scene-ready="false">
+    <fieldset
+      className="sale-labels"
+      aria-label={t(
+        "Villes à vendre sur le plateau",
+        "Cities for sale on the board",
+      )}
+    >
+      {targets.map((tile) => {
+        const [x, z] = tilePoint(tile, 0, 0.3);
+        const point = new THREE.Vector3(x, LOT_TOP + 0.08, z).project(camera);
+        const amount = money(propertyRefund(state, tile));
+        const chosen = tile === selected;
+        return (
+          <button
+            key={tile}
+            type="button"
+            className="sale-tile-quote"
+            data-tile={tile}
+            aria-label={t(
+              `Choisir ${tileName(tile, state.config)} à vendre · ${amount}`,
+              `Choose ${tileName(tile, state.config)} to sell · ${amount}`,
+            )}
+            aria-pressed={chosen}
+            disabled={saleBlocked}
+            style={{
+              left: ((point.x + 1) * width) / 2,
+              top: ((1 - point.y) * height) / 2,
+            }}
+            onClick={() => onSelect(tile)}
+          >
+            <span className="sale-tile-check" aria-hidden="true">
+              {chosen ? "✓" : ""}
+            </span>
+            <span>+{amount}</span>
+          </button>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+export default function BoardScene(props: BoardProps) {
+  const resolvedProps = { ...props, targets: choiceTargets(props) };
+  const config = props.state?.config ?? props.config;
+  const layer = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = layer.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div
+      ref={layer}
+      className="canvas-layer"
+      data-board-rule={config ? boardRule(config) : "country"}
+      data-scene-ready="false"
+      data-sale-active={
+        !props.preview && saleTargets(props.state, props.saleSeat).length > 0
+      }
+    >
       <Canvas
         orthographic
         shadows={{ type: THREE.PCFShadowMap }}
@@ -1771,8 +2309,9 @@ export default function BoardScene(props: BoardProps) {
           toneMapping: THREE.NeutralToneMapping,
         }}
       >
-        <SceneContent {...props} />
+        <SceneContent {...resolvedProps} />
       </Canvas>
+      {!props.preview && <SaleLabels {...props} {...size} />}
     </div>
   );
 }

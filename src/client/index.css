@@ -10,6 +10,29 @@
   --paper: #fffaf0;
   --coral: #c74024;
   --coral-dark: #98291a;
+  /* Interface zoom on large screens; see the match layer in App.css. */
+  --ui-zoom: 1;
+}
+/* Steps keep the 1920×1080 proportions on 1440p and 4K screens at 100 %. */
+@media (min-width: 2400px) and (min-height: 1350px) {
+  :root {
+    --ui-zoom: 1.25;
+  }
+}
+@media (min-width: 2560px) and (min-height: 1440px) {
+  :root {
+    --ui-zoom: 1.333;
+  }
+}
+@media (min-width: 3200px) and (min-height: 1800px) {
+  :root {
+    --ui-zoom: 1.667;
+  }
+}
+@media (min-width: 3840px) and (min-height: 2160px) {
+  :root {
+    --ui-zoom: 2;
+  }
 }
 * {
   box-sizing: border-box;
