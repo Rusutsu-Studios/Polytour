@@ -95,6 +95,8 @@ export default function DisabledHints() {
     document.addEventListener("focusin", focus);
     document.addEventListener("focusout", leave);
     document.addEventListener("keydown", dismissHint, true);
+    document.addEventListener("pointerdown", hide, true);
+    window.addEventListener("blur", hide);
     window.addEventListener("resize", hide);
     document.addEventListener("scroll", hide, true);
     return () => {
@@ -105,6 +107,8 @@ export default function DisabledHints() {
       document.removeEventListener("focusin", focus);
       document.removeEventListener("focusout", leave);
       document.removeEventListener("keydown", dismissHint, true);
+      document.removeEventListener("pointerdown", hide, true);
+      window.removeEventListener("blur", hide);
       window.removeEventListener("resize", hide);
       document.removeEventListener("scroll", hide, true);
     };

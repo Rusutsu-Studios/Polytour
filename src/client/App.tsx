@@ -1815,17 +1815,6 @@ function App() {
                 type="button"
                 className="text-button"
                 disabled={loading || room.leaving}
-                disabledReason={
-                  room.leaving
-                    ? t(
-                        "Vous quittez la salle. Veuillez patienter.",
-                        "You are leaving the room. Please wait.",
-                      )
-                    : t(
-                        "La salle se prépare. Veuillez patienter.",
-                        "The room is being prepared. Please wait.",
-                      )
-                }
                 onClick={() => void leave()}
               >
                 {room.leaving
@@ -1881,10 +1870,6 @@ function App() {
                   type="button"
                   className="button primary welcome-play"
                   disabled={loading}
-                  disabledReason={t(
-                    "La salle se prépare. Veuillez patienter.",
-                    "The room is being prepared. Please wait.",
-                  )}
                   onClick={() => void enter()}
                 >
                   {loading ? (
@@ -1921,10 +1906,6 @@ function App() {
                       type="button"
                       className="button ink"
                       disabled={loading}
-                      disabledReason={t(
-                        "La salle se prépare. Veuillez patienter.",
-                        "The room is being prepared. Please wait.",
-                      )}
                       onClick={() => void enter(true)}
                     >
                       {t("Rejoindre", "Join")}
@@ -2056,15 +2037,12 @@ function App() {
                   type="button"
                   className="button primary welcome-play"
                   disabledReason={
-                    roomOffline
-                      ? t(
-                          "Reconnectez-vous au serveur avant de démarrer.",
-                          "Reconnect to the server before starting.",
-                        )
-                      : starting
+                    starting
+                      ? undefined
+                      : roomOffline
                         ? t(
-                            "Le plateau se prépare…",
-                            "The board is being prepared…",
+                            "Reconnectez-vous au serveur avant de démarrer.",
+                            "Reconnect to the server before starting.",
                           )
                         : settingsDirty
                           ? t(

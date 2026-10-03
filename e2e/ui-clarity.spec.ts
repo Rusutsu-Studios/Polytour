@@ -15,6 +15,51 @@ import { clickBoardSpace } from "./board-interactions.js";
 
 test.use({ reducedMotion: "reduce" });
 
+for (const entry of ["play", "join", "invitation"] as const) {
+  test(`${entry} keeps loading inline without a popup before or after the response`, async ({
+    page,
+  }) => {
+    let requests = 0;
+    let respond: () => void = () => {};
+    const response = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    await page.route("**/api/rooms**", async (route) => {
+      requests += 1;
+      await response;
+      await route.fulfill({
+        status: 503,
+        json: { error: "room-service-unavailable" },
+      });
+    });
+    await page.goto(entry === "invitation" ? "/?room=ABCD23" : "/");
+    await page.getByLabel("Votre nom de joueur").fill("Loading fixture");
+    if (entry === "join")
+      await page.getByLabel("Vous avez un code ?").fill("ABCD23");
+    const button = page.locator(
+      entry === "join" ? ".join-form .button.ink" : ".welcome-play",
+    );
+    try {
+      await button.click();
+      await expect.poll(() => requests).toBe(1);
+      await expect(button).toBeDisabled();
+      await button.hover();
+      await button.focus();
+      await expect(page.getByRole("tooltip")).not.toBeVisible();
+      await page.screenshot({
+        path: `.local/verification/loading-${entry}.png`,
+      });
+      await button.press("Enter");
+      expect(requests).toBe(1);
+    } finally {
+      respond();
+    }
+    await expect(page.getByRole("alert")).toContainText("HTTP 503");
+    await expect(button).toBeEnabled();
+    await expect(page.getByRole("tooltip")).not.toBeVisible();
+  });
+}
+
 async function decisionRoom(page: Page, cash = 2_000_000) {
   const now = Date.now();
   const base = toPublic(

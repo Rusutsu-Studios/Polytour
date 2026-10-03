@@ -69,8 +69,9 @@ Escape minimizes a decision without sending an action; the bottom prompt reopens
 it. Roll and opponent turns keep their compact bottom prompt.
 
 Unavailable choices explain their prerequisite in a small ivory popup with a
-gold heading, on hover or keyboard focus. Minimized decisions use a bottom tab
-with their title and live countdown. The welcome screen's language control shows
+gold heading, on hover or keyboard focus. Loading and room preparation use inline
+labels and spinners, without popups. Minimized decisions use a bottom tab with
+their title and live countdown. The welcome screen's language control shows
 FR or EN beside a small globe, using the same text-button style as How to play.
 Clicking it switches directly to the other language; Enter and Space do the same.
 Chance cards hold for eight seconds; tax payments use the same reading window

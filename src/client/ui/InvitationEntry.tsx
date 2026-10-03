@@ -64,10 +64,6 @@ export default function InvitationEntry({
               autoComplete="nickname"
               placeholder={t("Votre pseudo", "Your nickname")}
               disabled={loading}
-              data-disabled-reason={t(
-                "La connexion à la salle est en cours.",
-                "Joining the room is in progress.",
-              )}
               aria-describedby={error ? "invitation-error" : undefined}
               onChange={(event) => onName(event.target.value)}
             />

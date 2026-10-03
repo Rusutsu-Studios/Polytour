@@ -16,6 +16,7 @@ has been published, and it does not reconstruct earlier development history.
 - Explain unavailable actions in small ivory popups on hover or keyboard focus,
   including construction prerequisites, insufficient cash, reconnecting and
   unsaved room settings (#32).
+- Keep room preparation and joining feedback inline, without loading popups.
 - Keep Surprise cards visible for eight seconds and show tax payments to every
   player in a matching six-second popup; reserve reading time before the next
   decision and bot action (#31).
