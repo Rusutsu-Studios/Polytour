@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { BOARD, ECONOMY } from "../shared/board/index.js";
+import { BOARD, ECONOMY, ruleEconomy } from "../shared/board/index.js";
 import type {
   GameConfig,
   GameEvent,
@@ -19,6 +19,7 @@ import type {
   WinKind,
 } from "../shared/engine/index.js";
 import {
+  economyRule,
   decisionWindow,
   getProperty,
   legalActions,
@@ -42,6 +43,7 @@ import {
   useRoom,
 } from "./net/room.js";
 import {
+  fullMoney,
   levelName,
   money,
   PLAYER_COLORS,
@@ -130,7 +132,7 @@ function MoneyCounter({ value }: { value: number }) {
     previous.current = value;
     return () => controls.stop();
   }, [value, speed, reducedMotion]);
-  return <>{money(display)}</>;
+  return <>{fullMoney(display)}</>;
 }
 
 function PlayerAvatar({ seat }: { seat: Seat }) {
@@ -416,8 +418,8 @@ function BoardFallback({
               ? `+${money(propertyRefund(state, tile.index))}`
               : state && getProperty(state, tile.index)?.owner != null
                 ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
-                : tilePrice(tile.index) != null
-                  ? money(tilePrice(tile.index) ?? 0)
+                : tilePrice(tile.index, state) != null
+                  ? money(tilePrice(tile.index, state) ?? 0)
                   : TILE_ICONS[tile.kind]}
           </b>
         </button>
@@ -487,8 +489,8 @@ function eventText(event: GameEvent, state: PublicState): string | null {
     case "ChampionshipChanged":
       return event.host
         ? t(
-            `Festival à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
-            `Festival in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
+            `Championnat à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
+            `Championship in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
           )
         : null;
     case "MoneyTransferred":
@@ -712,8 +714,8 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
           <b>{t("Achetez et construisez", "Buy and build")}</b>
           <span>
             {t(
-              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes et les festivals l’augmentent.",
-              "Choose land or a building. Other players pay rent when they land there; complete city groups and festivals increase the rent.",
+              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes, les festivals et le championnat l’augmentent.",
+              "Choose land or a building. Other players pay rent when they land there; complete city groups, festivals and the championship increase the rent.",
             )}
           </span>
         </li>

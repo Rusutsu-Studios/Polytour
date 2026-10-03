@@ -1,4 +1,4 @@
-# Game design (new-room rules v0.4; v0.2/v0.3 saved rooms retained)
+# Game design (new-room rules v0.4; v0.2–v0.3 saved rooms retained)
 
 Polytour is a fast, aggressive property game for two to four players. A room has
 four seats; the host can seat server bots in empty places. Compared to classic
@@ -7,11 +7,13 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-All numbers here are **prototype starting values**, not a verified reproduction
-of the reference game's current economy. They live in `src/shared/board/` as config
-and get tuned with the simulator (`pnpm sim`) — never hard-code them in logic.
-See [REFERENCE_PARITY.md](REFERENCE_PARITY.md) for the live comparison still needed
-to reproduce the requested reference values and room settings accurately.
+New rooms (rules version 4, `economyRule: "reference"`) follow the reference
+game's economy: its rent grid laid side by side on Polytour's board, its fees and
+its protections. Rooms saved under rules versions 2–3 keep the original
+**prototype** economy; the differences are noted where they apply. All numbers live
+in `src/shared/board/` as config and get checked with the simulator (`pnpm sim`) —
+never hard-code them in logic. See [REFERENCE_PARITY.md](REFERENCE_PARITY.md) for
+the sources and the values that remain interpolated.
 
 ## Design pillars and v1 boundaries
 
@@ -53,9 +55,10 @@ the lowest tile index wins the tie.
    A separate round limit
    applies to short tests/simulations; the timed preset uses a 10,000-round safety
    cap. Twenty rounds are not labelled twenty minutes.
-5. Three initial festival cities are selected by the seeded shuffle by default.
-   Their visible ×2 rent effect uses the same maximum-only modifier rule as
-   country ownership and the single championship host. Festival count is configurable.
+5. Three initial festivals are selected by the seeded shuffle by default, among
+   cities and resorts (prototype rooms: cities only). Each doubles the rent of its
+   tile for the whole match and combines with the other modifiers (see Economy).
+   Festival count is configurable.
 
 > Mechanics are not protected by copyright, but names and art are trademarks. Board
 > theme, city names, card names, and visuals must be our own.
@@ -91,26 +94,33 @@ Dubai and Bali.
 | Players | 2–4; empty seats stay empty or take a bot |
 | Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
 | Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
-| Initial festivals | 3 (configurable); neutral city squares with ×2 rent |
-| Sell-back to bank | 100% of invested value in new rooms; 50% in saved v0.2/v0.3 rooms |
+| Initial festivals | 3 (configurable); cities or resorts with ×2 rent |
+| Sell-back to bank | 100% of invested value (prototype: 50%) |
 | Buyout price | 2× invested value (paid to owner) |
 
-**Tile-specific economy:** prices increase from 60,000 on the early French cities
-to 400,000 at Tokyo. Each city has independent land, house and hotel costs in
-`src/shared/board/city-economy.ts`. The actual first-city and Tokyo costs come from the
-supplied editor captures; intermediate costs and all rents are provisional.
+**Tile-specific economy:** each side of the board is one price tier. A house costs
+50,000 / 100,000 / 150,000 / 200,000 on sides 1–4, and land rises from 60,000 on the
+first French cities to 400,000 at Tokyo. Each city's land, house, hotel and rent
+values are in `src/shared/board/city-economy.ts` (`REFERENCE_CITY_ECONOMY`). The
+rents and three-house totals are the reference values; a few totals and the hotel
+costs are interpolated (see REFERENCE_PARITY.md). Prototype rooms use
+`CITY_ECONOMY`, a linear grid with the same first-city and Tokyo costs.
 
-**Build levels** (each cost is incremental; rent is a provisional percentage of
-that tile's land price `L`):
+**Build levels** (each cost is incremental). In the reference grid, bare land earns
+little; House I earns `r`, House II about `2r`, House III about `3r`, and the
+Hotel `5.5r` to `6r`:
 
-| Level | Name | Build cost | Rent | Notes |
+| Level | Name | Build cost | Rent, first city → Tokyo | Notes |
 | --- | --- | --- | --- | --- |
-| 0 | Land | Tile land price | 0.2 × L | |
-| 1 | House I | Tile house price | 0.6 × L | |
-| 2 | House II | Tile house price | 1.0 × L | |
-| 3 | House III | Tile house price | 1.4 × L | |
-| 4 | Hotel | Tile hotel price | 2.8 × L | Return to owned House III after a completed lap; direct-hotel setting is an exception |
-| 5 | Landmark | Tile landmark price | 4.0 × L | Only on your own Hotel; **cannot be bought out** |
+| 0 | Land | Tile land price | 2,000 → 50,000 | |
+| 1 | House I | Tile house price | 25,000 → 200,000 | |
+| 2 | House II | Tile house price | 50,000 → 400,000 | |
+| 3 | House III | Tile house price | 75,000 → 600,000 | |
+| 4 | Hotel | Tile hotel price | 150,000 → 1,100,000 | Return to owned House III after a completed lap; direct-hotel setting is an exception. **Cannot be bought out or swapped** |
+
+Prototype rooms instead charge 20/60/100/140/280% of the land price `L` and keep a
+sixth level, the **Landmark** (1.5 × the hotel cost, rent 4 × L, only on your own
+Hotel). There, the Landmark rather than the Hotel cannot be bought out.
 
 `invested value` is a pure function of a tile and current level: the sum
 of the build costs of every level from Land up to that level. It does not depend on
@@ -135,14 +145,16 @@ and payouts to a player round **down** (sell-back refunds).
 On an unowned city, the active player may decline or buy it at any level from Land
 through their current unlock cap, paying every intervening cost in one transaction.
 On their own city, they may decline or raise it to a higher unlocked level in one
-transaction. The three Houses are unlocked from the start. In new rooms, an initial
-purchase stops at House III even if the player has completed a lap. An owned city
+transaction. Before their first completed lap, a player can own at most two houses
+on a city in reference rooms (three in prototype rooms); after it, a purchase can go
+straight to House III. In new rooms, an initial purchase stops at House III even if
+the player has completed a lap. An owned city
 with fewer than three houses also stops at House III for that landing. Hotel is
 available on a later landing when the city already has three houses and the player
 has completed at least one lap. The explicit `hotelsDirectly` custom setting bypasses
-these hotel prerequisites. Landmark is only available when that player lands on
-their own Hotel. An action is legal only when its full cost leaves the buyer with
-cash of at least zero.
+these hotel prerequisites. In prototype rooms, the Landmark is only available when
+that player lands on their own Hotel; reference rooms stop at the Hotel. An action
+is legal only when its full cost leaves the buyer with cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
 The engine still honours `"legacy-lap"` for simulations, but the server only
@@ -151,20 +163,23 @@ settings. A stale pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
 
-Owning every city of a country doubles the base rent of that country's Land through
-Hotel properties. It does not affect Landmark rent. Championship is a separate
-modifier (defined below), and the two modifiers never multiply each other: apply
-whichever single modifier is larger.
+Three modifiers raise rent: owning every city of a country (×2), a festival (×2)
+and the Championship host (×2 and up, defined below). In reference rooms they
+**add up**: each adds its bonus to ×1, so a full country with a ×2 championship
+pays ×3, and a festival on top pays ×4. The total is capped at ×10. Prototype rooms
+apply only the single largest modifier, and none to a Landmark.
 
-> **Open balance question.** With these numbers a Landmark (4.0 × L, no modifier)
+> **Prototype balance question.** A prototype Landmark (4.0 × L, no modifier)
 > earns less than a Hotel in a full country (5.6 × L) or a hosted Hotel (up to
-> 14 × L), so upgrading can lower rent; its only gain is buyout immunity. Keep the
-> rule for this prototype, but the simulator must report it (see below) before rents are tuned.
+> 14 × L), so upgrading can lower rent; its only gain is buyout immunity. Reference
+> rooms remove the Landmark and protect the Hotel instead.
 
-**Resorts:** price 200,000, no building. Rent by resorts owned: 1 → 50,000, 2 → 100,000, 3 → 200,000,
-4 → instant win. Resorts are not cities: they cannot be bought out, hosted, targeted
-by Earthquake or Land Swap, or upgraded. The only ways a resort changes hands are
-buying it while unowned and its owner selling it to the bank.
+**Resorts:** price 200,000, no building. Rent per resort by resorts owned:
+1 → 25,000, 2 → 50,000, 3 → 100,000 (prototype: 50,000 / 100,000 / 200,000),
+4 → instant win. A festival doubles a resort's rent. Resorts are not cities: they
+cannot be bought out, hosted, targeted by Earthquake or Land Swap, or upgraded. The
+only ways a resort changes hands are buying it while unowned and its owner selling
+it to the bank.
 
 ## Corners and special tiles
 
@@ -173,30 +188,35 @@ buying it while unowned and its owner selling it to the bank.
   sends the pawn to tile 8 with `islandTurns = 0` and **ends the turn immediately**,
   forfeiting any pending doubles roll; it does not pass Start or resolve Island
   again. At the start of each trapped turn, the player chooses one of:
-  - **Pay 100,000** (legal only with enough cash): released, then a normal roll.
-    A double on that roll grants the usual extra roll.
+  - **Pay 200,000** (prototype: 100,000; legal only with enough cash): released,
+    then a normal roll. A double on that roll grants the usual extra roll.
   - **Escape roll** (free; also the timeout default): a double releases the pawn and
     those same dice move it — there is no second roll, and an escape roll never
     grants an extra roll. A non-double increments `islandTurns` and ends the turn
     without moving.
 
-  After the second failed escape roll (`islandTurns = 2`) the player is released on
-  the spot; their next turn is a normal turn.
-- **Championship:** if the active player owns at least one non-Landmark city, they
-  must select a host on landing here. There is one host on the board at a time,
-  shared by all players. A newly selected host has a ×2 Championship modifier.
-  Selecting the current host again increases its modifier by ×1, to a maximum of ×5;
-  selecting a different host resets the modifier to ×2. Landmark cities cannot host:
-  a host that is upgraded to Landmark, changes owner, or is sold is cleared. Rent
-  uses the larger of the Championship and full-country multiplier, never both.
+  After the third failed escape roll (`islandTurns = 3`; prototype: the second)
+  the player is released on the spot; their next turn is a normal turn.
+- **Championship:** there is one host on the board at a time, shared by all
+  players. A player landing here who owns a city may host it in one of their
+  cities, or pass. Renewing it on its current city is free; moving it to another
+  city costs 50,000. The first championship is ×2, and every hosting adds ×1, up to
+  ×10, whether it stays or moves. The championship stays on its city when that city
+  is bought out, swapped, sold or returned by a bankruptcy. A timed-out choice
+  renews a host the player already owns and otherwise passes.
+  *Prototype rooms:* hosting is free and mandatory when the player owns a
+  non-Landmark city; a new host restarts at ×2, the same host gains ×1 up to ×5,
+  and an upgrade to Landmark, a change of owner or a sale clears the host.
 - **World Tour:** landing here **ends the turn immediately**, forfeiting any pending
   doubles roll, and gives that player a travel option for their next turn. At its
-  start they may pay 50,000 (legal only with enough cash) to travel clockwise to
-  one of their own properties, an unowned property or Start, chosen by clicking it
-  on the board, resolving the destination normally; otherwise, or on timeout, they
-  roll normally. The option expires after that choice. A World Tour move neither
-  counts as a dice roll nor creates a doubles bonus.
-- **Tax:** pay 10% of your total invested property value, rounded up (minimum 50,000).
+  start they may pay 50,000 (legal only with enough cash) to travel clockwise to an
+  unowned city or resort, or to one of their own properties when none is free
+  (prototype: any other tile), resolving the destination normally; otherwise, or on
+  timeout, they roll normally. The option expires after that choice. A World Tour
+  move neither counts as a dice roll nor creates a doubles bonus.
+- **Tax:** pay 10% of your total invested property value, rounded up. Cash is
+  never taxed, so a player with little cash and many buildings can owe more than
+  they hold. There is no minimum (prototype: 50,000).
 - **Chance:** draw from a 16-card deck. When its draw pile is empty, shuffle the
   discard pile to make the next draw pile; held keep cards remain unavailable.
 
@@ -205,19 +225,18 @@ buying it while unowned and its owner selling it to the bank.
 1. Resolve each mandatory payment in full before offering an optional action. Rent
    is the property's current base rent with its applicable one modifier; resorts use
    the resort-rent table and have no modifier.
-2. After paying rent on an opponent's non-Landmark city, the visitor may buy it out
-   once. A buyout costs `2 × invested value`, paid directly to the current owner.
-   The city, its level, and its invested value then transfer to the buyer. It is
-   legal only if the buyer can pay without going negative. A buyout never includes a
-   Championship host; ownership transfer clears the host before monopoly checks.
-   Resorts cannot be bought out. A buyout ends that landing's resolution; the buyer
-   can upgrade the city on a later landing.
+2. After paying rent on an opponent's city below the Hotel (prototype: below the
+   Landmark), the visitor may buy it out once. A buyout costs
+   `2 × invested value`, paid directly to the current owner. The city, its level,
+   and its invested value then transfer to the buyer. It is legal only if the buyer
+   can pay without going negative. The championship stays on a bought-out city
+   (prototype: the transfer clears it). Resorts cannot be bought out. A buyout ends
+   that landing's resolution; the buyer can upgrade the city on a later landing.
 3. Cash may become negative only after a mandatory payment. This immediately opens
    a forced-sell phase. The debtor may sell any owned cities or resorts to the bank;
-   each sale returns 100% of that property's invested value in new rooms
-   (50% rounded down in preexisting rooms) and resets
-   it to unowned Land. Selling a Championship host also clears that host. They may
-   sell in any order until solvent, then continue the interrupted resolution.
+   each sale returns 100% of that property's invested value (prototype: 50%,
+   rounded down) and resets it to unowned Land. They may sell in any order until
+   solvent, then continue the interrupted resolution.
 4. If selling every property they own could not bring cash back to zero, the engine
    skips the forced-sell decision and the player is bankrupt immediately; otherwise
    they are bankrupt if cash is still negative once no properties remain. A bankrupt
@@ -234,7 +253,7 @@ buying it while unowned and its owner selling it to the bank.
 ```mermaid
 flowchart TD
   S[Turn starts] --> I{On Island?}
-  I -- yes --> IE{Pay 100 or escape roll?}
+  I -- yes --> IE{Pay the fare or escape roll?}
   I -- no --> WT{World Tour pending?}
   WT -- yes --> TR{Pay 50 to travel?}
   WT -- no --> R[Roll 2d6]
@@ -249,7 +268,7 @@ flowchart TD
   M --> T{Tile}
   T -- unowned city/resort --> B[Offer purchase + builds]
   T -- own city --> U[Offer upgrade / landmark]
-  T -- "opponent city/resort" --> P[Rent card offer → pay rent → buyout offer if city, not Landmark]
+  T -- "opponent city/resort" --> P[Rent card offer → pay rent → buyout offer if city below the protected level]
   T -- "Island / World Tour" --> E
   T -- other --> X[Resolve tile/card]
   B & U & P & X --> D{Cash negative?}
@@ -306,8 +325,8 @@ properties to *block* a monopoly, which is where the tension comes from.
 | Audit | Pay 10% of your cash, rounded up | |
 | Guardian Angel | Cancel one rent payment | ✅ |
 | Coupon | Halve one rent payment | ✅ |
-| Earthquake | Downgrade one opponent building by 1 level (not Landmarks) | |
-| Land Swap | Optionally choose an opponent city; exchange it with your eligible city of lowest land price (not Landmarks) | |
+| Earthquake | Downgrade one opponent building by 1 level, Hotels included (prototype: not Landmarks) | |
+| Land Swap | Optionally choose an opponent city; exchange it with your eligible city of lowest land price (not Hotels; prototype: not Landmarks) | |
 | Detour | Move back 3 tiles | |
 | Contractor | Upgrade one of your cities by 1 level for free | |
 | Jailbreak | Everyone on the Island is released | |
@@ -331,13 +350,13 @@ properties to *block* a monopoly, which is where the tension comes from.
 - Guardian Angel is offered after a rent amount is known and before it is paid; it
   reduces that rent to zero. Coupon is offered at the same time and halves the rent,
   rounded up. At most one of these cards may be used for a single rent payment.
-- Earthquake targets an opponent's House, Villa, or Hotel; its invested value drops
-  with its level (no refund). Land Swap targets an opponent non-Landmark city whose
-  land price is no greater than the drawer's cheapest eligible non-Landmark city;
-  the engine exchanges it with that cheapest city. Each city keeps its current
-  level, and therefore its invested value, as it changes owner. The drawer may
-  decline the swap. This preserves a single-tile target decision. Any Championship
-  host involved in a swap is cleared.
+- Earthquake targets an opponent's House or Hotel; its invested value drops
+  with its level (no refund). Land Swap targets an opponent city below the Hotel
+  (prototype: below the Landmark) whose land price is no greater than the drawer's
+  cheapest such city; the engine exchanges it with that cheapest city. Each city
+  keeps its current level, and therefore its invested value, as it changes owner.
+  The drawer may decline the swap. This preserves a single-tile target decision.
+  The championship stays on its tile (prototype: a swapped host is cleared).
 - Contractor targets one of the drawer's non-Landmark cities and raises it exactly
   one legal level for free (Hotel still requires a completed lap); the free level
   counts toward invested value. It cannot create a Landmark, so a Hotel is not a
@@ -367,7 +386,7 @@ they are legal and relevant.
 | --- | --- | --- |
 | Roll (incl. Island pay-or-escape, World Tour travel-or-roll) | 10 s | Auto-roll (escape roll on Island, no travel on World Tour) |
 | Buy / build / buyout | 15 s | Decline |
-| Choose host / card target | 15 s | Deterministic legal default |
+| Choose host / card target | 15 s | Deterministic legal default (a paid championship: renew your own host, otherwise pass) |
 | Forced sell | 30 s | Sell cheapest properties until solvent |
 
 Animation time is added on top of these. The engine computes each decision's
@@ -454,10 +473,13 @@ choice; neither the UI nor a bot may infer it from board state.
 - Per-condition instant-win rates. Resorts can't be bought out, so one resort can
   block Resort Monopoly and its side's Line Monopoly for good; if either rate is
   near zero, revisit that rule.
-- Landmark build rate and rent earned per Landmark vs. full-country or hosted
-  Hotels (see the open balance question under Economy).
+- Prototype rooms: Landmark build rate and rent earned per Landmark vs.
+  full-country or hosted Hotels (see the balance question under Economy).
 
 Change one parameter at a time and commit the sim output alongside the config change.
+`pnpm sim -- --rules prototype|reference --rounds N` selects the rule set and round
+cap. The reference rules were adopted together at the user's request; their
+20-round and 60-round results are in `tools/sim/reference.json`.
 
 ## Modes (roadmap)
 

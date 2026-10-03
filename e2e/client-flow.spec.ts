@@ -265,7 +265,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     }));
     director.reset({
       ...snapshot,
-      config: { ...snapshot.config, hotelPurchaseRule: "legacy-lap" },
+      // Landmarks exist only in saved prototype rooms (rules versions 2–3).
+      config: {
+        ...snapshot.config,
+        hotelPurchaseRule: "legacy-lap",
+        economyRule: "prototype",
+      },
       activeSeat: 0,
       pending: {
         kind: "buy",
@@ -967,7 +972,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toContainText("2,15 M");
+  ).toHaveText(/2\s150\s000/);
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeFocused();
@@ -1104,6 +1109,64 @@ test("travel, rent protections and exchanges show the complete legal choice", as
   await expect(pick.locator(".ledger-balance")).toContainText("1,95 M");
   await page.screenshot({
     path: ".local/verification/decision-travel-regression.png",
+  });
+  // A reference room charges to move the championship and lets a player pass.
+  await page.evaluate(async (state) => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const owned = [1, 31];
+    const properties = state.properties.map((property) => ({
+      ...property,
+      owner: owned.includes(property.tile) ? (0 as const) : null,
+      level: property.tile === 31 ? (3 as const) : (0 as const),
+    }));
+    director.reset({
+      ...state,
+      config: { ...state.config, economyRule: "reference" },
+      activeSeat: 0,
+      properties,
+      championshipHost: { tile: 31, multiplier: 3 },
+      festivalTiles: [],
+      players: state.players.map((player) => ({
+        ...player,
+        cash: player.seat === 0 ? 1_000_000 : player.cash,
+        properties: player.seat === 0 ? owned : [],
+      })),
+      pending: {
+        kind: "host",
+        seat: 0,
+        targets: owned,
+        deadline: Date.now() + 60_000,
+      },
+    });
+  }, original);
+  await expect(page.locator(".decision-popup-ribbon")).toHaveText(
+    "Organiser le championnat",
+  );
+  await expect(page.getByRole("button", { name: "Passer" })).toBeEnabled();
+  const hostCity = page.getByLabel("Ville hôte", { exact: true });
+  await expect(hostCity.locator("option")).toHaveText([
+    "Roubaix · ×4 · 50 k",
+    "Tokyo · ×4",
+  ]);
+  await hostCity.selectOption("31");
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Renouveler le championnat",
+  );
+  // Tokyo with three houses: 600 k, with a ×4 championship.
+  await expect(page.locator(".decision-ledger")).toContainText("2,4 M");
+  await hostCity.selectOption("1");
+  await expect(page.locator(".decision-confirm")).toContainText(
+    "Organiser le championnat · 50 k",
+  );
+  await expect(page.locator(".ledger-balance")).toContainText("950 k");
+  await page.screenshot({
+    path: ".local/verification/decision-championship.png",
   });
   await page.evaluate(async (state) => {
     const modulePath =

@@ -1,5 +1,9 @@
 import { BOARD, ECONOMY, getTileLandPrice } from "../../shared/board/index.js";
-import type { Seat } from "../../shared/engine/index.js";
+import {
+  economyRule,
+  type PublicState,
+  type Seat,
+} from "../../shared/engine/index.js";
 import { getLocale, translate } from "../i18n.js";
 
 export const PLAYER_COLORS = [
@@ -36,10 +40,13 @@ export const TILE_NAMES = [
   "Lisbonne",
   "Surprise",
   "Milan",
-  "Chypre",
-  "Rome",
-  "Festival",
-  "Manchester",
+  "Surprise",
+  "Berlin",
+  "Championnat",
+  "Prague",
+  "Vienne",
+  "Surprise",
+  "Londres",
   "Dubaï",
   "Londres",
   "Surprise",
@@ -78,10 +85,13 @@ const ENGLISH_TILE_NAMES = [
   "Lisbon",
   "Chance",
   "Milan",
-  "Cyprus",
-  "Rome",
-  "Festival",
-  "Manchester",
+  "Chance",
+  "Berlin",
+  "Championship",
+  "Prague",
+  "Vienna",
+  "Chance",
+  "London",
   "Dubai",
   "London",
   "Chance",
@@ -131,10 +141,17 @@ export function tileColor(index: number) {
         ? "#e7b24c"
         : "#78bda7";
 }
-export function tilePrice(index: number) {
+/** Land price under the match's frozen rules; new rooms use the reference grid. */
+export function tilePrice(
+  index: number,
+  state: Pick<PublicState, "config"> | null = null,
+) {
   const tile = BOARD[index];
   return tile.kind === "city"
-    ? getTileLandPrice(tile.index)
+    ? getTileLandPrice(
+        tile.index,
+        state ? economyRule(state.config) : "reference",
+      )
     : tile.kind === "resort"
       ? ECONOMY.resortPrice
       : null;
@@ -148,6 +165,12 @@ export function tilePosition(index: number): [number, number] {
 }
 export function pawnOffset(seat: Seat): [number, number] {
   return [seat % 2 === 0 ? -0.19 : 0.19, seat < 2 ? -0.18 : 0.18];
+}
+/** Exact amount with grouped digits (1 800 000), for balances players track. */
+export function fullMoney(value: number) {
+  return new Intl.NumberFormat(getLocale() === "fr" ? "fr-FR" : "en-GB", {
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 export function money(value: number) {
   const locale = getLocale() === "fr" ? "fr-CH" : "en-GB";

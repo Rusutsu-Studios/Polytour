@@ -1,14 +1,17 @@
 import { motion } from "motion/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BOARD } from "../../shared/board/index.js";
+import { BOARD, ruleEconomy } from "../../shared/board/index.js";
 import type { BuildLevel } from "../../shared/board/types.js";
 import {
   type Action,
   actionCost,
+  buyoutPriceAt,
+  economyRule,
   getProperty,
   legalActions,
   maxBuildLevel,
+  nextChampionship,
   type PublicState,
   previewPropertyRent,
   propertyRefund,
@@ -66,10 +69,10 @@ const COPY = {
     "Select a space on the board.",
   ],
   host: [
-    "Accueillir un festival",
-    "Choisissez la ville qui accueillera le festival.",
-    "Host a festival",
-    "Choose the city that will host the festival.",
+    "Organiser le championnat",
+    "Choisissez la ville qui accueillera le championnat.",
+    "Host the championship",
+    "Choose the city that will host the championship.",
   ],
   "card-target": [
     "Choisir une ville",
@@ -110,8 +113,17 @@ function actionLabel(action: Action, state: PublicState): string {
       );
     case "Travel":
       return t("Voyager ici", "Travel here");
-    case "ChooseHost":
-      return t("Accueillir le festival", "Host the festival");
+    case "ChooseHost": {
+      const cost = actionCost(state, action);
+      return state.championshipHost?.tile === action.tile
+        ? t("Renouveler le championnat", "Renew the championship")
+        : cost > 0
+          ? t(
+              `Organiser le championnat · ${money(cost)}`,
+              `Host the championship · ${money(cost)}`,
+            )
+          : t("Organiser le championnat", "Host the championship");
+    }
     case "ChooseTarget":
       if (state.pending?.kind === "card-target") {
         const pending = state.pending;
@@ -263,12 +275,21 @@ export default function DecisionPanel({
     selectedAction && "level" in selectedAction
       ? selectedAction.level
       : (property?.level ?? 0);
+  const hosting = selectedAction?.type === "ChooseHost";
   const rent =
     decisionTile === undefined
       ? null
       : construction || selectedAction?.type === "Buyout"
         ? previewPropertyRent(state, decisionTile, seat, selectedLevel)
-        : propertyRent(state, decisionTile);
+        : hosting
+          ? propertyRent(
+              {
+                ...state,
+                championshipHost: nextChampionship(state, decisionTile),
+              },
+              decisionTile,
+            )
+          : propertyRent(state, decisionTile);
   const cost = selectedAction
     ? pending?.kind === "rent-card"
       ? rentCardPayment(
@@ -284,9 +305,15 @@ export default function DecisionPanel({
   const projectedCash =
     active &&
     selectedAction &&
-    (["Buy", "Build", "Buyout", "PayIsland", "Travel", "Sell"].includes(
-      selectedAction.type,
-    ) ||
+    ([
+      "Buy",
+      "Build",
+      "Buyout",
+      "PayIsland",
+      "Travel",
+      "Sell",
+      "ChooseHost",
+    ].includes(selectedAction.type) ||
       pending?.kind === "rent-card")
       ? active.cash + (refund ?? -cost)
       : null;
@@ -334,7 +361,12 @@ export default function DecisionPanel({
               "Hôtel après votre premier tour complet",
               "Hotel after your first complete lap",
             )
-          : t("Pas encore disponible", "Not available yet");
+          : level === 3
+            ? t(
+                "3 maisons après votre premier tour complet",
+                "Three houses after your first complete lap",
+              )
+            : t("Pas encore disponible", "Not available yet");
   const modalOpen = Boolean(
     ownTurn &&
       pending &&
@@ -368,7 +400,15 @@ export default function DecisionPanel({
         ]
       : pending?.kind === "buy" && resort
         ? [t("Acheter une station", "Buy a resort"), ""]
-        : decisionCopy(pending?.kind ?? "roll");
+        : pending?.kind === "host" && decline
+          ? [
+              decisionCopy("host")[0],
+              t(
+                `Déplacer le championnat coûte ${money(ruleEconomy(economyRule(state.config)).championshipFee)}, le renouveler est gratuit. Chaque édition ajoute ×1 au loyer de la ville hôte.`,
+                `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
+              ),
+            ]
+          : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
@@ -788,13 +828,30 @@ export default function DecisionPanel({
                 pending?.kind !== "rent-card" && (
                   <div>
                     <dt>
-                      {construction || pending?.kind === "buyout"
+                      {construction || pending?.kind === "buyout" || hosting
                         ? t("Nouveau loyer", "New rent")
                         : t("Loyer actuel", "Current rent")}
                     </dt>
                     <dd>{money(rent)}</dd>
                   </div>
                 )}
+              {construction && decisionTile !== undefined && !bankruptcy && (
+                <div className="ledger-buyout">
+                  <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
+                  <dd>
+                    {(() => {
+                      const price = buyoutPriceAt(
+                        state,
+                        decisionTile,
+                        selectedLevel,
+                      );
+                      return price === null
+                        ? t("Protégé", "Protected")
+                        : money(price);
+                    })()}
+                  </dd>
+                </div>
+              )}
               {projectedCash !== null && !bankruptcy && (
                 <div
                   className="ledger-balance"
@@ -894,7 +951,9 @@ export default function DecisionPanel({
               <label htmlFor="destination">
                 {pending?.kind === "sell"
                   ? t("Propriété à vendre", "Property to sell")
-                  : t("Destination", "Destination")}
+                  : pending?.kind === "host"
+                    ? t("Ville hôte", "Host city")
+                    : t("Destination", "Destination")}
               </label>
               <select
                 id="destination"
@@ -916,7 +975,9 @@ export default function DecisionPanel({
                     {tileName(action.tile)}
                     {action.type === "Sell"
                       ? ` · ${money(propertyRefund(state, action.tile))}`
-                      : ""}
+                      : action.type === "ChooseHost"
+                        ? ` · ×${nextChampionship(state, action.tile).multiplier}${actionCost(state, action) > 0 ? ` · ${money(actionCost(state, action))}` : ""}`
+                        : ""}
                   </option>
                 ))}
               </select>

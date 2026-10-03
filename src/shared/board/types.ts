@@ -3,6 +3,12 @@ export const COUNTRY_IDS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 export type CountryId = (typeof COUNTRY_IDS)[number];
 export type BoardSide = 1 | 2 | 3 | 4;
 export type BuildLevel = 0 | 1 | 2 | 3 | 4 | 5;
+/**
+ * Frozen economy of a match. "reference" (rules version 4) follows the
+ * reference game's grid and fees; "prototype" (rules versions 2–3, and saves
+ * without a marker) keeps the original Polytour economy and its Landmark.
+ */
+export type EconomyRule = "reference" | "prototype";
 export type ResortId = 1 | 2 | 3 | 4;
 
 export type CityTile = {

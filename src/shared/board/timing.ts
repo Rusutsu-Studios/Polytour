@@ -31,7 +31,7 @@ export const CHANCE_AMOUNTS = {
   auditPercent: 10,
   charity: 100_000,
   detourSteps: 3,
+  /** A full country, a festival and a newly hosted championship each double rent. */
   countryMultiplier: 2,
   initialHostMultiplier: 2,
-  maxHostMultiplier: 5,
 } as const;

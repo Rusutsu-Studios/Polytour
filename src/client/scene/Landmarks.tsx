@@ -11,7 +11,7 @@ import {
 } from "./board-layout.js";
 import { labelTexture } from "./board-textures.js";
 
-// Small original landmarks on the island, festival and world-tour corners;
+// Small original landmarks on the island, championship and world-tour corners;
 // Start is printed flat so nothing tall stands in front of the board. Each
 // keeps to the outer half of its square: the inner quarter belongs to pawns.
 

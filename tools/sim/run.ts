@@ -1,3 +1,4 @@
+import type { EconomyRule } from "../../src/shared/board/index.js";
 import { SIM_CONFIG, simSeats, simulateGame } from "./simulation.js";
 
 function option(name: string, fallback: number): number {
@@ -8,10 +9,20 @@ const games = option("--games", 100);
 if (!Number.isInteger(games) || games < 1 || games > 10_000)
   throw new RangeError("--games must be an integer from 1 to 10000");
 const players = option("--players", 4);
+const roundLimit = option("--rounds", 20);
+if (!Number.isInteger(roundLimit) || roundLimit < 1 || roundLimit > 200)
+  throw new RangeError("--rounds must be an integer from 1 to 200");
 if (!Number.isInteger(players) || players < 2 || players > 4)
   throw new RangeError("--players must be an integer from 2 to 4");
+const rulesIndex = process.argv.indexOf("--rules");
+const rules = (
+  rulesIndex < 0 ? "reference" : process.argv[rulesIndex + 1]
+) as EconomyRule;
+if (rules !== "reference" && rules !== "prototype")
+  throw new RangeError("--rules must be reference or prototype");
+const config = { ...SIM_CONFIG, economyRule: rules, roundLimit };
 const results = Array.from({ length: games }, (_, seed) =>
-  simulateGame(seed, SIM_CONFIG, undefined, simSeats(players)),
+  simulateGame(seed, config, undefined, simSeats(players)),
 );
 const rounds = results.map((result) => result.rounds).sort((a, b) => a - b);
 const count: Record<string, number> = {};
@@ -24,7 +35,8 @@ for (const result of results) {
 }
 const report = {
   games,
-  config: `${["", "", "two", "three", "four"][players]} medium bots, 20-round limit, 3 seeded festivals; captured costs + provisional rents`,
+  economyRule: rules,
+  config: `${["", "", "two", "three", "four"][players]} medium bots, ${roundLimit}-round limit, 3 seeded festivals; ${rules === "reference" ? "reference grid and fees" : "captured costs + provisional rents"}`,
   medianRounds: rounds[Math.floor((games - 1) * 0.5)],
   p90Rounds: rounds[Math.floor((games - 1) * 0.9)],
   wins: count,
@@ -41,6 +53,9 @@ const report = {
   ),
   assertions:
     "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
-  note: "Balance is provisional: compare round-limit rate and turnPositionWins against targets; Landmarks may earn less than hosted/full-country/festival Hotels; prices/rents and rare monopoly rates need playtesting",
+  note:
+    rules === "reference"
+      ? "Reference rules have no Landmark; compare round-limit rate, bankruptcies and turnPositionWins with the prototype run"
+      : "Balance is provisional: compare round-limit rate and turnPositionWins against targets; Landmarks may earn less than hosted/full-country/festival Hotels; prices/rents and rare monopoly rates need playtesting",
 };
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

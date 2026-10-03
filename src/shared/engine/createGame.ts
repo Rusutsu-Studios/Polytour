@@ -1,4 +1,4 @@
-import type { BuildLevel } from "../board/index.js";
+import type { BuildLevel, EconomyRule } from "../board/index.js";
 import {
   BOARD,
   BOARD_SIZE,
@@ -15,6 +15,7 @@ import {
   getTileLandPrice,
   isCityTile,
   isResortTile,
+  ruleEconomy,
 } from "../board/index.js";
 import { applyEvent, toPublic } from "./reducer.js";
 import { nextRandom, shuffle } from "./rng.js";
@@ -52,11 +53,18 @@ export const DEFAULT_GAME_CONFIG = {
   tripleMonopoly: true,
   hotelsDirectly: false,
   hotelPurchaseRule: "staged-hotels",
-  sellBackPercent: ECONOMY.sellBackPercent,
+  economyRule: "reference",
   extraRollOnDouble: true,
   botCanBuild: true,
   giftCanBankrupt: true,
 } as const satisfies GameConfig;
+/** Saves made before rules version 4 carry no marker: keep the prototype economy. */
+export function economyRule(config: GameConfig): EconomyRule {
+  return config.economyRule ?? "prototype";
+}
+function rules(state: PublicState) {
+  return ruleEconomy(economyRule(state.config));
+}
 export function getPlayer(state: PublicState, seat: Seat): PlayerState {
   const player = state.players.find((candidate) => candidate.seat === seat);
   if (!player) throw new RangeError(`Unknown seat ${seat}`);
@@ -80,6 +88,7 @@ export function propertyInvestedValue(
     return getTileInvestedValue(
       tileIndex,
       getProperty(state, tileIndex)?.level ?? 0,
+      economyRule(state.config),
     );
   if (tile && isResortTile(tile)) return ECONOMY.resortPrice;
   return 0;
@@ -94,8 +103,7 @@ export function netWorth(state: PublicState, seat: Seat | PlayerState): number {
     )
   );
 }
-/** How many resorts a seat owns; a resort's rent grows with the owner's count. */
-export function resortCount(state: PublicState, seat: Seat): number {
+function resortCount(state: PublicState, seat: Seat): number {
   return state.properties.filter(
     (property) =>
       property.owner === seat && getTile(property.tile)?.kind === "resort",
@@ -110,92 +118,54 @@ function ownsCountry(
     (tile) => propertyOwner(state, tile.index) === seat,
   );
 }
+/**
+ * Prototype rooms apply the single largest modifier. Reference rooms add each
+ * modifier's bonus: a full country (×2) and a ×2 championship make ×3.
+ */
+function rentMultiplier(
+  state: PublicState,
+  modifiers: readonly number[],
+): number {
+  const economy = rules(state);
+  return economy.rentModifiers === "largest"
+    ? Math.max(1, ...modifiers)
+    : Math.min(
+        economy.maxRentMultiplier,
+        modifiers.reduce((total, modifier) => total + modifier - 1, 1),
+      );
+}
 export function propertyRent(state: PublicState, tileIndex: number): number {
   const tile = getTile(tileIndex);
   const property = getProperty(state, tileIndex);
+  const rule = economyRule(state.config);
+  const festival = state.festivalTiles.includes(tileIndex)
+    ? CHANCE_AMOUNTS.initialHostMultiplier
+    : 1;
   if (tile && isResortTile(tile)) {
     const count =
       property?.owner !== null && property?.owner !== undefined
         ? resortCount(state, property.owner)
         : 1;
-    return getResortRent(Math.min(3, Math.max(1, count)) as 1 | 2 | 3);
+    const rent = getResortRent(
+      Math.min(3, Math.max(1, count)) as 1 | 2 | 3,
+      rule,
+    );
+    return rules(state).resortFestivals
+      ? rent * rentMultiplier(state, [festival])
+      : rent;
   }
   if (!tile || !isCityTile(tile) || !property) return 0;
-  const rent = getTileBaseRent(tileIndex, property.level);
+  const rent = getTileBaseRent(tileIndex, property.level, rule);
   if (property.level === 5) return rent;
-  return rent * (rentBoost(state, tileIndex)?.multiplier ?? 1);
-}
-export type RentBoost = {
-  readonly multiplier: number;
-  readonly source: "championship" | "festival" | "country";
-};
-/**
- * The bonus multiplying a city's rent below the landmark: the hosted
- * championship, an initial festival or a complete country. Bonuses never
- * stack; the largest applies. Resorts and other spaces earn none.
- */
-export function rentBoost(
-  state: PublicState,
-  tileIndex: number,
-): RentBoost | null {
-  const tile = getTile(tileIndex);
-  const property = getProperty(state, tileIndex);
-  if (!tile || !isCityTile(tile) || !property) return null;
-  const boosts: RentBoost[] = [];
-  if (state.championshipHost?.tile === tileIndex)
-    boosts.push({
-      multiplier: state.championshipHost.multiplier,
-      source: "championship",
-    });
-  if (state.festivalTiles.includes(tileIndex))
-    boosts.push({
-      multiplier: CHANCE_AMOUNTS.initialHostMultiplier,
-      source: "festival",
-    });
-  if (
-    property.owner !== null &&
-    ownsCountry(state, property.owner, tile.country)
-  )
-    boosts.push({
-      multiplier: CHANCE_AMOUNTS.countryMultiplier,
-      source: "country",
-    });
-  return boosts.reduce<RentBoost | null>(
-    (best, boost) =>
-      best && best.multiplier >= boost.multiplier ? best : boost,
-    null,
-  );
-}
-/** Rent this space would charge at another build level, owner and bonuses unchanged. */
-export function propertyRentAt(
-  state: PublicState,
-  tile: number,
-  level: BuildLevel,
-): number {
-  return propertyRent(
-    {
-      ...state,
-      properties: state.properties.map((candidate) =>
-        candidate.tile === tile ? { ...candidate, level } : candidate,
-      ),
-    },
-    tile,
-  );
-}
-/** What a visitor pays to take an owned city, or null when it cannot be bought out. */
-export function buyoutPrice(
-  state: PublicState,
-  tileIndex: number,
-): number | null {
-  const property = getProperty(state, tileIndex);
-  if (
-    !property ||
-    property.owner === null ||
-    property.level >= 5 ||
-    getTile(tileIndex)?.kind !== "city"
-  )
-    return null;
-  return propertyInvestedValue(state, tileIndex) * ECONOMY.buyoutMultiplier;
+  const country =
+    property.owner !== null && ownsCountry(state, property.owner, tile.country)
+      ? CHANCE_AMOUNTS.countryMultiplier
+      : 1;
+  const host =
+    state.championshipHost?.tile === tileIndex
+      ? state.championshipHost.multiplier
+      : 1;
+  return rent * rentMultiplier(state, [country, host, festival]);
 }
 /** Projects a single purchase or upgrade through the same rent rules as live play. */
 export function previewPropertyRent(
@@ -207,7 +177,9 @@ export function previewPropertyRent(
   const property = getProperty(state, tile);
   if (!property) return 0;
   const hostChangesOwner =
-    property.owner !== seat && state.championshipHost?.tile === tile;
+    !rules(state).championshipPersists &&
+    property.owner !== seat &&
+    state.championshipHost?.tile === tile;
   return propertyRent(
     {
       ...state,
@@ -231,42 +203,70 @@ export function maxBuildLevel(
 ): BuildLevel {
   if (getTile(tileIndex)?.kind === "resort") return 0;
   const level = getProperty(state, tileIndex)?.level ?? 0;
-  if (!purchasing && level === 4) return 5;
+  if (!purchasing && level === 4) return rules(state).topLevel;
   if (state.config.hotelsDirectly === true) return 4;
+  // Reference rooms allow two houses before a first completed lap, then three.
+  const lapped = getPlayer(state, seat).laps > 0;
+  const houses = lapped ? 3 : rules(state).firstLapHouseCap;
   if (
     state.config.hotelPurchaseRule === "staged-hotels" &&
     (purchasing || level < 3)
   )
-    return 3;
-  return getPlayer(state, seat).laps > 0 ? 4 : 3;
-}
-/** World Tour destinations: the player's own or unowned properties, and Start.
- * Saves without the marker keep their original travel-anywhere rule. */
-export function worldTourTargets(state: PublicState, seat: Seat): number[] {
-  const position = getPlayer(state, seat).position;
-  return BOARD.filter((tile) => {
-    if (tile.index === position) return false;
-    if (state.config.worldTourRule !== "own-free-or-start") return true;
-    if (tile.kind === "start") return true;
-    const property = getProperty(state, tile.index);
-    return (
-      property !== undefined &&
-      (property.owner === null || property.owner === seat)
-    );
-  }).map((tile) => tile.index);
+    return houses;
+  return lapped ? 4 : houses;
 }
 export function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
-    (propertyInvestedValue(state, tile) *
-      (state.config.sellBackPercent ?? ECONOMY.legacySellBackPercent)) /
-      100,
+    (propertyInvestedValue(state, tile) * rules(state).sellBackPercent) / 100,
   );
 }
-function purchaseCost(tileIndex: number, level: BuildLevel): number {
+function purchaseCost(
+  state: PublicState,
+  tileIndex: number,
+  level: BuildLevel,
+): number {
   const tile = getTile(tileIndex);
   return tile && isCityTile(tile)
-    ? getTileInvestedValue(tileIndex, level)
+    ? getTileInvestedValue(tileIndex, level, economyRule(state.config))
     : ECONOMY.resortPrice;
+}
+/**
+ * What an opponent would pay to buy out this city at a level, or null when
+ * the level (reference Hotel, prototype Landmark) or a resort is protected.
+ */
+export function buyoutPriceAt(
+  state: PublicState,
+  tileIndex: number,
+  level: BuildLevel,
+): number | null {
+  const tile = getTile(tileIndex);
+  if (!tile || !isCityTile(tile) || level >= rules(state).protectedLevel)
+    return null;
+  return (
+    getTileInvestedValue(tileIndex, level, economyRule(state.config)) *
+    ECONOMY.buyoutMultiplier
+  );
+}
+/** Hosting again on the current host is free; moving the championship has a fee. */
+export function championshipCost(state: PublicState, tile: number): number {
+  return state.championshipHost?.tile === tile
+    ? 0
+    : rules(state).championshipFee;
+}
+/** The championship after hosting it on a tile: a prototype move restarts at ×2. */
+export function nextChampionship(
+  state: PublicState,
+  tile: number,
+): NonNullable<PublicState["championshipHost"]> {
+  const economy = rules(state);
+  const host = state.championshipHost;
+  return {
+    tile,
+    multiplier:
+      host && (host.tile === tile || economy.championshipPersists)
+        ? Math.min(economy.maxHostMultiplier, host.multiplier + 1)
+        : CHANCE_AMOUNTS.initialHostMultiplier,
+  };
 }
 /** The rent owed after choosing at most one protection; null pays it in full. */
 export function rentCardPayment(amount: number, card: KeepCard | null): number {
@@ -282,19 +282,21 @@ export function actionCost(state: PublicState, action: Action): number {
   switch (action.type) {
     case "Buy":
       return pending.kind === "buy"
-        ? purchaseCost(pending.tile, action.level)
+        ? purchaseCost(state, pending.tile, action.level)
         : 0;
     case "Build":
       return pending.kind === "build"
-        ? purchaseCost(pending.tile, action.level) -
+        ? purchaseCost(state, pending.tile, action.level) -
             propertyInvestedValue(state, pending.tile)
         : 0;
     case "Buyout":
       return pending.kind === "buyout" ? pending.price : 0;
     case "PayIsland":
-      return ECONOMY.islandReleaseFee;
+      return pending.kind === "island" ? pending.fee : 0;
     case "Travel":
-      return ECONOMY.worldTourFee;
+      return pending.kind === "travel" ? pending.fee : 0;
+    case "ChooseHost":
+      return pending.kind === "host" ? championshipCost(state, action.tile) : 0;
     default:
       return 0;
   }
@@ -340,7 +342,9 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
           ? 0
           : purchaseCap;
       for (let level = 0; level <= maxLevel; level++)
-        if (purchaseCost(pending.tile, level as BuildLevel) <= player.cash)
+        if (
+          purchaseCost(state, pending.tile, level as BuildLevel) <= player.cash
+        )
           actions.push({ type: "Buy", level: level as BuildLevel });
       return actions;
     }
@@ -375,10 +379,15 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
         })),
       ];
     case "host":
-      return pending.targets.map((tile) => ({
-        type: "ChooseHost" as const,
-        tile,
-      }));
+      return [
+        // A paid championship is optional; the prototype host is mandatory.
+        ...(rules(state).championshipFee > 0
+          ? [{ type: "Decline" as const }]
+          : []),
+        ...pending.targets
+          .filter((tile) => championshipCost(state, tile) <= player.cash)
+          .map((tile) => ({ type: "ChooseHost" as const, tile })),
+      ];
     case "card-target":
       return [
         ...(pending.card === "Land Swap" ? [{ type: "Decline" as const }] : []),
@@ -485,7 +494,7 @@ function animationBudget(events: readonly GameEvent[]): number {
   }, 0);
 }
 /** A player's own time for a decision, after the animations that open it. */
-export function decisionWindow(
+function decisionWindow(
   config: GameConfig,
   kind: PendingDecision["kind"],
 ): number {
@@ -554,8 +563,13 @@ function resolver(initial: GameState, context: EngineContext) {
       } as PendingDecision,
     });
   };
+  /** An ownership change clears a prototype host; a reference host stays put. */
   const clearHost = (tiles: readonly number[]) => {
-    if (state.championshipHost && tiles.includes(state.championshipHost.tile))
+    if (
+      !rules(state).championshipPersists &&
+      state.championshipHost &&
+      tiles.includes(state.championshipHost.tile)
+    )
       emit({ type: "ChampionshipChanged", host: null });
   };
   const checkWins = (): boolean => {
@@ -629,20 +643,35 @@ function resolver(initial: GameState, context: EngineContext) {
     else emit({ type: "MoneyTransferred", from, to, amount, reason });
     insolvency(from, to);
   };
+  /** Reference flights reach unowned properties, or own ones when none is free. */
+  const travelTargets = (player: PlayerState): number[] => {
+    const others = BOARD.filter((tile) => tile.index !== player.position).map(
+      (tile) => tile.index,
+    );
+    if (!rules(state).travelToFreeProperties) return others;
+    const owned = (owner: Seat | null) =>
+      others.filter(
+        (tile) =>
+          getProperty(state, tile) !== undefined &&
+          propertyOwner(state, tile) === owner,
+      );
+    const free = owned(null);
+    return free.length > 0 ? free : owned(player.seat);
+  };
   const startDecision = () => {
     const player = getPlayer(state, state.activeSeat);
     if (player.onIsland)
       open({
         kind: "island",
         seat: player.seat,
-        fee: ECONOMY.islandReleaseFee,
+        fee: rules(state).islandReleaseFee,
       });
     else if (player.travelPending)
       open({
         kind: "travel",
         seat: player.seat,
         fee: ECONOMY.worldTourFee,
-        targets: worldTourTargets(state, player.seat),
+        targets: travelTargets(player),
       });
     else open({ kind: "roll", seat: player.seat });
   };
@@ -737,7 +766,7 @@ function resolver(initial: GameState, context: EngineContext) {
     if (isEscapeRoll && !isDouble) {
       const islandTurns = player.islandTurns + 1;
       emit({ type: "IslandEscapeFailed", seat, islandTurns });
-      if (islandTurns >= ECONOMY.islandMaxFailedEscapes)
+      if (islandTurns >= rules(state).islandMaxFailedEscapes)
         emit({ type: "LeftIsland", seat, method: "released" });
       secrets({ extraRoll: false, turnEnded: true });
       prepend({ kind: "finish" });
@@ -760,6 +789,7 @@ function resolver(initial: GameState, context: EngineContext) {
       prepend({ kind: "landing", seat }, { kind: "finish" });
     }
   };
+  /** Own cities below the Landmark: hosts and Contractor targets. */
   const eligibleOwnCities = (seat: Seat) =>
     state.properties.filter(
       (property) =>
@@ -863,18 +893,22 @@ function resolver(initial: GameState, context: EngineContext) {
         break;
       }
       case "Land Swap": {
-        const own = eligibleOwnCities(seat).sort(
-          (a, b) => landPrice(a.tile) - landPrice(b.tile) || a.tile - b.tile,
-        )[0];
+        // Protected cities (Landmarks, reference Hotels) never change hands.
+        const swappable = (property: PropertyState) =>
+          getTile(property.tile)?.kind === "city" &&
+          property.level < rules(state).protectedLevel;
+        const price = (tile: number) => landPrice(state, tile);
+        const own = state.properties
+          .filter((property) => property.owner === seat && swappable(property))
+          .sort((a, b) => price(a.tile) - price(b.tile) || a.tile - b.tile)[0];
         if (!own) break;
         const targets = state.properties
           .filter(
             (property) =>
               property.owner !== null &&
               property.owner !== seat &&
-              property.level < 5 &&
-              getTile(property.tile)?.kind === "city" &&
-              landPrice(property.tile) <= landPrice(own.tile),
+              swappable(property) &&
+              price(property.tile) <= price(own.tile),
           )
           .map((property) => property.tile);
         if (targets.length)
@@ -897,7 +931,7 @@ function resolver(initial: GameState, context: EngineContext) {
           getPlayer(state, seat).laps > 0 ||
           state.config.hotelsDirectly === true
             ? 4
-            : 3;
+            : rules(state).firstLapHouseCap;
         const targets = eligibleOwnCities(seat)
           .filter((property) => property.level < cap)
           .map((property) => property.tile);
@@ -984,9 +1018,9 @@ function resolver(initial: GameState, context: EngineContext) {
         secrets({ extraRoll: false, turnEnded: true });
         break;
       case "championship": {
-        const targets = eligibleOwnCities(seat).map(
-          (property) => property.tile,
-        );
+        const targets = eligibleOwnCities(seat)
+          .map((property) => property.tile)
+          .filter((tile) => championshipCost(state, tile) <= player.cash);
         if (targets.length) open({ kind: "host", seat, targets });
         break;
       }
@@ -996,7 +1030,7 @@ function resolver(initial: GameState, context: EngineContext) {
           from: seat,
           to: null,
           amount: Math.max(
-            ECONOMY.minimumTax,
+            rules(state).minimumTax,
             Math.ceil(
               (player.properties.reduce(
                 (sum, index) => sum + propertyInvestedValue(state, index),
@@ -1038,14 +1072,19 @@ function resolver(initial: GameState, context: EngineContext) {
           payment(task.from, task.to, task.amount, "Rent", task.tile);
           break;
         case "buyout": {
-          const price = buyoutPrice(state, task.tile);
+          const property = getProperty(state, task.tile);
           if (
-            price !== null &&
             !getPlayer(state, task.seat).bankrupt &&
-            propertyOwner(state, task.tile) !== task.seat &&
-            getPlayer(state, task.seat).cash >= price
-          )
-            open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
+            property &&
+            property.owner !== null &&
+            property.owner !== task.seat &&
+            property.level < rules(state).protectedLevel &&
+            getTile(task.tile)?.kind === "city"
+          ) {
+            const price = buyoutPriceAt(state, task.tile, property.level);
+            if (price !== null && getPlayer(state, task.seat).cash >= price)
+              open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
+          }
           break;
         }
         case "wins":
@@ -1068,12 +1107,14 @@ function resolver(initial: GameState, context: EngineContext) {
         roll(seat);
         break;
       case "PayIsland":
-        payment(seat, null, ECONOMY.islandReleaseFee, "Island release");
+        if (pending.kind === "island")
+          payment(seat, null, pending.fee, "Island release");
         emit({ type: "LeftIsland", seat, method: "paid" });
         startDecision();
         break;
       case "Travel":
-        payment(seat, null, ECONOMY.worldTourFee, "World Tour");
+        if (pending.kind === "travel")
+          payment(seat, null, pending.fee, "World Tour");
         emit({ type: "TravelOptionChanged", seat, available: false });
         emit({ type: "TurnPhaseChanged", phase: "resolve" });
         secrets({ extraRoll: false, turnEnded: false });
@@ -1087,7 +1128,7 @@ function resolver(initial: GameState, context: EngineContext) {
             seat,
             tile: pending.tile,
             level: action.level,
-            amount: purchaseCost(pending.tile, action.level),
+            amount: purchaseCost(state, pending.tile, action.level),
           });
           prepend({ kind: "wins" });
         }
@@ -1095,7 +1136,7 @@ function resolver(initial: GameState, context: EngineContext) {
       case "Build":
         if (pending.kind === "build") {
           const amount =
-            purchaseCost(pending.tile, action.level) -
+            purchaseCost(state, pending.tile, action.level) -
             propertyInvestedValue(state, pending.tile);
           if (action.level === 5) clearHost([pending.tile]);
           emit({
@@ -1133,17 +1174,10 @@ function resolver(initial: GameState, context: EngineContext) {
         }
         break;
       case "ChooseHost": {
-        const multiplier =
-          state.championshipHost?.tile === action.tile
-            ? Math.min(
-                CHANCE_AMOUNTS.maxHostMultiplier,
-                state.championshipHost.multiplier + 1,
-              )
-            : CHANCE_AMOUNTS.initialHostMultiplier;
-        emit({
-          type: "ChampionshipChanged",
-          host: { tile: action.tile, multiplier },
-        });
+        const host = nextChampionship(state, action.tile);
+        const fee = championshipCost(state, action.tile);
+        if (fee > 0) payment(seat, null, fee, "Championship");
+        emit({ type: "ChampionshipChanged", host });
         break;
       }
       case "ChooseTarget":
@@ -1209,10 +1243,10 @@ function resolver(initial: GameState, context: EngineContext) {
   };
   return { act, startDecision, result: () => ({ state, events }) };
 }
-function landPrice(tileIndex: number): number {
+function landPrice(state: PublicState, tileIndex: number): number {
   const tile = getTile(tileIndex);
   return tile && isCityTile(tile)
-    ? getTileLandPrice(tileIndex)
+    ? getTileLandPrice(tileIndex, economyRule(state.config))
     : ECONOMY.resortPrice;
 }
 
@@ -1281,9 +1315,10 @@ function bestRentTarget(
 }
 function nextRentIncrease(state: PublicState, tileIndex: number): number {
   const property = getProperty(state, tileIndex);
+  const rule = economyRule(state.config);
   return getTile(tileIndex)?.kind === "city" && property && property.level < 4
-    ? getTileBaseRent(tileIndex, (property.level + 1) as BuildLevel) -
-        getTileBaseRent(tileIndex, property.level)
+    ? getTileBaseRent(tileIndex, (property.level + 1) as BuildLevel, rule) -
+        getTileBaseRent(tileIndex, property.level, rule)
     : 0;
 }
 function timeoutAction(state: PublicState): Action {
@@ -1299,11 +1334,19 @@ function timeoutAction(state: PublicState): Action {
     case "buyout":
     case "rent-card":
       return { type: "Decline" };
-    case "host":
-      return {
-        type: "ChooseHost",
-        tile: bestRentTarget(state, pending.targets),
-      };
+    case "host": {
+      // A paid championship is optional: renew your own host for free, never
+      // spend on a move by default.
+      if (rules(state).championshipFee === 0)
+        return {
+          type: "ChooseHost",
+          tile: bestRentTarget(state, pending.targets),
+        };
+      const current = state.championshipHost?.tile;
+      return current !== undefined && pending.targets.includes(current)
+        ? { type: "ChooseHost", tile: current }
+        : { type: "Decline" };
+    }
     case "card-target":
       return pending.card === "Land Swap"
         ? { type: "Decline" }
@@ -1416,8 +1459,7 @@ export function botAction(
     case "island":
       return (
         actions.find(
-          (action) =>
-            action.type === "PayIsland" && cash > ECONOMY.islandReleaseFee * 3,
+          (action) => action.type === "PayIsland" && cash > pending.fee * 3,
         ) ?? actions[0]
       );
     case "travel": {
@@ -1429,7 +1471,7 @@ export function botAction(
         .sort((a, b) => {
           const score = (tile: number) =>
             propertyOwner(state, tile) === null && getProperty(state, tile)
-              ? landPrice(tile) +
+              ? landPrice(state, tile) +
                 (getTile(tile)?.kind === "resort" ? ECONOMY.resortPrice : 0)
               : propertyOwner(state, tile) === seat
                 ? nextRentIncrease(state, tile)
@@ -1451,12 +1493,13 @@ export function botAction(
       const builds = actions.filter(
         (action) => action.type === "Buy" || action.type === "Build",
       );
+      const economy = rules(state);
       const reserve =
         difficulty === "easy"
           ? 0
           : difficulty === "hard"
-            ? Math.max(ECONOMY.minimumTax, Math.floor(cash / 4))
-            : ECONOMY.islandReleaseFee;
+            ? Math.max(economy.minimumTax, Math.floor(cash / 4))
+            : economy.islandReleaseFee;
       const affordable = builds.filter(
         (action) => cash - actionCost(state, action) >= reserve,
       );
@@ -1471,7 +1514,7 @@ export function botAction(
       return selected ?? { type: "Decline" };
     }
     case "buyout":
-      return cash - pending.price >= ECONOMY.islandReleaseFee &&
+      return cash - pending.price >= rules(state).islandReleaseFee &&
         (difficulty === "hard" || pending.price <= cash / 2)
         ? { type: "Buyout" }
         : { type: "Decline" };
@@ -1482,7 +1525,14 @@ export function botAction(
           ? "Guardian Angel"
           : "Coupon",
       };
-    case "host":
+    case "host": {
+      const best = bestRentTarget(state, pending.targets);
+      const fee = championshipCost(state, best);
+      // Free renewals always; a paid move only with a comfortable reserve.
+      return fee === 0 || cash - fee >= rules(state).islandReleaseFee * 2
+        ? { type: "ChooseHost", tile: best }
+        : timeoutAction(state);
+    }
     case "sell":
       return timeoutAction(state);
     case "card-target":
@@ -1530,11 +1580,11 @@ export function createGame(
   )
     throw new RangeError("Unsupported hotel purchase rule");
   if (
-    config.sellBackPercent !== undefined &&
-    config.sellBackPercent !== ECONOMY.sellBackPercent &&
-    config.sellBackPercent !== ECONOMY.legacySellBackPercent
+    config.economyRule !== undefined &&
+    !["reference", "prototype"].includes(config.economyRule)
   )
-    throw new RangeError("Unsupported sell-back percentage");
+    throw new RangeError("Unsupported economy rule");
+  const economy = ruleEconomy(config.economyRule ?? "reference");
   if (!Number.isFinite(context.now))
     throw new RangeError("Game time must be finite");
   if (
@@ -1582,7 +1632,10 @@ export function createGame(
   );
   const deck = shuffle(CHANCE_CARDS, order.state);
   const festivals = shuffle(
-    BOARD.filter(isCityTile).map((tile) => tile.index),
+    BOARD.filter(
+      (tile) =>
+        isCityTile(tile) || (economy.resortFestivals && isResortTile(tile)),
+    ).map((tile) => tile.index),
     deck.state,
   );
   const publicState: PublicState = {
@@ -1590,7 +1643,7 @@ export function createGame(
     config: {
       ...config,
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
-      sellBackPercent: config.sellBackPercent ?? ECONOMY.sellBackPercent,
+      economyRule: config.economyRule ?? "reference",
     },
     players,
     properties: BOARD.filter(

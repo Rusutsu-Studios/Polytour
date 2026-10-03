@@ -13,14 +13,16 @@ export {
   getTileBuildCost,
   getTileInvestedValue,
   getTileLandPrice,
+  REFERENCE_CITY_ECONOMY,
 } from "./city-economy.js";
 export {
   BUILD_LEVELS,
   ECONOMY,
   getResortRent,
-  RESORT_RENTS,
+  RULE_ECONOMY,
   roundCharge,
   roundPayout,
+  ruleEconomy,
 } from "./economy.js";
 export { BOT_TIMING, CHANCE_AMOUNTS, DECISION_TIMING } from "./timing.js";
 export type {
@@ -30,6 +32,7 @@ export type {
   CityTile,
   CountryConfig,
   CountryId,
+  EconomyRule,
   ResortId,
   ResortTile,
   Tile,
