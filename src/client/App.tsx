@@ -1753,6 +1753,7 @@ function App() {
     economyRule: room.lobby?.economyRule ?? "reference",
     hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
     sellBackPercent: room.lobby?.sellBackPercent ?? 100,
+    worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
   };
   const host = credentials?.seat === room.lobby?.hostSeat;
   const seated =

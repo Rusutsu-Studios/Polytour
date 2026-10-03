@@ -9,10 +9,19 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Changed
+
+- World Tour can fly to your own cities and resorts as well as unowned ones in
+  rooms created from now on (rules version 6). Rooms already created keep their
+  destinations.
+
 ### Fixed
 
 - Invitation links ask only for a nickname and join the invited room, with
   retryable errors, saved-seat recovery and a return to the start screen (#54).
+- World Tour and long card moves walk the pawn along the board route, past Start
+  when they cross it, instead of jumping across the board. The destination picker
+  counts the Start salary a flight collects (#29).
 
 ## [0.1.0] - 2026-10-03
 

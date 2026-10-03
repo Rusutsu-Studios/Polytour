@@ -23,6 +23,7 @@ import {
   rentBoost,
   resortCount,
   type Seat,
+  worldTourRule,
 } from "../../shared/engine/index.js";
 import { useDirector } from "../director/director.js";
 import { translate as t, useLocale } from "../i18n.js";
@@ -530,14 +531,20 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
               `Host the Championship for free in an eligible city to multiply its rent up to ×${rules.maxHostMultiplier}.`,
             );
       case "world-tour":
-        return t(
-          rules.travelToFreeProperties
-            ? `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre, ou vers vos propriétés si aucune n’est libre. Vous pouvez aussi lancer les dés gratuitement.`
-            : `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une case libre, une de vos propriétés ou le départ, ou lancez les dés gratuitement.`,
-          rules.travelToFreeProperties
-            ? `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property, or one of your properties when none is free. You may also roll for free.`
-            : `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned space, one of your properties or Start, or roll for free.`,
-        );
+        if (!rules.travelToFreeProperties)
+          return t(
+            `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une case libre, une de vos propriétés ou le départ, ou lancez les dés gratuitement.`,
+            `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned space, one of your properties or Start, or roll for free.`,
+          );
+        return worldTourRule(state.config) === "free-and-own"
+          ? t(
+              `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre ou l’une des vôtres. Vous pouvez aussi lancer les dés gratuitement.`,
+              `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property or one of your own. You may also roll for free.`,
+            )
+          : t(
+              `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre, ou vers vos propriétés si aucune n’est libre. Vous pouvez aussi lancer les dés gratuitement.`,
+              `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property, or one of your properties when none is free. You may also roll for free.`,
+            );
       case "chance":
         return t(
           "Piochez une carte. Fortune, voyage ou surprise au programme.",

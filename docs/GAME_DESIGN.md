@@ -7,7 +7,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 5, `economyRule: "reference"`) follow the reference
+New rooms (rules version 6, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -158,7 +158,7 @@ is legal only when its full cost leaves the buyer with cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
 The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations; the server only
-creates version-5 rooms and cannot accept an internal rule marker through room
+creates version-6 rooms and cannot accept an internal rule marker through room
 settings. A stale pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
@@ -210,8 +210,9 @@ it to the bank.
 - **World Tour:** landing here **ends the turn immediately**, forfeiting any pending
   doubles roll, and gives that player a travel option for their next turn. At its
   start they may pay 50,000 (legal only with enough cash) to travel clockwise to an
-  unowned city or resort, or to one of their own properties when none is free
-  (prototype: any other tile), resolving the destination normally. A destination
+  unowned city or resort or to one of their own properties (rules versions 4–5:
+  their own only when none is free; prototype: any other tile), resolving the
+  destination normally. A destination
   behind World Tour is reached by continuing round the board, so that flight
   passes Start and pays the salary. Otherwise, or on timeout, they roll normally.
   The option expires after that choice. A World Tour move neither counts as a dice

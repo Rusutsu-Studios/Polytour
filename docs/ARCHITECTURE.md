@@ -21,8 +21,10 @@ either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
 an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
 for the write-quota incident and measured regressions.
 State version 1 is retained, with the explicit migration ladder from PR #19.
-New rooms freeze rules version 5: country-grouped board, reference economy and
-staged hotels. Existing version-2/3 rooms retain the original board, prototype
+New rooms freeze rules version 6: country-grouped board, reference economy,
+staged hotels and World Tour flights to free or own properties. Version-5 rooms
+keep flights to own properties only when none is free.
+Existing version-2/3 rooms retain the original board, prototype
 prices, travel and sale rules; version 2 also keeps its original hotel progression.
 The competing unshipped version-4 definitions are not silently guessed. Unknown
 or contradictory saved markers are rejected before a room can change rules.
@@ -247,8 +249,10 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 5 with country-grouped tiles, reference economy, staged hotels and
-  full nominal sale refunds. A version-2/3 save without the newer selectors uses
+  use version 6 with country-grouped tiles, reference economy, staged hotels, full
+  nominal sale refunds and `worldTourRule: "free-and-own"`. A version-4/5 save
+  without that selector keeps World Tour on free properties first. A version-2/3
+  save without the newer selectors uses
   its original legacy board and prototype economy. Version-2 lobbies start with
   lap-only hotels, while version-3 lobbies retain staged hotels; both keep their
   original 50% refunds and unrestricted travel. Board selection reaches the engine,

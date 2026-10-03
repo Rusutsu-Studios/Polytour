@@ -1,4 +1,9 @@
-import type { BoardRule, BuildLevel, EconomyRule } from "../board/index.js";
+import type {
+  BoardRule,
+  BuildLevel,
+  EconomyRule,
+  WorldTourRule,
+} from "../board/index.js";
 import {
   BOARD_SIZE,
   BOT_TIMING,
@@ -55,6 +60,7 @@ export const DEFAULT_GAME_CONFIG = {
   hotelPurchaseRule: "staged-hotels",
   economyRule: "reference",
   boardRule: "country",
+  worldTourRule: "free-and-own",
   sellBackPercent: 100,
   extraRollOnDouble: true,
   botCanBuild: true,
@@ -67,6 +73,12 @@ export function economyRule(config: GameConfig): EconomyRule {
 /** Missing markers belong to matches made on the original production board. */
 export function boardRule(config: Pick<GameConfig, "boardRule">): BoardRule {
   return config.boardRule ?? "legacy";
+}
+/** Saves made before rules version 6 reach own properties only when none is free. */
+export function worldTourRule(
+  config: Pick<GameConfig, "worldTourRule">,
+): WorldTourRule {
+  return config.worldTourRule ?? "free-first";
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
@@ -378,12 +390,13 @@ export function worldTourTargets(state: PublicState, seat: Seat): number[] {
     .filter((tile) => tile.index !== player.position)
     .map((tile) => tile.index);
   if (!rules(state).travelToFreeProperties) return others;
-  const owned = (owner: Seat | null) =>
+  const owned = (...owners: (Seat | null)[]) =>
     others.filter(
       (tile) =>
         getProperty(state, tile) !== undefined &&
-        propertyOwner(state, tile) === owner,
+        owners.includes(propertyOwner(state, tile)),
     );
+  if (worldTourRule(state.config) === "free-and-own") return owned(null, seat);
   const free = owned(null);
   return free.length > 0 ? free : owned(seat);
 }
@@ -773,7 +786,7 @@ function resolver(initial: GameState, context: EngineContext) {
     else emit({ type: "MoneyTransferred", from, to, amount, reason });
     insolvency(from, to);
   };
-  /** Reference flights reach unowned properties, or own ones when none is free. */
+  /** Reference flights reach unowned and own properties; see WorldTourRule. */
   const travelTargets = (player: PlayerState): number[] => {
     return worldTourTargets(state, player.seat);
   };
@@ -1726,6 +1739,11 @@ export function createGame(
   )
     throw new RangeError("Unsupported board rule");
   if (
+    config.worldTourRule !== undefined &&
+    !["free-and-own", "free-first"].includes(config.worldTourRule)
+  )
+    throw new RangeError("Unsupported World Tour rule");
+  if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
     config.sellBackPercent !== 100
@@ -1795,6 +1813,7 @@ export function createGame(
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
       economyRule: config.economyRule ?? "reference",
       boardRule: config.boardRule ?? "country",
+      worldTourRule: config.worldTourRule ?? "free-and-own",
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,
