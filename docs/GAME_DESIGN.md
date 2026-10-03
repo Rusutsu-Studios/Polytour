@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 5, `economyRule: "reference"`) follow the reference
+New rooms (rules version 6, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -163,7 +163,7 @@ is legal only when its full cost leaves the buyer with cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
 The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations; the server only
-creates version-5 rooms and cannot accept an internal rule marker through room
+creates version-6 rooms and cannot accept an internal rule marker through room
 settings. A stale pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
@@ -215,10 +215,13 @@ it to the bank.
 - **World Tour:** landing here **ends the turn immediately**, forfeiting any pending
   doubles roll, and gives that player a travel option for their next turn. At its
   start they may pay 50,000 (legal only with enough cash) to travel clockwise to an
-  unowned city or resort, or to one of their own properties when none is free
-  (prototype: any other tile), resolving the destination normally; otherwise, or on
-  timeout, they roll normally. The option expires after that choice. A World Tour
-  move neither counts as a dice roll nor creates a doubles bonus.
+  unowned city or resort or to one of their own properties (rules versions 4–5:
+  their own only when none is free; prototype: any other tile), resolving the
+  destination normally. A destination
+  behind World Tour is reached by continuing round the board, so that flight
+  passes Start and pays the salary. Otherwise, or on timeout, they roll normally.
+  The option expires after that choice. A World Tour move neither counts as a dice
+  roll nor creates a doubles bonus.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
@@ -350,10 +353,10 @@ properties to *block* a monopoly, which is where the tension comes from.
   It cannot grant a doubles roll. Grand Tour, Jet Set, and Stadium Call move
   **clockwise** along the board, so the lap rule applies: Grand Tour always pays
   salary once and counts a lap, and Stadium Call drawn on tile 19 goes all the way
-  round and does too. (The client may animate a long card move as a teleport; the
-  rule still follows the clockwise path.) Detour moves counter-clockwise and never
-  pays Start, even when it lands on Start. Jet Set ends the turn on World Tour, and
-  Stranded sends the pawn to Island; both use those tiles' rules.
+  round and does too. (The client walks the pawn along that clockwise path, faster
+  on a long move.) Detour moves counter-clockwise and never pays Start, even when
+  it lands on Start. Jet Set ends the turn on World Tour, and Stranded sends the
+  pawn to Island; both use those tiles' rules.
 - A card with no legal target (or no legal effect) does nothing and is discarded.
 - Guardian Angel is offered after a rent amount is known and before it is paid; it
   reduces that rent to zero. Coupon is offered at the same time and halves the rent,

@@ -38,6 +38,7 @@ import {
   rentCardPayment,
   resortCount,
   toPublic,
+  travelSalary,
   worldTourTargets,
 } from "./index.js";
 
@@ -426,11 +427,75 @@ describe("dice, Island, laps and World Tour", () => {
     const finished = act(travelled, { type: "Decline" }).state;
     expect(finished.activeSeat).not.toBe(seat);
   });
-  it("new reference World Tour reaches free properties first, then only the traveller's own", () => {
+  it("World Tour to a space behind it walks on round the board and collects salary at Start", () => {
+    const state = newGame();
+    const seat = state.activeSeat;
+    const turn = {
+      ...withActive(setPlayer(state, seat, { position: 24 }), seat),
+      pending: {
+        kind: "travel" as const,
+        seat,
+        fee: 50_000,
+        deadline: 100,
+        targets: [0, 23, 25],
+      },
+    };
+    expect(travelSalary(toPublic(turn), seat, 23)).toBe(400_000);
+    expect(travelSalary(toPublic(turn), seat, 0)).toBe(400_000);
+    expect(travelSalary(toPublic(turn), seat, 25)).toBe(0);
+    // Tile 23 is one space behind World Tour: the flight takes 31 steps.
+    const behind = act(turn, { type: "Travel", tile: 23 });
+    expect(behind.events).toContainEqual({
+      type: "PlayerMoved",
+      seat,
+      from: 24,
+      position: 23,
+      steps: 31,
+      laps: 1,
+    });
+    expect(
+      behind.events.filter((event) => event.type === "SalaryPaid"),
+    ).toEqual([{ type: "SalaryPaid", seat, amount: 400_000, cash: 2_350_000 }]);
+    expect(getPlayer(behind.state, seat)).toMatchObject({
+      position: 23,
+      laps: 1,
+      cash: 2_350_000,
+    });
+    // The clock waits for the fee, a walk no longer than the longest dice
+    // walk, and the salary.
+    expect(behind.state.pending).toMatchObject({
+      kind: "buy",
+      deadline:
+        1 +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.walkAnimation +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.choice,
+    });
+    const ahead = act(turn, { type: "Travel", tile: 25 });
+    expect(
+      ahead.events.filter((event) => event.type === "SalaryPaid"),
+    ).toHaveLength(0);
+    expect(getPlayer(ahead.state, seat)).toMatchObject({
+      position: 25,
+      laps: 0,
+      cash: 1_950_000,
+    });
+    expect(ahead.state.pending).toMatchObject({
+      kind: "buy",
+      deadline:
+        1 +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.stepAnimation +
+        DECISION_TIMING.choice,
+    });
+  });
+  it("a version-5 reference World Tour reaches free properties first, then only the traveller's own", () => {
     let state = newGame(4, {
       ...CONFIG,
       economyRule: "reference",
       boardRule: "country",
+      worldTourRule: "free-first",
     });
     const seat = state.activeSeat;
     const rival = other(state);
@@ -489,6 +554,21 @@ describe("dice, Island, laps and World Tour", () => {
     expect(
       worldTourTargets({ ...toPublic(next), config: legacyConfig }, seat),
     ).toHaveLength(31);
+    // A version-5 save carries no World Tour marker and keeps this rule; a
+    // version-6 room adds the traveller's own property (tile 1) to the list.
+    const { worldTourRule: _tour, ...version5 } = next.config;
+    expect(
+      worldTourTargets({ ...toPublic(next), config: version5 }, seat),
+    ).toEqual(targets);
+    expect(
+      worldTourTargets(
+        {
+          ...toPublic(next),
+          config: { ...next.config, worldTourRule: "free-and-own" },
+        },
+        seat,
+      ),
+    ).toEqual([1, ...targets]);
   });
 });
 describe("forced sales and bankruptcy", () => {
@@ -1665,41 +1745,55 @@ describe("reference economy on the original board", () => {
     const paid = act(waiting, { type: "PayIsland" }).state;
     expect(getPlayer(paid, next).cash).toBe(2_000_000 - 200_000);
   });
-  it("flies World Tour only to free properties, or to own ones when none is free", () => {
-    const config = { ...REFERENCE, lineMonopoly: false, tripleMonopoly: false };
-    const state = reference(4, config);
-    const next = nextSeat(state);
-    const rival = state.turnOrder.find(
-      (seat) => seat !== state.activeSeat && seat !== next,
-    );
-    if (rival === undefined) throw new Error("Expected a third seat");
-    const traveller = (from: GameState) =>
-      land(setPlayer(from, next, { position: 24, travelPending: true }), 0)
-        .state;
-    const tiles = state.properties.map((property) => property.tile);
-    const some = traveller(grant(grant(state, 1, rival), 2, next));
-    expect(some.pending).toMatchObject({
-      kind: "travel",
-      seat: next,
-      fee: 50_000,
-      targets: tiles.filter((tile) => tile !== 1 && tile !== 2),
-    });
-    let full = state;
-    for (const tile of tiles)
-      full = grant(
-        full,
-        tile,
-        [2, 5, 12].includes(tile)
-          ? next
-          : tile === 21
-            ? state.activeSeat
-            : rival,
+  it.each([
+    // Rules version 6: free properties and the traveller's own.
+    ["free-and-own", (tile: number) => tile !== 1],
+    // Rules versions 4–5: the traveller's own only when none is free.
+    ["free-first", (tile: number) => tile !== 1 && tile !== 2],
+  ] as const)(
+    "flies a %s World Tour only to the properties that rule allows",
+    (worldTourRule, reachable) => {
+      const config: GameConfig = {
+        ...REFERENCE,
+        worldTourRule,
+        lineMonopoly: false,
+        tripleMonopoly: false,
+      };
+      const state = reference(4, config);
+      const next = nextSeat(state);
+      const rival = state.turnOrder.find(
+        (seat) => seat !== state.activeSeat && seat !== next,
       );
-    expect(traveller(full).pending).toMatchObject({
-      kind: "travel",
-      targets: [2, 5, 12],
-    });
-  });
+      if (rival === undefined) throw new Error("Expected a third seat");
+      const traveller = (from: GameState) =>
+        land(setPlayer(from, next, { position: 24, travelPending: true }), 0)
+          .state;
+      const tiles = state.properties.map((property) => property.tile);
+      // A rival owns tile 1 and the traveller owns tile 2.
+      const some = traveller(grant(grant(state, 1, rival), 2, next));
+      expect(some.pending).toMatchObject({
+        kind: "travel",
+        seat: next,
+        fee: 50_000,
+        targets: tiles.filter(reachable),
+      });
+      let full = state;
+      for (const tile of tiles)
+        full = grant(
+          full,
+          tile,
+          [2, 5, 12].includes(tile)
+            ? next
+            : tile === 21
+              ? state.activeSeat
+              : rival,
+        );
+      expect(traveller(full).pending).toMatchObject({
+        kind: "travel",
+        targets: [2, 5, 12],
+      });
+    },
+  );
   it("taxes 10 % of property value with no minimum", () => {
     const state = reference();
     const seat = state.activeSeat;

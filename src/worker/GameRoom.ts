@@ -84,17 +84,28 @@ const SEATS = [0, 1, 2, 3] as const;
 const MAX_WAITING = 6;
 /** A lobby, or a lobby the leader brought back, expires after two hours. */
 const LOBBY_LIFETIME = 7_200_000;
-/** 2–3 are original production rooms; 5 combines the board and reference rules. */
-const RULES_VERSION = 5;
+/**
+ * 2–3 are original production rooms; 5 combines the board and reference rules;
+ * 6 lets World Tour reach the traveller's own properties as well as free ones.
+ */
+const RULES_VERSION = 6;
 function frozenRules(version: number | null) {
-  if (version !== 2 && version !== 3 && version !== 4 && version !== 5)
+  if (
+    version !== 2 &&
+    version !== 3 &&
+    version !== 4 &&
+    version !== 5 &&
+    version !== 6
+  )
     throw new Error("Unsupported saved rules version");
   return {
-    boardRule: version === 5 ? ("country" as const) : ("legacy" as const),
+    boardRule: version >= 5 ? ("country" as const) : ("legacy" as const),
     economyRule: version >= 4 ? ("reference" as const) : ("prototype" as const),
     hotelPurchaseRule:
       version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
+    worldTourRule:
+      version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
   };
 }
 
@@ -265,7 +276,12 @@ export class GameRoom extends DurableObject<Env> {
     const prototypeEconomy = economy === undefined || economy === "prototype";
     const board = state.config.boardRule;
     const sale = state.config.sellBackPercent;
+    const tour = state.config.worldTourRule;
     if (
+      // Saves made before rules version 6 carry no World Tour marker.
+      (rulesVersion !== null &&
+        tour !== frozen.worldTourRule &&
+        (rulesVersion >= 6 || tour !== undefined)) ||
       (rulesVersion !== null &&
         rulesVersion >= 4 &&
         (hotelRule !== frozen.hotelPurchaseRule ||

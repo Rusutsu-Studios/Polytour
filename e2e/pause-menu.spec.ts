@@ -194,6 +194,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
             economyRule: DEFAULT_GAME_CONFIG.economyRule,
             hotelPurchaseRule: DEFAULT_GAME_CONFIG.hotelPurchaseRule,
             sellBackPercent: DEFAULT_GAME_CONFIG.sellBackPercent,
+            worldTourRule: DEFAULT_GAME_CONFIG.worldTourRule,
             seats: snapshot.players.map((player) => ({
               seat: player.seat,
               name: player.name,

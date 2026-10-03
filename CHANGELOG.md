@@ -31,6 +31,11 @@ has been published, and it does not reconstruct earlier development history.
   rules. Video settings retain the High/Low graphics control.
 - Removed manual animation finish/skip and speed controls, preserving reduced
   motion, automatic catch-up and reconnect recovery.
+- World Tour can fly to your own cities and resorts as well as unowned ones in
+  rooms created from now on (rules version 6). Rooms already created keep their
+  destinations.
+- Road markings around the board and in the town are softer, so they no longer
+  compete with the spaces' names and prices.
 - Board lots are printed in two parts: the city ground, with its buildings and
   name on a pavement of its country's own style and color, and a concrete price
   strip showing only the price or the owner's rent. Beaches are one piece of
@@ -52,6 +57,9 @@ has been published, and it does not reconstruct earlier development history.
   so public setup and observed cards cannot reveal the next draw (#46).
 - Shared room-creation limits bound anonymous storage allocation without IP keys;
   health probes and unknown-room requests no longer create room tables (#46).
+- World Tour and long card moves walk the pawn along the board route, past Start
+  when they cross it, instead of jumping across the board. The destination picker
+  counts the Start salary a flight collects (#29).
 
 ## [0.1.0] - 2026-10-03
 

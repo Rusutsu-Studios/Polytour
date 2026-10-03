@@ -1798,6 +1798,7 @@ function App() {
     economyRule: room.lobby?.economyRule ?? "reference",
     hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
     sellBackPercent: room.lobby?.sellBackPercent ?? 100,
+    worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;

@@ -9,6 +9,8 @@ export const DECISION_TIMING = {
   sell: 30_000,
   diceAnimation: 1_700,
   stepAnimation: 300,
+  /** The longest walk (twelve hops): longer moves hop faster to fit it. */
+  walkAnimation: 3_600,
   jumpAnimation: 900,
   cardAnimation: 3_200,
   moneyAnimation: 650,

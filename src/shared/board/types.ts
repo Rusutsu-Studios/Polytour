@@ -11,6 +11,13 @@ export type BoardRule = "country" | "legacy";
  * without a marker) keeps the original Polytour economy and its Landmark.
  */
 export type EconomyRule = "reference" | "prototype";
+/**
+ * Frozen World Tour destinations of a reference match. "free-and-own" (rules
+ * version 6) reaches unowned properties and the traveller's own; "free-first"
+ * (versions 4–5, and saves without a marker) reaches the traveller's own only
+ * when none is free. Prototype matches fly to any other tile either way.
+ */
+export type WorldTourRule = "free-and-own" | "free-first";
 export type ResortId = 1 | 2 | 3 | 4;
 
 export type CityTile = {

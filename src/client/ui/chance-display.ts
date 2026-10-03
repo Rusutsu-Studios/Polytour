@@ -9,6 +9,7 @@ import {
   type GameConfig,
   type GameEvent,
   type PublicState,
+  worldTourRule,
 } from "../../shared/engine/index.js";
 import { translate as t } from "../i18n.js";
 import { money } from "./board-display.js";
@@ -95,10 +96,15 @@ export function describeChanceCardDetails(
           `Move clockwise: passing Start pays ${money(config.startSalary)} and counts a lap. On your next turn, a flight costs ${money(ECONOMY.worldTourFee)}; you may also roll normally.`,
         ),
         rules.travelToFreeProperties
-          ? t(
-              "Le vol vise une propriété libre. S’il n’en reste aucune, choisissez une de vos propriétés.",
-              "Fly to an unowned property. If none remain, choose one of your own properties.",
-            )
+          ? worldTourRule(config) === "free-and-own"
+            ? t(
+                "Le vol vise une propriété libre ou l’une des vôtres.",
+                "Fly to an unowned property or one of your own.",
+              )
+            : t(
+                "Le vol vise une propriété libre. S’il n’en reste aucune, choisissez une de vos propriétés.",
+                "Fly to an unowned property. If none remain, choose one of your own properties.",
+              )
           : t(
               "Le vol peut viser toute autre case du plateau.",
               "Fly to any other space on the board.",

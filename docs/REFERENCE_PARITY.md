@@ -210,6 +210,14 @@ houses. Monopolies still decide most matches. Bankruptcies are rarer (7.7 %
 against 15 %) because sales refund the full investment. The last player in turn
 order wins 19.3 % of matches instead of 15.3 %.
 
+### World Tour to own properties — rules version 6, 3 October 2026
+
+At the user's request, a World Tour flight can always reach the player's own
+cities and resorts as well as unowned ones, instead of their own only when none
+is free. This deliberately departs from the reference rule above. New rooms freeze
+`rulesVersion: 6` with `worldTourRule: "free-and-own"`; version-4/5 rooms keep
+`"free-first"`, and prototype rooms still fly to any other tile.
+
 ## Capture from the running reference before adding an exact preset
 
 | Area | Evidence needed | Current status |
