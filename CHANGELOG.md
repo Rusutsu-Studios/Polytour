@@ -9,6 +9,12 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+### Fixed
+
+- The room lobby board fills its preview instead of shrinking into a short canvas.
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
