@@ -1,19 +1,15 @@
 import { useLocale } from "../i18n.js";
 import "./DiceExplanation.css";
 
-/** Keep the server dice explanation identical in settings and during a match. */
+/** One dice explanation in the help shared by the welcome screen and matches. */
 export default function DiceExplanation() {
   const { t } = useLocale();
   return (
     <>
       <p>
         {t(
-          "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six. Aucun achat ne modifie les résultats.",
-          "On every roll, the server draws fresh random bytes with Cloudflare’s Web Crypto API. Values that would favor some faces are discarded, giving each face a 1 in 6 chance. Purchases cannot alter the results.",
-        )}{" "}
-        {t(
-          "Les loyers et effets sont encore en cours d’équilibrage.",
-          "Rents and card effects are still being balanced.",
+          "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six.",
+          "On every roll, the server draws fresh random bytes with Cloudflare’s Web Crypto API. Values that would favor some faces are discarded, giving each face a 1 in 6 chance.",
         )}
       </p>
       <p>

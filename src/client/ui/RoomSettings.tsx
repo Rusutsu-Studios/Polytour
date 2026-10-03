@@ -3,7 +3,6 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import { money } from "./board-display.js";
-import DiceExplanation from "./DiceExplanation.js";
 import "./RoomSettings.css";
 
 export type RoomSettingsProps = {
@@ -337,23 +336,17 @@ export function RoomSettings({
           ))}
         </div>
       </fieldset>
-      <details className="room-settings-fairness">
-        <summary>{t("Dés et économie", "Dice and economy")}</summary>
-        {config.randomnessMode === "drand" ? (
+      {config.randomnessMode === "drand" && (
+        <details className="room-settings-fairness">
+          <summary>{t("Source des dés", "Dice source")}</summary>
           <p>
             {t(
               "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
               "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
-            )}{" "}
-            {t(
-              "Les loyers et effets sont encore en cours d’équilibrage.",
-              "Rents and card effects are still being balanced.",
             )}
           </p>
-        ) : (
-          <DiceExplanation />
-        )}
-      </details>
+        </details>
+      )}
       {save && (
         <button
           type="button"

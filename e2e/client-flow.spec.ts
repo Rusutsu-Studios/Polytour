@@ -20,14 +20,19 @@ async function inspectSpace(page: Page, index: number) {
   throw new Error(`The inspection card never reached space ${index}`);
 }
 
-async function expectSecureDiceExplanation(panel: Locator) {
-  await expect(panel).toContainText(
-    "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six. Aucun achat ne modifie les résultats.",
+async function expectDiceHelp(panel: Locator) {
+  await expect(
+    panel.getByRole("heading", { name: "Comment jouer", exact: true }),
+  ).toBeVisible();
+  const dice = panel.locator(".help-dice");
+  await expect(dice).toBeVisible();
+  await expect(dice).toContainText(
+    "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six.",
   );
-  await expect(panel).toContainText(
-    "Les loyers et effets sont encore en cours d’équilibrage.",
+  await expect(panel).not.toContainText(
+    /Aucun achat|bonus payant|équilibrage|loyers à ajuster/,
   );
-  const documentation = panel.getByRole("link", {
+  const documentation = dice.getByRole("link", {
     name: "Documentation Web Crypto de Cloudflare (nouvel onglet)",
     exact: true,
   });
@@ -90,6 +95,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Jouer avec 3 bots" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Comment jouer", exact: true })
+    .click();
+  await expectDiceHelp(page.locator(".help-dialog"));
+  await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
+  await page.getByRole("button", { name: "C’est parti" }).click();
   await page.getByLabel("Votre nom de joueur").fill("Raimundo");
   await page.locator(".settings-trigger").click();
   await expect(
@@ -128,11 +139,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.locator(".settings-dialog .room-settings"),
   ).not.toContainText("drand");
-  const settingsFairness = page.locator(
-    ".settings-dialog .room-settings-fairness",
-  );
-  await settingsFairness.locator("summary").click();
-  await expectSecureDiceExplanation(settingsFairness);
+  await expect(
+    page.locator(".settings-dialog .room-settings-fairness"),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".settings-dialog .room-settings"),
+  ).not.toContainText("Web Crypto");
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
@@ -149,7 +161,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page
     .getByRole("button", { name: "À propos des dés", exact: true })
     .click();
-  await expectSecureDiceExplanation(page.locator(".proof-panel"));
+  await expect(page.locator(".proof-panel")).not.toContainText("Web Crypto");
+  await expect(
+    page.locator('.proof-panel a[href*="developers.cloudflare.com"]'),
+  ).toHaveCount(0);
   await expect(page.locator(".proof-panel")).not.toContainText("drand");
   await expect(
     page.getByRole("button", { name: "Télécharger la preuve" }),
@@ -659,7 +674,8 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   ).toBeVisible();
   await minimizeOwnDecision(page);
   await page.getByRole("button", { name: "Comment jouer" }).click();
-  await expect(page.locator("dialog")).toBeVisible();
+  await expectDiceHelp(page.locator(".help-dialog"));
+  await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
   await page.getByRole("button", { name: "C’est parti" }).click();
   await expect(page.locator("dialog")).not.toBeVisible();
   expect(errors).toEqual([]);
