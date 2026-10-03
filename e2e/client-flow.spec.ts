@@ -57,10 +57,25 @@ async function expectDiceHelp(panel: Locator) {
 }
 
 // Play opens a lobby with three bots; the room starts once its leader says so.
-async function playWithBots(page: Page) {
+// The full settings live in that lobby; the home screen keeps quick sliders.
+async function openLobby(page: Page) {
   await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".lobby-seats")).toContainText("Atlas");
+}
+async function playWithBots(page: Page) {
+  await openLobby(page);
   await page.getByRole("button", { name: "Démarrer la partie" }).click();
+}
+/** Saves the leader's settings draft for the room, then closes the sheet. */
+async function saveSettings(page: Page) {
+  await page.getByRole("button", { name: "Enregistrer les réglages" }).click();
+  await expect(page.locator(".room-settings-save")).toHaveText(
+    "Réglages enregistrés",
+  );
+  await page
+    .locator(".settings-dialog-footer")
+    .getByRole("button", { name: "Fermer les réglages" })
+    .click();
 }
 
 async function minimizeOwnDecision(page: Page) {
@@ -123,6 +138,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
   await page.getByRole("button", { name: "C’est parti" }).click();
   await page.getByLabel("Votre nom de joueur").fill("Raimundo");
+  await openLobby(page);
   await page.locator(".settings-trigger").click();
   await expect(
     page
@@ -166,8 +182,8 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.locator(".settings-dialog .room-settings"),
   ).not.toContainText("Web Crypto");
-  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await playWithBots(page);
+  await saveSettings(page);
+  await page.getByRole("button", { name: "Démarrer la partie" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
@@ -806,6 +822,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
+  await openLobby(page);
   await page.locator(".settings-trigger").click();
   // No intermediate blur or render wait: switching from a slider to the exact
   // field must preserve the entered amount, even while a draft sync is pending.
@@ -826,8 +843,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     .getByRole("group", { name: "Durée de partie" })
     .getByRole("radio", { name: "20 min", exact: true })
     .check();
-  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await page.getByRole("button", { name: "Jouer", exact: true }).click();
+  await saveSettings(page);
   await expect(page.locator(".lobby-seats")).toBeVisible();
   const code = await page.locator(".room-code-block strong").innerText();
   const friend = await browser.newContext({
@@ -987,6 +1003,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await page.clock.install();
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Camille");
+  await openLobby(page);
   await page.locator(".settings-trigger").click();
   await page
     .getByRole("group", { name: "Temps de décision" })
@@ -1002,8 +1019,8 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await capital.press("ArrowLeft");
   await expect(capital).toHaveValue("2000000");
   await page.screenshot({ path: ".local/verification/settings-sliders.png" });
-  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await playWithBots(page);
+  await saveSettings(page);
+  await page.getByRole("button", { name: "Démarrer la partie" }).click();
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
     "data-scene-ready",
     "true",
@@ -1163,13 +1180,14 @@ test("travel, rent protections and exchanges show the complete legal choice", as
   );
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alex");
+  await openLobby(page);
   await page.locator(".settings-trigger").click();
   await page
     .getByRole("group", { name: "Temps de décision" })
     .getByRole("radio", { name: "60 s", exact: true })
     .check();
-  await page.getByRole("button", { name: "Appliquer les réglages" }).click();
-  await playWithBots(page);
+  await saveSettings(page);
+  await page.getByRole("button", { name: "Démarrer la partie" }).click();
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeEnabled({ timeout: 60_000 });

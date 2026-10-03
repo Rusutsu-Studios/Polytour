@@ -8,12 +8,14 @@ test("home sliders, language persistence and readable HTTP failure", async ({
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.route("**/api/rooms", (route) =>
-    route.fulfill({
+  const created: { config?: { startingCash?: number } }[] = [];
+  await page.route("**/api/rooms", (route) => {
+    created.push(route.request().postDataJSON());
+    return route.fulfill({
       status: 503,
       json: { error: "room-storage-limit" },
-    }),
-  );
+    });
+  });
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Nouvelle partie" }),
@@ -54,14 +56,8 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   await startingCash.focus();
   await page.keyboard.press("ArrowRight");
   await expect(startingCash).toHaveValue("2010000");
-  await page.locator(".settings-trigger").click();
-  await expect(
-    page
-      .locator(".settings-dialog")
-      .getByRole("slider", { name: "Starting cash", exact: true }),
-  ).toHaveValue("2010000");
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".settings-trigger")).toBeFocused();
+  // The full settings live in the lobby; the home screen keeps quick sliders.
+  await expect(page.locator(".settings-trigger")).toHaveCount(0);
   for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     await expect(page.locator(".welcome-board-preview canvas")).toBeVisible();
@@ -101,6 +97,8 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   await page.getByLabel("Player name").fill("Language check");
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Cloudflare");
+  // A quick slider sets the room the Play button creates.
+  expect(created.at(-1)?.config?.startingCash).toBe(2_010_000);
   await expect(page.getByRole("alert")).not.toContainText("Unexpected token");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");

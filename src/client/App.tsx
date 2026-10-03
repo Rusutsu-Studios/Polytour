@@ -1846,12 +1846,6 @@ function App() {
                   : t("Jouer", "Play")}
                 <Icon name="arrow" />
               </button>
-              <p className="field-note welcome-play-note">
-                {t(
-                  "Votre salon s’ouvre avec 3 bots. Retirez-les, invitez des amis ou ajoutez un joueur sur ce PC.",
-                  "Your lobby opens with 3 bots. Remove them, invite friends or add a player on this PC.",
-                )}
-              </p>
               <div className="join-form">
                 <label htmlFor="room-code">
                   {t("Vous avez un code ?", "Have a room code?")}
@@ -1888,7 +1882,6 @@ function App() {
                   {formError}
                 </p>
               )}
-              <RoomSettings config={config} onChange={setConfig} />
             </div>
           </div>
           <div className="welcome-world">

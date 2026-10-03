@@ -21,7 +21,7 @@ An unknown custom server explanation is shown verbatim. Original card artwork is
 language-neutral. Other languages are not implemented.
 
 Browser regressions verify language persistence, document language, keyboard
-sliders shared with the full settings, desktop bounds and a real local match
+sliders that set the created room, desktop bounds and a real local match
 switching language without changing credentials or opening another socket. A
 mocked quota response checks English error handling without a remote room request.
 

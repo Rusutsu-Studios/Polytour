@@ -17,7 +17,7 @@ a two-hour maximum. Room settings can be adjusted before starting.
 French and English are available from the welcome header and the in-game view
 settings. Language changes update cards, decisions, board labels and tools while
 preserving the current room. Three quick sliders sit beside the welcome board;
-the full settings dialog also supports precise values. See [LANGUAGES.md](docs/LANGUAGES.md).
+the lobby's full settings dialog covers every rule and supports precise values. See [LANGUAGES.md](docs/LANGUAGES.md).
 
 In newly created rooms, the first purchase is limited to land and three houses.
 Return to your own three-house city after a completed lap to build its hotel.
