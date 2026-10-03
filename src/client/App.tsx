@@ -23,6 +23,7 @@ import {
   legalActions,
   netWorth,
   propertyRefund,
+  propertyRent,
 } from "../shared/engine/index.js";
 import type {
   RandomnessStatus,
@@ -45,7 +46,6 @@ import {
   levelName,
   money,
   PLAYER_COLORS,
-  PLAYER_SYMBOLS,
   TILE_ICONS,
   tileColor,
   tileName,
@@ -240,9 +240,7 @@ function MatchResults({
             }
           >
             <span className="standing-rank">{index + 1}</span>
-            <span className="standing-symbol" aria-hidden="true">
-              {PLAYER_SYMBOLS[standing.seat]}
-            </span>
+            <span className="standing-color" aria-hidden="true" />
             <b>
               {players.find((player) => player.seat === standing.seat)?.name}
             </b>
@@ -307,54 +305,61 @@ function BoardFallback({
       <p className="flat-board-note">
         {t("Vue légère du plateau", "Simple board view")}
       </p>
-      {getBoard(boardConfig).map((tile) => (
-        <button
-          type="button"
-          key={tile.index}
-          style={
-            {
-              "--tile-color": tileColor(tile.index, boardConfig),
-            } as CSSProperties
-          }
-          data-sale={saleTargets?.includes(tile.index) || undefined}
-          data-pick={targets?.includes(tile.index) || undefined}
-          aria-pressed={
-            choices?.includes(tile.index) ? chosen === tile.index : undefined
-          }
-          aria-label={
-            state && saleTargets?.includes(tile.index)
-              ? t(
-                  `Choisir ${tileName(tile.index, boardConfig)} à vendre · ${money(propertyRefund(state, tile.index))}`,
-                  `Select ${tileName(tile.index, boardConfig)} to sell · ${money(propertyRefund(state, tile.index))}`,
-                )
-              : undefined
-          }
-          disabled={
-            choices !== undefined &&
-            (saleBlocked || !choices.includes(tile.index))
-          }
-          onClick={() => onSelect(tile.index)}
-        >
-          <span>{tileName(tile.index, boardConfig)}</span>
-          <b>
-            {state && saleTargets?.includes(tile.index)
-              ? `+${money(propertyRefund(state, tile.index))}`
-              : state && getProperty(state, tile.index)?.owner != null
-                ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
-                : tilePrice(
-                      tile.index,
-                      state ?? (config ? { config } : null),
-                    ) != null
-                  ? money(
-                      tilePrice(
+      {getBoard(boardConfig).map((tile) => {
+        const owner = state ? getProperty(state, tile.index)?.owner : null;
+        return (
+          <button
+            type="button"
+            key={tile.index}
+            style={
+              {
+                "--tile-color": tileColor(tile.index, boardConfig),
+              } as CSSProperties
+            }
+            data-sale={saleTargets?.includes(tile.index) || undefined}
+            data-pick={targets?.includes(tile.index) || undefined}
+            aria-pressed={
+              choices?.includes(tile.index) ? chosen === tile.index : undefined
+            }
+            aria-label={
+              state && saleTargets?.includes(tile.index)
+                ? t(
+                    `Choisir ${tileName(tile.index, boardConfig)} à vendre · ${money(propertyRefund(state, tile.index))}`,
+                    `Select ${tileName(tile.index, boardConfig)} to sell · ${money(propertyRefund(state, tile.index))}`,
+                  )
+                : undefined
+            }
+            disabled={
+              choices !== undefined &&
+              (saleBlocked || !choices.includes(tile.index))
+            }
+            onClick={() => onSelect(tile.index)}
+          >
+            <span>{tileName(tile.index, boardConfig)}</span>
+            <b
+              style={
+                owner != null ? { color: PLAYER_COLORS[owner] } : undefined
+              }
+            >
+              {state && saleTargets?.includes(tile.index)
+                ? `+${money(propertyRefund(state, tile.index))}`
+                : state && owner != null
+                  ? money(propertyRent(state, tile.index))
+                  : tilePrice(
                         tile.index,
                         state ?? (config ? { config } : null),
-                      ) ?? 0,
-                    )
-                  : TILE_ICONS[tile.kind]}
-          </b>
-        </button>
-      ))}
+                      ) != null
+                    ? money(
+                        tilePrice(
+                          tile.index,
+                          state ?? (config ? { config } : null),
+                        ) ?? 0,
+                      )
+                    : TILE_ICONS[tile.kind]}
+            </b>
+          </button>
+        );
+      })}
     </section>
   );
 }

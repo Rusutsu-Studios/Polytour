@@ -30,7 +30,6 @@ import {
   levelName,
   money,
   PLAYER_COLORS,
-  PLAYER_SYMBOLS,
   REGION_COLORS,
   TILE_ICONS,
   tileColor,
@@ -174,7 +173,7 @@ export default function CityCard({
                 level={property.level}
                 color={ownerColor}
                 resort={tile.kind === "resort"}
-                symbol={owner ? PLAYER_SYMBOLS[owner.seat] : undefined}
+                flag={Boolean(owner)}
               />
               <p className="city-card-owner" data-owned={Boolean(owner)}>
                 {owner ? (
@@ -183,9 +182,7 @@ export default function CityCard({
                       className="city-card-pawn"
                       style={{ backgroundColor: ownerColor }}
                       aria-hidden="true"
-                    >
-                      {PLAYER_SYMBOLS[owner.seat]}
-                    </span>
+                    />
                     <span>
                       <strong>
                         {owner.seat === seat

@@ -1,5 +1,5 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import type { WorkerDiagnostics } from "../src/shared/protocol/worker-diagnostics.js";
 
@@ -10,6 +10,13 @@ async function health(hostname: string, cf?: Record<string, unknown>) {
 }
 
 describe("Worker HTTP diagnostics", () => {
+  // The first request in this file starts the Worker. With the Durable Object
+  // suites running in parallel, that cold start alone can pass the 5 s test
+  // timeout, so it is paid here rather than inside the first assertion.
+  beforeAll(async () => {
+    await health("warm-up.polytour.example");
+  }, 30_000);
+
   it("returns the request's POP, not the visitor's city or region", async () => {
     const response = await health("preview.polytour.example", {
       colo: "FRA",

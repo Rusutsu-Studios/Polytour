@@ -9,7 +9,7 @@ import {
   useDirector,
 } from "../director/director.js";
 import { useLocale } from "../i18n.js";
-import { PLAYER_COLORS, PLAYER_SYMBOLS } from "./board-display.js";
+import { PLAYER_COLORS } from "./board-display.js";
 import { type CardDraw, describeCard } from "./chance-display.js";
 import "./CardMoment.css";
 
@@ -123,7 +123,6 @@ export default function CardMoment({
             {t("Carte Surprise", "Chance card")} ·{" "}
             <strong>{player?.name ?? t("Joueur", "Player")}</strong>
           </span>
-          <i aria-hidden="true">{PLAYER_SYMBOLS[event.seat]}</i>
         </header>
         <img
           className="chance-art"

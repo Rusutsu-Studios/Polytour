@@ -34,11 +34,6 @@
   display: block;
   font-size: 19px;
 }
-.chance-card :where(header) i {
-  margin-left: auto;
-  font-size: 24px;
-  font-style: normal;
-}
 .chance-seal {
   display: grid;
   place-items: center;

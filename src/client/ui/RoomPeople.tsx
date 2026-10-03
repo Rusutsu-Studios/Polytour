@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Seat } from "../../shared/engine/index.js";
 import type { LobbyState } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
-import { PLAYER_COLORS, PLAYER_SYMBOLS } from "./board-display.js";
+import { PLAYER_COLORS } from "./board-display.js";
 import Icon from "./Icon.js";
 import "./RoomPeople.css";
 
@@ -21,7 +21,6 @@ export function PlayerAvatar({ seat }: { seat: Seat }) {
         <i className="avatar-eyes" />
       </i>
       <i className="avatar-body" />
-      <span>{PLAYER_SYMBOLS[seat]}</span>
     </div>
   );
 }
@@ -125,9 +124,13 @@ export function LobbySeats({
           return (
             <li key={seat} className="lobby-seat empty" style={style}>
               <div className="seat-open">
-                <span className="seat-plus" aria-hidden="true">
-                  {you === null ? PLAYER_SYMBOLS[seat] : "+"}
-                </span>
+                {you === null ? (
+                  <span className="seat-plus seat-color" aria-hidden="true" />
+                ) : (
+                  <span className="seat-plus" aria-hidden="true">
+                    +
+                  </span>
+                )}
                 <strong>{t("Place libre", "Open seat")}</strong>
                 {you === null ? (
                   <span>
