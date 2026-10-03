@@ -50,6 +50,10 @@ server; separate browser tabs share saved credentials, so use separate browser p
 windows for different seats. Refreshing resumes your seat. A disconnected human
 is temporarily controlled by a bot after 60 seconds and regains control on return.
 
+Invitation links open a nickname-only join screen. Enter joins that room; it does
+not create a bot game. The room code stays off the invitation screen. Leave returns
+to the normal start screen, and a saved seat in the invited room resumes directly.
+
 ## Verify
 
 ```sh

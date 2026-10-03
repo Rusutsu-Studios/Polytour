@@ -29,7 +29,7 @@ import type {
   RoomConfig,
   RoomCredentials,
 } from "../shared/protocol/index.js";
-import { RoomConfigSchema } from "../shared/protocol/index.js";
+import { RoomCodeSchema, RoomConfigSchema } from "../shared/protocol/index.js";
 import { APP_VERSION } from "../shared/version.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
@@ -61,6 +61,7 @@ import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
 import Icon from "./ui/Icon.js";
+import InvitationEntry from "./ui/InvitationEntry.js";
 import LuckCardHelp from "./ui/LuckCardHelp.js";
 import {
   deviceSeats,
@@ -1645,17 +1646,26 @@ function MatchView({
 
 function App() {
   useLocale();
-  const initialCode =
-    new URLSearchParams(window.location.search).get("room")?.toUpperCase() ??
-    "";
+  const [invitationCode, setInvitationCode] = useState<string | null>(
+    () =>
+      new URLSearchParams(window.location.search)
+        .get("room")
+        ?.trim()
+        .toUpperCase() ?? null,
+  );
+  const invalidInvitation =
+    invitationCode !== null &&
+    !RoomCodeSchema.safeParse(invitationCode).success;
   const [credentials, setCredentials] = useState<RoomCredentials | null>(() => {
     const saved = readCredentials();
-    return initialCode && saved?.roomCode !== initialCode ? null : saved;
+    return invitationCode !== null && saved?.roomCode !== invitationCode
+      ? null
+      : saved;
   });
   const [name, setName] = useState(
     () => localStorage.getItem("polytour-name") ?? "",
   );
-  const [joinCode, setJoinCode] = useState(initialCode);
+  const [joinCode, setJoinCode] = useState("");
   const [config, setConfig] = useState<RoomConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const entering = useRef(false);
@@ -1681,7 +1691,7 @@ function App() {
   async function enter(join = false) {
     if (entering.current) return;
     const cleanName = name.trim();
-    const code = joinCode.trim().toUpperCase();
+    const code = (invitationCode ?? joinCode).trim().toUpperCase();
     if (!cleanName) {
       setFormError(
         t(
@@ -1692,7 +1702,7 @@ function App() {
       document.getElementById("player-name")?.focus();
       return;
     }
-    if (join && !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(code)) {
+    if (join && !RoomCodeSchema.safeParse(code).success) {
       setFormError(
         t(
           "Le code de salle contient six lettres ou chiffres.",
@@ -1736,6 +1746,9 @@ function App() {
   function leave() {
     forgetCredentials();
     setCredentials(null);
+    setInvitationCode(null);
+    setJoinCode("");
+    setFormError(null);
     setConfig((current) => ({ ...current, randomnessMode: "secure" }));
     director.reset(null);
     setSelected(null);
@@ -1793,8 +1806,13 @@ function App() {
               <Icon name="help" size={18} />
               <span>{t("Comment jouer", "How to play")}</span>
             </button>
-            {credentials && (
-              <button type="button" className="text-button" onClick={leave}>
+            {(credentials || invitationCode !== null) && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={loading}
+                onClick={leave}
+              >
                 {t("Quitter", "Leave")}
               </button>
             )}
@@ -1802,88 +1820,101 @@ function App() {
         </header>
       )}
       {!credentials ? (
-        <section className="welcome-grid">
-          <div className="welcome-copy">
-            <span className="travel-stamp">
-              <Icon name="people" size={17} />
-              {t("4 places · amis ou bots", "4 seats · friends or bots")}
-            </span>
-            <h1>{t("Nouvelle partie", "New game")}</h1>
-            <p className="welcome-intro">
-              {t(
-                "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
-                "Buy the cities you land on, build and collect rent.",
-              )}
-            </p>
-            <div className="welcome-form">
-              <label htmlFor="player-name">
-                {t("Votre nom de joueur", "Player name")}
-              </label>
-              <input
-                id="player-name"
-                value={name}
-                maxLength={24}
-                autoComplete="nickname"
-                placeholder={t("Votre pseudo", "Your nickname")}
-                onChange={(event) => setName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void enter();
-                }}
-              />
-              <button
-                type="button"
-                className="button primary welcome-play"
-                disabled={loading}
-                onClick={() => void enter()}
-              >
-                {loading ? (
-                  <span className="spinner" />
-                ) : (
-                  <Icon name="dice" size={24} />
+        <section
+          className={`welcome-grid${invitationCode !== null ? " invitation-entry" : ""}`}
+        >
+          {invitationCode !== null ? (
+            <InvitationEntry
+              name={name}
+              onName={setName}
+              onJoin={() => void enter(true)}
+              loading={loading}
+              error={formError}
+              invalid={invalidInvitation}
+            />
+          ) : (
+            <div className="welcome-copy">
+              <span className="travel-stamp">
+                <Icon name="people" size={17} />
+                {t("4 places · amis ou bots", "4 seats · friends or bots")}
+              </span>
+              <h1>{t("Nouvelle partie", "New game")}</h1>
+              <p className="welcome-intro">
+                {t(
+                  "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
+                  "Buy the cities you land on, build and collect rent.",
                 )}
-                {loading
-                  ? t("Préparation du salon…", "Preparing the lobby…")
-                  : t("Jouer", "Play")}
-                <Icon name="arrow" />
-              </button>
-              <div className="join-form">
-                <label htmlFor="room-code">
-                  {t("Vous avez un code ?", "Have a room code?")}
+              </p>
+              <div className="welcome-form">
+                <label htmlFor="player-name">
+                  {t("Votre nom de joueur", "Player name")}
                 </label>
-                <div>
-                  <input
-                    id="room-code"
-                    className="code-input"
-                    value={joinCode}
-                    maxLength={6}
-                    placeholder="ABCD23"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    onChange={(event) =>
-                      setJoinCode(event.target.value.toUpperCase())
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void enter(true);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="button ink"
-                    disabled={loading}
-                    onClick={() => void enter(true)}
-                  >
-                    {t("Rejoindre", "Join")}
-                    <Icon name="arrow" size={18} />
-                  </button>
+                <input
+                  id="player-name"
+                  value={name}
+                  maxLength={24}
+                  autoComplete="nickname"
+                  placeholder={t("Votre pseudo", "Your nickname")}
+                  onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void enter();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="button primary welcome-play"
+                  disabled={loading}
+                  onClick={() => void enter()}
+                >
+                  {loading ? (
+                    <span className="spinner" />
+                  ) : (
+                    <Icon name="dice" size={24} />
+                  )}
+                  {loading
+                    ? t("Préparation du salon…", "Preparing the lobby…")
+                    : t("Jouer", "Play")}
+                  <Icon name="arrow" />
+                </button>
+                <div className="join-form">
+                  <label htmlFor="room-code">
+                    {t("Vous avez un code ?", "Have a room code?")}
+                  </label>
+                  <div>
+                    <input
+                      id="room-code"
+                      className="code-input"
+                      value={joinCode}
+                      maxLength={6}
+                      placeholder="ABCD23"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      onChange={(event) =>
+                        setJoinCode(event.target.value.toUpperCase())
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void enter(true);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="button ink"
+                      disabled={loading}
+                      onClick={() => void enter(true)}
+                    >
+                      {t("Rejoindre", "Join")}
+                      <Icon name="arrow" size={18} />
+                    </button>
+                  </div>
                 </div>
+                {formError && (
+                  <p className="error-message" role="alert">
+                    {formError}
+                  </p>
+                )}
               </div>
-              {formError && (
-                <p className="error-message" role="alert">
-                  {formError}
-                </p>
-              )}
             </div>
-          </div>
+          )}
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
@@ -1913,12 +1944,14 @@ function App() {
                 </Suspense>
               </SceneBoundary>
             </div>
-            <div className="welcome-quick-settings">
-              <span className="welcome-setup-title">
-                {t("Réglages rapides", "Quick settings")}
-              </span>
-              <QuickSettings config={config} onChange={setConfig} />
-            </div>
+            {invitationCode === null && (
+              <div className="welcome-quick-settings">
+                <span className="welcome-setup-title">
+                  {t("Réglages rapides", "Quick settings")}
+                </span>
+                <QuickSettings config={config} onChange={setConfig} />
+              </div>
+            )}
           </div>
         </section>
       ) : !game ? (

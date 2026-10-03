@@ -1674,6 +1674,9 @@ input::placeholder {
   min-width: 0;
   position: relative;
 }
+.invitation-entry .welcome-world {
+  grid-template-rows: minmax(0, 1fr);
+}
 .welcome-board-preview > div:not(.flat-board) {
   height: 100%;
 }

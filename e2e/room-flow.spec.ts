@@ -89,6 +89,73 @@ async function send(actor: Actor, message: ClientMessage) {
   );
 }
 
+test("an invitation joins the existing production room and refresh resumes the same guest seat", async ({
+  page,
+  browser,
+  request,
+}) => {
+  const created = await request.post("/api/rooms", {
+    data: { name: "Invitation host" },
+  });
+  expect(created.status()).toBe(201);
+  const hostCredentials: RoomCredentials = await created.json();
+  const host = await connect(browser, hostCredentials);
+  const roomRequests: string[] = [];
+  page.on("request", (outgoing) => {
+    if (outgoing.method() === "POST")
+      roomRequests.push(new URL(outgoing.url()).pathname);
+  });
+  await page.goto(
+    `/?room=${encodeURIComponent(` ${hostCredentials.roomCode.toLowerCase()} `)}`,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Rejoindre la salle" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Votre nom de joueur")).toBeFocused();
+  await expect(page.getByLabel("Vous avez un code ?")).toHaveCount(0);
+  await page.getByLabel("Votre nom de joueur").fill("Invitation guest");
+  const joinedResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname ===
+        `/api/rooms/${hostCredentials.roomCode}/join` &&
+      response.request().method() === "POST",
+  );
+  await page.getByLabel("Votre nom de joueur").press("Enter");
+  const joined = await joinedResponse;
+  expect(joined.status()).toBe(200);
+  expect(joined.request().postDataJSON()).toEqual({ name: "Invitation guest" });
+  const guestCredentials: RoomCredentials = await joined.json();
+  expect(guestCredentials.roomCode).toBe(hostCredentials.roomCode);
+  expect(guestCredentials.seat).toBe(1);
+  await expect(page.locator(".waiting-host")).toBeVisible();
+  await expect(page.locator(".lobby-seat.filled.human")).toHaveCount(2);
+  await expect(page.locator(".lobby-seats")).toContainText("Invitation host");
+  await expect(page.locator(".lobby-seats")).toContainText("Invitation guest");
+  await expect(page.locator(".lobby-seat.filled.bot")).toHaveCount(0);
+  expect(host.state).toBeNull();
+  expect(roomRequests).toEqual([`/api/rooms/${hostCredentials.roomCode}/join`]);
+  const savedCredentials = await page.evaluate(() =>
+    sessionStorage.getItem("polytour-room-v1"),
+  );
+  expect(JSON.parse(savedCredentials ?? "null")).toEqual(guestCredentials);
+  await page.reload();
+  await expect(page.locator(".waiting-host")).toBeVisible();
+  await expect(page.locator(".lobby-seat.filled.human")).toHaveCount(2);
+  await expect(page.locator(".invitation-entry")).toHaveCount(0);
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+  ).toBe(savedCredentials);
+  expect(roomRequests).toEqual([`/api/rooms/${hostCredentials.roomCode}/join`]);
+  expect(host.state).toBeNull();
+  await page.getByRole("button", { name: "Quitter", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Nouvelle partie" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Vous avez un code ?")).toHaveValue("");
+  expect(new URL(page.url()).search).toBe("");
+  await host.page.context().close();
+});
+
 test("four isolated browser seats finish a real authoritative match and reconnect", async ({
   browser,
   request,
