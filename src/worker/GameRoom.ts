@@ -36,6 +36,7 @@ import {
 } from "../shared/protocol/room-diagnostics.js";
 import type { WorkerDiagnostics } from "../shared/protocol/worker-diagnostics.js";
 import type { DiceCommitment, DiceProof } from "../shared/randomness/types.js";
+import { createEngineContext } from "./chance-randomness.js";
 import { prepareDice, resolveDice } from "./randomness.js";
 import {
   CURRENT_STATE_VERSION,
@@ -98,6 +99,7 @@ async function hashToken(token: string): Promise<string> {
 
 export class GameRoom extends DurableObject<Env> {
   private deletingRoom = false;
+  private schemaReady = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -105,11 +107,18 @@ export class GameRoom extends DurableObject<Env> {
       new WebSocketRequestResponsePair(DEBUG_PING_REQUEST, DEBUG_PING_RESPONSE),
     );
     ctx.blockConcurrencyWhile(async () => {
-      this.initializeSchema();
+      // Looking up an unknown room must not allocate persistent tables.
+      this.schemaReady =
+        this.ctx.storage.sql
+          .exec(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'",
+          )
+          .toArray().length > 0;
     });
   }
 
   private initializeSchema(): void {
+    if (this.schemaReady) return;
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
     );
@@ -128,6 +137,7 @@ export class GameRoom extends DurableObject<Env> {
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS commands (seat INTEGER NOT NULL, id TEXT NOT NULL, PRIMARY KEY(seat,id))",
     );
+    this.schemaReady = true;
   }
 
   private openSockets(tag?: string): WebSocket[] {
@@ -146,6 +156,7 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private readMeta<T>(key: string): T | null {
+    if (!this.schemaReady) return null;
     const row = this.ctx.storage.sql
       .exec<{ v: string }>("SELECT v FROM meta WHERE k=?", key)
       .toArray()[0];
@@ -159,6 +170,7 @@ export class GameRoom extends DurableObject<Env> {
     );
   }
   private readState(): { state: GameState; seq: number } | null {
+    if (!this.schemaReady) return null;
     const row = this.ctx.storage.sql
       .exec<{ seq: number; json: string }>(
         "SELECT seq,json FROM state WHERE id=1",
@@ -217,6 +229,7 @@ export class GameRoom extends DurableObject<Env> {
     return { seq: row.seq, state };
   }
   private seats(): StoredSeat[] {
+    if (!this.schemaReady) return [];
     return this.ctx.storage.sql
       .exec<StoredSeat>(
         "SELECT seat,name,control,token_hash FROM seats ORDER BY seat",
@@ -233,24 +246,31 @@ export class GameRoom extends DurableObject<Env> {
     const token = newToken();
     const tokenHash = await hashToken(token);
     if (this.readMeta("room")) return null;
-    this.ctx.storage.transactionSync(() => {
-      this.writeMeta("room", {
-        roomCode,
-        config: RoomConfigSchema.parse(config),
-        createdAt: Date.now(),
-      } satisfies RoomMeta);
-      this.writeMeta("stateVersion", CURRENT_STATE_VERSION);
-      this.writeMeta("rulesVersion", RULES_VERSION);
-      this.ctx.storage.sql.exec(
-        "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
-        name,
-        tokenHash,
-      );
-      this.ctx.storage.sql.exec(
-        "INSERT INTO timers(kind,fire_at) VALUES('cleanup',?)",
-        Date.now() + 7_200_000,
-      );
-    });
+    const hadSchema = this.schemaReady;
+    try {
+      this.ctx.storage.transactionSync(() => {
+        this.initializeSchema();
+        this.writeMeta("room", {
+          roomCode,
+          config: RoomConfigSchema.parse(config),
+          createdAt: Date.now(),
+        } satisfies RoomMeta);
+        this.writeMeta("stateVersion", CURRENT_STATE_VERSION);
+        this.writeMeta("rulesVersion", RULES_VERSION);
+        this.ctx.storage.sql.exec(
+          "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
+          name,
+          tokenHash,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO timers(kind,fire_at) VALUES('cleanup',?)",
+          Date.now() + 7_200_000,
+        );
+      });
+    } catch (error) {
+      this.schemaReady = hadSchema;
+      throw error;
+    }
     await this.scheduleAlarm();
     return { roomCode, seat: 0, token };
   }
@@ -431,7 +451,11 @@ export class GameRoom extends DurableObject<Env> {
     socket: WebSocket,
     frame: string | ArrayBuffer,
   ): Promise<void> {
-    if (this.deletingRoom || socket.readyState !== WebSocket.OPEN)
+    if (
+      this.deletingRoom ||
+      !this.schemaReady ||
+      socket.readyState !== WebSocket.OPEN
+    )
       return socket.close(1000, "Room expired");
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (!attachment) return socket.close(1008, "Session missing");
@@ -501,7 +525,7 @@ export class GameRoom extends DurableObject<Env> {
       saved.state.matchDeadline !== null &&
       now >= saved.state.matchDeadline
     ) {
-      const ended = applyTimeout(saved.state, { now });
+      const ended = applyTimeout(saved.state, createEngineContext(now));
       this.persist(ended.state, ended.events, undefined, undefined, true);
       await this.scheduleAlarm();
       return this.reject(socket, message.id, "game-over");
@@ -535,9 +559,12 @@ export class GameRoom extends DurableObject<Env> {
       this.send(socket, { type: "ack", id: message.id });
       return;
     }
-    const result = applyAction(saved.state, attachment.seat, message.action, {
-      now,
-    });
+    const result = applyAction(
+      saved.state,
+      attachment.seat,
+      message.action,
+      createEngineContext(now),
+    );
     if (!result.ok)
       return this.reject(
         socket,
@@ -715,7 +742,7 @@ export class GameRoom extends DurableObject<Env> {
       },
       allSeats,
       seed,
-      { now: startedAt },
+      createEngineContext(startedAt),
     );
     this.ctx.storage.transactionSync(() => {
       for (const entry of allSeats)
@@ -845,23 +872,28 @@ export class GameRoom extends DurableObject<Env> {
         saved.state.matchDeadline !== null &&
         Date.now() >= saved.state.matchDeadline
       ) {
-        const ended = applyTimeout(saved.state, { now: Date.now() });
+        const ended = applyTimeout(
+          saved.state,
+          createEngineContext(Date.now()),
+        );
         this.persist(ended.state, ended.events, undefined, undefined, true);
         this.broadcast({ type: "lobby", lobby: this.lobby() });
         await this.scheduleAlarm();
         return;
       }
       const applied = pending.action
-        ? applyAction(saved.state, pending.seat, pending.action, {
-            now: Date.now(),
-            dice: result.dice,
-          })
+        ? applyAction(
+            saved.state,
+            pending.seat,
+            pending.action,
+            createEngineContext(Date.now(), result.dice),
+          )
         : {
             ok: true as const,
-            ...applyTimeout(saved.state, {
-              now: Date.now(),
-              dice: result.dice,
-            }),
+            ...applyTimeout(
+              saved.state,
+              createEngineContext(Date.now(), result.dice),
+            ),
           };
       if (!applied.ok) throw new Error(applied.error.message);
       this.persist(
@@ -908,6 +940,7 @@ export class GameRoom extends DurableObject<Env> {
     state = this.readState()?.state ?? null,
     resetBot = false,
   ): void {
+    if (!this.schemaReady) return;
     if (state?.status === "active" && state.matchDeadline !== null)
       this.setTimer("match-end", state.matchDeadline);
     else this.ctx.storage.sql.exec("DELETE FROM timers WHERE kind='match-end'");
@@ -973,6 +1006,7 @@ export class GameRoom extends DurableObject<Env> {
     await this.scheduleAlarm();
   }
   private async scheduleAlarm(): Promise<void> {
+    if (!this.schemaReady) return;
     const row = this.ctx.storage.sql
       .exec<{ next: number | null }>("SELECT MIN(fire_at) AS next FROM timers")
       .toArray()[0];
@@ -985,7 +1019,7 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    if (this.deletingRoom) return;
+    if (this.deletingRoom || !this.schemaReady) return;
     // Old deployments can leave move/retry timers behind in rooms with no
     // audience. Cancel them on their first wake rather than execute a move.
     this.refreshTimers();
@@ -1017,16 +1051,18 @@ export class GameRoom extends DurableObject<Env> {
         for (const socket of this.ctx.getWebSockets())
           socket.close(1000, "Room expired");
         await this.ctx.storage.deleteAll();
-        // deleteAll also removes SQL tables. Closed-socket callbacks and later
-        // fetches can still reach this live instance, so retain an empty schema.
-        this.initializeSchema();
+        // Keep expired and unknown rooms storage-free, including after eviction.
+        this.schemaReady = false;
         this.deletingRoom = false;
         return;
       }
       if (timer.kind === "match-end") {
         const saved = this.readState();
         if (saved?.state.status === "active") {
-          const result = applyTimeout(saved.state, { now: Date.now() });
+          const result = applyTimeout(
+            saved.state,
+            createEngineContext(Date.now()),
+          );
           this.persist(result.state, result.events, undefined, undefined, true);
           this.broadcast({ type: "lobby", lobby: this.lobby() });
         }
@@ -1051,9 +1087,12 @@ export class GameRoom extends DurableObject<Env> {
         if (action.type === "Roll")
           await this.beginDice(seat, action, null, saved.seq);
         else {
-          const result = applyAction(saved.state, seat, action, {
-            now: Date.now(),
-          });
+          const result = applyAction(
+            saved.state,
+            seat,
+            action,
+            createEngineContext(Date.now()),
+          );
           if (result.ok) {
             this.persist(result.state, result.events);
             await this.scheduleAlarm();
@@ -1069,7 +1108,10 @@ export class GameRoom extends DurableObject<Env> {
             saved.seq,
           );
         else {
-          const result = applyTimeout(saved.state, { now: Date.now() });
+          const result = applyTimeout(
+            saved.state,
+            createEngineContext(Date.now()),
+          );
           this.persist(result.state, result.events);
           await this.scheduleAlarm();
         }

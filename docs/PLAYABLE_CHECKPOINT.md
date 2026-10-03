@@ -527,7 +527,8 @@ asset-first. At five-second cadence, the room probes account for about 36 DO
 compute-request equivalents per active debugger-hour under the 20:1 incoming
 WebSocket ratio; they create no additional Worker HTTP polling. One authenticated
 metadata message on opening/reconnect reads socket attachments, without querying
-game rows. It can wake the DO and run its normal schema initialization.
+game rows. It can wake the DO; after the room-allocation integration below, its
+constructor only checks for an existing schema rather than creating tables.
 
 The client accepts newer optional capability numbers without rejecting the game
 welcome, but sends diagnostic messages only for the supported version. Per-socket
@@ -675,3 +676,40 @@ Local verification:
   179.2 kB gzip against the 250 kB limit.
 
 These results use the local Worker. They do not establish a production deployment.
+
+
+## Pause settings integration with graphics and room protection — 3 October 2026
+
+The integration retains main through `3f74335`: nickname-only invitations,
+card catalogue and saved-economy explanations, application version, town
+occlusion, High/Low graphics, secure Chance entropy and room-allocation guards.
+A shared graphics control remains on the welcome screen and match toolbar and
+also appears in the pause menu's Video tab. Card-help motion uses a fixed duration
+after removing the animation-speed preference. Match rules stay behind the
+sliders tool; personal settings remain in the pause menu.
+
+The GameRoom native WebSocket reply and authenticated attachment-only metadata
+path coexist with `schemaReady`. The constructor checks for an existing schema;
+only `init()` creates tables. Cleanup retains empty storage. Every live engine
+context retains fresh Chance entropy, and the new admission and Worker-only
+health paths are preserved.
+
+Local verification:
+
+- TypeScript, Biome, all 268 unit/Worker tests and 14 release-tooling tests pass.
+  One initial Worker HTTP diagnostic test exceeded the five-second startup
+  timeout; the complete suite then passed without changing code or timeouts.
+- All 48 non-live browser scenarios pass on the UI integration (`cf39fd0`),
+  including the real four-seat match, invitations, graphics and all eleven
+  pause/settings/debug cases. Desktop coverage includes 1280x720, 1440x900,
+  1920x1080, 2560x1440 and 3840x2160; Debug also covers 390x844.
+- After the latest backend integration, 23 targeted scenarios pass across two
+  runs: all eleven pause/settings/debug cases, graphics persistence/render cost/
+  real roll/reconnect, cards, invitations, authoritative match/reconnection,
+  version and Worker routing. Client assets are unchanged by that backend merge.
+- One hundred reference-economy simulations terminate and preserve per-event
+  money, card, ownership and replay invariants. Production build, bundle budgets,
+  version consistency, Cloudflare configuration and deployment dry run pass.
+
+These are local integration checks. GitHub CI and remote deployment verification
+are recorded in the pull request separately.
