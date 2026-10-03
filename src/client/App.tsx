@@ -1,6 +1,14 @@
 import { AnimatePresence, animate, motion } from "motion/react";
 import type { CSSProperties, ErrorInfo, ReactNode } from "react";
-import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { BOARD, ECONOMY } from "../shared/board/index.js";
 import type {
   GameEvent,
@@ -901,6 +909,13 @@ function MatchView({
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(false);
   const [debugProbeActive, setDebugProbeActive] = useState(false);
+  const onDebugActiveChange = useCallback(
+    (active: boolean) => {
+      setDebugProbeActive(active);
+      room.setDebugActive(active);
+    },
+    [room.setDebugActive],
+  );
   const cloudflarePing = useCloudflarePing(
     pauseOpen && debugProbeActive,
     room.connection,
@@ -1427,7 +1442,9 @@ function MatchView({
           onZoom={onZoom}
           connection={room.connection}
           ping={cloudflarePing}
-          onDebugActiveChange={setDebugProbeActive}
+          roomDebug={room.roomDebug}
+          ownSeat={credentials.seat}
+          onDebugActiveChange={onDebugActiveChange}
         />
       )}
       {debug && (

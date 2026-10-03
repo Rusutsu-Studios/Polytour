@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GameEvent, PublicState } from "../../shared/engine/index.js";
 import type { ServerMessage } from "../../shared/protocol/index.js";
 import { RoomConfigSchema } from "../../shared/protocol/index.js";
+import { RoomDiagnosticsSchema } from "../../shared/protocol/room-diagnostics.js";
 
 const seat = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
 const tile = z.number().int().min(0).max(31);
@@ -183,6 +184,7 @@ const envelope = z.discriminatedUnion("type", [
     snapshot: state.nullable(),
     lobby,
     randomness: randomness.nullable(),
+    roomDebugVersion: z.number().int().positive().optional(),
   }),
   z.object({
     type: z.literal("events"),
@@ -206,6 +208,10 @@ const envelope = z.discriminatedUnion("type", [
   }),
   randomness.extend({ type: z.literal("randomness") }),
   z.object({ type: z.literal("pong"), t: z.number(), serverNow: z.number() }),
+  z.object({
+    type: z.literal("room-diagnostics"),
+    value: RoomDiagnosticsSchema,
+  }),
 ]);
 export function parseServerMessage(raw: string): ServerMessage {
   return envelope.parse(JSON.parse(raw) as unknown);

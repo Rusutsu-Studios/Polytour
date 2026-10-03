@@ -441,6 +441,48 @@ additionally cover 390x844 without horizontal overflow or player-card overlap.
 Metadata shown in these captures is a fixture.
 No remote runtime or production deployment is asserted by these local checks.
 
+## Room routing and latency diagnostics — 3 October 2026
+
+Debug now joins the connected seats' Cloudflare ingress POPs and regions to their
+shared GameRoom and its local SQLite storage. The current socket's public Worker
+endpoint is shown separately from the static HTTP probe. Physical DO location and
+server hostname are explicitly unavailable; an optional jurisdiction is a placement
+restriction, not an execution DC. No internal Cloudflare credentials, player IPs,
+seat capabilities, object identifiers or database contents reach the diagnostic UI.
+
+A bounded graph holds sixty real room WebSocket RTT samples, with minimum, mean
+and maximum. Samples run every five seconds only while Debug and the page are
+visible and online. A fixed native DO WebSocket auto-response avoids waking game
+JavaScript, SQL and alarms. The existing one-second static HTTP probe remains
+asset-first. At five-second cadence, the room probes account for about 36 DO
+compute-request equivalents per active debugger-hour under the 20:1 incoming
+WebSocket ratio; they create no additional Worker HTTP polling. One authenticated
+metadata message on opening/reconnect reads socket attachments, without querying
+game rows. It can wake the DO and run its normal schema initialization.
+
+The client accepts newer optional capability numbers without rejecting the game
+welcome, but sends diagnostic messages only for the supported version. Per-socket
+FIFO slots preserve expired requests so delayed fixed replies cannot invent a new
+latency after menu closure, visibility changes or a same-socket resync. New sockets
+reset samples and refresh routing metadata. Gameplay protocol version and frozen
+rules remain unchanged.
+
+Local TypeScript, Biome, 162 unit/Worker tests, 100 simulated games, production build,
+bundle budgets, Wrangler configuration and deployment dry run pass. Backend tests
+exercise real workerd authenticated sockets and hibernation: the fixed ping does
+not enter the JavaScript message handler, touch SQL, change alarms or mutate state.
+
+The 16 existing browser scenarios pass, including the complete authoritative match,
+reconnect and live legacy drand verification. All 11 pause/settings/debug cases are
+verified: 26 of 27 scenarios passed in the full run, then the graph capture and the
+remaining stale-pong case passed after a test-only WebSocket observer setup fix.
+Coverage includes five-second socket cadence, one-time metadata, old capability
+fallback, hidden/offline/close suspension, reconnection, FIFO late-reply rejection,
+real timed samples, sixty-point history, pause gaps and FR/EN accessibility.
+Captures at 1280x720, 1440x900, 1920x1080 and 390x844 have no horizontal overflow.
+The illustrated FRA/Europe and IAD/North America paths are authored fixtures,
+not evidence of geographically distributed remote players.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,

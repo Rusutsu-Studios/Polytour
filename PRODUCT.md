@@ -51,6 +51,10 @@ The architecture and animation documentation live in `docs/`. Screenshots and ex
 - The room code and reconnect path make playing with friends practical.
 - The board leads the PC experience; the interface supports the match without occupying its play area.
 
+## Connection diagnostics
+
+Debug shows connected players' Cloudflare ingress routes toward their shared GameRoom and its local SQLite database. A small history graph measures the room WebSocket round trip every five seconds only while the view is visible. The public Worker endpoint is shown; exact internal DO location and physical server hostname remain explicitly unavailable. No player IPs, credentials or database contents are exposed. Latency probes add no Worker HTTP calls and do not touch SQLite. A routing snapshot is requested once on opening or reconnecting; its handler reads no game database rows, though waking the DO may run its normal schema initialization.
+
 ## Accessibility & Inclusion
 
 Every player color also has a distinct symbol. All decisions, room controls, and tile inspection have keyboard-accessible DOM controls. Respect reduced motion and recover automatically from delayed events or hidden tabs. A pause menu offers continue, personal settings and leave while the match keeps running. Settings use Game, Video, Audio and Debug tabs; Audio is reserved for the upcoming sound work. Debug measures Cloudflare's HTTP round-trip time through a static asset that bypasses the Worker, and shows the contacted host and Cloudflare entry point with its region. The last sample remains visible in small text at the bottom right, such as `AMS · 42 ms`; measurements run only while Debug is open. Money, deadlines and essential labels must remain legible at the minimum desktop target, and overlays must preserve keyboard focus and dismissal. Optional mobile adaptation must not compromise the desktop board or require a physical phone FPS result to ship this prototype.

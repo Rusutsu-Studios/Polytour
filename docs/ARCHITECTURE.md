@@ -70,6 +70,35 @@ See Cloudflare's [response headers](https://developers.cloudflare.com/fundamenta
 [static asset billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
 and [DO location](https://developers.cloudflare.com/durable-objects/reference/data-location/).
 
+The same Debug view also measures the existing game WebSocket's round trip every
+five seconds, after the server advertises the optional debug capability in
+`welcome`. A fixed `setWebSocketAutoResponse` pair responds without waking
+hibernating game JavaScript, touching SQLite or scheduling a DO alarm. A bounded
+per-socket FIFO keeps expired attempts across menu/visibility changes so late
+constant replies cannot produce a false fresh latency. Closing Debug stops all
+client timers. At this cadence, 720 incoming messages per hour correspond to
+36 DO compute-request equivalents per hour per active debugger under the
+[20:1 WebSocket billing ratio](https://developers.cloudflare.com/durable-objects/platform/pricing/#compute-billing).
+Outgoing messages are free; these pings add no Worker HTTP requests. They are not
+entirely unmetered DO messages.
+
+One authenticated `debug-info` message on open/reconnect obtains a routing snapshot
+from WebSocket attachments: the current socket's public Worker endpoint/ingress,
+and each connected seat's ingress POP. The diagnostic handler reads no game SQL
+rows. Metadata requests can wake the DO and run its normal constructor schema
+initialization. They expose no IP addresses, seat capabilities, object identifiers
+or database contents. This metadata is sent
+only to the requesting room member. It is refreshed after reconnection or when an
+initial measurement was interrupted, without continuous metadata polling.
+
+The route diagram joins those player entry points to one shared `GameRoom` with
+its local SQLite database. A DO's exact execution POP and physical server hostname
+have no documented runtime getters; the UI says they are not exposed by Cloudflare.
+`ctx.id.jurisdiction` is an enforced restriction, not the execution DC, and is null
+for the current unrestricted rooms. `request.cf.colo` is ingress metadata and must
+never be substituted for a DO's location. HTTP and WebSocket round trips are
+shown separately; subtracting them would not reliably measure Worker-to-DO latency.
+
 ## System overview
 
 ```mermaid

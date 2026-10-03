@@ -18,6 +18,11 @@ import {
   RoomConfigSchema,
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
+import {
+  DEBUG_PING_REQUEST,
+  DEBUG_PING_RESPONSE,
+  type RoomDiagnostics,
+} from "../src/shared/protocol/room-diagnostics.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -33,6 +38,43 @@ const ZURICH_PROBE = {
   ...FRANKFURT_PROBE,
   headers: { "cf-ray": "fedcba9876543210-ZRH" },
 } satisfies ProbeResponse;
+const FRANKFURT_ROOM = {
+  worker: {
+    worker: "polytour",
+    hostname: "127.0.0.1",
+    runtime: "cloudflare",
+    cloudflare: {
+      colo: "FRA",
+      location: "Frankfurt, Germany",
+      region: "Europe",
+    },
+  },
+  room: {
+    className: "GameRoom",
+    storage: "sqlite",
+    location: null,
+    jurisdiction: "eu",
+  },
+  peers: [
+    {
+      seat: 0,
+      colo: "FRA",
+      location: "Frankfurt, Germany",
+      region: "Europe",
+    },
+    {
+      seat: 1,
+      colo: "IAD",
+      location: "Ashburn, United States",
+      region: "North America",
+    },
+  ],
+} satisfies RoomDiagnostics;
+
+type MatchFixtureOptions = {
+  roomDiagnostics?: () => RoomDiagnostics;
+  observePongs?: boolean;
+};
 
 const workerHealthRequests = new WeakMap<Page, string[]>();
 test.beforeEach(async ({ page }) => {
@@ -69,7 +111,7 @@ async function expectSharedPing(panel: Locator, point: string) {
 }
 
 /** Deterministic authoritative frames; no room or gameplay action is sent to the Worker. */
-async function enterMatch(page: Page) {
+async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
   const now = Date.now();
   const initial = toPublic(
     createGame(
@@ -97,6 +139,8 @@ async function enterMatch(page: Page) {
   let connections = 0;
   let sequence = 0;
   const messages: string[] = [];
+  const debugPings: WebSocketRoute[] = [];
+  let metadataRequests = 0;
   await page.route("**/api/rooms", (route) =>
     route.fulfill({
       status: 201,
@@ -112,7 +156,23 @@ async function enterMatch(page: Page) {
     connections += 1;
     ws.onMessage((raw) => {
       messages.push(String(raw));
-      if ((JSON.parse(String(raw)) as { type: string }).type === "sync") {
+      if (String(raw) === DEBUG_PING_REQUEST) {
+        debugPings.push(ws);
+        return;
+      }
+      const message = JSON.parse(String(raw)) as { type: string };
+      if (message.type === "debug-info") {
+        metadataRequests += 1;
+        if (options.roomDiagnostics) {
+          ws.send(
+            JSON.stringify({
+              type: "room-diagnostics",
+              value: options.roomDiagnostics(),
+            } satisfies ServerMessage),
+          );
+        }
+      }
+      if (message.type === "sync") {
         const welcome: ServerMessage = {
           type: "welcome",
           protocolVersion: 1,
@@ -120,6 +180,7 @@ async function enterMatch(page: Page) {
           seq: sequence,
           snapshot,
           randomness: null,
+          ...(options.roomDiagnostics ? { roomDebugVersion: 1 } : {}),
           lobby: {
             roomCode: "ABCD35",
             hostSeat: 0,
@@ -138,6 +199,24 @@ async function enterMatch(page: Page) {
     });
   });
   await page.goto("/");
+  if (options.observePongs) {
+    // The route mock is installed during navigation; observe it before joining.
+    await page.evaluate((pong) => {
+      const NativeSocket = window.WebSocket;
+      let received = 0;
+      window.WebSocket = class extends NativeSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          this.addEventListener("message", (event) => {
+            if (event.data !== pong) return;
+            received += 1;
+            document.documentElement.dataset.roomPongsReceived =
+              String(received);
+          });
+        }
+      };
+    }, DEBUG_PING_RESPONSE);
+  }
   await page.getByLabel("Votre nom de joueur").fill("Camille");
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
@@ -152,6 +231,13 @@ async function enterMatch(page: Page) {
     snapshot,
     messages,
     connections: () => connections,
+    metadataRequests: () => metadataRequests,
+    pingRequests: () => debugPings.length,
+    pong(index: number) {
+      const pingSocket = debugPings[index];
+      if (!pingSocket) throw new Error(`No fixture ping at index ${index}`);
+      pingSocket.send(DEBUG_PING_RESPONSE);
+    },
     async disconnect() {
       if (!socket) throw new Error("Expected an open match socket");
       await socket.close({ code: 1011, reason: "Fixture reconnect" });
@@ -407,6 +493,10 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
   const status = debugPanel.getByRole("status");
   await expect(status).toHaveText(/^\d+ ms$/);
   await expectSharedPing(debugPanel, "FRA");
+  await expect(page.locator(".room-debug-route")).toContainText(
+    "Informations de la salle indisponibles.",
+  );
+  await expect(page.locator(".room-debug-chart")).toHaveCount(0);
   expect(new URL(probeURLs[0]).pathname).toBe("/connection-probe.txt");
   await expect(debugPanel).toHaveAttribute("data-runtime", "cloudflare");
   await expect(debugPanel).toContainText("Ping Cloudflare");
@@ -487,6 +577,11 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
   await page.clock.runFor(30_000);
   expect(requests).toBe(5);
   expect(match.connections()).toBe(1);
+  expect(
+    match.messages.map((raw) =>
+      raw.startsWith("{") ? (JSON.parse(raw) as { type: string }).type : raw,
+    ),
+  ).toEqual(["sync"]);
 });
 
 test("Debug immediately refreshes the Cloudflare entry after online or network changes and sleeps while hidden", async ({
@@ -795,6 +890,335 @@ test("the tiny match badge retains its shared sample outside Debug without more 
     });
     expect(requests).toBe(1);
   }
+});
+
+test("room diagnostics show connected ingress routes and SQLite with bounded measured latency history", async ({
+  page,
+}) => {
+  await page.route("**/connection-probe.txt**", (route) =>
+    route.fulfill(FRANKFURT_PROBE),
+  );
+  const match = await enterMatch(page, {
+    roomDiagnostics: () => FRANKFURT_ROOM,
+  });
+  await freezeClock(page);
+  await openSettings(page);
+  expect(match.metadataRequests()).toBe(0);
+  expect(match.pingRequests()).toBe(0);
+  const previousTime = await page.locator(".match-clock").innerText();
+  const debugTab = page.getByRole("tab", { name: "Débogage", exact: true });
+  await debugTab.click();
+  const route = page.locator(".room-debug-route");
+  const latency = page.locator(".room-debug-latency");
+  const measuredLatency = latency.locator(".room-debug-latency-heading strong");
+  const chart = latency.getByRole("img", {
+    name: /Historique du ping de la partie/,
+  });
+  await expect(route).toContainText("GameRoom");
+  await expect.poll(() => match.pingRequests()).toBe(1);
+  expect(match.metadataRequests()).toBe(1);
+  await expect(route.locator('[data-own="true"]')).toContainText("Vous");
+  await expect(route.locator('[data-own="true"]')).toContainText("FRA");
+  await expect(route.locator('[data-own="true"]')).toContainText("Europe");
+  await expect(route.locator('[data-own="false"]')).toContainText("IAD");
+  await expect(route.locator('[data-own="false"]')).toContainText(
+    "Amérique du Nord",
+  );
+  await expect(route.locator(".room-debug-object")).toContainText(
+    "SQLite dans cet objet",
+  );
+  await expect(diagnosticValue(route, "Endpoint Worker")).toContainText(
+    new URL(page.url()).hostname,
+  );
+  await expect(diagnosticValue(route, "Votre entrée WebSocket")).toContainText(
+    "FRA",
+  );
+  await expect(diagnosticValue(route, "Juridiction")).toHaveText(
+    "Union européenne",
+  );
+  await expect(diagnosticValue(route, "Hôte / centre de données")).toHaveText(
+    "Non exposé par Cloudflare",
+  );
+  await expect(route.locator(".room-debug-object")).not.toContainText("IAD");
+  await page.clock.runFor(120);
+  match.pong(0);
+  await expect(measuredLatency).toHaveText("120 ms");
+  await page.clock.runFor(4880);
+  await expect.poll(() => match.pingRequests()).toBe(2);
+  await page.clock.runFor(80);
+  match.pong(1);
+  await expect(measuredLatency).toHaveText("80 ms");
+  await page.clock.runFor(4920);
+  await expect.poll(() => match.pingRequests()).toBe(3);
+  await page.clock.runFor(200);
+  match.pong(2);
+  await expect(measuredLatency).toHaveText("200 ms");
+  await expect(chart).toHaveAccessibleName(/3 mesures/);
+  await expect(chart.locator("circle")).toHaveCount(3);
+  await expect(diagnosticValue(latency, "Min")).toHaveText("80 ms");
+  await expect(diagnosticValue(latency, "Moyenne")).toHaveText("133 ms");
+  await expect(diagnosticValue(latency, "Max")).toHaveText("200 ms");
+  await expect(chart.locator("polyline")).toHaveCount(1);
+  await setDocumentVisibility(page, false);
+  await page.clock.runFor(20_000);
+  expect(match.pingRequests()).toBe(3);
+  await setDocumentVisibility(page, true);
+  await expect.poll(() => match.pingRequests()).toBe(4);
+  await page.clock.runFor(60);
+  match.pong(3);
+  await expect(measuredLatency).toHaveText("60 ms");
+  await expect(chart.locator("circle")).toHaveCount(4);
+  await expect(chart.locator("polyline")).toHaveCount(2);
+  expect(match.metadataRequests()).toBe(1);
+  await expect(debugTab).toBeFocused();
+  await expect(page.locator(".match-clock")).not.toHaveText(previousTime);
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.clock.runFor(50);
+    const layout = await page
+      .locator(".pause-dialog-body")
+      .evaluate((body) => ({
+        clientWidth: body.clientWidth,
+        scrollWidth: body.scrollWidth,
+        pageWidth: document.documentElement.scrollWidth,
+      }));
+    expect(layout.scrollWidth).toBe(layout.clientWidth);
+    expect(layout.pageWidth).toBe(viewport.width);
+    await expect(debugTab).toBeFocused();
+    await page.screenshot({
+      path: `.local/verification/room-debug-${viewport.width}.png`,
+    });
+    if (viewport.width === 390) {
+      await latency.locator(".room-debug-statistics").scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: ".local/verification/room-debug-latency-390.png",
+      });
+    }
+  }
+  // The chart retains at most sixty actual replies, even after a long open menu.
+  let sinceLastCadence = 260;
+  for (let pingIndex = 4; pingIndex < 64; pingIndex += 1) {
+    await page.clock.runFor(5000 - sinceLastCadence);
+    await expect.poll(() => match.pingRequests()).toBe(pingIndex + 1);
+    await page.clock.runFor(40);
+    match.pong(pingIndex);
+    await expect(chart.locator("circle")).toHaveCount(
+      Math.min(pingIndex + 1, 60),
+    );
+    sinceLastCadence = 40;
+  }
+  await expect(chart).toHaveAccessibleName(/60 mesures/);
+  await expect(chart.locator("circle")).toHaveCount(60);
+  expect(match.metadataRequests()).toBe(1);
+  expect(match.connections()).toBe(1);
+  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
+  await page
+    .locator(".pause-dialog")
+    .getByLabel("Langue", { exact: true })
+    .selectOption("en");
+  await page.getByRole("tab", { name: "Debug", exact: true }).click();
+  await expect(route).toContainText("Connected player routes");
+  await expect(route.locator('[data-own="true"]')).toContainText("You");
+  await expect(route.locator('[data-own="false"]')).toContainText(
+    "North America",
+  );
+  await expect(route.locator(".room-debug-object")).toContainText(
+    "SQLite inside this object",
+  );
+  await expect(diagnosticValue(route, "Host / data center")).toHaveText(
+    "Not exposed by Cloudflare",
+  );
+  await expect(
+    latency.getByRole("img", { name: /Game ping history/ }),
+  ).toHaveAccessibleName(/60 samples/);
+  expect(match.connections()).toBe(1);
+});
+
+test("room diagnostics use the game socket only while Debug is visible and refresh metadata on reconnect", async ({
+  page,
+}) => {
+  await page.route("**/connection-probe.txt**", (route) =>
+    route.fulfill(FRANKFURT_PROBE),
+  );
+  let diagnostics: RoomDiagnostics = FRANKFURT_ROOM;
+  const match = await enterMatch(page, {
+    roomDiagnostics: () => diagnostics,
+  });
+  await freezeClock(page);
+  await openSettings(page);
+  await page.clock.runFor(10_000);
+  await page.getByRole("tab", { name: "Audio", exact: true }).click();
+  await page.clock.runFor(10_000);
+  expect(match.metadataRequests()).toBe(0);
+  expect(match.pingRequests()).toBe(0);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  const route = page.locator(".room-debug-route");
+  const measuredLatency = page.locator(".room-debug-latency-heading strong");
+  await expect(route).toContainText("GameRoom");
+  await expect.poll(() => match.pingRequests()).toBe(1);
+  expect(match.metadataRequests()).toBe(1);
+  await page.clock.runFor(25);
+  match.pong(0);
+  await expect(measuredLatency).toHaveText("25 ms");
+  await page.clock.runFor(4975);
+  await expect.poll(() => match.pingRequests()).toBe(2);
+  await setDocumentVisibility(page, false);
+  await page.clock.runFor(20_000);
+  expect(match.pingRequests()).toBe(2);
+  expect(match.metadataRequests()).toBe(1);
+  await setDocumentVisibility(page, true);
+  await expect.poll(() => match.pingRequests()).toBe(3);
+  // The outstanding reply from before hiding consumes its expired FIFO slot.
+  match.pong(1);
+  await page.clock.runFor(50);
+  match.pong(2);
+  await expect(measuredLatency).toHaveText("50 ms");
+  expect(match.metadataRequests()).toBe(1);
+  await setBrowserOnline(page, false);
+  await page.clock.runFor(20_000);
+  expect(match.pingRequests()).toBe(3);
+  await setBrowserOnline(page, true);
+  await expect.poll(() => match.pingRequests()).toBe(4);
+  await page.clock.runFor(35);
+  match.pong(3);
+  await expect(measuredLatency).toHaveText("35 ms");
+  expect(match.metadataRequests()).toBe(1);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await setBrowserOnline(page, true);
+  await page.clock.runFor(20_000);
+  expect(match.pingRequests()).toBe(4);
+  expect(match.metadataRequests()).toBe(1);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  await expect.poll(() => match.pingRequests()).toBe(5);
+  await expect.poll(() => match.metadataRequests()).toBe(2);
+  await page.clock.runFor(45);
+  match.pong(4);
+  await expect(measuredLatency).toHaveText("45 ms");
+  await page.getByRole("button", { name: "Revenir au plateau" }).click();
+  await setBrowserOnline(page, true);
+  await setDocumentVisibility(page, true);
+  await page.clock.runFor(20_000);
+  expect(match.pingRequests()).toBe(5);
+  expect(match.metadataRequests()).toBe(2);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  await expect.poll(() => match.pingRequests()).toBe(6);
+  await expect.poll(() => match.metadataRequests()).toBe(3);
+  await page.clock.runFor(55);
+  match.pong(5);
+  await expect(measuredLatency).toHaveText("55 ms");
+  diagnostics = {
+    ...FRANKFURT_ROOM,
+    worker: {
+      ...FRANKFURT_ROOM.worker,
+      cloudflare: {
+        colo: "ZRH",
+        location: "Zurich, Switzerland",
+        region: "Europe",
+      },
+    },
+    peers: [
+      {
+        ...FRANKFURT_ROOM.peers[0],
+        colo: "ZRH",
+        location: "Zurich, Switzerland",
+      },
+      FRANKFURT_ROOM.peers[1],
+    ],
+  };
+  await match.disconnect();
+  await expect(page.locator(".room-debug-chart")).toHaveCount(0);
+  await page.clock.runFor(1000);
+  await expect.poll(() => match.connections()).toBe(2);
+  await expect.poll(() => match.metadataRequests()).toBe(4);
+  await expect.poll(() => match.pingRequests()).toBe(7);
+  await expect(diagnosticValue(route, "Votre entrée WebSocket")).toContainText(
+    "ZRH",
+  );
+  await expect(route.locator('[data-own="true"]')).toContainText("ZRH");
+  await expect(diagnosticValue(route, "Endpoint Worker")).toContainText(
+    new URL(page.url()).hostname,
+  );
+  await expect(
+    diagnosticValue(page.locator(".pause-debug"), "Point d’entrée Cloudflare"),
+  ).toContainText("FRA");
+  await page.clock.runFor(65);
+  match.pong(6);
+  await expect(measuredLatency).toHaveText("65 ms");
+  await expect(page.locator(".room-debug-chart circle")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await setBrowserOnline(page, true);
+  await page.clock.runFor(20_000);
+  expect(match.pingRequests()).toBe(7);
+  expect(match.metadataRequests()).toBe(4);
+  const ordinaryMessages = match.messages.filter(
+    (raw) =>
+      raw !== DEBUG_PING_REQUEST && JSON.parse(raw).type !== "debug-info",
+  );
+  expect(ordinaryMessages.map((raw) => JSON.parse(raw).type)).toEqual([
+    "sync",
+    "sync",
+  ]);
+});
+
+test("late room pongs from timed out or closed Debug cannot become a fresh latency sample", async ({
+  page,
+}) => {
+  await page.route("**/connection-probe.txt**", (route) =>
+    route.fulfill(FRANKFURT_PROBE),
+  );
+  const match = await enterMatch(page, {
+    roomDiagnostics: () => FRANKFURT_ROOM,
+    observePongs: true,
+  });
+  await freezeClock(page);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  await expect.poll(() => match.pingRequests()).toBe(1);
+  await page.clock.runFor(5000);
+  await expect.poll(() => match.pingRequests()).toBe(2);
+  await page.getByRole("button", { name: "Revenir au plateau" }).click();
+  await page.clock.runFor(1000);
+  expect(match.pingRequests()).toBe(2);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  await expect.poll(() => match.pingRequests()).toBe(3);
+  await expect.poll(() => match.metadataRequests()).toBe(2);
+  const measuredLatency = page.locator(".room-debug-latency-heading strong");
+  await page.clock.runFor(100);
+  match.pong(0);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-room-pongs-received",
+    "1",
+  );
+  await expect(measuredLatency).toHaveText("—");
+  await expect(page.locator(".room-debug-chart")).toHaveCount(0);
+  await page.clock.runFor(100);
+  match.pong(1);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-room-pongs-received",
+    "2",
+  );
+  await expect(measuredLatency).toHaveText("—");
+  await expect(page.locator(".room-debug-chart")).toHaveCount(0);
+  await page.clock.runFor(100);
+  match.pong(2);
+  await expect(measuredLatency).toHaveText("300 ms");
+  await expect(page.locator(".room-debug-chart circle")).toHaveCount(1);
+  match.pong(2);
+  await page.clock.runFor(100);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-room-pongs-received",
+    "4",
+  );
+  await expect(measuredLatency).toHaveText("300 ms");
+  await expect(page.locator(".room-debug-chart circle")).toHaveCount(1);
+  expect(match.connections()).toBe(1);
 });
 
 test("the rules icon is read only, invitations stay separate, and leaving needs confirmation", async ({

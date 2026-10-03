@@ -1,8 +1,10 @@
 # Client ↔ server protocol
 
-JSON text frames over one WebSocket per player (`/ws/room/:code`). Every message is
-a discriminated union on `type`, defined once with Zod in `src/shared/protocol/` and
-imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
+JSON text frames over one WebSocket per player (`/ws/room/:code`). Gameplay and
+diagnostic metadata use a discriminated union on `type`, defined once with Zod in
+`src/shared/protocol/` and imported by both client and worker. A fixed pair of
+transport-only debug ping/pong strings is described below. Binary encoding
+(e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
 ## Implemented playable protocol
@@ -27,6 +29,22 @@ debug socket has been removed; `/api/health` remains.
 - First send `sync {lastSeq:null}` for a snapshot, or a known sequence for replay.
   `welcome {protocolVersion,you,seq,snapshot,lobby,randomness}` always comes first.
   Replay then sends the contiguous events and any persisted dice proof receipts.
+- New servers optionally advertise `roomDebugVersion: 1` in `welcome`. Only then,
+  while Debug is open, the client requests `debug-info` once on open/reconnect.
+  The socket-specific `room-diagnostics {value}` response is validated by
+  `shared/protocol/room-diagnostics.ts`. It contains the requesting socket's saved
+  Worker ingress metadata, connected seats' ingress POPs, the `GameRoom` class,
+  local SQLite storage and an optional enforced jurisdiction. Exact physical DO
+  location is always null: it is not exposed by the runtime. No IP, capability,
+  DO identifier or database contents are exposed. Diagnostics are neither game
+  events nor broadcasts and do not change the event sequence or game state.
+- The fixed strings `polytour-debug-ping-v1` / `polytour-debug-pong-v1` measure
+  room WebSocket round-trip time every five seconds while Debug is open, visible
+  and online. `setWebSocketAutoResponse` answers without running game JavaScript,
+  SQL or alarms. The client handles the exact pong before JSON parsing. Its
+  bounded per-socket FIFO retains expired/suspended attempts so a late fixed pong
+  cannot be attributed to a new measurement. Socket replacement resets that FIFO.
+  Old servers without the capability are never sent these new debug messages.
 - Host lobby operations are `start {fillBots}`, `settings {config}`,
   `add-bot {seat}` and `remove-bot {seat}`. A room has four places and starts with
   two to four players. `add-bot` seats a server bot on an empty place (`seat-taken`

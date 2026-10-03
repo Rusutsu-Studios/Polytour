@@ -20,6 +20,10 @@
   background: #173b456b;
 }
 
+.pause-dialog[data-debug="true"] {
+  width: min(850px, calc(100vw - 48px));
+}
+
 .pause-dialog-frame {
   border-radius: inherit;
 }
@@ -199,6 +203,18 @@
   display: none;
 }
 
+.pause-dialog[data-debug="true"] .pause-dialog-body {
+  padding-block: 22px;
+}
+
+.pause-dialog[data-debug="true"] .pause-note {
+  margin-bottom: 16px;
+}
+
+.pause-dialog[data-debug="true"] .pause-tab-panel {
+  padding-top: 18px;
+}
+
 .pause-setting {
   display: grid;
   gap: 10px;
@@ -325,6 +341,229 @@
   line-height: 1.45;
 }
 
+.pause-debug-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: 18px 28px;
+  align-items: start;
+}
+
+.pause-debug h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 800;
+}
+
+.room-debug-route {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  min-width: 0;
+}
+
+.room-debug-latency {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.pause-debug-edge {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.pause-debug-edge dl {
+  gap: 10px;
+  font-size: 13px;
+}
+
+.pause-debug-edge .pause-debug-note {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.room-debug-peers {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 12px 0 0;
+  border-right: 1px solid #759ca4;
+  list-style: none;
+}
+
+.room-debug-peers li {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding-block: 4px;
+}
+
+.room-debug-player,
+.room-debug-ingress {
+  display: grid;
+  gap: 2px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.room-debug-player small,
+.room-debug-ingress small {
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 400;
+}
+
+.room-debug-ingress {
+  text-align: right;
+}
+
+.room-debug-peers li[data-own="true"] .room-debug-player {
+  color: #1856a7;
+}
+
+.room-debug-arrow {
+  color: #47666c;
+  font-size: 20px;
+  text-align: right;
+}
+
+.room-debug-object {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 44px;
+  margin: 10px 0 18px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: #e4f2e8;
+  font-size: 14px;
+}
+
+.room-debug-object::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  right: 0;
+  height: 10px;
+  border-right: 1px solid #759ca4;
+}
+
+.room-debug-object span {
+  color: #355e67;
+  font-size: 12px;
+  text-align: right;
+}
+
+.pause-debug .room-debug-host {
+  gap: 12px;
+  font-size: 13px;
+}
+
+.room-debug-host dd small {
+  display: block;
+  margin-top: 2px;
+  color: #47666c;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.room-debug-note,
+.room-debug-empty {
+  margin: 0;
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.room-debug-empty {
+  padding-block: 12px;
+  font-size: 14px;
+}
+
+.room-debug-latency-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.room-debug-latency-heading h3 {
+  margin-bottom: 8px;
+}
+
+.room-debug-latency-heading strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.room-debug-chart {
+  display: block;
+  width: 100%;
+  height: 90px;
+  margin-block: 6px 8px;
+  overflow: visible;
+}
+
+.room-debug-chart text {
+  fill: #47666c;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.room-debug-chart-grid {
+  stroke: #b6c9c1;
+  stroke-width: 1;
+}
+
+.room-debug-chart-line {
+  fill: none;
+  stroke: #236cce;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.room-debug-chart-point {
+  fill: #236cce;
+}
+
+.room-debug-chart-empty {
+  display: grid;
+  align-items: center;
+  min-height: 90px;
+  margin: 6px 0 8px;
+  color: #47666c;
+  font-size: 13px;
+  text-align: center;
+}
+
+.pause-debug .room-debug-statistics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pause-debug .room-debug-statistics > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+
+.room-debug-statistics dt {
+  font-size: 12px;
+}
+
+.room-debug-statistics dd {
+  font-size: 14px;
+  text-align: left;
+}
+
 .pause-dialog :is(button, select, input, .pause-tab-panel):focus-visible {
   outline: 3px solid #173b45;
   outline-offset: 4px;
@@ -334,8 +573,26 @@
   outline-color: #fffaf0;
 }
 
+@media (max-width: 700px) {
+  .pause-debug-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+
+  .room-debug-route,
+  .room-debug-latency,
+  .pause-debug-edge {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
 @media (max-width: 480px) {
   .pause-dialog {
+    width: calc(100vw - 32px);
+  }
+
+  .pause-dialog[data-debug="true"] {
     width: calc(100vw - 32px);
   }
 

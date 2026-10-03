@@ -8,10 +8,13 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import type { Seat } from "../../shared/engine/index.js";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
+import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
 import Icon from "./Icon.js";
+import RoomDebug, { translatedRegion } from "./RoomDebug.js";
 import "./PauseMenu.css";
 
 type Page = "menu" | "settings" | "confirm-leave";
@@ -25,6 +28,8 @@ export type PauseMenuProps = {
   onZoom: (zoom: number) => void;
   connection: string;
   ping: PingState;
+  roomDebug: RoomDebugState;
+  ownSeat: Seat;
   onDebugActiveChange: (active: boolean) => void;
 };
 
@@ -40,6 +45,8 @@ export default function PauseMenu({
   onZoom,
   connection,
   ping,
+  roomDebug,
+  ownSeat,
   onDebugActiveChange,
 }: PauseMenuProps) {
   const { locale, setLocale, t } = useLocale();
@@ -60,29 +67,13 @@ export default function PauseMenu({
   const debugActive = page === "settings" && tab === "debug";
   const sample = ping.status === "success" ? ping.value : null;
   const unavailable = t("Indisponible", "Unavailable");
-  const regions: Record<string, string> = {
-    Europe: t("Europe", "Europe"),
-    Africa: t("Afrique", "Africa"),
-    Asia: t("Asie", "Asia"),
-    "Latin America & the Caribbean": t(
-      "Amérique latine et Caraïbes",
-      "Latin America & the Caribbean",
-    ),
-    "Middle East": t("Moyen-Orient", "Middle East"),
-    "North America": t("Amérique du Nord", "North America"),
-    Oceania: t("Océanie", "Oceania"),
-  };
   const entryPoint =
     sample?.runtime === "local"
       ? t("Local", "Local")
       : sample?.colo
         ? [sample.colo, sample.location].filter(Boolean).join(" · ")
         : unavailable;
-  const region = sample?.region;
-  const regionLabel =
-    region && Object.hasOwn(regions, region)
-      ? (regions[region] ?? unavailable)
-      : unavailable;
+  const regionLabel = translatedRegion(sample?.region ?? null, t);
 
   // Commit the probe gate before browser timers or network events can see a closed tab.
   useLayoutEffect(() => {
@@ -169,6 +160,7 @@ export default function PauseMenu({
     <dialog
       ref={dialogRef}
       className="pause-dialog"
+      data-debug={debugActive}
       aria-labelledby={`${id}-title`}
       aria-describedby={`${id}-note`}
       onCancel={(event) => {
@@ -399,85 +391,96 @@ export default function PauseMenu({
                       {t("Bientôt disponible", "Coming soon")}
                     </p>
                   )}
-                  {value === "debug" && (
+                  {value === "debug" && debugActive && (
                     <div
                       className="pause-debug"
                       data-runtime={sample?.runtime ?? "unknown"}
                     >
-                      <dl>
-                        <div>
-                          <dt>{t("Ping Cloudflare", "Cloudflare ping")}</dt>
-                          <dd role="status">
-                            {ping.status === "success"
-                              ? `${ping.value.latencyMs} ms`
-                              : ping.status === "loading"
-                                ? t("Mesure en cours…", "Measuring…")
-                                : unavailable}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>
-                            {t(
-                              "Point d’entrée Cloudflare",
-                              "Cloudflare entry point",
+                      <div className="pause-debug-grid">
+                        <RoomDebug value={roomDebug} ownSeat={ownSeat} />
+                        <section
+                          className="pause-debug-edge"
+                          aria-labelledby={`${id}-http-title`}
+                        >
+                          <h3 id={`${id}-http-title`}>
+                            {t("Connexion HTTP", "HTTP connection")}
+                          </h3>
+                          <dl>
+                            <div>
+                              <dt>{t("Ping Cloudflare", "Cloudflare ping")}</dt>
+                              <dd role="status">
+                                {ping.status === "success"
+                                  ? `${ping.value.latencyMs} ms`
+                                  : ping.status === "loading"
+                                    ? t("Mesure en cours…", "Measuring…")
+                                    : unavailable}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>
+                                {t(
+                                  "Point d’entrée Cloudflare",
+                                  "Cloudflare entry point",
+                                )}
+                              </dt>
+                              <dd>{entryPoint}</dd>
+                            </div>
+                            <div>
+                              <dt>{t("Région", "Region")}</dt>
+                              <dd>{regionLabel}</dd>
+                            </div>
+                            <div>
+                              <dt>{t("Service de jeu", "Game service")}</dt>
+                              <dd>polytour</dd>
+                            </div>
+                            <div>
+                              <dt>{t("Hôte", "Host")}</dt>
+                              <dd>{sample?.hostname ?? unavailable}</dd>
+                            </div>
+                            <div>
+                              <dt>
+                                {t("Connexion de la partie", "Game connection")}
+                              </dt>
+                              <dd>{connectionLabel}</dd>
+                            </div>
+                          </dl>
+                          <p className="pause-debug-note">
+                            {ping.status === "success" ? (
+                              <>
+                                {t("Dernière mesure : ", "Last measured: ")}
+                                <time
+                                  dateTime={new Date(
+                                    ping.value.checkedAt,
+                                  ).toISOString()}
+                                >
+                                  {new Date(
+                                    ping.value.checkedAt,
+                                  ).toLocaleTimeString(
+                                    locale === "fr" ? "fr-CH" : "en-GB",
+                                  )}
+                                </time>
+                                {t(" · Chaque seconde.", " · Every second.")}
+                              </>
+                            ) : ping.status === "error" ? (
+                              t(
+                                "Mesure impossible. Nouvelle tentative dès que la connexion le permet.",
+                                "Could not measure. Retrying when the connection allows.",
+                              )
+                            ) : (
+                              t(
+                                "Actualisation chaque seconde.",
+                                "Updated every second.",
+                              )
                             )}
-                          </dt>
-                          <dd>{entryPoint}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Région", "Region")}</dt>
-                          <dd>{regionLabel}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Service de jeu", "Game service")}</dt>
-                          <dd>polytour</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Hôte", "Host")}</dt>
-                          <dd>{sample?.hostname ?? unavailable}</dd>
-                        </div>
-                        <div>
-                          <dt>
-                            {t("Connexion de la partie", "Game connection")}
-                          </dt>
-                          <dd>{connectionLabel}</dd>
-                        </div>
-                      </dl>
-                      <p className="pause-debug-note">
-                        {ping.status === "success" ? (
-                          <>
-                            {t("Dernière mesure : ", "Last measured: ")}
-                            <time
-                              dateTime={new Date(
-                                ping.value.checkedAt,
-                              ).toISOString()}
-                            >
-                              {new Date(
-                                ping.value.checkedAt,
-                              ).toLocaleTimeString(
-                                locale === "fr" ? "fr-CH" : "en-GB",
-                              )}
-                            </time>
-                            {t(" · Chaque seconde.", " · Every second.")}
-                          </>
-                        ) : ping.status === "error" ? (
-                          t(
-                            "Mesure impossible. Nouvelle tentative dès que la connexion le permet.",
-                            "Could not measure. Retrying when the connection allows.",
-                          )
-                        ) : (
-                          t(
-                            "Actualisation chaque seconde.",
-                            "Updated every second.",
-                          )
-                        )}
-                      </p>
-                      <p className="pause-debug-note">
-                        {t(
-                          "Ping HTTP vers Cloudflare, distinct de la latence de la partie.",
-                          "HTTP ping to Cloudflare, separate from the game’s latency.",
-                        )}
-                      </p>
+                          </p>
+                          <p className="pause-debug-note">
+                            {t(
+                              "Ping HTTP vers Cloudflare, distinct de la latence de la partie.",
+                              "HTTP ping to Cloudflare, separate from the game’s latency.",
+                            )}
+                          </p>
+                        </section>
+                      </div>
                     </div>
                   )}
                 </div>
