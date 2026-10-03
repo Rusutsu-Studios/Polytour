@@ -4,33 +4,11 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { APP_VERSION } from "../src/shared/version.js";
+import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
-
-// Board inspection steps space by space; the card is the deed, not a list.
-async function inspectSpace(page: Page, index: number) {
-  const card = page.locator(".city-card");
-  await expect(card).toBeVisible();
-  for (let step = 0; step <= 32; step++) {
-    const current = Number(
-      await card.getAttribute("data-space", { timeout: 5000 }),
-    );
-    if (current === index) return;
-    const direction = (index - current + 32) % 32 <= 16 ? 1 : -1;
-    await page
-      .getByRole("button", {
-        name: direction === 1 ? "Case suivante" : "Case précédente",
-        exact: true,
-      })
-      .click();
-    await expect(card).toHaveAttribute(
-      "data-space",
-      String((current + direction + 32) % 32),
-    );
-  }
-  throw new Error(`The inspection card never reached space ${index}`);
-}
 
 async function expectDiceHelp(panel: Locator) {
   await expect(
@@ -66,6 +44,50 @@ async function playWithBots(page: Page) {
   await openLobby(page);
   await page.getByRole("button", { name: "Démarrer la partie" }).click();
 }
+
+// The Worker broadcasts room changes before acknowledging the command.
+// Observing a changed lobby alone does not mean the sender can act again.
+function observeRoomCommands(screen: Page) {
+  const operations = new Map<string, string>();
+  const replies = new Map<string, string[]>();
+  screen.on("websocket", (socket) => {
+    socket.on("framesent", (frame) => {
+      try {
+        const message = JSON.parse(String(frame.payload)) as {
+          type?: string;
+          id?: string;
+          op?: { type?: string };
+        };
+        if (message.type === "lobby" && message.id && message.op?.type)
+          operations.set(message.id, message.op.type);
+      } catch {
+        // Diagnostic ping frames are plain text.
+      }
+    });
+    socket.on("framereceived", (frame) => {
+      try {
+        const message = JSON.parse(String(frame.payload)) as {
+          type?: string;
+          id?: string;
+        };
+        const operation = message.id && operations.get(message.id);
+        if (operation && (message.type === "ack" || message.type === "reject"))
+          replies.set(operation, [
+            ...(replies.get(operation) ?? []),
+            message.type,
+          ]);
+      } catch {
+        // Diagnostic pong frames are plain text.
+      }
+    });
+  });
+  return async (operation: string, perform: () => Promise<void>) => {
+    const completed = replies.get(operation)?.length ?? 0;
+    await perform();
+    await expect.poll(() => replies.get(operation)?.[completed]).toBe("ack");
+  };
+}
+
 /** Saves the leader's settings draft for the room, then closes the sheet. */
 async function saveSettings(page: Page) {
   await page.getByRole("button", { name: "Enregistrer les réglages" }).click();
@@ -211,31 +233,40 @@ test.describe("low graphics", () => {
     const toolbarGraphics = page.locator(
       "nav.game-tools [data-graphics-quality]",
     );
-    await expect(toolbarGraphics).toHaveAttribute(
-      "data-graphics-quality",
-      "low",
-    );
-    await expect(toolbarGraphics).toHaveAccessibleName(lowLabel);
+    await expect(toolbarGraphics).toHaveCount(0);
     await page.getByRole("button", { name: "Menu pause", exact: true }).click();
     await page
       .locator(".pause-dialog")
       .getByRole("button", { name: "Réglages", exact: true })
       .click();
     await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-    const drawerGraphics = page.locator(
-      ".pause-dialog [data-graphics-quality]",
+    const graphics = page.getByRole("group", {
+      name: "Graphismes",
+      exact: true,
+    });
+    const highGraphics = graphics.getByRole("radio", {
+      name: "Élevé",
+      exact: true,
+    });
+    const lowGraphics = graphics.getByRole("radio", {
+      name: "Faible",
+      exact: true,
+    });
+    await expect(graphics.getByRole("radio")).toHaveCount(2);
+    await expect(lowGraphics).toBeChecked();
+    await expect(highGraphics).not.toBeChecked();
+    const highBox = await highGraphics.locator("..").boundingBox();
+    const lowBox = await lowGraphics.locator("..").boundingBox();
+    expect(highBox).not.toBeNull();
+    expect(lowBox).not.toBeNull();
+    expect(highBox?.y).toBe(lowBox?.y);
+    expect((highBox?.x ?? 0) + (highBox?.width ?? 0)).toBeLessThan(
+      lowBox?.x ?? 0,
     );
-    await expect(drawerGraphics).toHaveAttribute(
-      "data-graphics-quality",
-      "low",
-    );
-    await drawerGraphics.press("Enter");
-    await expect(toolbarGraphics).toHaveAccessibleName(highLabel);
-    await expect(drawerGraphics).toHaveAccessibleName(highLabel);
-    await expect(drawerGraphics).toHaveAttribute(
-      "data-graphics-quality",
-      "high",
-    );
+    await lowGraphics.focus();
+    await lowGraphics.press("ArrowLeft");
+    await expect(highGraphics).toBeChecked();
+    await expect(lowGraphics).not.toBeChecked();
     await expect.poll(rendering).toMatchObject({
       dpr: 1.5,
       shadows: true,
@@ -247,13 +278,10 @@ test.describe("low graphics", () => {
     expect(standard.width).toBe(Math.floor(low.width * 1.5));
     expect(standard.height).toBe(Math.floor(low.height * 1.5));
     expect(standard.frustum).toEqual(low.frustum);
-    await drawerGraphics.press("Space");
-    await expect(drawerGraphics).toHaveAccessibleName(lowLabel);
-    await expect(toolbarGraphics).toHaveAccessibleName(lowLabel);
-    await expect(toolbarGraphics).toHaveAttribute(
-      "data-graphics-quality",
-      "low",
-    );
+    await highGraphics.press("ArrowRight");
+    await expect(lowGraphics).toBeChecked();
+    await expect(highGraphics).not.toBeChecked();
+    await expect(toolbarGraphics).toHaveCount(0);
     await expect.poll(rendering).toEqual(low);
     await expect.poll(() => rendering(true)).toMatchObject({ idleFrames: 0 });
     expect(
@@ -266,7 +294,7 @@ test.describe("low graphics", () => {
       }, original),
     ).toBe(true);
     await original.dispose();
-    await drawerGraphics.press("Escape");
+    await lowGraphics.press("Escape");
     await expect(
       page
         .locator(".pause-dialog")
@@ -304,10 +332,7 @@ test.describe("low graphics", () => {
     await page.reload();
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
-    await expect(toolbarGraphics).toHaveAttribute(
-      "data-graphics-quality",
-      "low",
-    );
+    await expect(toolbarGraphics).toHaveCount(0);
     await expect(page.locator(".match-connection")).toHaveAttribute(
       "data-state",
       "online",
@@ -869,11 +894,20 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .getByRole("button", { name: "À propos des dés", exact: true })
     .click();
   await expect(page.locator(".proof-result")).toContainText("Dernier lancer :");
-  await page
-    .getByRole("button", { name: "Explorer le plateau", exact: true })
-    .click();
-  await inspectSpace(page, 31);
+  await expect(
+    page.getByRole("button", { name: "Explorer le plateau", exact: true }),
+  ).toHaveCount(0);
+  const pauseTrigger = page.getByRole("button", {
+    name: "Menu pause",
+    exact: true,
+  });
+  await pauseTrigger.focus();
+  await clickBoardSpace(page, 31);
+  await expect(page.locator(".city-card")).toHaveAttribute("data-space", "31");
   await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
+  await expect(
+    page.getByRole("button", { name: /Case précédente|Case suivante/ }),
+  ).toHaveCount(0);
   // The deed lists every building level with its cost and its rent.
   const deedRows = page.locator(".city-card-table tbody tr");
   await expect(deedRows).toHaveCount(5);
@@ -920,12 +954,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     director.reset(snapshot);
   }, beforeMovement);
   await page
-    .getByRole("button", { name: "Case suivante", exact: true })
+    .getByRole("button", { name: "Fermer l’inspection", exact: true })
     .press("Escape");
   await expect(page.locator(".city-card")).not.toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Explorer le plateau", exact: true }),
-  ).toBeFocused();
+  await expect(pauseTrigger).toBeFocused();
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
   // A healthy connection is silent; only its state attribute shows it.
@@ -1029,6 +1061,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
   page,
   browser,
 }) => {
+  const hostCommand = observeRoomCommands(page);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
@@ -1053,7 +1086,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     .getByRole("group", { name: "Durée de partie" })
     .getByRole("radio", { name: "20 min", exact: true })
     .check();
-  await saveSettings(page);
+  await hostCommand("settings", () => saveSettings(page));
   await expect(page.locator(".lobby-seats")).toBeVisible();
   const code = await page.locator(".room-code-block strong").innerText();
   const friend = await browser.newContext({
@@ -1118,9 +1151,9 @@ test("desktop room controls fit, create and join preserve the host settings", as
         .getByRole("group", { name: "Durée de partie" })
         .getByRole("radio", { name: "20 min", exact: true }),
     ).toBeChecked();
-    await page
-      .getByRole("button", { name: "Enregistrer les réglages" })
-      .click();
+    await hostCommand("settings", () =>
+      page.getByRole("button", { name: "Enregistrer les réglages" }).click(),
+    );
     await expect(
       second
         .getByRole("group", { name: "Durée de partie" })
@@ -1140,17 +1173,21 @@ test("desktop room controls fit, create and join preserve the host settings", as
     await expect(
       second.getByRole("button", { name: "Retirer le bot Atlas" }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Retirer le bot Atlas" }).click();
+    await hostCommand("remove-bot", () =>
+      page.getByRole("button", { name: "Retirer le bot Atlas" }).click(),
+    );
     await expect(second.locator(".lobby-seats")).not.toContainText("Atlas");
     await expect(
       second.getByRole("button", { name: /Ajouter un bot/ }),
     ).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "Ajouter un bot à la place 4" })
-      .click();
+    await hostCommand("add-bot", () =>
+      page.getByRole("button", { name: "Ajouter un bot à la place 4" }).click(),
+    );
     await expect(page.locator(".lobby-seats")).toContainText("Atlas");
     await expect(second.locator(".lobby-seats")).toContainText("Atlas");
-    await page.getByRole("button", { name: "Retirer le bot Atlas" }).click();
+    await hostCommand("remove-bot", () =>
+      page.getByRole("button", { name: "Retirer le bot Atlas" }).click(),
+    );
     await expect(
       page.getByRole("button", { name: "Ajouter un bot à la place 4" }),
     ).toBeVisible();
@@ -1158,7 +1195,9 @@ test("desktop room controls fit, create and join preserve the host settings", as
     await expect(page.locator(".lobby-count")).toContainText(
       "Partie à 3 joueurs",
     );
-    await page.getByRole("button", { name: "Démarrer la partie" }).click();
+    await hostCommand("start", () =>
+      page.getByRole("button", { name: "Démarrer la partie" }).click(),
+    );
     // Three players keep their lobby colours; the fourth corner stays empty.
     await expect(page.locator(".player-card")).toHaveCount(3);
     await expect(second.locator(".player-card")).toHaveCount(3);
@@ -1619,13 +1658,14 @@ test("travel, rent protections and exchanges show the complete legal choice", as
   }, original);
 });
 
-test("the room leader seats a local player, admits a friend and brings everyone back", async ({
+test("the room leader seats a local player, admits a friend, hands over during play and brings everyone back", async ({
   page,
   browser,
 }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const hostCommand = observeRoomCommands(page);
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Alice");
   await page.getByRole("button", { name: "Jouer", exact: true }).click();
@@ -1633,18 +1673,24 @@ test("the room leader seats a local player, admits a friend and brings everyone 
   await expect(seats).toContainText("Milo");
   await expect(seats.locator(".host-label")).toHaveCount(1);
   // Someone next to Alice takes Milo's place on this screen.
-  await page.getByRole("button", { name: "Retirer le bot Milo" }).click();
+  await hostCommand("remove-bot", () =>
+    page.getByRole("button", { name: "Retirer le bot Milo" }).click(),
+  );
   await page
     .getByRole("button", {
       name: "Ajouter un joueur sur ce PC à la place 2",
     })
     .click();
   await page.getByLabel("Joueur sur ce PC").fill("Bea");
-  await page.getByRole("button", { name: "Ajouter", exact: true }).click();
+  await hostCommand("add-local", () =>
+    page.getByRole("button", { name: "Ajouter", exact: true }).click(),
+  );
   const local = page.locator(".lobby-seat[data-local]");
   await expect(local).toContainText("Bea");
   await expect(local).toContainText("Sur votre PC");
-  await page.getByLabel(/Verrouiller la salle/).check();
+  await hostCommand("lock", () =>
+    page.getByLabel(/Verrouiller la salle/).check(),
+  );
   await expect(page.getByLabel(/Verrouiller la salle/)).toBeChecked();
   const code = await page.locator(".room-code-block strong").innerText();
   const friendContext = await browser.newContext({
@@ -1653,6 +1699,7 @@ test("the room leader seats a local player, admits a friend and brings everyone 
   });
   try {
     const friend = await friendContext.newPage();
+    const friendCommand = observeRoomCommands(friend);
     await friend.goto(`/?room=${code}`);
     await friend.getByLabel("Votre nom de joueur").fill("Cora");
     await friend
@@ -1663,26 +1710,32 @@ test("the room leader seats a local player, admits a friend and brings everyone 
       "Alice doit accepter votre entrée.",
     );
     await expect(friend.locator(".lobby-seats")).toContainText("Bea");
-    await page.getByRole("button", { name: "Accepter Cora" }).click();
+    await hostCommand("admit", () =>
+      page.getByRole("button", { name: "Accepter Cora" }).click(),
+    );
     await expect(friend.locator(".waiting-host")).toContainText(
       "En attente du démarrage par Alice.",
     );
     await expect(seats).toContainText("Cora");
     await expect(seats).not.toContainText("Nova");
     // The role goes to Cora, then back to Alice.
-    await page
-      .getByRole("button", { name: "Nommer Cora chef de salle" })
-      .click();
+    await hostCommand("transfer-host", () =>
+      page.getByRole("button", { name: "Nommer Cora chef de salle" }).click(),
+    );
     await expect(
       friend.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toHaveCount(0);
-    await friend
-      .getByRole("button", { name: "Nommer Alice chef de salle" })
-      .click();
-    await page.getByRole("button", { name: "Démarrer la partie" }).click();
+    await friendCommand("transfer-host", () =>
+      friend
+        .getByRole("button", { name: "Nommer Alice chef de salle" })
+        .click(),
+    );
+    await hostCommand("start", () =>
+      page.getByRole("button", { name: "Démarrer la partie" }).click(),
+    );
     await expect(page.locator(".player-card")).toHaveCount(4);
     await expect(page.locator('.player-card[data-seat="1"]')).toContainText(
       "Ce PC",
@@ -1690,10 +1743,127 @@ test("the room leader seats a local player, admits a friend and brings everyone 
     await expect(friend.locator('.player-card[data-seat="2"]')).toContainText(
       "Vous",
     );
-    // Ending the match asks first, then every screen returns to the lobby.
+    // The room keeps every player's avatar visible, with only independent
+    // human players eligible to receive the leader role.
     await page
       .getByRole("button", { name: "Inviter des joueurs", exact: true })
       .click();
+    const picker = page.locator(".room-leader-picker");
+    const choices = picker.locator(".room-leader-choice");
+    await expect(choices).toHaveCount(4);
+    await expect(picker.locator(".player-avatar")).toHaveCount(4);
+    await expect(picker).toContainText("Alice");
+    await expect(picker).toContainText("Bea");
+    await expect(picker).toContainText("Cora");
+    await expect(picker).toContainText("Atlas");
+    const aliceChoice = picker.locator('.room-leader-choice[data-seat="0"]');
+    const coraChoice = picker.locator('.room-leader-choice[data-seat="2"]');
+    await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
+    await expect(aliceChoice).toBeDisabled();
+    await expect(
+      picker.locator('.room-leader-choice[data-seat="1"]'),
+    ).toBeDisabled();
+    await expect(
+      picker.locator('.room-leader-choice[data-seat="3"]'),
+    ).toBeDisabled();
+    await expect(coraChoice).toBeEnabled();
+    await expect(coraChoice).toHaveAccessibleName("Nommer Cora chef de salle");
+    for (const size of DESKTOP_SIZES.slice(0, 3)) {
+      await page.setViewportSize(size);
+      const bounds = await picker.evaluate((element) => {
+        const grid = element.querySelector("ul");
+        if (!grid) throw new Error("Expected the room leader avatar grid");
+        const rect = grid.getBoundingClientRect();
+        return {
+          width: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          gridWidth: grid.clientWidth,
+          gridScrollWidth: grid.scrollWidth,
+          left: rect.left,
+          right: rect.right,
+        };
+      });
+      expect(bounds.scrollWidth).toBe(bounds.width);
+      expect(bounds.gridScrollWidth).toBe(bounds.gridWidth);
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(size.width);
+      await page.screenshot({
+        path: `${process.env.POLYTOUR_SCREENSHOT_DIR ?? ".local/verification"}/room-leader-match-${size.width}.png`,
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await friend
+      .getByRole("button", { name: "Inviter des joueurs", exact: true })
+      .click();
+    const friendPicker = friend.locator(".room-leader-picker");
+    await expect(friendPicker.locator(".room-leader-choice")).toHaveCount(4);
+    await expect(
+      friendPicker.locator(".room-leader-choice:enabled"),
+    ).toHaveCount(0);
+
+    // Hold the outgoing transfer briefly to observe the pending state, then
+    // release that same frame to the real Worker for authorization/broadcasts.
+    await page.evaluate(() => {
+      const originalSend = WebSocket.prototype.send;
+      let release: (() => void) | null = null;
+      const surface = window as Window & { releaseLeaderTransfer?: () => void };
+      WebSocket.prototype.send = function (data) {
+        if (typeof data === "string") {
+          try {
+            const message = JSON.parse(data) as {
+              type?: string;
+              op?: { type?: string };
+            };
+            if (
+              !release &&
+              message.type === "lobby" &&
+              message.op?.type === "transfer-host"
+            ) {
+              release = () => originalSend.call(this, data);
+              return;
+            }
+          } catch {
+            // Diagnostic ping frames are plain text and pass through.
+          }
+        }
+        originalSend.call(this, data);
+      };
+      surface.releaseLeaderTransfer = () => {
+        WebSocket.prototype.send = originalSend;
+        delete surface.releaseLeaderTransfer;
+        if (!release) throw new Error("Expected the pending leader transfer");
+        release();
+      };
+    });
+    await coraChoice.click();
+    await expect(picker.locator(".room-leader-choice:enabled")).toHaveCount(0);
+    await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate(() => {
+      const surface = window as Window & { releaseLeaderTransfer?: () => void };
+      if (!surface.releaseLeaderTransfer)
+        throw new Error("Expected the held leader transfer frame");
+      surface.releaseLeaderTransfer();
+    });
+    await expect(coraChoice).toHaveAttribute("aria-pressed", "true");
+    await expect(picker.locator(".room-leader-choice:enabled")).toHaveCount(0);
+    await expect(page.getByLabel(/Verrouiller la salle/)).toHaveCount(0);
+    await expect(
+      friendPicker.locator('.room-leader-choice[data-seat="2"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(friend.getByLabel(/Verrouiller la salle/)).toBeEnabled();
+    await friendCommand("transfer-host", () =>
+      friendPicker
+        .getByRole("button", { name: "Nommer Alice chef de salle" })
+        .click(),
+    );
+    await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
+    await expect(coraChoice).toBeEnabled();
+    await expect(
+      friendPicker.locator(".room-leader-choice:enabled"),
+    ).toHaveCount(0);
+    await expect(page.getByLabel(/Verrouiller la salle/)).toBeEnabled();
+
+    // Ending the match asks first, then every screen returns to the lobby.
     await page
       .getByRole("button", { name: "Ramener tout le monde au salon" })
       .click();
@@ -1930,3 +2100,79 @@ test("match card help uses the active salary and saved economy rather than welco
   await page.keyboard.press("Escape");
   await expect(help).toBeVisible();
 });
+
+for (const locale of ["fr", "en"] as const) {
+  test(`the ${locale} footer opens release notes with keyboard dismissal and readable layouts`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      (language) => localStorage.setItem("polytour.locale", language),
+      locale,
+    );
+    await page.goto("/");
+    const trigger = page.getByRole("button", {
+      name:
+        locale === "fr"
+          ? `Version ${APP_VERSION} : voir les nouveautés`
+          : `Version ${APP_VERSION}: view changelog`,
+    });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", {
+      name: locale === "fr" ? "Nouveautés" : "What's new",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("heading", { name: `v${APP_VERSION}`, exact: true }),
+    ).toBeVisible();
+    await expect(dialog).toContainText(
+      "The Championship corner is now a stadium",
+    );
+    await expect(
+      dialog.getByRole("heading", { name: "v0.1.0", exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      dialog
+        .getByRole("heading", {
+          name: locale === "fr" ? "Modifications" : "Changed",
+          exact: true,
+        })
+        .first(),
+    ).toBeVisible();
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      const bounds = await dialog.boundingBox();
+      expect(bounds).not.toBeNull();
+      if (!bounds) throw new Error("Release dialog has no bounds");
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.y).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(size.width);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(size.height);
+      await page.screenshot({
+        path: `.local/verification/changelog-${locale}-${size.width}.png`,
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const history = dialog.getByRole("region");
+    await history.focus();
+    await page.keyboard.press("End");
+    await expect
+      .poll(() => history.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await dialog
+      .getByRole("button", {
+        name: locale === "fr" ? "Fermer les nouveautés" : "Close changelog",
+      })
+      .click();
+    await expect(trigger).toBeFocused();
+  });
+}

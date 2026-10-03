@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { applyLocaleMetadata } from "./seo.js";
 
 export type Locale = "fr" | "en";
 const STORAGE_KEY = "polytour.locale";
@@ -18,14 +19,14 @@ function savedLocale(): Locale {
 let locale = savedLocale();
 
 function applyLocale(next: Locale) {
-  if (typeof document !== "undefined") document.documentElement.lang = next;
+  applyLocaleMetadata(next);
   if (locale === next) return;
   locale = next;
   for (const listener of listeners) listener();
 }
 
 if (typeof window !== "undefined") {
-  document.documentElement.lang = locale;
+  applyLocaleMetadata(locale);
   window.addEventListener("storage", (event) => {
     if (event.key === STORAGE_KEY || event.key === null)
       applyLocale(savedLocale());

@@ -35,7 +35,7 @@ export default defineConfig({
     },
     {
       name: "production",
-      testMatch: ["room-flow.spec.ts", "smoke.spec.ts"],
+      testMatch: ["room-flow.spec.ts", "smoke.spec.ts", "seo.spec.ts"],
       use: { baseURL: remoteBaseURL ?? productionURL },
     },
   ],

@@ -37,6 +37,15 @@ members through their attachments rather than tags, so a waiting member's socket
 stays open when that person takes a place. Spectating members do not count as an
 audience: with only them connected, the room sleeps like an abandoned match.
 
+Explicit departure uses a capability-authenticated HTTP request, even while the
+socket reconnects. In a lobby it releases the device's own and local places,
+revokes its capability, closes all its sockets and transfers the persisted leader
+to another person with their own device. Waiting members may leave too. Released
+places admit connected, approved members; with no devices left, the room unlocks
+and its next seated person becomes leader. Ordinary socket disconnection keeps
+places and leadership for recovery. During a match, departure closes the device's
+sockets but preserves its places, match state and usual reconnect grace.
+
 Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
 expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
@@ -69,6 +78,16 @@ Polytour is one Cloudflare Worker that serves the web client, an HTTP API, and
 WebSocket upgrades. Each live match is a `GameRoom` Durable Object: a single-threaded,
 strongly consistent actor that owns the game state, the players' sockets, and the
 turn timers. Everything that outlives a match (accounts, results, ratings) goes to D1.
+
+## Public HTML and crawl routing
+
+The Worker serves crawlable homepage HTML with a fixed production canonical URL,
+social metadata, game structured data and content available before React starts.
+Only `https://polytour.fun` advertises an indexable homepage and sitemap. Private
+room/invitation HTML and nonproduction Worker responses carry HTTP noindex
+directives. The asset handler serves existing static files; missing files and
+unknown navigation paths receive a real 404. See [SEO.md](SEO.md) for the locale,
+favicon, share-image and crawler policy.
 
 ## Browser diagnostics
 
@@ -170,7 +189,7 @@ flowchart LR
 
 | Product | Role in Polytour | Why this one |
 | --- | --- | --- |
-| **Workers + Static Assets** | Serves the SPA, `/api/*`, and WS upgrades. One deploy. | Static asset requests are free and globally cached; SPA fallback via `not_found_handling: "single-page-application"`. |
+| **Workers + Static Assets** | Serves the SPA, `/api/*`, and WS upgrades. One deploy. | Static files use direct asset serving; app documents use the Worker for canonical and crawl headers. Missing paths return 404. |
 | **Durable Objects (SQLite)** | `GameRoom` per match, `Matchmaker` per queue. | Exactly the "coordination atom" pattern: single-threaded, strongly consistent state + WebSockets in one place. |
 | **DO WebSocket Hibernation** | All player connections. | Turn-based games are idle most of the time; hibernation keeps sockets open while the DO is evicted, so idle rooms cost almost nothing. |
 | **DO Alarms** | Turn deadlines, disconnect grace, bot moves, room cleanup. | Durable timers that survive eviction; `setTimeout` would pin the DO in memory. |
@@ -186,17 +205,18 @@ Add them only when a concrete requirement appears.
 
 ## Routing
 
-`wrangler.jsonc` (sketch — fill in at scaffold time):
+`wrangler.jsonc` (routing excerpt; Analytics Engine remains planned):
 
 ```jsonc
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "polytour",
   "main": "./src/worker/index.ts",
-  "compatibility_date": "<scaffold date>",
+  "compatibility_date": "2026-09-30",
   "assets": {
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/ws/*"]
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": ["/", "/index.html", "/robots.txt", "/sitemap.xml", "/rooms/*", "/api/*", "/ws/*"]
   },
   "durable_objects": {
     "bindings": [
@@ -214,7 +234,10 @@ Add them only when a concrete requirement appears.
 
 | Route | Handler |
 | --- | --- |
-| `GET /*` (non-API) | Static assets / SPA shell (Worker not invoked) |
+| `GET /`, `/rooms/:roomCode` | Worker serves app HTML with canonical and crawl headers |
+| `GET /robots.txt`, `/sitemap.xml` | Worker applies the production-origin crawl policy |
+| `GET /index.html` | Permanent redirect to `/`, preserving the query |
+| `GET /*` (existing static file) | Static assets (Worker not invoked); unknown paths return 404 |
 | `POST /api/auth/guest` | Verify Turnstile, create guest user in D1, set signed session cookie |
 | `GET /api/me` | Current user profile |
 | `POST /api/rooms` | Create private room: generate a 6-char code, call `GAME_ROOM.getByName(code).init()`; on "already initialized", retry with a new code → returns the code |

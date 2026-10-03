@@ -1,0 +1,176 @@
+.version-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  margin: -4px -7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.version-trigger:hover {
+  color: #98291a;
+  background: #fffaf0;
+}
+.changelog-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: #fffaf0;
+  color: #173b45;
+  box-shadow: 0 20px 70px #173b4566;
+  overflow: hidden;
+}
+.changelog-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.changelog-dialog::backdrop {
+  background: #173b4580;
+}
+.changelog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid #d7d9cc;
+}
+.changelog-header h2 {
+  margin: 0;
+  font:
+    900 30px / 1.2 "Trebuchet MS",
+    "Segoe UI",
+    sans-serif;
+}
+.changelog-header h2:focus {
+  outline: none;
+}
+.changelog-header p {
+  margin: 8px 0 0;
+  color: #47666c;
+  font-size: 14px;
+}
+.changelog-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: #c74024;
+  color: #fffaf0;
+  cursor: pointer;
+}
+.changelog-close:hover {
+  background: #98291a;
+}
+.changelog-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 24px 32px 32px;
+  min-height: 0;
+}
+.changelog-language {
+  margin: 0 0 28px;
+  font-size: 13px;
+  color: #47666c;
+}
+.changelog-release + .changelog-release {
+  margin-top: 36px;
+  padding-top: 28px;
+  border-top: 1px solid #d7d9cc;
+}
+.changelog-release-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.changelog-release h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+}
+.changelog-release time {
+  width: 100%;
+  color: #47666c;
+  font-size: 13px;
+}
+.changelog-current {
+  font-size: 12px;
+  font-weight: 700;
+  color: #26764c;
+}
+.changelog-release h4 {
+  margin: 24px 0 10px;
+  font-size: 15px;
+  color: #98291a;
+}
+.changelog-release ul {
+  padding-left: 20px;
+  margin: 0;
+}
+.changelog-release li {
+  padding-left: 4px;
+  line-height: 1.65;
+  font-size: 15px;
+}
+.changelog-release li + li {
+  margin-top: 10px;
+}
+.changelog-release p {
+  font-size: 15px;
+  line-height: 1.65;
+}
+.changelog-release code {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.changelog-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 32px;
+  border-top: 1px solid #d7d9cc;
+  color: #47666c;
+  font-size: 12px;
+}
+.changelog-footer a {
+  color: #236cce;
+  text-underline-offset: 3px;
+}
+:is(
+  .version-trigger,
+  .changelog-dialog button,
+  .changelog-dialog a,
+  .changelog-scroll
+):focus-visible {
+  outline: 3px solid #236cce;
+  outline-offset: 3px;
+}
+.changelog-scroll:focus-visible {
+  outline-offset: -4px;
+}
+@media (max-width: 600px) {
+  .changelog-dialog {
+    max-height: calc(100dvh - 24px);
+  }
+  .changelog-header,
+  .changelog-scroll {
+    padding: 20px;
+  }
+  .changelog-footer {
+    padding: 16px 20px;
+    flex-wrap: wrap;
+  }
+}

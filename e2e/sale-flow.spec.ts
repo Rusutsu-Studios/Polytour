@@ -18,6 +18,7 @@ import {
   PROTOCOL_VERSION,
   RoomConfigSchema,
 } from "../src/shared/protocol/index.js";
+import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
@@ -670,9 +671,7 @@ test("roll button and informative timer remain usable through 4K and reduced mot
       };
     });
   const before = await sample();
-  await page
-    .getByRole("button", { name: "Explorer le plateau", exact: true })
-    .click();
+  await clickBoardSpace(page, 9);
   await expect(page.locator(".city-card")).toBeVisible();
   await page.keyboard.press("Escape");
   const after = await sample();

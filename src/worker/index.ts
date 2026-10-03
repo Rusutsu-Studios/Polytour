@@ -9,12 +9,27 @@ import {
 import { APP_VERSION } from "../shared/version.js";
 import { GameRoom } from "./GameRoom.js";
 import { Matchmaker } from "./Matchmaker.js";
+import { robotsResponse, sitemapResponse, withSeoHeaders } from "./seo.js";
 import { workerDiagnostics } from "./worker-diagnostics.js";
 
 export { GameRoom, Matchmaker };
 
 const app = new Hono<{ Bindings: Env }>();
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+app.get("/robots.txt", (context) => robotsResponse(new URL(context.req.url)));
+app.get("/sitemap.xml", (context) => sitemapResponse(new URL(context.req.url)));
+app.get("/index.html", (context) => {
+  const url = new URL(context.req.url);
+  return context.redirect(`/${url.search}`, 308);
+});
+app.get("/", (context) => context.env.ASSETS.fetch(context.req.raw));
+app.get("/rooms/:roomCode", (context) => {
+  // Retain the old browser route without enabling an unrestricted SPA fallback.
+  const url = new URL(context.req.url);
+  url.pathname = "/";
+  return context.env.ASSETS.fetch(new Request(url, context.req.raw));
+});
 
 app.onError((error, context) => {
   // Keep the cause in Worker logs, but never send internal failures as plain text
@@ -141,6 +156,22 @@ app.post("/api/rooms/:roomCode/join", async (context) => {
     return context.json(result, result.error === "room-not-found" ? 404 : 409);
   return context.json(result, 200, { "Cache-Control": "no-store" });
 });
+app.post("/api/rooms/:roomCode/leave", async (context) => {
+  if (!sameOrigin(context.req.raw))
+    return context.json({ error: "origin-rejected" }, 403);
+  const code = RoomCodeSchema.safeParse(context.req.param("roomCode"));
+  if (!code.success) return context.json({ error: "invalid-room" }, 400);
+  const token = context.req
+    .header("Authorization")
+    ?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+  if (!token) return context.json({ error: "unauthorized" }, 401);
+  const result = await context.env.GAME_ROOM.getByName(code.data).leave(token);
+  return context.json(
+    result,
+    "error" in result ? (result.error === "room-not-found" ? 404 : 401) : 200,
+    { "Cache-Control": "no-store" },
+  );
+});
 app.get("/api/rooms/:roomCode", async (context) => {
   if (context.req.header("Upgrade"))
     return context.json({ error: "invalid-route" }, 400);
@@ -169,7 +200,10 @@ app.get("/api/queues/:mode/health", (context) =>
 app.notFound((context) => context.json({ error: "Not found" }, 404));
 
 export default {
-  fetch(request, env, executionContext) {
-    return app.fetch(request, env, executionContext);
+  async fetch(request, env, executionContext) {
+    return withSeoHeaders(
+      request,
+      await app.fetch(request, env, executionContext),
+    );
   },
 } satisfies ExportedHandler<Env>;
