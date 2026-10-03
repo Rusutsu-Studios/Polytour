@@ -18,6 +18,11 @@ has been published, and it does not reconstruct earlier development history.
 - A production homepage sitemap and crawl policy that excludes private room
   pages and previews from indexing, with proper missing-page responses.
 
+### Fixed
+
+- Feature-branch push checks compare released history with main, allowing draft
+  release versions to be updated after another pull request merges.
+
 ## [0.3.1] - 2026-10-03
 
 ### Changed
