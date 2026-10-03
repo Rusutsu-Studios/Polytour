@@ -1,4 +1,9 @@
-import type { BoardRule, BuildLevel, EconomyRule } from "../board/index.js";
+import type {
+  BoardRule,
+  BuildLevel,
+  EconomyRule,
+  WorldTourRule,
+} from "../board/index.js";
 import {
   BOARD_SIZE,
   BOT_TIMING,
@@ -55,6 +60,7 @@ export const DEFAULT_GAME_CONFIG = {
   hotelPurchaseRule: "staged-hotels",
   economyRule: "reference",
   boardRule: "country",
+  worldTourRule: "free-and-own",
   sellBackPercent: 100,
   extraRollOnDouble: true,
   botCanBuild: true,
@@ -67,6 +73,12 @@ export function economyRule(config: GameConfig): EconomyRule {
 /** Missing markers belong to matches made on the original production board. */
 export function boardRule(config: Pick<GameConfig, "boardRule">): BoardRule {
   return config.boardRule ?? "legacy";
+}
+/** Saves made before rules version 6 reach own properties only when none is free. */
+export function worldTourRule(
+  config: Pick<GameConfig, "worldTourRule">,
+): WorldTourRule {
+  return config.worldTourRule ?? "free-first";
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
@@ -378,14 +390,30 @@ export function worldTourTargets(state: PublicState, seat: Seat): number[] {
     .filter((tile) => tile.index !== player.position)
     .map((tile) => tile.index);
   if (!rules(state).travelToFreeProperties) return others;
-  const owned = (owner: Seat | null) =>
+  const owned = (...owners: (Seat | null)[]) =>
     others.filter(
       (tile) =>
         getProperty(state, tile) !== undefined &&
-        propertyOwner(state, tile) === owner,
+        owners.includes(propertyOwner(state, tile)),
     );
+  if (worldTourRule(state.config) === "free-and-own") return owned(null, seat);
   const free = owned(null);
   return free.length > 0 ? free : owned(seat);
+}
+/** Tiles from one space to another going clockwise; the same space is a lap. */
+function clockwiseSteps(from: number, to: number): number {
+  return (to - from + BOARD_SIZE) % BOARD_SIZE || BOARD_SIZE;
+}
+/** The Start salary a flight to this tile collects on its clockwise route. */
+export function travelSalary(
+  state: PublicState,
+  seat: Seat,
+  tile: number,
+): number {
+  const position = getPlayer(state, seat).position;
+  return position + clockwiseSteps(position, tile) >= BOARD_SIZE
+    ? state.config.startSalary
+    : 0;
 }
 export function actionCost(state: PublicState, action: Action): number {
   const pending = state.pending;
@@ -569,13 +597,17 @@ function animationBudget(events: readonly GameEvent[]): number {
       case "DiceRolled":
         return total + DECISION_TIMING.diceAnimation;
       case "PlayerMoved": {
-        // Mirrors the client: a walk hops tile by tile, anything else jumps.
+        // Mirrors the client: a move walks its route tile by tile, a long one
+        // hops faster; only a move without a route jumps.
         const steps = Math.abs(event.steps ?? 0);
         return (
           total +
-          (steps === 0 || steps > 16
+          (steps === 0
             ? DECISION_TIMING.jumpAnimation
-            : steps * DECISION_TIMING.stepAnimation)
+            : Math.min(
+                steps * DECISION_TIMING.stepAnimation,
+                DECISION_TIMING.walkAnimation,
+              ))
         );
       }
       case "SentToIsland":
@@ -767,7 +799,7 @@ function resolver(initial: GameState, context: ResolutionContext) {
     else emit({ type: "MoneyTransferred", from, to, amount, reason });
     insolvency(from, to);
   };
-  /** Reference flights reach unowned properties, or own ones when none is free. */
+  /** Reference flights reach unowned and own properties; see WorldTourRule. */
   const travelTargets = (player: PlayerState): number[] => {
     return worldTourTargets(state, player.seat);
   };
@@ -854,8 +886,7 @@ function resolver(initial: GameState, context: ResolutionContext) {
       });
   };
   const moveTo = (seat: Seat, target: number) => {
-    const current = getPlayer(state, seat).position;
-    move(seat, (target - current + BOARD_SIZE) % BOARD_SIZE || BOARD_SIZE);
+    move(seat, clockwiseSteps(getPlayer(state, seat).position, target));
   };
   const roll = (seat: Seat) => {
     const player = getPlayer(state, seat);
@@ -1747,6 +1778,11 @@ export function createGame(
   )
     throw new RangeError("Unsupported board rule");
   if (
+    config.worldTourRule !== undefined &&
+    !["free-and-own", "free-first"].includes(config.worldTourRule)
+  )
+    throw new RangeError("Unsupported World Tour rule");
+  if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
     config.sellBackPercent !== 100
@@ -1816,6 +1852,7 @@ export function createGame(
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
       economyRule: config.economyRule ?? "reference",
       boardRule: config.boardRule ?? "country",
+      worldTourRule: config.worldTourRule ?? "free-and-own",
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,

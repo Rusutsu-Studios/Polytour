@@ -46,7 +46,7 @@ type RuleEconomy = {
   readonly championshipPersists: boolean;
   /** Festivals can be drawn on resorts as well as cities. */
   readonly resortFestivals: boolean;
-  /** World Tour flies only to unowned properties (or own ones when none is free). */
+  /** World Tour flies only to properties; WorldTourRule decides when own ones count. */
   readonly travelToFreeProperties: boolean;
 };
 

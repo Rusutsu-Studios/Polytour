@@ -41,5 +41,6 @@ export type {
   ResortId,
   ResortTile,
   Tile,
+  WorldTourRule,
 } from "./types.js";
 export { COUNTRY_IDS } from "./types.js";

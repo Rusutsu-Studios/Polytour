@@ -1360,6 +1360,12 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     director.reset({
       ...state,
       activeSeat: 0,
+      // The traveller waits on World Tour, so space 1 lies past Start.
+      players: state.players.map((player) =>
+        player.seat === 0
+          ? { ...player, position: 24, travelPending: true }
+          : player,
+      ),
       pending: {
         kind: "travel",
         seat: 0,
@@ -1389,9 +1395,16 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     "Voyager à Tokyo · 50 k",
   );
   await expect(pick.locator(".ledger-balance")).toContainText("1,95 M");
+  await expect(pick.locator(".ledger-balance")).not.toContainText("départ");
   await page.screenshot({
     path: ".local/verification/decision-travel-regression.png",
   });
+  // A flight to a space behind World Tour goes on round and collects salary.
+  await page.getByLabel("Destination", { exact: true }).selectOption("1");
+  await expect(pick.locator(".ledger-balance")).toContainText("2,35 M");
+  await expect(pick.locator(".ledger-balance")).toContainText(
+    "+400 k au départ",
+  );
   // A reference room charges to move the championship and lets a player pass.
   await page.evaluate(async (state) => {
     const modulePath =

@@ -802,6 +802,11 @@
   font-size: 17px;
   font-variant-numeric: tabular-nums;
 }
+.pick-balance small {
+  color: #26764c;
+  font-size: 12px;
+  font-weight: 700;
+}
 .pick-empty {
   display: flex;
   align-items: center;

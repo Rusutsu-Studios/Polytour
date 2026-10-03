@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { BoardRule, EconomyRule } from "../board/index.js";
+import type { BoardRule, EconomyRule, WorldTourRule } from "../board/index.js";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
@@ -128,6 +128,7 @@ export type LobbyState = {
   readonly economyRule: EconomyRule;
   readonly hotelPurchaseRule: "staged-hotels" | "legacy-lap";
   readonly sellBackPercent: 50 | 100;
+  readonly worldTourRule: WorldTourRule;
   seats: LobbySeat[];
 };
 export type RandomnessStatus = {
