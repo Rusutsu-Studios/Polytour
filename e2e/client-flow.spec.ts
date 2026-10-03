@@ -1051,14 +1051,22 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
     const { viewState, serverState } = director.getSnapshot();
     return [viewState.players[0].cash, serverState.players[0].cash];
   });
-  expect(balances).toEqual([2_000_000, 2_150_000]);
+  // Bots may transfer cash before the human's first turn (for example Birthday).
+  // This presentation check measures Windfall against the captured live balance.
+  const cashBeforeCard = original.players[0].cash;
+  const cashAfterCard = cashBeforeCard + 150_000;
+  expect(balances).toEqual([cashBeforeCard, cashAfterCard]);
   await page.screenshot({ path: ".local/verification/card-fortune.png" });
   await page.getByRole("button", { name: "Continuer", exact: false }).click();
   await page.clock.runFor(1500);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toHaveText(/2\s150\s000/);
+  ).toContainText(
+    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(
+      cashAfterCard,
+    ),
+  );
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeFocused();
