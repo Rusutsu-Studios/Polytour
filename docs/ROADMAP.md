@@ -5,6 +5,11 @@ multiplayer is solid → it looks amazing → people can find games → launch**
 blocks gameplay; the 3D scene is a consumer of events and can be built in parallel
 once the protocol is stable.
 
+Use [RELEASING.md](RELEASING.md) to select release scope from this plan, group
+issues and pull requests into GitHub milestones, and prepare a verified release.
+Example milestone names such as `v0.2.0` and `v1.0.0` are planning conventions;
+they do not establish agreed scope, dates or completed milestones.
+
 ## First playable checkpoint — October 2026
 
 A vertical slice now joins the rules engine, authoritative private rooms and the

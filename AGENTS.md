@@ -36,6 +36,7 @@ a stylized 3D board with juicy, choreographed animations.
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Any client↔server message change |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Any rendering, VFX, sound, or UI motion work |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Picking the next task |
+| [docs/RELEASING.md](docs/RELEASING.md), [CHANGELOG.md](CHANGELOG.md) | Application version, release preparation or milestone planning |
 | [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Dice, entropy, commitments and proof verification |
 | [docs/REFERENCE_PARITY.md](docs/REFERENCE_PARITY.md) | Confirmed values versus provisional balance |
 
@@ -88,6 +89,9 @@ pnpm test:e2e       # desktop UI plus production Worker/socket flows
                     # first run: pnpm exec playwright install chromium
 pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
+pnpm check:version # package version/changelog agreement; --tag vX.Y.Z; --base <git-ref>
+pnpm test:version  # focused release-tooling tests
+pnpm version:bump patch # or minor/major; moves Unreleased notes, updates package version; no Git operations
 pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4;
                     # --rules reference|prototype, default reference; --rounds N, default 20)
 pnpm check:drand    # live future-round verification; local proof evidence
