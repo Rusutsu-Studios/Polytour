@@ -519,3 +519,28 @@ These checks validate the local candidate. They do not establish GitHub merge,
 production publication, hardware frame rate or human-playtest balance. With a
 20-round simulation cap, 95% of reference and 91% of prototype matches reach the
 cap; the small sample is a correctness check, not proof of a balanced economy.
+
+## Nickname-only invitation entry — 3 October 2026
+
+Invitation links open a focused nickname form and the board preview. Enter joins
+the invited room; bot play, room creation and room settings are absent from this
+entry. The room code is absent from the invitation markup, including labels and
+hidden fields, in preparation for streamer-mode privacy (#37). Leave clears the
+invitation and returns to the normal start screen. Matching saved credentials
+resume the existing seat without a second join; credentials for another room do
+not override the invitation. Invalid links fail locally, and rejected joins keep
+the nickname and target available for retry.
+
+Local verification:
+
+- TypeScript, Biome and all 182 unit/Worker tests pass.
+- All 32 standard browser scenarios pass in 4.9 minutes, including eight
+  invitation regressions, the real production-build invitation join/refresh
+  scenario, and a complete authoritative four-seat match with reconnection.
+- French and English invitation captures fit 1280×720, 1440×900 and 1920×1080
+  without scrolling. Keyboard focus, Enter submission, pending-state guards,
+  restored focus after errors and reduced motion are checked.
+- The production build and bundle budgets pass; initial lobby JavaScript is
+  179.2 kB gzip against the 250 kB limit.
+
+These results use the local Worker. They do not establish a production deployment.
