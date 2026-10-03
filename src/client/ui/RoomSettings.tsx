@@ -345,14 +345,33 @@ export function RoomSettings({
                 "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
               )
             : t(
-                "Les deux dés sont tirés sur le serveur avec un générateur cryptographique. Aucun achat ne modifie les résultats.",
-                "Both dice are rolled on the server with a cryptographic generator. Purchases cannot alter the results.",
+                "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six. Aucun achat ne modifie les résultats.",
+                "On every roll, the server draws fresh random bytes with Cloudflare’s Web Crypto API. Values that would favor some faces are discarded, giving each face a 1 in 6 chance. Purchases cannot alter the results.",
               )}{" "}
           {t(
             "Les loyers et effets sont encore en cours d’équilibrage.",
             "Rents and card effects are still being balanced.",
           )}
         </p>
+        {config.randomnessMode !== "drand" && (
+          <p>
+            <a
+              href="https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#methods"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={t(
+                "Documentation Web Crypto de Cloudflare (nouvel onglet)",
+                "Cloudflare Web Crypto documentation (opens in a new tab)",
+              )}
+            >
+              {t(
+                "Documentation Web Crypto de Cloudflare",
+                "Cloudflare Web Crypto documentation",
+              )}
+              <span aria-hidden="true"> ↗</span>
+            </a>
+          </p>
+        )}
       </details>
       {save && (
         <button

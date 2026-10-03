@@ -258,6 +258,12 @@
   line-height: 1.6;
 }
 
+.room-settings-fairness a {
+  color: var(--settings-blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .room-settings-save {
   width: 100%;
   min-height: 46px;
@@ -313,6 +319,7 @@
 
 .room-settings input:focus-visible,
 .room-settings-save:focus-visible,
+.room-settings-fairness a:focus-visible,
 .room-settings-fairness summary:focus-visible {
   outline: 3px solid var(--settings-blue);
   outline-offset: 3px;
