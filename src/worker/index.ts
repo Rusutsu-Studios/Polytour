@@ -73,10 +73,30 @@ async function readJson(request: Request): Promise<unknown> {
 
 app.get("/api/health", (context) => context.json({ status: "ok" }));
 app.post("/api/rooms", async (context) => {
+  // Aggregate edge shedding happens before reading a body or reaching storage.
+  // Use a fixed key: a LAN party shares no IP-specific quota, and attacker-chosen
+  // cookies/headers cannot bypass this gate by inventing fresh identities.
+  const edge = await context.env.ROOM_CREATION_RATE_LIMIT.limit({
+    key: "room-creation",
+  });
+  if (!edge.success)
+    return context.json({ error: "rate-limited" }, 429, {
+      "Retry-After": "60",
+      "Cache-Control": "no-store",
+    });
   if (!sameOrigin(context.req.raw))
     return context.json({ error: "origin-rejected" }, 403);
   const parsed = CreateRoomSchema.safeParse(await readJson(context.req.raw));
   if (!parsed.success) return context.json({ error: "invalid-room" }, 400);
+  const admission =
+    await context.env.MATCHMAKER.getByName(
+      "room-admission",
+    ).admitRoomCreation();
+  if (!admission.success)
+    return context.json({ error: "rate-limited" }, 429, {
+      "Retry-After": String(admission.retryAfter),
+      "Cache-Control": "no-store",
+    });
   const config = parsed.data.config ?? RoomConfigSchema.parse({});
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = roomCode();
@@ -120,15 +140,14 @@ app.get("/ws/room/:roomCode", async (context) => {
     return context.json({ error: "upgrade-required" }, 426);
   return context.env.GAME_ROOM.getByName(code.data).fetch(context.req.raw);
 });
-app.get("/api/rooms/:roomCode/health", async (context) =>
-  context.env.GAME_ROOM.getByName(context.req.param("roomCode")).fetch(
-    context.req.raw,
-  ),
-);
-app.get("/api/queues/:mode/health", async (context) =>
-  context.env.MATCHMAKER.getByName(context.req.param("mode")).fetch(
-    context.req.raw,
-  ),
+app.get("/api/rooms/:roomCode/health", (context) => {
+  const code = RoomCodeSchema.safeParse(context.req.param("roomCode"));
+  if (!code.success) return context.json({ error: "invalid-room" }, 400);
+  // Health is service liveness, not a room lookup; probing names allocates no DO.
+  return context.json({ kind: "game-room", status: "ok" });
+});
+app.get("/api/queues/:mode/health", (context) =>
+  context.json({ kind: "matchmaker", status: "ok" }),
 );
 app.notFound((context) => context.json({ error: "Not found" }, 404));
 
