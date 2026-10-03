@@ -1,7 +1,12 @@
-import { CHANCE_AMOUNTS, ruleEconomy } from "../../shared/board/index.js";
+import {
+  CHANCE_AMOUNTS,
+  ECONOMY,
+  ruleEconomy,
+} from "../../shared/board/index.js";
 import {
   type ChanceCard,
   economyRule,
+  type GameConfig,
   type GameEvent,
   type PublicState,
 } from "../../shared/engine/index.js";
@@ -47,6 +52,174 @@ const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
 export function cardName(card: ChanceCard): string {
   return t(CARD_NAMES[card], ENGLISH_CARD_NAMES[card]);
 }
+
+/** Extra rules for reference browsing, without exposing the private deck order. */
+export function describeChanceCardDetails(
+  card: ChanceCard,
+  config: GameConfig,
+): readonly string[] {
+  const rules = ruleEconomy(economyRule(config));
+  const noTarget = t(
+    "Sans cible éligible, la carte est défaussée sans effet.",
+    "If there is no eligible target, the card is discarded without effect.",
+  );
+  const gifts =
+    config.giftCanBankrupt === false
+      ? t(
+          "Dans cette salle, chaque cadeau est limité au cash disponible du joueur qui paie : il ne provoque ni vente ni faillite.",
+          "In this room, each gift is capped at the payer’s available cash: it cannot force a sale or bankruptcy.",
+        )
+      : t(
+          "Dans cette salle, ce paiement peut obliger le joueur à vendre des propriétés ou entraîner sa faillite.",
+          "In this room, this payment can force the payer to sell properties or go bankrupt.",
+        );
+  switch (card) {
+    case "Grand Tour":
+      return [
+        t(
+          "Le trajet suit le plateau dans le sens du jeu et compte un tour complet. Il ne donne pas de lancer supplémentaire sur un double.",
+          "Move clockwise and complete a lap. This move does not grant another roll for doubles.",
+        ),
+      ];
+    case "Stranded":
+      return [
+        t(
+          `Ce transfert termine votre tour, sans salaire ni tour complet. La traversée coûte ${money(rules.islandReleaseFee)} ; vous êtes aussi libéré après ${rules.islandMaxFailedEscapes} tentatives de double ratées.`,
+          `This transfer ends your turn, without salary or lap credit. The fare is ${money(rules.islandReleaseFee)}; you are also released after ${rules.islandMaxFailedEscapes} failed doubles attempts.`,
+        ),
+      ];
+    case "Jet Set":
+      return [
+        t(
+          `Le trajet suit le sens du jeu : franchir le départ rapporte ${money(config.startSalary)} et compte un tour. Au prochain tour, un vol coûte ${money(ECONOMY.worldTourFee)} ; vous pouvez aussi lancer les dés normalement.`,
+          `Move clockwise: passing Start pays ${money(config.startSalary)} and counts a lap. On your next turn, a flight costs ${money(ECONOMY.worldTourFee)}; you may also roll normally.`,
+        ),
+        rules.travelToFreeProperties
+          ? t(
+              "Le vol vise une propriété libre. S’il n’en reste aucune, choisissez une de vos propriétés.",
+              "Fly to an unowned property. If none remain, choose one of your own properties.",
+            )
+          : t(
+              "Le vol peut viser toute autre case du plateau.",
+              "Fly to any other space on the board.",
+            ),
+      ];
+    case "Stadium Call":
+      return [
+        t(
+          `Le trajet suit le sens du jeu ; franchir le départ rapporte ${money(config.startSalary)} et compte un tour.`,
+          `Move clockwise; passing Start pays ${money(config.startSalary)} and counts a lap.`,
+        ),
+        rules.championshipPersists
+          ? t(
+              "Vous pouvez refuser d’organiser le championnat. Son multiplicateur continue d’augmenter lorsqu’il change de ville et reste attaché à sa case si elle change de propriétaire.",
+              "You may decline to host. Its multiplier keeps increasing when it moves to another city and stays on its space if ownership changes.",
+            )
+          : t(
+              `Organisez gratuitement le championnat si vous avez une ville éligible. Le déplacer remet le multiplicateur à ×${CHANCE_AMOUNTS.initialHostMultiplier} ; un changement de propriétaire l’annule.`,
+              `Host for free if you have an eligible city. Moving it resets the multiplier to ×${CHANCE_AMOUNTS.initialHostMultiplier}; an ownership change clears it.`,
+            ),
+        t(
+          "Sans ville éligible, vous rejoignez tout de même le championnat, mais ne pouvez pas l’organiser.",
+          "If you have no eligible city, you still move to the Championship but cannot host it.",
+        ),
+      ];
+    case "Windfall":
+      return [
+        t(
+          "Le versement est immédiat. Cette carte ne se conserve pas.",
+          "The payment is immediate. You do not keep this card.",
+        ),
+      ];
+    case "Parking Fine":
+      return [
+        t(
+          "Si votre cash ne suffit pas, vendez des propriétés pour régler la dette. Une dette impossible à couvrir entraîne la faillite.",
+          "If you lack cash, sell properties to cover the debt. A debt you cannot cover causes bankruptcy.",
+        ),
+      ];
+    case "Birthday":
+      return [gifts];
+    case "Audit":
+      return [
+        t(
+          "Le montant est arrondi à l’unité supérieure. Un cash nul ou négatif ne produit aucun paiement.",
+          "The amount is rounded up to a whole unit. Zero or negative cash produces no charge.",
+        ),
+      ];
+    case "Guardian Angel":
+    case "Coupon":
+      return [
+        t(
+          "Vous choisissez de la jouer lorsqu’un loyer est dû. Une seule carte peut être utilisée par paiement ; elle est ensuite défaussée. Vous ne pouvez garder qu’un exemplaire de chaque protection.",
+          "Choose whether to play it when rent is due. Use at most one card per payment, then discard it. You may hold only one of each protection.",
+        ),
+        ...(card === "Coupon"
+          ? [
+              t(
+                "Le loyer réduit est arrondi à l’unité supérieure.",
+                "The reduced rent is rounded up to a whole unit.",
+              ),
+            ]
+          : []),
+      ];
+    case "Earthquake":
+      return [
+        t(
+          "Choisissez une ville adverse construite, hôtels compris. Les terrains nus et les stations sont exclus. Le niveau retiré n’est pas remboursé.",
+          "Choose an opponent’s built city, including Hotels. Bare land and resorts are excluded. The removed level is not refunded.",
+        ),
+        noTarget,
+      ];
+    case "Land Swap":
+      return [
+        t(
+          "Votre ville est choisie automatiquement selon le prix du terrain, sans ses bâtiments. Vous pouvez refuser l’échange. Les deux villes conservent leurs bâtiments ; les stations sont exclues.",
+          "Your city is selected automatically by land price, excluding buildings. You may decline the swap. Both cities keep their buildings; resorts are excluded.",
+        ),
+        noTarget,
+      ];
+    case "Detour":
+      return [
+        t(
+          "Même si vous traversez le départ à reculons, vous ne recevez pas de salaire et ne comptez pas de tour complet. Ce déplacement ne donne pas de lancer supplémentaire sur un double.",
+          "Crossing Start backwards pays no salary and does not count a lap. This move does not grant another roll for doubles.",
+        ),
+      ];
+    case "Contractor":
+      return [
+        config.hotelsDirectly === true
+          ? t(
+              "Le réglage hôtels directs autorise cette carte à construire jusqu’à l’hôtel, même avant votre premier tour complet.",
+              "The direct Hotels setting lets this card build up to a Hotel, even before your first completed lap.",
+            )
+          : t(
+              `Avant votre premier tour complet, la limite est de ${rules.firstLapHouseCap} maisons. Après un tour complet, cette carte peut offrir l’hôtel sans attendre un retour sur la ville.`,
+              `Before your first completed lap, the limit is ${rules.firstLapHouseCap} houses. After a lap, this card can grant a Hotel without waiting to revisit the city.`,
+            ),
+        t(
+          "Les stations, les hôtels et les monuments ne sont pas des cibles éligibles.",
+          "Resorts, Hotels and Landmarks are not eligible targets.",
+        ),
+        noTarget,
+      ];
+    case "Jailbreak":
+      return [
+        t(
+          "Les pions restent sur place. Sans joueur détenu, la carte n’a aucun effet.",
+          "Pawns stay in place. If nobody is detained, the card has no effect.",
+        ),
+      ];
+    case "Charity":
+      return [
+        t(
+          "En cas d’égalité, le premier adversaire dans l’ordre des tours reçoit le cadeau.",
+          "If cash balances are tied, the first opponent in turn order receives the gift.",
+        ),
+        gifts,
+      ];
+  }
+}
 export type CardDraw = Extract<GameEvent, { type: "CardDrawn" }>;
 export type CardPresentation = {
   title: string;
@@ -61,15 +234,43 @@ export function describeCard(
   event: CardDraw,
   state: PublicState,
 ): CardPresentation {
+  const card = describeChanceCard(event.card, state.config);
+  if (
+    (event.card === "Guardian Angel" || event.card === "Coupon") &&
+    !event.kept
+  ) {
+    return {
+      ...card,
+      badge: t("Déjà dans votre main", "Already in your hand"),
+      text:
+        event.card === "Guardian Angel"
+          ? t(
+              "Vous possédez déjà cette protection. Ce doublon ne rejoint pas votre main.",
+              "You already have this protection. The duplicate is not added to your hand.",
+            )
+          : t(
+              "Vous possédez déjà ce bon. Ce doublon ne rejoint pas votre main.",
+              "You already have this coupon. The duplicate is not added to your hand.",
+            ),
+    };
+  }
+  return card;
+}
+
+/** The catalogue and drawn cards share the room's frozen rules and amounts. */
+export function describeChanceCard(
+  card: ChanceCard,
+  config: GameConfig,
+): CardPresentation {
   const base = {
-    title: cardName(event.card),
+    title: cardName(card),
     art: "fortune" as const,
     tone: "gain" as const,
   };
-  const rules = ruleEconomy(economyRule(state.config));
+  const rules = ruleEconomy(economyRule(config));
   // Landmarks guard prototype rooms; Hotels guard reference rooms from transfers.
   const reference = rules.topLevel === 4;
-  switch (event.card) {
+  switch (card) {
     case "Grand Tour":
       return {
         ...base,
@@ -77,8 +278,8 @@ export function describeCard(
         tone: "travel",
         badge: t("Retour au départ", "Back to Start"),
         text: t(
-          `Rejoignez le Grand départ. Le salaire de ${money(state.config.startSalary)} est versé si vous le franchissez.`,
-          `Move to Start. Collect ${money(state.config.startSalary)} salary if you pass it.`,
+          `Rejoignez le Grand départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
+          `Move to Start. Collect ${money(config.startSalary)} salary if you pass it.`,
         ),
       };
     case "Stranded":
@@ -167,35 +368,21 @@ export function describeCard(
       return {
         ...base,
         tone: "keep",
-        badge: event.kept
-          ? t("Gardez cette carte", "Keep this card")
-          : t("Déjà dans votre main", "Already in your hand"),
-        text: event.kept
-          ? t(
-              "Au prochain loyer, vous pourrez jouer cette carte pour ne rien payer.",
-              "Play this card when rent is due to pay nothing.",
-            )
-          : t(
-              "Vous possédez déjà cette protection. Ce doublon ne rejoint pas votre main.",
-              "You already have this protection. The duplicate is not added to your hand.",
-            ),
+        badge: t("Gardez cette carte", "Keep this card"),
+        text: t(
+          "Au prochain loyer, vous pourrez jouer cette carte pour ne rien payer.",
+          "Play this card when rent is due to pay nothing.",
+        ),
       };
     case "Coupon":
       return {
         ...base,
         tone: "keep",
-        badge: event.kept
-          ? t("Loyer réduit de moitié", "Half-price rent")
-          : t("Déjà dans votre main", "Already in your hand"),
-        text: event.kept
-          ? t(
-              "Gardez ce bon : vous pourrez l’utiliser pour diviser un futur loyer par deux.",
-              "Keep this coupon to halve a future rent payment.",
-            )
-          : t(
-              "Vous possédez déjà ce bon. Ce doublon ne rejoint pas votre main.",
-              "You already have this coupon. The duplicate is not added to your hand.",
-            ),
+        badge: t("Loyer réduit de moitié", "Half-price rent"),
+        text: t(
+          "Gardez ce bon : vous pourrez l’utiliser pour diviser un futur loyer par deux.",
+          "Keep this coupon to halve a future rent payment.",
+        ),
       };
     case "Earthquake":
       return {

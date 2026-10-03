@@ -6,6 +6,7 @@ import {
   RoomCodeSchema,
   RoomConfigSchema,
 } from "../shared/protocol/index.js";
+import { APP_VERSION } from "../shared/version.js";
 import { GameRoom } from "./GameRoom.js";
 import { Matchmaker } from "./Matchmaker.js";
 
@@ -72,6 +73,9 @@ async function readJson(request: Request): Promise<unknown> {
 }
 
 app.get("/api/health", (context) => context.json({ status: "ok" }));
+app.get("/api/version", (context) =>
+  context.json({ version: APP_VERSION }, 200, { "Cache-Control": "no-store" }),
+);
 app.post("/api/rooms", async (context) => {
   // Aggregate edge shedding happens before reading a body or reaching storage.
   // Use a fixed key: a LAN party shares no IP-specific quota, and attacker-chosen

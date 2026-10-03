@@ -6,6 +6,7 @@
     "types": [],
     "skipLibCheck": true,
     "module": "nodenext",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

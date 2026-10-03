@@ -47,11 +47,17 @@ server; separate browser tabs share saved credentials, so use separate browser p
 windows for different seats. Refreshing resumes your seat. A disconnected human
 is temporarily controlled by a bot after 60 seconds and regains control on return.
 
+Invitation links open a nickname-only join screen. Enter joins that room; it does
+not create a bot game. The room code stays off the invitation screen. Leave returns
+to the normal start screen, and a saved seat in the invited room resumes directly.
+
 ## Verify
 
 ```sh
 pnpm typecheck
 pnpm lint
+pnpm check:version
+pnpm test:version
 pnpm test
 pnpm build
 pnpm check:bundle
@@ -92,6 +98,19 @@ performance pass can be planned later.
 Feature branches have isolated Worker Preview storage. Production deploys from
 `main`; see the architecture document before deploying.
 
+## Versions and releases
+
+The application release version comes from `package.json`. It appears in the
+welcome footer and the uncached `GET /api/version` response. Intermediate builds
+may share a version; include the Git commit and deployment URL in bug reports.
+Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
+Polytour follows the `MAJOR.MINOR.PATCH` conventions of
+[Semantic Versioning](https://semver.org/): fixes use patch releases, features use
+minor releases, and `1.0.0` marks a deliberate stable launch boundary. See
+[RELEASING.md](docs/RELEASING.md) for preparing versions, planning GitHub
+milestones, checking compatibility and publishing a verified release.
+
 | Doc | What's in it |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Working rules for AI coding agents (Codex reads it; [CLAUDE.md](CLAUDE.md) imports it for Claude Code) |
@@ -101,6 +120,7 @@ Feature branches have isolated Worker Preview storage. Production deploys from
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | WebSocket messages and game events |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Art direction, animation pipeline, signature moments, perf budgets |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased build plan |
+| [docs/RELEASING.md](docs/RELEASING.md), [CHANGELOG.md](CHANGELOG.md) | Application versions, release records and milestone workflow |
 | [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Server CSPRNG, uniform dice, seed rationale and legacy drand compatibility |
 | [docs/REFERENCE_PARITY.md](docs/REFERENCE_PARITY.md) | Captured reference values and provisional economy |
 | [docs/PLAYABLE_CHECKPOINT.md](docs/PLAYABLE_CHECKPOINT.md) | Verified features, simulator evidence and remaining work |
