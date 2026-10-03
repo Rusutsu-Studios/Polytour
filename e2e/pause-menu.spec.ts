@@ -178,7 +178,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
         const welcome: ServerMessage = {
           type: "welcome",
           protocolVersion: PROTOCOL_VERSION,
-          you: { seat: 0 },
+          you: { seat: 0, member: null },
           seq: sequence,
           snapshot,
           randomness: null,
@@ -186,17 +186,21 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
           lobby: {
             roomCode: "ABCD35",
             hostSeat: 0,
+            locked: false,
+            waiting: [],
             status: "playing",
             config: RoomConfigSchema.parse({ decisionSeconds: 60 }),
             boardRule: DEFAULT_GAME_CONFIG.boardRule,
             economyRule: DEFAULT_GAME_CONFIG.economyRule,
             hotelPurchaseRule: DEFAULT_GAME_CONFIG.hotelPurchaseRule,
             sellBackPercent: DEFAULT_GAME_CONFIG.sellBackPercent,
+            worldTourRule: DEFAULT_GAME_CONFIG.worldTourRule,
             seats: snapshot.players.map((player) => ({
               seat: player.seat,
               name: player.name,
               control: player.control,
               online: player.seat === 0,
+              controller: null,
             })),
           },
         };
@@ -226,7 +230,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
     }, DEBUG_PING_RESPONSE);
   }
   await page.getByLabel("Votre nom de joueur").fill("Camille");
-  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
     "data-scene-ready",
@@ -625,7 +629,7 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
     .getByRole("button", { name: "Quitter la partie", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Jouer avec 3 bots" }),
+    page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
   await expect.poll(aborts).toBe(beforeClosing + 3);
   const afterLeaving = requests;
@@ -1331,9 +1335,10 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
     .getByRole("button", { name: "Inviter des joueurs", exact: true })
     .click();
   await expect(page.locator(".room-tool")).toContainText("ABCD35");
-  await expect(page.locator(".room-tool").locator("input, select")).toHaveCount(
-    0,
-  );
+  // No match settings here: the room leader's lock is the panel's only control.
+  const roomControls = page.locator(".room-tool").locator("input, select");
+  await expect(roomControls).toHaveCount(1);
+  await expect(roomControls).toHaveAccessibleName(/Verrouiller la salle/);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Menu pause", exact: true }).click();
   await page.getByRole("button", { name: "Quitter", exact: true }).click();
@@ -1361,7 +1366,7 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
     .getByRole("button", { name: "Quitter la partie", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Jouer avec 3 bots" }),
+    page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".pause-dialog")).toHaveCount(0);
   expect(

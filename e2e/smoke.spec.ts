@@ -42,12 +42,12 @@ test.describe("production app shell", () => {
     await page.goto("/");
     await expect(page).toHaveTitle("Polytour");
     await expect(
-      page.getByRole("button", { name: "Jouer avec 3 bots" }),
+      page.getByRole("button", { name: "Jouer", exact: true }),
     ).toBeVisible();
     const response = await page.goto("/rooms/ABC123");
     expect(response?.status()).toBe(200);
     await expect(
-      page.getByRole("button", { name: "Jouer avec 3 bots" }),
+      page.getByRole("button", { name: "Jouer", exact: true }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   });

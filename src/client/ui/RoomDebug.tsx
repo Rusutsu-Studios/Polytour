@@ -40,7 +40,7 @@ export default function RoomDebug({
   ownSeat,
 }: {
   value: RoomDebugState;
-  ownSeat: Seat;
+  ownSeat: Seat | null;
 }) {
   const { locale, t } = useLocale();
   const id = useId();

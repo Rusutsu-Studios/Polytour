@@ -12,13 +12,16 @@ support is optional. It runs entirely on Cloudflare: a Worker serves the SPA and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: first playable prototype.** Shared rules, 2–4 player private rooms,
+> **Status: first playable prototype.** Shared rules, 2–4 player private rooms
+> with a transferable leader, a waiting room and players sharing one screen,
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
-> 120 minutes. New rooms (rules version 5) use the reference economy: its rent
+> 120 minutes. New rooms (rules version 6) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
-> championship, Hotels that cannot be bought out and no Landmark. Two houses
+> championship, Hotels that cannot be bought out and no Landmark. World Tour
+> reaches free properties and the traveller's own (version 5: own only when none
+> is free). Two houses
 > before a first completed lap, three after; the Hotel follows on a later
 > visit to a three-house city. Direct
 > hotels are an explicit custom exception; saved version-2/3 rooms keep their original board and the

@@ -19,6 +19,7 @@ import {
   propertyRent,
   rentCardPayment,
   type Seat,
+  travelSalary,
 } from "../../shared/engine/index.js";
 import type { RandomnessStatus } from "../../shared/protocol/index.js";
 import { useDirector } from "../director/director.js";
@@ -27,7 +28,6 @@ import {
   levelName,
   money,
   PLAYER_COLORS,
-  PLAYER_SYMBOLS,
   TILE_ICONS,
   tileColor,
   tileName,
@@ -45,7 +45,10 @@ import "./DecisionPanel.css";
 
 export type DecisionPanelProps = {
   state: PublicState;
-  seat: Seat;
+  /** The seat this screen acts for now; null for someone watching. */
+  seat: Seat | null;
+  /** Names the deciding player when several people share this screen. */
+  playerName?: string;
   act: (action: Action) => void;
   blocked: boolean;
   randomness: RandomnessStatus | null;
@@ -276,7 +279,8 @@ function confirmLabel(action: Action, state: PublicState): string {
 
 export default function DecisionPanel({
   state,
-  seat,
+  seat: viewer,
+  playerName,
   act,
   blocked,
   randomness,
@@ -304,9 +308,16 @@ export default function DecisionPanel({
   obscuredRef.current = obscured;
   const pending = state.pending;
   const decisionSeat = pending?.seat ?? state.activeSeat;
+  // Previews take the deciding player's view for someone only watching.
+  const seat = viewer ?? decisionSeat;
   const active = state.players.find((player) => player.seat === decisionSeat);
   const ownTurn =
-    decisionSeat === seat && !active?.bankrupt && state.status === "active";
+    viewer !== null &&
+    decisionSeat === viewer &&
+    !active?.bankrupt &&
+    state.status === "active";
+  const named = (text: string) =>
+    playerName ? `${playerName} · ${text}` : text;
   const rngBusy = randomness !== null && randomness.status !== "resolved";
   const decisionKey = `${pending?.kind ?? "roll"}:${decisionSeat}:${pending?.deadline ?? 0}:${pending && "tile" in pending ? pending.tile : ""}`;
   const actions = ownTurn ? legalActions(state, seat) : [];
@@ -392,6 +403,11 @@ export default function DecisionPanel({
     selectedAction?.type === "Sell"
       ? propertyRefund(state, selectedAction.tile)
       : null;
+  // A flight past Start collects the salary on the way.
+  const salary =
+    selectedAction?.type === "Travel"
+      ? travelSalary(state, seat, selectedAction.tile)
+      : 0;
   const projectedCash =
     active &&
     selectedAction &&
@@ -405,7 +421,7 @@ export default function DecisionPanel({
       "ChooseHost",
     ].includes(selectedAction.type) ||
       pending?.kind === "rent-card")
-      ? active.cash + (refund ?? -cost)
+      ? active.cash + (refund ?? salary - cost)
       : null;
   // Every level up to the hotel is shown; the ones this player cannot take
   // now stay visible but locked, so the hotel reads as "not yet".
@@ -569,11 +585,10 @@ export default function DecisionPanel({
         {debt && (
           <>
             <span
-              className="player-symbol"
+              className="player-dot"
               style={{ color: PLAYER_COLORS[decisionSeat] }}
-            >
-              {PLAYER_SYMBOLS[decisionSeat]}
-            </span>
+              aria-hidden="true"
+            />
             <span>{t("Votre dette à régler", "Settle your debt")}</span>
           </>
         )}
@@ -605,9 +620,11 @@ export default function DecisionPanel({
       >
         <div className="sale-topline">
           <h2 id="decision-heading">
-            {bankruptcy
-              ? t("Déclarer faillite ?", "Declare bankruptcy?")
-              : t("Vendre une ville", "Sell a city")}
+            {named(
+              bankruptcy
+                ? t("Déclarer faillite ?", "Declare bankruptcy?")
+                : t("Vendre une ville", "Sell a city"),
+            )}
           </h2>
           <dl className="sale-ledger">
             <div>
@@ -737,14 +754,14 @@ export default function DecisionPanel({
       >
         <div className="pick-head">
           <span
-            className="player-symbol"
+            className="player-dot"
             style={{ color: PLAYER_COLORS[decisionSeat] }}
             aria-hidden="true"
-          >
-            {PLAYER_SYMBOLS[decisionSeat]}
-          </span>
+          />
           <h2 id="decision-heading">
-            {pending.kind === "card-target" ? cardName(pending.card) : copy[0]}
+            {named(
+              pending.kind === "card-target" ? cardName(pending.card) : copy[0],
+            )}
           </h2>
           {pickActions.length > 0 && (
             <select
@@ -837,14 +854,31 @@ export default function DecisionPanel({
                     </div>
                   </dl>
                 )}
-                {travel && active && (
-                  <span className="ledger-balance pick-balance">
-                    {t("Il vous restera", "You keep")}
-                    <b>
-                      {money(active.cash - actionCost(state, pickedAction))}
-                    </b>
-                  </span>
-                )}
+                {travel &&
+                  active &&
+                  (() => {
+                    const salary = travelSalary(state, seat, pickedAction.tile);
+                    return (
+                      <span className="ledger-balance pick-balance">
+                        {t("Il vous restera", "You keep")}
+                        <b>
+                          {money(
+                            active.cash +
+                              salary -
+                              actionCost(state, pickedAction),
+                          )}
+                        </b>
+                        {salary > 0 && (
+                          <small>
+                            {t(
+                              `+${money(salary)} au départ`,
+                              `+${money(salary)} at Start`,
+                            )}
+                          </small>
+                        )}
+                      </span>
+                    );
+                  })()}
               </>
             ) : (
               <span className="pick-empty">
@@ -904,8 +938,8 @@ export default function DecisionPanel({
       ? t("Le lancer se fait attendre", "Waiting for the dice")
       : t("Les dés se préparent", "Preparing the dice")
     : ownTurn && !busy
-      ? copy[0]
-      : shownSeat === seat
+      ? named(copy[0])
+      : viewer !== null && shownSeat === viewer
         ? t("Votre tour", "Your turn")
         : t(
             `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
@@ -1019,7 +1053,7 @@ export default function DecisionPanel({
       }}
     >
       <div className="decision-popup-ribbon">
-        <span>{copy[0]}</span>
+        <span>{named(copy[0])}</span>
       </div>
       <motion.div
         className="decision-popup-inner"
@@ -1065,16 +1099,14 @@ export default function DecisionPanel({
               level={selectedLevel}
               color={PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]}
               resort={resort}
-              symbol={
-                PLAYER_SYMBOLS[construction ? seat : (owner?.seat ?? seat)]
-              }
+              flag
             />
             {owner && (
               <span className="decision-property">
                 <span style={{ color: PLAYER_COLORS[owner.seat] }}>
-                  {PLAYER_SYMBOLS[owner.seat]}
+                  {owner.name}
                 </span>{" "}
-                {owner.name} · {levelName(property?.level ?? 0)}
+                · {levelName(property?.level ?? 0)}
               </span>
             )}
           </div>
@@ -1138,6 +1170,12 @@ export default function DecisionPanel({
                     <dd>{money(rent)}</dd>
                   </div>
                 )}
+              {salary > 0 && !bankruptcy && (
+                <div>
+                  <dt>{t("Salaire au départ", "Salary at Start")}</dt>
+                  <dd>+{money(salary)}</dd>
+                </div>
+              )}
               {construction && decisionTile !== undefined && !bankruptcy && (
                 <div className="ledger-buyout">
                   <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
@@ -1167,7 +1205,7 @@ export default function DecisionPanel({
                           "Available to settle the debt",
                         )
                       : pending?.kind === "travel"
-                        ? t("Après frais de voyage", "After travel costs")
+                        ? t("Après le voyage", "After the trip")
                         : t("Argent restant", "Cash remaining")}
                   </dt>
                   <dd>{money(projectedCash)}</dd>

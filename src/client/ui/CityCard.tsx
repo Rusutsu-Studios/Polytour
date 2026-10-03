@@ -23,6 +23,7 @@ import {
   rentBoost,
   resortCount,
   type Seat,
+  worldTourRule,
 } from "../../shared/engine/index.js";
 import { useDirector } from "../director/director.js";
 import { translate as t, useLocale } from "../i18n.js";
@@ -30,7 +31,6 @@ import {
   levelName,
   money,
   PLAYER_COLORS,
-  PLAYER_SYMBOLS,
   REGION_COLORS,
   TILE_ICONS,
   tileColor,
@@ -55,7 +55,8 @@ export default function CityCard({
   onClose,
 }: {
   state: PublicState;
-  seat: Seat;
+  /** Null for someone watching the match without a seat. */
+  seat: Seat | null;
   selected: number | null;
   onSelect: (tile: number) => void;
   onClose: () => void;
@@ -173,7 +174,7 @@ export default function CityCard({
                 level={property.level}
                 color={ownerColor}
                 resort={tile.kind === "resort"}
-                symbol={owner ? PLAYER_SYMBOLS[owner.seat] : undefined}
+                flag={Boolean(owner)}
               />
               <p className="city-card-owner" data-owned={Boolean(owner)}>
                 {owner ? (
@@ -182,9 +183,7 @@ export default function CityCard({
                       className="city-card-pawn"
                       style={{ backgroundColor: ownerColor }}
                       aria-hidden="true"
-                    >
-                      {PLAYER_SYMBOLS[owner.seat]}
-                    </span>
+                    />
                     <span>
                       <strong>
                         {owner.seat === seat
@@ -275,8 +274,8 @@ function Ledger({
   );
 }
 
-function rentLabel(owner: Seat | null, seat: Seat) {
-  return owner === seat
+function rentLabel(owner: Seat | null, seat: Seat | null) {
+  return owner !== null && owner === seat
     ? t("Loyer que vous touchez", "Rent you collect")
     : t("Loyer à payer ici", "Rent due here");
 }
@@ -287,7 +286,7 @@ function CityDeed({
   index,
 }: {
   state: PublicState;
-  seat: Seat;
+  seat: Seat | null;
   index: number;
 }) {
   const tile = getBoard(state.config)[index];
@@ -308,7 +307,9 @@ function CityDeed({
           },
           {
             label: t("Loyer juste après l’achat", "Rent right after buying"),
-            value: money(previewPropertyRent(state, index, seat, 0)),
+            value: money(
+              previewPropertyRent(state, index, seat ?? state.activeSeat, 0),
+            ),
           },
         ]
       : [
@@ -376,7 +377,12 @@ function CityDeed({
                 <td className="city-card-boosted">
                   {money(
                     owner === null
-                      ? previewPropertyRent(state, index, seat, level)
+                      ? previewPropertyRent(
+                          state,
+                          index,
+                          seat ?? state.activeSeat,
+                          level,
+                        )
                       : propertyRentAt(state, index, level),
                   )}
                 </td>
@@ -406,7 +412,7 @@ function ResortDeed({
   index,
 }: {
   state: PublicState;
-  seat: Seat;
+  seat: Seat | null;
   index: number;
 }) {
   const owner = getProperty(state, index)?.owner ?? null;
@@ -424,7 +430,9 @@ function ResortDeed({
           },
           {
             label: t("Loyer juste après l’achat", "Rent right after buying"),
-            value: money(previewPropertyRent(state, index, seat, 0)),
+            value: money(
+              previewPropertyRent(state, index, seat ?? state.activeSeat, 0),
+            ),
           },
         ]
       : [
@@ -530,14 +538,20 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
               `Host the Championship for free in an eligible city to multiply its rent up to ×${rules.maxHostMultiplier}.`,
             );
       case "world-tour":
-        return t(
-          rules.travelToFreeProperties
-            ? `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre, ou vers vos propriétés si aucune n’est libre. Vous pouvez aussi lancer les dés gratuitement.`
-            : `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une case libre, une de vos propriétés ou le départ, ou lancez les dés gratuitement.`,
-          rules.travelToFreeProperties
-            ? `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property, or one of your properties when none is free. You may also roll for free.`
-            : `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned space, one of your properties or Start, or roll for free.`,
-        );
+        if (!rules.travelToFreeProperties)
+          return t(
+            `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une case libre, une de vos propriétés ou le départ, ou lancez les dés gratuitement.`,
+            `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned space, one of your properties or Start, or roll for free.`,
+          );
+        return worldTourRule(state.config) === "free-and-own"
+          ? t(
+              `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre ou l’une des vôtres. Vous pouvez aussi lancer les dés gratuitement.`,
+              `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property or one of your own. You may also roll for free.`,
+            )
+          : t(
+              `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre, ou vers vos propriétés si aucune n’est libre. Vous pouvez aussi lancer les dés gratuitement.`,
+              `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property, or one of your properties when none is free. You may also roll for free.`,
+            );
       case "chance":
         return t(
           "Piochez une carte. Fortune, voyage ou surprise au programme.",

@@ -1,4 +1,9 @@
-import type { BoardRule, BuildLevel, EconomyRule } from "../board/types.js";
+import type {
+  BoardRule,
+  BuildLevel,
+  EconomyRule,
+  WorldTourRule,
+} from "../board/types.js";
 
 export type Seat = 0 | 1 | 2 | 3;
 export type SeatInfo = {
@@ -28,6 +33,8 @@ export type GameConfig = {
   readonly economyRule?: EconomyRule;
   /** Missing on saved matches: keep the original production tile indices. */
   readonly boardRule?: BoardRule;
+  /** Missing on saves before rules version 6: own properties only when none is free. */
+  readonly worldTourRule?: WorldTourRule;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
@@ -334,6 +341,8 @@ export type GameEvent =
       readonly type: "PlayerControlChanged";
       readonly seat: Seat;
       readonly control: "human" | "bot";
+      /** The new controller's name, when a person takes over a bot's place. */
+      readonly name?: string;
     };
 export type RollAction = { readonly type: "Roll" };
 export type Action =

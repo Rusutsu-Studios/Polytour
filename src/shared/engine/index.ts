@@ -15,6 +15,7 @@ export {
   buyoutPrice,
   buyoutPriceAt,
   championshipCost,
+  changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,
   decisionWindow,
@@ -36,6 +37,8 @@ export {
   rentCardPayment,
   resortCount,
   toPublic,
+  travelSalary,
+  worldTourRule,
   worldTourTargets,
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";

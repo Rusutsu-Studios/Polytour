@@ -21,7 +21,8 @@ debug socket has been removed; `/api/health` remains.
   visitor geography or IP address is returned. Unknown POP codes remain visible
   without a location mapping. This endpoint does not locate the room's DO.
 
-- `POST /api/rooms {name, config?}` returns201 and `{roomCode, seat, token}`.
+- `POST /api/rooms {name, config?, bots?}` returns 201 and `{roomCode, seat, token}`.
+  `bots` (0–3, default 0) seats server bots after the creator; Play asks for three.
   Creation attempts first pass the fixed `room-creation` edge key (120/minute per
   Cloudflare location), then the Matchmaker named `room-admission` (burst 60,
   refill 1/second, at most 1,000 admissions per UTC day in one persisted record).
@@ -29,8 +30,12 @@ debug socket has been removed; `/api/health` remains.
   `{error: "rate-limited"}` with HTTP 429, `Retry-After` in seconds and
   `Cache-Control: no-store`; edge denials use 60 seconds, durable denials wait for
   refill or UTC-day reset. Gate failures use the HTTP 503 error path below.
-- `POST /api/rooms/:code/join {name}` returns200 and another seat capability.
-  Creation limits do not apply to joining, reconnecting or moves.
+- `POST /api/rooms/:code/join {name}` returns 200 and another capability. An open
+  lobby seats the newcomer in the first empty place, otherwise in the first bot's
+  place. A locked room, a match in progress (or finished) puts them in the waiting
+  list instead and returns `seat: null`. `room-full` (409) means four people already
+  hold the places, or six people already wait. Creation limits do not apply to
+  joining, reconnecting or moves.
 - `/api/health`, `/api/rooms/:code/health` and `/api/queues/:mode/health` report
   service liveness directly from the Worker, without a Durable Object lookup.
   Room health validates the code format but does not establish that a room exists.
@@ -39,6 +44,11 @@ debug socket has been removed; `/api/health` remains.
   Capability tokens never appear in public state, lobby, events, or URLs.
 - First send `sync {lastSeq:null}` for a snapshot, or a known sequence for replay.
   `welcome {protocolVersion,you,seq,snapshot,lobby,randomness}` always comes first.
+  `you` is `{seat, member}`: a seat for a seated device, or `seat: null` and a
+  waiting member id. A waiting member receives the lobby and every event (they
+  watch the match) but cannot act. When they get a place, the same socket gets a
+  fresh `welcome` with its new seat; when the leader returns to the lobby, every
+  socket gets a `welcome` with `seq: 0` and no snapshot.
   Replay then sends the contiguous events and any persisted dice proof receipts.
 - New servers optionally advertise `roomDebugVersion: 1` in `welcome`. Only then,
   while Debug is open, the client requests `debug-info` once on open/reconnect.
@@ -56,19 +66,43 @@ debug socket has been removed; `/api/health` remains.
   bounded per-socket FIFO retains expired/suspended attempts so a late fixed pong
   cannot be attributed to a new measurement. Socket replacement resets that FIFO.
   Old servers without the capability are never sent these new debug messages.
-- Host lobby operations are `start {fillBots}`, `settings {config}`,
-  `add-bot {seat}` and `remove-bot {seat}`. A room has four places and starts with
-  two to four players. `add-bot` seats a server bot on an empty place (`seat-taken`
-  otherwise) and `remove-bot` frees a bot's place (`not-a-bot` otherwise); joining
-  friends take the first empty place. `start {fillBots: true}` seats bots in every
+- The room leader is `lobby.hostSeat`: the creator, until they hand the role on.
+  Leader operations are `start {fillBots}`, `settings {config}`, `add-bot {seat}`,
+  `remove-bot {seat}` (these four in the lobby only), `transfer-host {seat}`,
+  `lock {locked}`, `admit {member}`, `deny {member}`, `replace-bot {member, seat}`
+  (during a match) and `return-to-lobby` (during or after a match). Anyone else
+  gets `host-only`; a waiting member gets `not-seated` for any operation.
+  A room has four places and starts with two to four players. `add-bot` seats a
+  server bot on an empty place (`seat-taken` otherwise) and `remove-bot` frees a
+  bot's place (`not-a-bot` otherwise). `start {fillBots: true}` seats bots in every
   empty place; `start {fillBots: false}` starts with the occupied places and is
   rejected with `players-required` below two. Each player keeps its lobby seat
   number (colour and corner) in the match, so a smaller match can have gaps such
   as seats 0, 1 and 3. Settings are validated and freeze when the match starts.
-- Protocol version 3 reloads cached clients before interpreting the regrouped board.
-  New rooms freeze rules version 5 with `boardRule: "country"`,
-  `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"` and
-  `sellBackPercent: 100`. Existing version-2/3 rooms keep the legacy board,
+- `transfer-host` needs another person with their own device (`not-transferable`
+  for the leader's seat, a bot, an empty place or a local player). `lock` holds
+  newcomers as `approved: false` members; unlocking admits them all. `admit` seats
+  an admitted member at once in a lobby (if a place is free and they are
+  connected); `deny` removes a member and closes their sockets with code 4003
+  (`Not admitted`), so their capability stops working. `replace-bot` hands a bot's
+  place to an admitted member: the engine emits `PlayerControlChanged {seat,
+  control: "human", name}` and the seat keeps its money, cities, cards and turn.
+  It is refused while dice are pending. `return-to-lobby` discards the match
+  (state, event log, commands, timers) and keeps places, bots, settings and the
+  frozen rules version; admitted members then take empty places, then bots' places.
+- Local players share a device: `add-local {seat, name}` (lobby only, any seated
+  device, an empty place) and `remove-local {seat}` (its device or the leader;
+  `not-local` for any other seat). `lobby.seats[n].controller` names the device's
+  seat. Intents carry an optional `seat` for a local player; a device may only name
+  its own seat or its local players (`not-your-seat`). Local players connect,
+  disconnect and get their 60-second grace together with their device.
+- Protocol version 4 adds leaders, waiting members and local players (nullable
+  `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
+  clients reload. Version 3 reloaded clients before the regrouped board.
+  New rooms freeze rules version 6 with `boardRule: "country"`,
+  `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
+  `sellBackPercent: 100` and `worldTourRule: "free-and-own"`; older lobbies report
+  `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
   Lobby snapshots expose their frozen rule markers separately from room settings.
   The strict room-setting schema never accepts internal rule markers; clients

@@ -5,7 +5,10 @@ import { translate } from "../i18n.js";
 
 export const RoomCredentialsSchema = z.object({
   roomCode: RoomCodeSchema,
-  seat: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
+  // Null for someone placed in the waiting list rather than a seat.
+  seat: z
+    .union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)])
+    .nullable(),
   token: z.string().min(1),
 });
 

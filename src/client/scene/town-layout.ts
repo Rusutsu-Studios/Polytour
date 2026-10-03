@@ -205,11 +205,6 @@ export const TOWN_TREES: readonly TownTree[] = [
     ),
 );
 
-/** A tree stands on each unsold plot until it is bought. */
-export function plotTree(plot: TownPlot): TownTree {
-  return tree(plot.position);
-}
-
 /**
  * The cars' closed circuit, sampled every `spacing` units: in along an
  * avenue, a quarter of the roundabout, out along the next avenue, around its

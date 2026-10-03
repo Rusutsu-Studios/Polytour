@@ -360,22 +360,13 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
   await actor.page
     .getByRole("button", { name: "Quitter la partie", exact: true })
     .click();
-  await actor.page.locator(".settings-trigger").click();
-  await expect(
-    actor.page.locator(".settings-dialog .room-settings"),
-  ).not.toContainText("drand");
-  await actor.page
-    .getByRole("button", { name: "Appliquer les réglages" })
-    .click();
   await actor.page.getByLabel("Votre nom de joueur").fill("Fast after legacy");
   const createdResponse = actor.page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/rooms" &&
       response.request().method() === "POST",
   );
-  await actor.page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await actor.page.getByRole("button", { name: "Jouer", exact: true }).click();
   const created = await createdResponse;
   expect(created.status()).toBe(201);
   expect(created.request().postDataJSON().config.randomnessMode).toBe("secure");

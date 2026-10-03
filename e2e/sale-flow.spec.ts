@@ -139,9 +139,7 @@ async function enterSaleRoom(
   });
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Sale fixture");
-  await page
-    .getByRole("button", { name: "Créer une salle entre amis" })
-    .click();
+  await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".match-connection")).toHaveAttribute(
     "data-state",
     "online",
@@ -436,15 +434,22 @@ test("every city and resort sale quote remains clickable at each desktop size", 
     for (const tile of room.state().players[0].properties) {
       const target = quote(page, tile);
       await expect(target).toBeEnabled();
-      const clickable = await target.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(
-          rect.x + rect.width / 2,
-          rect.y + rect.height / 2,
-        );
-        return hit !== null && (button === hit || button.contains(hit));
-      });
-      expect(clickable, `Sale quote ${tile} at ${size.width}px`).toBe(true);
+      // Quotes follow the board after a resize, so wait for them to settle
+      // rather than hit-testing the frame right after the viewport changes.
+      await expect
+        .poll(
+          () =>
+            target.evaluate((button) => {
+              const rect = button.getBoundingClientRect();
+              const hit = document.elementFromPoint(
+                rect.x + rect.width / 2,
+                rect.y + rect.height / 2,
+              );
+              return hit !== null && (button === hit || button.contains(hit));
+            }),
+          { message: `Sale quote ${tile} at ${size.width}px` },
+        )
+        .toBe(true);
       await target.click();
       await expect(target).toHaveAttribute("aria-pressed", "true");
     }

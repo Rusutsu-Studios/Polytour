@@ -32,7 +32,8 @@ export type PauseMenuProps = {
   connection: string;
   ping: PingState;
   roomDebug: RoomDebugState;
-  ownSeat: Seat;
+  /** Null while this screen waits for a place in the room. */
+  ownSeat: Seat | null;
   onDebugActiveChange: (active: boolean) => void;
 };
 

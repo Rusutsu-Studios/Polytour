@@ -11,6 +11,14 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Added
 
+- Play opens a lobby with three bots instead of starting at once; friends who
+  enter the room code take a bot's place (#30).
+- A transferable room leader who can lock the room and approve newcomers, hand
+  a bot's place to someone who arrived mid-game, and bring everyone back to the
+  lobby during or after a match. People who join mid-game watch until they get
+  a place (#33).
+- Players sharing one PC: any seated player can seat a local player, whose
+  decisions appear on that screen labelled with their name (#44).
 - A pause menu with Game, Video, Audio and Debug settings; the game continues
   while the menu is open, and audio controls are marked coming soon (#35).
 - A five-second Cloudflare ping indicator and on-demand room routing and
@@ -18,10 +26,28 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Changed
 
+- Protocol version 4: open browsers reload after the deploy that ships it.
 - Personal settings live in the pause menu; the sliders tool shows fixed match
   rules. Video settings retain the High/Low graphics control.
 - Removed manual animation finish/skip and speed controls, preserving reduced
   motion, automatic catch-up and reconnect recovery.
+- World Tour can fly to your own cities and resorts as well as unowned ones in
+  rooms created from now on (rules version 6). Rooms already created keep their
+  destinations.
+- Road markings around the board and in the town are softer, so they no longer
+  compete with the spaces' names and prices.
+- Board lots are printed in two parts: the city ground, with its buildings and
+  name on a pavement of its country's own style and color, and a concrete price
+  strip showing only the price or the owner's rent. Beaches are one piece of
+  sand, the tax and chance squares are smooth concrete, and unsold plots in the
+  central town no longer hold trees (#57).
+- Country colors are spread further apart so no two groups look alike, and the
+  tax square is named "Impôts" in French and "Taxes" in English (#57).
+- Festival cities fly a tall, vivid swallowtail banner facing the camera with a
+  garland of pennants; the floating multiplier medallion is gone, and the
+  championship host flies a gold banner (#57).
+- Players are identified by color only; per-player symbols are removed from
+  the board, pawns, corner HUDs, cards and menus (#57).
 - The Championship corner is now a stadium with a spinning gold trophy; it
   lights up in the host's colour while a championship runs. The World Tour
   corner is now a jet port with a terminal, a control tower and an airliner
@@ -36,6 +62,9 @@ has been published, and it does not reconstruct earlier development history.
   so public setup and observed cards cannot reveal the next draw (#46).
 - Shared room-creation limits bound anonymous storage allocation without IP keys;
   health probes and unknown-room requests no longer create room tables (#46).
+- World Tour and long card moves walk the pawn along the board route, past Start
+  when they cross it, instead of jumping across the board. The destination picker
+  counts the Start salary a flight collects (#29).
 
 ## [0.1.0] - 2026-10-03
 

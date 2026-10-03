@@ -20,8 +20,13 @@ export const BOARD_HALF = LOT_DEPTH + (LOTS_PER_SIDE / 2) * LOT_WIDTH;
 export const INNER_HALF = BOARD_HALF - LOT_DEPTH;
 export const ROAD_WIDTH = 0.62;
 export const LAWN_HALF = INNER_HALF - ROAD_WIDTH;
-/** The colored plot printed at the screen-top end of each lot, for buildings. */
+// A lot is printed in two parts, like the reference boards: the city ground
+// at the screen-top end, with its buildings and name, and the price strip at
+// the screen-bottom end.
+/** The plot at the screen-top end of the city ground where buildings stand. */
 export const BUILDING_BAND = 0.56;
+/** The strip at the screen-bottom end of each lot with its price or rent. */
+export const PRICE_BAND = 0.56;
 export const LOT_GAP = 0.045;
 
 export const BOARD_BOTTOM = -0.14;
@@ -123,6 +128,11 @@ export function screenTop(index: number): 1 | -1 {
 /** Tile-local z of the center of the building plot. */
 export function buildingBandZ(index: number) {
   return screenTop(index) * (LOT_DEPTH / 2 - BUILDING_BAND / 2);
+}
+
+/** Tile-local z of the center of the price strip. */
+export function priceBandZ(index: number) {
+  return -screenTop(index) * (LOT_DEPTH / 2 - PRICE_BAND / 2);
 }
 
 /**

@@ -3,7 +3,8 @@
 ## Implemented prototype boundary
 
 The first playable slice uses a Worker and one SQLite-backed GameRoom per private
-match of two to four seats. It stores state, events, proof receipts, commands and timers in
+room of two to four seats. A room outlives its matches: its leader can return
+everyone to the lobby and start again. It stores state, events, proof receipts, commands and timers in
 that room. Create/join issues a cryptographically random seat capability; only its
 hash is stored. The WebSocket sends the token in `Sec-WebSocket-Protocol`, never
 the URL. The client keeps it in sessionStorage, so refresh restores its seat in
@@ -25,6 +26,17 @@ constrains allocation across locations. Neither guarantees complete DDoS resista
 or fair admission: abusive callers can exhaust the shared budget. See
 [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md#room-allocation-controls).
 
+Besides `seats`, the room stores a `members` table (people waiting for a place:
+an approval, a bot's seat or the next game, each with a capability hash) and a
+`local_seats` table (players sharing a device with a controller seat; they have no
+token of their own). `meta` holds the leader seat (`host`, default 0 for older
+rooms) and the `locked` flag. Both tables are created with the room; a room
+saved before them gains them with `IF NOT EXISTS` when it next wakes (unknown
+rooms still allocate nothing), so saved rooms need no state migration. Sockets are matched to seats and
+members through their attachments rather than tags, so a waiting member's socket
+stays open when that person takes a place. Spectating members do not count as an
+audience: with only them connected, the room sleeps like an abandoned match.
+
 Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
 expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
@@ -40,8 +52,10 @@ either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
 an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
 for the write-quota incident and measured regressions.
 State version 1 is retained, with the explicit migration ladder from PR #19.
-New rooms freeze rules version 5: country-grouped board, reference economy and
-staged hotels. Existing version-2/3 rooms retain the original board, prototype
+New rooms freeze rules version 6: country-grouped board, reference economy,
+staged hotels and World Tour flights to free or own properties. Version-5 rooms
+keep flights to own properties only when none is free.
+Existing version-2/3 rooms retain the original board, prototype
 prices, travel and sale rules; version 2 also keeps its original hotel progression.
 The competing unshipped version-4 definitions are not silently guessed. Unknown
 or contradictory saved markers are rejected before a room can change rules.
@@ -337,8 +351,10 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 5 with country-grouped tiles, reference economy, staged hotels and
-  full nominal sale refunds. A version-2/3 save without the newer selectors uses
+  use version 6 with country-grouped tiles, reference economy, staged hotels, full
+  nominal sale refunds and `worldTourRule: "free-and-own"`. A version-4/5 save
+  without that selector keeps World Tour on free properties first. A version-2/3
+  save without the newer selectors uses
   its original legacy board and prototype economy. Version-2 lobbies start with
   lap-only hotels, while version-3 lobbies retain staged hotels; both keep their
   original 50% refunds and unrestricted travel. Board selection reaches the engine,

@@ -21,6 +21,22 @@ describe("room HTTP response boundary", () => {
     },
   );
 
+  it("accepts a place in the waiting room instead of a seat", async () => {
+    await expect(
+      parseRoomResponse(
+        Response.json({
+          roomCode: "ABCD23",
+          seat: null,
+          token: "test-capability-not-real",
+        }),
+      ),
+    ).resolves.toEqual({
+      roomCode: "ABCD23",
+      seat: null,
+      token: "test-capability-not-real",
+    });
+  });
+
   it("keeps a recognized structured room error actionable", async () => {
     await expect(
       parseRoomResponse(Response.json({ error: "room-full" }, { status: 409 })),

@@ -18,17 +18,20 @@ export const PLAYER_COLORS = [
   "#8151b5",
   "#26764c",
 ] as const;
-export const PLAYER_SYMBOLS = ["●", "◆", "▲", "■"] as const;
 export const PLAYER_LABELS = ["Corail", "Océan", "Lavande", "Forêt"] as const;
+// Eight hues spread around the wheel, so groups stay apart even as the light
+// tints printed on the board. Look-alike pairs (orange and yellow, red and
+// pink, blue and teal) sit on different sides, and yellow stays away from the
+// sand of the beaches.
 export const REGION_COLORS = {
-  A: "#74b987",
-  B: "#e7a544",
-  C: "#63b4c7",
-  D: "#b990ca",
-  E: "#e57c75",
-  F: "#a9b94d",
-  G: "#619dc7",
-  H: "#da9b64",
+  A: "#5b8fd9",
+  B: "#ec8a3c",
+  C: "#5fb56c",
+  D: "#9a7ad8",
+  E: "#e0524f",
+  F: "#e6c033",
+  G: "#3fb5ad",
+  H: "#dc72bd",
 } as const;
 // One country per colour group, from France to Japan; resorts sit between.
 export const TILE_NAMES = [
@@ -62,7 +65,7 @@ export const TILE_NAMES = [
   "Séoul",
   "Surprise",
   "Osaka",
-  "Taxe locale",
+  "Impôts",
   "Tokyo",
 ] as const;
 export const LEVEL_NAMES = [
@@ -104,7 +107,7 @@ const ENGLISH_TILE_NAMES = [
   "Seoul",
   "Chance",
   "Osaka",
-  "Local tax",
+  "Taxes",
   "Tokyo",
 ] as const;
 const ENGLISH_LEVEL_NAMES = [
@@ -145,7 +148,7 @@ const LEGACY_TILE_NAMES = [
   "Singapour",
   "Séoul",
   "Bali",
-  "Taxe locale",
+  "Impôts",
   "Osaka",
   "Tokyo",
 ] as const;
@@ -179,7 +182,7 @@ const LEGACY_ENGLISH_TILE_NAMES = [
   "Singapore",
   "Seoul",
   "Bali",
-  "Local tax",
+  "Taxes",
   "Osaka",
   "Tokyo",
 ] as const;

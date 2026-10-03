@@ -5,16 +5,19 @@ French cities to Tokyo, buy land, build, pay rent and compete for collections on
 original Three.js toy board. Cloudflare Workers and one SQLite Durable Object per
 room own the rules, persistence and WebSockets.
 
-**Status:** first playable prototype. Create a private room and share its code with
-friends, or immediately play against three server bots. In a private room the host
-clicks an empty seat card to add a bot; a match starts with two to four players. The default preset is
+**Status:** first playable prototype. Play opens a private lobby with three server
+bots; friends who enter its code take the bots' places, and a player sitting next to
+you can join on the same PC. The room's creator leads it: they add or remove bots,
+start the match, can lock the room so newcomers wait for approval, hand a bot's place
+to someone who arrived mid-game, bring everyone back to the lobby for another game,
+and pass the leader role on. A match starts with two to four players. The default preset is
 2 M starting cash, 400 k per lap, three festivals, line/triple collection wins and
 a two-hour maximum. Room settings can be adjusted before starting.
 
 French and English are available from the welcome header and the in-game view
 settings. Language changes update cards, decisions, board labels and tools while
 preserving the current room. Three quick sliders sit beside the welcome board;
-the full settings dialog also supports precise values. See [LANGUAGES.md](docs/LANGUAGES.md).
+the lobby's full settings dialog covers every rule and supports precise values. See [LANGUAGES.md](docs/LANGUAGES.md).
 
 In newly created rooms, the first purchase is limited to land and three houses.
 Return to your own three-house city after a completed lap to build its hotel.

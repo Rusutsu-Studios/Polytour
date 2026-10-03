@@ -12,6 +12,7 @@ import {
   applyTimeout,
   botAction,
   botDecisionAt,
+  changeControl,
   createGame,
   legalActions,
   toPublic,
@@ -51,8 +52,18 @@ type StoredSeat = {
   control: "human" | "bot";
   token_hash: string | null;
 };
+type StoredMember = {
+  id: string;
+  name: string;
+  token_hash: string;
+  approved: number;
+  joined_at: number;
+};
 type Attachment = {
-  seat: Seat;
+  /** The device's own seat; null while its person waits for a place. */
+  seat: Seat | null;
+  /** The waiting member id, until that person takes a place. */
+  member?: string | null;
   synced: boolean;
   invalid: number;
   tokens: number;
@@ -68,22 +79,43 @@ type PendingDice = {
 };
 type EventRow = { seq: number; json: string; proof: string | null };
 const BOT_NAMES = ["Iris", "Milo", "Nova", "Atlas"] as const;
-/** 2–3 are original production rooms; 5 combines the board and reference rules. */
-const RULES_VERSION = 5;
+const SEATS = [0, 1, 2, 3] as const;
+/** People who can wait at once for a place, an approval or the next game. */
+const MAX_WAITING = 6;
+/** A lobby, or a lobby the leader brought back, expires after two hours. */
+const LOBBY_LIFETIME = 7_200_000;
+/**
+ * 2–3 are original production rooms; 5 combines the board and reference rules;
+ * 6 lets World Tour reach the traveller's own properties as well as free ones.
+ */
+const RULES_VERSION = 6;
 function frozenRules(version: number | null) {
-  if (version !== 2 && version !== 3 && version !== 4 && version !== 5)
+  if (
+    version !== 2 &&
+    version !== 3 &&
+    version !== 4 &&
+    version !== 5 &&
+    version !== 6
+  )
     throw new Error("Unsupported saved rules version");
   return {
-    boardRule: version === 5 ? ("country" as const) : ("legacy" as const),
+    boardRule: version >= 5 ? ("country" as const) : ("legacy" as const),
     economyRule: version >= 4 ? ("reference" as const) : ("prototype" as const),
     hotelPurchaseRule:
       version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
+    worldTourRule:
+      version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
   };
 }
 
 function newToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+function newMemberId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
 }
@@ -114,7 +146,23 @@ export class GameRoom extends DurableObject<Env> {
             "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'",
           )
           .toArray().length > 0;
+      if (this.schemaReady) this.createPeopleTables();
     });
+  }
+
+  /**
+   * Waiting members and local players. Rooms saved before these tables
+   * existed gain them when they wake; IF NOT EXISTS makes that a no-op later.
+   */
+  private createPeopleTables(): void {
+    // People waiting for a place: an approval, the next game or a bot's seat.
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL, approved INTEGER NOT NULL, joined_at INTEGER NOT NULL)",
+    );
+    // A local player shares the controller seat's device and token.
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS local_seats (seat INTEGER PRIMARY KEY, controller INTEGER NOT NULL)",
+    );
   }
 
   private initializeSchema(): void {
@@ -137,13 +185,36 @@ export class GameRoom extends DurableObject<Env> {
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS commands (seat INTEGER NOT NULL, id TEXT NOT NULL, PRIMARY KEY(seat,id))",
     );
+    this.createPeopleTables();
     this.schemaReady = true;
   }
 
-  private openSockets(tag?: string): WebSocket[] {
+  private openSockets(): WebSocket[] {
     return this.ctx
-      .getWebSockets(tag)
+      .getWebSockets()
       .filter((socket) => socket.readyState === WebSocket.OPEN);
+  }
+  /**
+   * Sockets are found through their attachments rather than tags: a waiting
+   * member's socket stays open when that person takes a place.
+   */
+  private socketsWhere(test: (attachment: Attachment) => boolean): WebSocket[] {
+    return this.openSockets().filter((socket) => {
+      const attachment = socket.deserializeAttachment() as Attachment | null;
+      return attachment !== null && test(attachment);
+    });
+  }
+  /** Sockets of the device that owns this seat, directly or as a local player. */
+  private seatSockets(seat: Seat): WebSocket[] {
+    const controller = this.controllerOf(seat);
+    return this.socketsWhere((attachment) => attachment.seat === controller);
+  }
+  private memberSockets(id: string): WebSocket[] {
+    return this.socketsWhere((attachment) => attachment.member === id);
+  }
+  /** An unattended match must not run: spectators alone do not keep it going. */
+  private seatedSockets(): WebSocket[] {
+    return this.socketsWhere((attachment) => attachment.seat !== null);
   }
 
   private setTimer(kind: string, fireAt: number): void {
@@ -205,7 +276,12 @@ export class GameRoom extends DurableObject<Env> {
     const prototypeEconomy = economy === undefined || economy === "prototype";
     const board = state.config.boardRule;
     const sale = state.config.sellBackPercent;
+    const tour = state.config.worldTourRule;
     if (
+      // Saves made before rules version 6 carry no World Tour marker.
+      (rulesVersion !== null &&
+        tour !== frozen.worldTourRule &&
+        (rulesVersion >= 6 || tour !== undefined)) ||
       (rulesVersion !== null &&
         rulesVersion >= 4 &&
         (hotelRule !== frozen.hotelPurchaseRule ||
@@ -236,11 +312,54 @@ export class GameRoom extends DurableObject<Env> {
       )
       .toArray();
   }
+  private members(): StoredMember[] {
+    if (!this.schemaReady) return [];
+    return this.ctx.storage.sql
+      .exec<StoredMember>(
+        "SELECT id,name,token_hash,approved,joined_at FROM members ORDER BY joined_at,id",
+      )
+      .toArray();
+  }
+  private localSeats(): { seat: Seat; controller: Seat }[] {
+    if (!this.schemaReady) return [];
+    return this.ctx.storage.sql
+      .exec<{ seat: Seat; controller: Seat }>(
+        "SELECT seat,controller FROM local_seats ORDER BY seat",
+      )
+      .toArray();
+  }
+  private controllerOf(seat: Seat): Seat {
+    return (
+      this.localSeats().find((entry) => entry.seat === seat)?.controller ?? seat
+    );
+  }
+  /** The seats a device acts for: its own, then the local players it added. */
+  private controlledSeats(seat: Seat): Seat[] {
+    return [
+      seat,
+      ...this.localSeats()
+        .filter((entry) => entry.controller === seat)
+        .map((entry) => entry.seat),
+    ];
+  }
+  /** Rooms created before leaders existed keep their creator, seat 0. */
+  private hostSeat(): Seat {
+    return this.readMeta<Seat>("host") ?? 0;
+  }
+  /** A person arriving takes an open place first, then a bot's place. */
+  private freeSeat(): Seat | undefined {
+    const seats = this.seats();
+    return (
+      SEATS.find((seat) => !seats.some((entry) => entry.seat === seat)) ??
+      seats.find((entry) => entry.control === "bot")?.seat
+    );
+  }
 
   async init(
     roomCode: string,
     name: string,
     config: RoomConfig,
+    bots = 0,
   ): Promise<RoomCredentials | null> {
     if (this.deletingRoom) return null;
     const token = newToken();
@@ -262,9 +381,15 @@ export class GameRoom extends DurableObject<Env> {
           name,
           tokenHash,
         );
+        for (const seat of SEATS.slice(1, 1 + Math.max(0, Math.min(3, bots))))
+          this.ctx.storage.sql.exec(
+            "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'bot',NULL)",
+            seat,
+            BOT_NAMES[seat],
+          );
         this.ctx.storage.sql.exec(
           "INSERT INTO timers(kind,fire_at) VALUES('cleanup',?)",
-          Date.now() + 7_200_000,
+          Date.now() + LOBBY_LIFETIME,
         );
       });
     } catch (error) {
@@ -275,36 +400,62 @@ export class GameRoom extends DurableObject<Env> {
     return { roomCode, seat: 0, token };
   }
 
+  /**
+   * An open lobby seats a newcomer at once, in an empty place or instead of a
+   * bot. A locked room or a match holds them in the waiting list instead:
+   * locked rooms until the leader admits them, matches until the next lobby
+   * or until the leader hands them a bot's place.
+   */
   async join(name: string): Promise<RoomCredentials | { error: string }> {
     if (this.deletingRoom) return { error: "room-not-found" };
     const token = newToken();
     const tokenHash = await hashToken(token);
     const room = this.readMeta<RoomMeta>("room");
     if (!room) return { error: "room-not-found" };
-    if (this.readState()) return { error: "game-already-started" };
-    const occupied = this.seats();
-    const seat = ([0, 1, 2, 3] as const).find(
-      (candidate) => !occupied.some((entry) => entry.seat === candidate),
-    );
+    const playing = this.readState() !== null;
+    const locked = this.readMeta<boolean>("locked") === true;
+    // Four people already hold the places, so none could ever open up.
+    const seat = this.freeSeat();
     if (seat === undefined) return { error: "room-full" };
+    if (!playing && !locked) {
+      this.ctx.storage.sql.exec(
+        "INSERT OR REPLACE INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',?)",
+        seat,
+        name,
+        tokenHash,
+      );
+      this.broadcast({ type: "lobby", lobby: this.lobby() });
+      return { roomCode: room.roomCode, seat, token };
+    }
+    if (this.members().length >= MAX_WAITING) return { error: "room-full" };
     this.ctx.storage.sql.exec(
-      "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',?)",
-      seat,
+      "INSERT INTO members(id,name,token_hash,approved,joined_at) VALUES(?,?,?,?,?)",
+      newMemberId(),
       name,
       tokenHash,
+      locked ? 0 : 1,
+      Date.now(),
     );
     this.broadcast({ type: "lobby", lobby: this.lobby() });
-    return { roomCode: room.roomCode, seat, token };
+    return { roomCode: room.roomCode, seat: null, token };
   }
 
   private lobby(): LobbyState {
     const room = this.readMeta<RoomMeta>("room");
     if (!room) throw new Error("Room has not been initialized");
     const seats = this.seats();
+    const locals = this.localSeats();
     const saved = this.readState();
     return {
       roomCode: room.roomCode,
-      hostSeat: 0,
+      hostSeat: this.hostSeat(),
+      locked: this.readMeta<boolean>("locked") === true,
+      waiting: this.members().map((member) => ({
+        id: member.id,
+        name: member.name,
+        approved: member.approved === 1,
+        online: this.memberSockets(member.id).length > 0,
+      })),
       status: !saved
         ? "lobby"
         : saved.state.status === "finished"
@@ -312,16 +463,58 @@ export class GameRoom extends DurableObject<Env> {
           : "playing",
       config: room.config,
       ...frozenRules(this.readMeta<number>("rulesVersion")),
-      seats: ([0, 1, 2, 3] as const).map((seat) => {
+      seats: SEATS.map((seat) => {
         const entry = seats.find((candidate) => candidate.seat === seat);
+        const controller =
+          locals.find((local) => local.seat === seat)?.controller ?? null;
         return {
           seat,
           name: entry?.name ?? "Place libre",
           control: entry?.control ?? null,
-          online: this.openSockets(`seat:${seat}`).length > 0,
+          online:
+            this.socketsWhere(
+              (attachment) => attachment.seat === (controller ?? seat),
+            ).length > 0,
+          controller,
         };
       }),
     };
+  }
+
+  /**
+   * In a lobby, admitted people who are present take open places, then bots'
+   * places. Their sockets stay open and are welcomed again in their new seat.
+   */
+  private seatWaitingMembers(): boolean {
+    if (this.readState()) return false;
+    let seated = false;
+    for (const member of this.members()) {
+      if (member.approved !== 1 || !this.memberSockets(member.id).length)
+        continue;
+      const seat = this.freeSeat();
+      if (seat === undefined) break;
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          "INSERT OR REPLACE INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',?)",
+          seat,
+          member.name,
+          member.token_hash,
+        );
+        this.ctx.storage.sql.exec("DELETE FROM members WHERE id=?", member.id);
+      });
+      this.promote(member.id, seat);
+      seated = true;
+    }
+    return seated;
+  }
+  private promote(member: string, seat: Seat): void {
+    for (const socket of this.memberSockets(member)) {
+      const attachment = socket.deserializeAttachment() as Attachment;
+      attachment.seat = seat;
+      attachment.member = null;
+      socket.serializeAttachment(attachment);
+      if (attachment.synced) this.welcome(socket, attachment, null);
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -354,29 +547,45 @@ export class GameRoom extends DurableObject<Env> {
     const entry = this.seats().find(
       (seat) => seat.control === "human" && seat.token_hash === tokenHash,
     );
-    if (!entry)
+    const member = entry
+      ? undefined
+      : this.members().find((candidate) => candidate.token_hash === tokenHash);
+    if (!entry && !member)
       return Response.json({ error: "unauthorized" }, { status: 401 });
-    if (this.openSockets(`seat:${entry.seat}`).length >= 2)
+    const existing = entry
+      ? this.socketsWhere((attachment) => attachment.seat === entry.seat)
+      : this.memberSockets(member?.id ?? "");
+    if (existing.length >= 2)
       return Response.json({ error: "too-many-connections" }, { status: 429 });
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1], [`seat:${entry.seat}`]);
+    // Tags name the socket at connection time for inspection only. A waiting
+    // member's socket can take a seat later, so the room reads attachments.
+    this.ctx.acceptWebSocket(pair[1], [
+      entry ? `seat:${entry.seat}` : `member:${member?.id}`,
+    ]);
     pair[1].serializeAttachment({
-      seat: entry.seat,
+      seat: entry?.seat ?? null,
+      member: member?.id ?? null,
       synced: false,
       invalid: 0,
       tokens: 40,
       rateAt: Date.now(),
       workerDiagnostics: workerDiagnostics(request),
     } satisfies Attachment);
-    this.ctx.storage.sql.exec(
-      "DELETE FROM timers WHERE kind=?",
-      `grace:${entry.seat}`,
-    );
-    this.ctx.storage.sql.exec(
-      "DELETE FROM meta WHERE k=?",
-      `takeover:${entry.seat}`,
-    );
-    await this.updateTimers();
+    // The device is back for its own seat and every local player on it.
+    if (entry) {
+      for (const seat of this.controlledSeats(entry.seat)) {
+        this.ctx.storage.sql.exec(
+          "DELETE FROM timers WHERE kind=?",
+          `grace:${seat}`,
+        );
+        this.ctx.storage.sql.exec(
+          "DELETE FROM meta WHERE k=?",
+          `takeover:${seat}`,
+        );
+      }
+      await this.updateTimers();
+    }
     return new Response(null, {
       status: 101,
       webSocket: pair[0],
@@ -409,15 +618,17 @@ export class GameRoom extends DurableObject<Env> {
   private roomDiagnostics(attachment: Attachment): RoomDiagnostics {
     const peers = new Map<Seat, RoomDiagnostics["peers"][number]>();
     const ownPoint = attachment.workerDiagnostics?.cloudflare;
-    peers.set(attachment.seat, {
-      seat: attachment.seat,
-      colo: ownPoint?.colo ?? null,
-      location: ownPoint?.location ?? null,
-      region: ownPoint?.region ?? null,
-    });
+    // Seated devices only: someone waiting for a place has no seat to show.
+    if (attachment.seat !== null)
+      peers.set(attachment.seat, {
+        seat: attachment.seat,
+        colo: ownPoint?.colo ?? null,
+        location: ownPoint?.location ?? null,
+        region: ownPoint?.region ?? null,
+      });
     for (const socket of this.openSockets()) {
       const peer = socket.deserializeAttachment() as Attachment | null;
-      if (!peer?.synced || peers.has(peer.seat)) continue;
+      if (!peer?.synced || peer.seat === null || peers.has(peer.seat)) continue;
       const point = peer.workerDiagnostics?.cloudflare;
       peers.set(peer.seat, {
         seat: peer.seat,
@@ -516,7 +727,13 @@ export class GameRoom extends DurableObject<Env> {
     }
     if (!attachment.synced) return;
     if (message.type === "lobby")
-      return this.handleLobby(socket, attachment.seat, message);
+      return this.handleLobby(socket, attachment, message);
+    if (attachment.seat === null)
+      return this.reject(socket, message.id, "not-seated");
+    // A device acts for its own seat, or names one of its local players.
+    const seat = message.seat ?? attachment.seat;
+    if (!this.controlledSeats(attachment.seat).includes(seat))
+      return this.reject(socket, message.id, "not-your-seat");
     if (!saved) return this.reject(socket, message.id, "game-not-started");
     if (message.atSeq !== saved.seq)
       return this.reject(socket, message.id, "stale");
@@ -532,36 +749,29 @@ export class GameRoom extends DurableObject<Env> {
     }
     if (this.readMeta("pendingDice"))
       return this.reject(socket, message.id, "randomness-pending");
-    if (this.commandUsed(attachment.seat, message.id))
+    if (this.commandUsed(seat, message.id))
       return this.reject(socket, message.id, "duplicate");
     // Input handling can precede a delayed alarm. A human may not extend the
     // decision by racing that alarm; the persisted timeout owns the next move.
     if (saved.state.pending && now >= saved.state.pending.deadline)
       return this.reject(socket, message.id, "decision-expired");
-    const legal = legalActions(toPublic(saved.state), attachment.seat).some(
+    const legal = legalActions(toPublic(saved.state), seat).some(
       (action) => JSON.stringify(action) === JSON.stringify(message.action),
     );
     if (!legal)
       return this.reject(
         socket,
         message.id,
-        saved.state.activeSeat !== attachment.seat
-          ? "not-your-turn"
-          : "illegal-action",
+        saved.state.activeSeat !== seat ? "not-your-turn" : "illegal-action",
       );
     if (message.action.type === "Roll") {
-      await this.beginDice(
-        attachment.seat,
-        message.action,
-        message.id,
-        saved.seq,
-      );
+      await this.beginDice(seat, message.action, message.id, saved.seq);
       this.send(socket, { type: "ack", id: message.id });
       return;
     }
     const result = applyAction(
       saved.state,
-      attachment.seat,
+      seat,
       message.action,
       createEngineContext(now),
     );
@@ -572,15 +782,28 @@ export class GameRoom extends DurableObject<Env> {
         result.error.code,
         result.error.message,
       );
-    this.persist(result.state, result.events, {
-      seat: attachment.seat,
-      id: message.id,
-    });
+    this.persist(result.state, result.events, { seat, id: message.id });
     this.send(socket, { type: "ack", id: message.id });
     await this.scheduleAlarm();
   }
 
   private sync(
+    socket: WebSocket,
+    attachment: Attachment,
+    lastSeq: number | null,
+  ): void {
+    // An admitted person coming back to an open lobby place takes it now.
+    let current = attachment;
+    if (current.member && this.seatWaitingMembers())
+      current = socket.deserializeAttachment() as Attachment;
+    this.welcome(socket, current, lastSeq);
+    this.broadcast({ type: "lobby", lobby: this.lobby() });
+    if (current.seat === null) return;
+    for (const seat of this.controlledSeats(current.seat))
+      this.broadcast({ type: "presence", seat, status: "online" });
+  }
+
+  private welcome(
     socket: WebSocket,
     attachment: Attachment,
     lastSeq: number | null,
@@ -602,7 +825,7 @@ export class GameRoom extends DurableObject<Env> {
       type: "welcome",
       protocolVersion: PROTOCOL_VERSION,
       roomDebugVersion: ROOM_DEBUG_VERSION,
-      you: { seat: attachment.seat },
+      you: { seat: attachment.seat, member: attachment.member ?? null },
       seq,
       snapshot: saved && !replay ? toPublic(saved.state) : null,
       lobby: this.lobby(),
@@ -637,12 +860,6 @@ export class GameRoom extends DurableObject<Env> {
           })),
       });
     }
-    this.broadcast({ type: "lobby", lobby: this.lobby() });
-    this.broadcast({
-      type: "presence",
-      seat: attachment.seat,
-      status: "online",
-    });
   }
 
   private commandUsed(seat: Seat, id: string): boolean {
@@ -660,37 +877,151 @@ export class GameRoom extends DurableObject<Env> {
     );
   }
 
+  /**
+   * Room operations. The leader runs the room; any seated device may also add
+   * a player who shares its screen, and remove that player again.
+   */
   private async handleLobby(
     socket: WebSocket,
-    seat: Seat,
+    attachment: Attachment,
     message: Extract<ClientMessage, { type: "lobby" }>,
   ): Promise<void> {
-    if (seat !== 0) return this.reject(socket, message.id, "host-only");
-    if (this.readState())
-      return this.reject(socket, message.id, "game-already-started");
+    const seat = attachment.seat;
+    if (seat === null) return this.reject(socket, message.id, "not-seated");
     if (this.commandUsed(seat, message.id))
       return this.reject(socket, message.id, "duplicate");
     const room = this.readMeta<RoomMeta>("room");
     if (!room) return this.reject(socket, message.id, "room-not-found");
-    if (message.op.type === "settings") {
-      const config = message.op.config;
+    const op = message.op;
+    const saved = this.readState();
+    const leader = seat === this.hostSeat();
+    const done = (writes: () => void) => {
       this.ctx.storage.transactionSync(() => {
-        this.writeMeta("room", { ...room, config });
+        writes();
         this.rememberCommand(seat, message.id);
       });
-      this.send(socket, { type: "ack", id: message.id });
+    };
+    // The new lobby goes out before the ack, so a screen that waited for its
+    // answer already shows the result when its controls unlock.
+    const finish = () => {
       this.broadcast({ type: "lobby", lobby: this.lobby() });
-      return;
+      this.send(socket, { type: "ack", id: message.id });
+    };
+    if (op.type === "add-local" || op.type === "remove-local") {
+      if (saved) return this.reject(socket, message.id, "game-already-started");
+      const entry = this.seats().find(
+        (candidate) => candidate.seat === op.seat,
+      );
+      if (op.type === "add-local") {
+        if (entry) return this.reject(socket, message.id, "seat-taken");
+        done(() => {
+          this.ctx.storage.sql.exec(
+            "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',NULL)",
+            op.seat,
+            op.name,
+          );
+          this.ctx.storage.sql.exec(
+            "INSERT OR REPLACE INTO local_seats(seat,controller) VALUES(?,?)",
+            op.seat,
+            seat,
+          );
+        });
+        return finish();
+      }
+      const local = this.localSeats().find((entry) => entry.seat === op.seat);
+      if (!local) return this.reject(socket, message.id, "not-local");
+      if (local.controller !== seat && !leader)
+        return this.reject(socket, message.id, "host-only");
+      done(() => {
+        this.ctx.storage.sql.exec("DELETE FROM seats WHERE seat=?", op.seat);
+        this.ctx.storage.sql.exec(
+          "DELETE FROM local_seats WHERE seat=?",
+          op.seat,
+        );
+      });
+      this.seatWaitingMembers();
+      return finish();
     }
-    if (message.op.type === "add-bot" || message.op.type === "remove-bot") {
-      const target = message.op.seat;
+    if (!leader) return this.reject(socket, message.id, "host-only");
+    switch (op.type) {
+      case "transfer-host": {
+        // The role goes to another person with their own device.
+        const target = this.seats().find(
+          (candidate) => candidate.seat === op.seat,
+        );
+        if (
+          op.seat === seat ||
+          target?.control !== "human" ||
+          target.token_hash === null
+        )
+          return this.reject(socket, message.id, "not-transferable");
+        done(() => this.writeMeta("host", op.seat));
+        return finish();
+      }
+      case "lock":
+        done(() => {
+          this.writeMeta("locked", op.locked);
+          // Opening the door admits everyone who was waiting at it.
+          if (!op.locked)
+            this.ctx.storage.sql.exec("UPDATE members SET approved=1");
+        });
+        this.seatWaitingMembers();
+        return finish();
+      case "admit":
+      case "deny": {
+        const member = this.members().find((entry) => entry.id === op.member);
+        if (!member) return this.reject(socket, message.id, "member-not-found");
+        if (op.type === "admit") {
+          done(() =>
+            this.ctx.storage.sql.exec(
+              "UPDATE members SET approved=1 WHERE id=?",
+              op.member,
+            ),
+          );
+          this.seatWaitingMembers();
+          return finish();
+        }
+        const sockets = this.memberSockets(op.member);
+        done(() =>
+          this.ctx.storage.sql.exec(
+            "DELETE FROM members WHERE id=?",
+            op.member,
+          ),
+        );
+        for (const turnedAway of sockets)
+          turnedAway.close(4003, "Not admitted");
+        return finish();
+      }
+      case "replace-bot":
+        return this.replaceBot(socket, seat, message.id, op);
+      case "return-to-lobby":
+        if (!saved) return this.reject(socket, message.id, "game-not-started");
+        return this.returnToLobby(socket, seat, message.id);
+      case "start":
+      case "settings":
+      case "add-bot":
+      case "remove-bot":
+        break;
+      default: {
+        const unknown: never = op;
+        return unknown;
+      }
+    }
+    if (saved) return this.reject(socket, message.id, "game-already-started");
+    if (op.type === "settings") {
+      const config = op.config;
+      done(() => this.writeMeta("room", { ...room, config }));
+      return finish();
+    }
+    if (op.type === "add-bot" || op.type === "remove-bot") {
+      const target = op.seat;
       const entry = this.seats().find((candidate) => candidate.seat === target);
-      if (message.op.type === "add-bot" && entry)
+      if (op.type === "add-bot" && entry)
         return this.reject(socket, message.id, "seat-taken");
-      if (message.op.type === "remove-bot" && entry?.control !== "bot")
+      if (op.type === "remove-bot" && entry?.control !== "bot")
         return this.reject(socket, message.id, "not-a-bot");
-      const adding = message.op.type === "add-bot";
-      this.ctx.storage.transactionSync(() => {
+      const adding = op.type === "add-bot";
+      done(() => {
         if (adding)
           this.ctx.storage.sql.exec(
             "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'bot',NULL)",
@@ -702,14 +1033,12 @@ export class GameRoom extends DurableObject<Env> {
             "DELETE FROM seats WHERE seat=? AND control='bot'",
             target,
           );
-        this.rememberCommand(seat, message.id);
       });
-      this.send(socket, { type: "ack", id: message.id });
-      this.broadcast({ type: "lobby", lobby: this.lobby() });
-      return;
+      if (!adding) this.seatWaitingMembers();
+      return finish();
     }
     const seats = this.seats();
-    const fillBots = message.op.fillBots;
+    const fillBots = op.fillBots;
     if (!fillBots && seats.length < ECONOMY.minimumPlayers)
       return this.reject(
         socket,
@@ -719,7 +1048,7 @@ export class GameRoom extends DurableObject<Env> {
       );
     // Seats keep their lobby number (colour and corner) in the match, so a
     // three-player room can leave any one of the four places empty.
-    const allSeats: SeatInfo[] = ([0, 1, 2, 3] as const).flatMap((index) => {
+    const allSeats: SeatInfo[] = SEATS.flatMap((index) => {
       const entry = seats.find((candidate) => candidate.seat === index);
       if (!entry && !fillBots) return [];
       return [
@@ -756,10 +1085,7 @@ export class GameRoom extends DurableObject<Env> {
       // need no alarm, but starting that room must give every absent human the
       // same reconnect grace as a player who disconnects during the match.
       for (const entry of seats)
-        if (
-          entry.control === "human" &&
-          !this.openSockets(`seat:${entry.seat}`).length
-        )
+        if (entry.control === "human" && !this.seatSockets(entry.seat).length)
           this.ctx.storage.sql.exec(
             "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES(?,?)",
             `grace:${entry.seat}`,
@@ -773,17 +1099,108 @@ export class GameRoom extends DurableObject<Env> {
     await this.scheduleAlarm();
   }
 
+  /**
+   * During a match the leader hands a server bot's place to someone waiting.
+   * The engine records the change, so the seat keeps its money and cities.
+   */
+  private async replaceBot(
+    socket: WebSocket,
+    seat: Seat,
+    id: string,
+    op: { member: string; seat: Seat },
+  ): Promise<void> {
+    const saved = this.readState();
+    if (!saved) return this.reject(socket, id, "game-not-started");
+    if (this.readMeta("pendingDice"))
+      return this.reject(socket, id, "randomness-pending");
+    const member = this.members().find((entry) => entry.id === op.member);
+    if (member?.approved !== 1)
+      return this.reject(socket, id, "member-not-found");
+    const target = this.seats().find((entry) => entry.seat === op.seat);
+    if (target?.control !== "bot") return this.reject(socket, id, "not-a-bot");
+    const result = changeControl(saved.state, op.seat, "human", member.name);
+    if (!result.ok) return this.reject(socket, id, result.error.code);
+    const present = this.memberSockets(member.id).length > 0;
+    this.persist(
+      result.state,
+      result.events,
+      { seat, id },
+      undefined,
+      false,
+      () => {
+        this.ctx.storage.sql.exec(
+          "UPDATE seats SET name=?,control='human',token_hash=? WHERE seat=?",
+          member.name,
+          member.token_hash,
+          op.seat,
+        );
+        this.ctx.storage.sql.exec("DELETE FROM members WHERE id=?", member.id);
+        // Someone who stepped away gets the usual reconnect grace.
+        if (!present)
+          this.ctx.storage.sql.exec(
+            "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES(?,?)",
+            `grace:${op.seat}`,
+            Date.now() + 60_000,
+          );
+      },
+    );
+    this.promote(member.id, op.seat);
+    this.send(socket, { type: "ack", id });
+    this.broadcast({ type: "lobby", lobby: this.lobby() });
+    if (present)
+      this.broadcast({ type: "presence", seat: op.seat, status: "online" });
+    await this.scheduleAlarm();
+  }
+
+  /**
+   * The leader ends the match (or leaves its results) and brings everyone
+   * back to the lobby: the same places, bots and settings, and a free place
+   * for each admitted person who waited. A match in progress is discarded.
+   */
+  private async returnToLobby(
+    socket: WebSocket,
+    seat: Seat,
+    id: string,
+  ): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM state");
+      this.ctx.storage.sql.exec("DELETE FROM events");
+      this.ctx.storage.sql.exec("DELETE FROM commands");
+      this.ctx.storage.sql.exec("DELETE FROM timers");
+      this.ctx.storage.sql.exec(
+        "DELETE FROM meta WHERE k='pendingDice' OR k LIKE 'takeover:%'",
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO timers(kind,fire_at) VALUES('cleanup',?)",
+        Date.now() + LOBBY_LIFETIME,
+      );
+      this.rememberCommand(seat, id);
+    });
+    this.seatWaitingMembers();
+    this.send(socket, { type: "ack", id });
+    // A welcome without a snapshot sends every screen back to the lobby.
+    for (const open of this.openSockets()) {
+      const attachment = open.deserializeAttachment() as Attachment | null;
+      if (attachment?.synced) this.welcome(open, attachment, null);
+    }
+    this.broadcast({ type: "lobby", lobby: this.lobby() });
+    await this.scheduleAlarm();
+  }
+
   private persist(
     state: GameState,
     events: readonly GameEvent[],
     command?: { seat: Seat; id: string },
     proof?: DiceProof,
     clearDice = false,
+    /** Room rows that must change together with this state, before timers. */
+    writes?: () => void,
   ): void {
     const fromSeq = (this.readState()?.seq ?? 0) + 1;
     const toSeq = fromSeq + events.length - 1;
     const proofIndex = events.findIndex((event) => event.type === "DiceRolled");
     this.ctx.storage.transactionSync(() => {
+      writes?.();
       this.ctx.storage.sql.exec(
         "INSERT OR REPLACE INTO state(id,seq,json) VALUES(1,?,?)",
         toSeq,
@@ -915,7 +1332,7 @@ export class GameRoom extends DurableObject<Env> {
         this.readState()?.state.status !== "active"
       )
         return;
-      if (this.openSockets().length === 0) {
+      if (this.seatedSockets().length === 0) {
         await this.updateTimers();
         return;
       }
@@ -955,7 +1372,7 @@ export class GameRoom extends DurableObject<Env> {
     // Keep its state, grace timers and real-time end intact; reconnect restores
     // the remaining timers without extending any engine deadline.
     const pendingDice = this.readMeta<PendingDice>("pendingDice");
-    if (state?.status !== "active" || this.openSockets().length === 0) {
+    if (state?.status !== "active" || this.seatedSockets().length === 0) {
       this.ctx.storage.sql.exec(
         "DELETE FROM timers WHERE kind IN ('bot','decision','randomness')",
       );
@@ -1071,7 +1488,7 @@ export class GameRoom extends DurableObject<Env> {
       }
       if (timer.kind.startsWith("grace:")) {
         const seat = Number(timer.kind.slice(6)) as Seat;
-        if (!this.openSockets(`seat:${seat}`).length) {
+        if (!this.seatSockets(seat).length) {
           this.writeMeta(`takeover:${seat}`, true);
           this.broadcast({ type: "presence", seat, status: "bot" });
         }
@@ -1124,23 +1541,31 @@ export class GameRoom extends DurableObject<Env> {
     // Complete the handshake explicitly as well as on runtimes with auto-reply.
     socket.close(1000, "Connection closed");
     const attachment = socket.deserializeAttachment() as Attachment | null;
+    if (this.deletingRoom || !attachment || !this.readMeta("room")) return;
+    const own = attachment.seat;
+    if (own === null) {
+      // A waiting member's presence lives in the lobby's waiting list.
+      this.broadcast({ type: "lobby", lobby: this.lobby() });
+      return;
+    }
     if (
-      this.deletingRoom ||
-      !attachment ||
-      this.openSockets(`seat:${attachment.seat}`).some(
+      this.socketsWhere((candidate) => candidate.seat === own).some(
         (candidate) => candidate !== socket,
       )
     )
       return;
-    if (!this.readMeta("room")) return;
     const saved = this.readState();
-    this.broadcast({ type: "presence", seat: attachment.seat, status: "away" });
+    const seats = this.controlledSeats(own);
+    for (const seat of seats)
+      this.broadcast({ type: "presence", seat, status: "away" });
     if (saved?.state.status !== "active") return;
-    this.ctx.storage.sql.exec(
-      "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES(?,?)",
-      `grace:${attachment.seat}`,
-      Date.now() + 60_000,
-    );
+    // Local players leave with the device they share.
+    for (const seat of seats)
+      this.ctx.storage.sql.exec(
+        "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES(?,?)",
+        `grace:${seat}`,
+        Date.now() + 60_000,
+      );
     await this.updateTimers();
   }
   async webSocketError(socket: WebSocket): Promise<void> {

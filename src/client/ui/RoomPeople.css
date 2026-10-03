@@ -1,0 +1,257 @@
+/* Who is in the room: seat choices, the waiting room and the leader's tools.
+   Seat cards themselves keep their base look in App.css. */
+.seat-choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.seat-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--player-color) 45%, #6fb2c2);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition:
+    background 150ms,
+    transform 150ms;
+}
+.seat-choice:hover:not(:disabled) {
+  background: #fff;
+  transform: translateY(-1px);
+}
+.seat-choice:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.seat-local-form {
+  height: 100%;
+  min-height: 138px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px;
+  background: #d4f1f4;
+  border: 2px solid color-mix(in srgb, var(--player-color) 55%, #6fb2c2);
+  border-radius: 14px;
+}
+.seat-local-form label {
+  font-size: 12px;
+  font-weight: 750;
+}
+.seat-local-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #5eaca4;
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 13px;
+}
+.seat-local-form > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.seat-local-form .button {
+  min-height: 34px;
+  padding: 7px 14px;
+  font-size: 12px;
+}
+/* A player sharing this screen: the same card, its edge dashed like a hand-off. */
+.lobby-seat.filled[data-local] {
+  border-top-style: dashed;
+}
+.seat-promote {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  color: #6b4700;
+  background: #f6e7b8;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.seat-promote:hover:not(:disabled) {
+  background: #f1d888;
+}
+.seat-promote:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.checkbox-label.room-lock {
+  margin: 4px 0 16px;
+}
+.room-lock > span {
+  display: grid;
+  gap: 2px;
+}
+.room-lock strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+}
+.room-lock small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.waiting-room {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 3px 0 #56a7bf;
+}
+.waiting-room h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.waiting-room ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.waiting-room li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.waiting-name {
+  display: grid;
+  min-width: 0;
+}
+.waiting-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.waiting-name small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.waiting-room li[data-approved="false"] .waiting-name small {
+  color: #8a3a12;
+  font-weight: 750;
+}
+.waiting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.waiting-actions .button {
+  min-height: 32px;
+  padding: 6px 11px;
+  gap: 5px;
+  font-size: 12px;
+}
+.waiting-notice {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 18px 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.return-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fbe9dc;
+}
+.return-confirm p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.leader-tools {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #d3d8c8;
+}
+.leader-tools h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.leader-tools .checkbox-label.room-lock {
+  margin: 0;
+}
+.leader-transfer {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.leader-transfer li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.leader-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tool-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--coral);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+.spectator-note {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 4px 0 #78b5a6;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+.results-leader-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}

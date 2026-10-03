@@ -31,7 +31,6 @@ import {
   PLOT_DEPTH,
   PLOT_WIDTH,
   POND,
-  plotTree,
   RING_HALF_WIDTH,
   RING_RADIUS,
   TOWN_MAX_HEIGHT,
@@ -94,10 +93,6 @@ const FEATURES = {
 function envelopes(plots: typeof TOWN_PLOTS): readonly Box[] {
   return [
     ...plots.map(plotBox),
-    ...plots.map((plot) => {
-      const tree = plotTree(plot);
-      return squareBox(tree.position, TREE_RADIUS, tree.height, "plot tree");
-    }),
     ...TOWN_TREES.map((tree) =>
       squareBox(tree.position, TREE_RADIUS, tree.height, "tree"),
     ),
