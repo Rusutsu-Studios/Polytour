@@ -88,6 +88,33 @@ export default function PauseMenu({
   >({});
   const returnTo = useRef<"continue" | "settings" | "leave">("continue");
   const ping = useWorkerPing(page === "settings" && tab === "debug");
+  const diagnostics = ping.status === "success" ? ping.value.diagnostics : null;
+  const unavailable = t("Indisponible", "Unavailable");
+  const regions: Record<string, string> = {
+    Europe: t("Europe", "Europe"),
+    Africa: t("Afrique", "Africa"),
+    Asia: t("Asie", "Asia"),
+    "Latin America & the Caribbean": t(
+      "Amérique latine et Caraïbes",
+      "Latin America & the Caribbean",
+    ),
+    "Middle East": t("Moyen-Orient", "Middle East"),
+    "North America": t("Amérique du Nord", "North America"),
+    Oceania: t("Océanie", "Oceania"),
+  };
+  const entryPoint =
+    diagnostics?.runtime === "local"
+      ? t("Local", "Local")
+      : diagnostics?.cloudflare
+        ? [diagnostics.cloudflare.colo, diagnostics.cloudflare.location]
+            .filter(Boolean)
+            .join(" · ")
+        : unavailable;
+  const region = diagnostics?.cloudflare?.region;
+  const regionLabel =
+    region && Object.hasOwn(regions, region)
+      ? (regions[region] ?? unavailable)
+      : unavailable;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -399,22 +426,43 @@ export default function PauseMenu({
                     </p>
                   )}
                   {value === "debug" && (
-                    <div className="pause-debug">
+                    <div
+                      className="pause-debug"
+                      data-runtime={diagnostics?.runtime ?? "unknown"}
+                    >
                       <dl>
                         <div>
                           <dt>
-                            {t(
-                              "Ping Cloudflare (HTTP)",
-                              "Cloudflare ping (HTTP)",
-                            )}
+                            {t("Ping Worker (HTTP)", "Worker ping (HTTP)")}
                           </dt>
                           <dd role="status">
                             {ping.status === "success"
                               ? `${ping.value.latencyMs} ms`
                               : ping.status === "loading"
                                 ? t("Mesure en cours…", "Measuring…")
-                                : t("Indisponible", "Unavailable")}
+                                : unavailable}
                           </dd>
+                        </div>
+                        <div>
+                          <dt>
+                            {t(
+                              "Point d’entrée Cloudflare",
+                              "Cloudflare entry point",
+                            )}
+                          </dt>
+                          <dd>{entryPoint}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("Région", "Region")}</dt>
+                          <dd>{regionLabel}</dd>
+                        </div>
+                        <div>
+                          <dt>Worker</dt>
+                          <dd>{diagnostics?.worker ?? unavailable}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("Hôte", "Host")}</dt>
+                          <dd>{diagnostics?.hostname ?? unavailable}</dd>
                         </div>
                         <div>
                           <dt>
@@ -454,8 +502,8 @@ export default function PauseMenu({
                       </p>
                       <p className="pause-debug-note">
                         {t(
-                          "Aller-retour vers le serveur Cloudflare. Cette mesure est distincte de la latence de la partie.",
-                          "Round trip to the Cloudflare server. This is separate from the game’s latency.",
+                          "Ping HTTP du Worker, distinct de la latence de la partie.",
+                          "Worker HTTP ping, separate from the game’s latency.",
                         )}
                       </p>
                     </div>

@@ -34,6 +34,28 @@ WebSocket upgrades. Each live match is a `GameRoom` Durable Object: a single-thr
 strongly consistent actor that owns the game state, the players' sockets, and the
 turn timers. Everything that outlives a match (accounts, results, ratings) goes to D1.
 
+## Browser diagnostics
+
+The pause menu's Debug tab measures the full HTTP round trip to the same-origin
+Worker using `GET /api/health?debug=1`, without caching, every ten seconds while
+the tab is open. The same response identifies the configured `polytour` service
+and the contacted hostname, including a branch Preview. `request.cf.colo`
+identifies the Cloudflare entry point. Its readable location and broad region
+come from a bundled snapshot of the [official Cloudflare Status components
+API](https://www.cloudflarestatus.com/api/v2/components.json), retrieved on
+3 October 2026 (`worker/cloudflare-locations.ts`). Updating that snapshot means
+joining POP components' `group_id` to the seven geographic region groups and
+extracting the final three-letter code from each POP name. Product components
+are excluded. The snapshot contains 341 POPs; new codes still display when unmapped.
+
+Loopback hosts show local execution even when a development runtime supplies
+synthetic Cloudflare metadata. Missing POP metadata stays unknown. Visitor
+`cf.city`, `cf.country` and `cf.region` are never used as a server location.
+The HTTP ping is separate from the WebSocket game latency, and this entry point
+does not identify the room's Durable Object location. See Cloudflare's
+[request metadata](https://developers.cloudflare.com/workers/runtime-apis/request/#incomingrequestcfproperties)
+and [DO location](https://developers.cloudflare.com/durable-objects/reference/data-location/).
+
 ## System overview
 
 ```mermaid

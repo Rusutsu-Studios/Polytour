@@ -137,7 +137,7 @@ The closed dice tool explains the server's fresh cryptographic draws and equal f
 
 Menus restore keyboard focus on dismissal, support Escape where appropriate and retain a visible focus indicator. Reduced motion keeps informative changes without camera spectacle.
 
-The pause icon opens a compact ivory menu with Continue, Settings and Leave. The match keeps running while the menu is open. Personal settings are a subpage with Game, Video, Audio and Debug tabs; language belongs to Game, reduced motion and board size to Video. Audio says "Coming soon". Debug measures the HTTP round trip to the same-origin Worker while that tab is open. The separate sliders icon displays the fixed room rules; the invitation icon displays the room code.
+The pause icon opens a compact ivory menu with Continue, Settings and Leave. The match keeps running while the menu is open. Personal settings are a subpage with Game, Video, Audio and Debug tabs; language belongs to Game, reduced motion and board size to Video. Audio says "Coming soon". Debug measures the HTTP round trip to the same-origin Worker while that tab is open and shows its name, host and Cloudflare entry point (code, location and region). Local execution and unavailable metadata are explicit. The separate sliders icon displays the fixed room rules; the invitation icon displays the room code.
 
 **The Timing Rule.** The Director shows the events leading to a decision before the choice opens. Playback uses fixed normal pacing with automatic catch-up and recovery. New decisions and reading cards cannot take focus from the open pause menu.
 

@@ -11,6 +11,14 @@ optimization only if profiling says so — messages are small and infrequent.
 the older illustrative launch sketches below wherever they differ. The scaffold
 debug socket has been removed; `/api/health` remains.
 
+- `GET /api/health` returns `{status: "ok"}` with `Cache-Control: no-store`.
+  Adding `?debug=1` includes `diagnostics` (the type in
+  `shared/protocol/worker-diagnostics.ts`): configured Worker name, request
+  hostname, runtime (`cloudflare`, `local` or `unknown`) and nullable Cloudflare
+  entry-point metadata (`colo`, nullable location and region). No room state,
+  visitor geography or IP address is returned. Unknown POP codes remain visible
+  without a location mapping. This endpoint does not locate the room's DO.
+
 - `POST /api/rooms {name, config?}` returns201 and `{roomCode, seat, token}`.
 - `POST /api/rooms/:code/join {name}` returns200 and another seat capability.
 - The WebSocket uses `Sec-WebSocket-Protocol: polytour, seat.<token>`, selects

@@ -46,7 +46,8 @@ it updates board labels, cards, decisions and tools without reconnecting the roo
 The toolbar's pause icon opens Continue, Settings and Leave while the match
 continues. Personal settings use Game, Video, Audio and Debug tabs. Game holds
 language; Video holds reduced motion and board size; Audio is marked coming soon.
-Debug measures the HTTP round trip to the Worker only while its tab is open.
+Debug measures the HTTP round trip to the Worker only while its tab is open,
+with the contacted host and Cloudflare entry point (code, location and region).
 New decisions and cards keep progressing without replacing the menu's focus.
 The sliders icon separately displays the fixed room rules, and the invitation
 icon displays the room code. Playback has normal pacing and automatic recovery;

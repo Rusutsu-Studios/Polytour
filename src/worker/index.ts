@@ -8,6 +8,7 @@ import {
 } from "../shared/protocol/index.js";
 import { GameRoom } from "./GameRoom.js";
 import { Matchmaker } from "./Matchmaker.js";
+import { workerDiagnostics } from "./worker-diagnostics.js";
 
 export { GameRoom, Matchmaker };
 
@@ -71,7 +72,18 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-app.get("/api/health", (context) => context.json({ status: "ok" }));
+app.get("/api/health", (context) =>
+  context.json(
+    {
+      status: "ok",
+      ...(context.req.query("debug") === "1"
+        ? { diagnostics: workerDiagnostics(context.req.raw) }
+        : {}),
+    },
+    200,
+    { "Cache-Control": "no-store" },
+  ),
+);
 app.post("/api/rooms", async (context) => {
   if (!sameOrigin(context.req.raw))
     return context.json({ error: "origin-rejected" }, 403);

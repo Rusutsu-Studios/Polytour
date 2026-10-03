@@ -1,4 +1,10 @@
-import { expect, type Page, test, type WebSocketRoute } from "@playwright/test";
+import {
+  expect,
+  type Locator,
+  type Page,
+  test,
+  type WebSocketRoute,
+} from "@playwright/test";
 import {
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -11,8 +17,27 @@ import {
   RoomConfigSchema,
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
+import type { WorkerDiagnostics } from "../src/shared/protocol/worker-diagnostics.js";
 
 test.use({ reducedMotion: "reduce" });
+
+const CLOUDFLARE_HEALTH = {
+  status: "ok",
+  diagnostics: {
+    worker: "polytour",
+    hostname: "test.polytour.example",
+    runtime: "cloudflare",
+    cloudflare: {
+      colo: "FRA",
+      location: "Frankfurt, Germany",
+      region: "Europe",
+    },
+  },
+} satisfies { status: "ok"; diagnostics: WorkerDiagnostics };
+
+function diagnosticValue(panel: Locator, label: string) {
+  return panel.getByText(label, { exact: true }).locator("..").locator("dd");
+}
 
 /** Deterministic authoritative frames; no room or gameplay action is sent to the Worker. */
 async function enterMatch(page: Page) {
@@ -300,9 +325,11 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
     };
   });
   let requests = 0;
+  const healthURLs: string[] = [];
   await page.route("**/api/health**", (route) => {
     requests += 1;
-    if (requests === 1) return route.fulfill({ json: { status: "ok" } });
+    healthURLs.push(route.request().url());
+    if (requests === 1) return route.fulfill({ json: CLOUDFLARE_HEALTH });
     if (requests === 2)
       return route.fulfill({
         status: 503,
@@ -318,13 +345,54 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
   await page.clock.runFor(30_000);
   expect(requests).toBe(0);
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
-  const status = page.locator(".pause-debug").getByRole("status");
+  const debugPanel = page.locator(".pause-debug");
+  const status = debugPanel.getByRole("status");
   await expect(status).toHaveText(/^\d+ ms$/);
-  await expect(page.locator(".pause-debug")).toContainText(
-    "Ping Cloudflare (HTTP)",
+  expect(new URL(healthURLs[0]).searchParams.get("debug")).toBe("1");
+  await expect(debugPanel).toHaveAttribute("data-runtime", "cloudflare");
+  await expect(debugPanel).toContainText("Ping Worker (HTTP)");
+  await expect(
+    diagnosticValue(debugPanel, "Point d’entrée Cloudflare"),
+  ).toContainText("FRA");
+  await expect(
+    diagnosticValue(debugPanel, "Point d’entrée Cloudflare"),
+  ).toContainText("Frankfurt, Germany");
+  await expect(diagnosticValue(debugPanel, "Région")).toHaveText("Europe");
+  await expect(diagnosticValue(debugPanel, "Worker")).toHaveText("polytour");
+  await expect(diagnosticValue(debugPanel, "Hôte")).toHaveText(
+    "test.polytour.example",
   );
-  await expect(page.locator(".pause-debug")).toContainText("Connectée");
+  await expect(
+    diagnosticValue(debugPanel, "Connexion de la partie"),
+  ).toHaveText("Connectée");
   await page.screenshot({ path: ".local/verification/pause-debug.png" });
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    // Resizing clears the WebGL buffer; let the paused animation clock redraw it.
+    await page.clock.runFor(250);
+    const layout = await page.locator(".pause-dialog").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const body = element.querySelector(".pause-dialog-body");
+      return {
+        left: rect.left,
+        right: rect.right,
+        width: document.documentElement.scrollWidth,
+        bodyWidth: body?.clientWidth,
+        bodyScrollWidth: body?.scrollWidth,
+      };
+    });
+    expect(layout.left).toBeGreaterThanOrEqual(0);
+    expect(layout.right).toBeLessThanOrEqual(viewport.width);
+    expect(layout.width).toBe(viewport.width);
+    expect(layout.bodyScrollWidth).toBe(layout.bodyWidth);
+    await page.screenshot({
+      path: `.local/verification/pause-debug-${viewport.width}.png`,
+    });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.clock.runFor(10_000);
   await expect(status).toHaveText("Indisponible");
   expect(requests).toBe(2);
@@ -360,6 +428,78 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
   );
   await page.clock.runFor(30_000);
   expect(requests).toBe(5);
+  expect(match.connections()).toBe(1);
+});
+
+test("Cloudflare diagnostics translate and distinguish local or older health responses", async ({
+  page,
+}) => {
+  let healthResponse: unknown = CLOUDFLARE_HEALTH;
+  const requests: string[] = [];
+  await page.route("**/api/health**", (route) => {
+    requests.push(route.request().url());
+    return route.fulfill({ json: healthResponse });
+  });
+  const match = await enterMatch(page);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  const panel = page.locator(".pause-debug");
+  await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  await expect(
+    diagnosticValue(panel, "Point d’entrée Cloudflare"),
+  ).toContainText("FRA");
+  await expect(diagnosticValue(panel, "Région")).toHaveText("Europe");
+  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
+  await page
+    .locator(".pause-dialog")
+    .getByLabel("Langue", { exact: true })
+    .selectOption("en");
+  await page.getByRole("tab", { name: "Debug", exact: true }).click();
+  await expect(panel).toHaveAttribute("data-runtime", "cloudflare");
+  await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  await expect(diagnosticValue(panel, "Cloudflare entry point")).toContainText(
+    "FRA",
+  );
+  await expect(diagnosticValue(panel, "Cloudflare entry point")).toContainText(
+    "Frankfurt, Germany",
+  );
+  await expect(diagnosticValue(panel, "Region")).toHaveText("Europe");
+  await expect(diagnosticValue(panel, "Worker")).toHaveText("polytour");
+  await expect(diagnosticValue(panel, "Host")).toHaveText(
+    "test.polytour.example",
+  );
+  healthResponse = {
+    status: "ok",
+    diagnostics: {
+      worker: "polytour",
+      hostname: "127.0.0.1",
+      runtime: "local",
+      cloudflare: null,
+    },
+  };
+  await page.getByRole("tab", { name: "Video", exact: true }).click();
+  await page.getByRole("tab", { name: "Debug", exact: true }).click();
+  await expect(panel).toHaveAttribute("data-runtime", "local");
+  await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  await expect(diagnosticValue(panel, "Cloudflare entry point")).toHaveText(
+    "Local",
+  );
+  await expect(diagnosticValue(panel, "Region")).toHaveText("Unavailable");
+  await expect(diagnosticValue(panel, "Host")).toHaveText("127.0.0.1");
+  await expect(panel).not.toContainText("FRA");
+  await expect(panel).not.toContainText("Frankfurt");
+  healthResponse = { status: "ok" };
+  await page.getByRole("tab", { name: "Video", exact: true }).click();
+  await page.getByRole("tab", { name: "Debug", exact: true }).click();
+  await expect(panel).toHaveAttribute("data-runtime", "unknown");
+  await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  for (const label of ["Cloudflare entry point", "Region", "Worker", "Host"])
+    await expect(diagnosticValue(panel, label)).toHaveText("Unavailable");
+  await expect(panel).not.toContainText("FRA");
+  await expect(panel).not.toContainText("127.0.0.1");
+  expect(requests.length).toBeGreaterThanOrEqual(4);
+  for (const url of requests)
+    expect(new URL(url).searchParams.get("debug")).toBe("1");
   expect(match.connections()).toBe(1);
 });
 
