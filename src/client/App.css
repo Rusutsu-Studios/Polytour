@@ -2093,7 +2093,9 @@ button.seat-open:disabled {
 }
 .help-dialog {
   width: min(550px, calc(100vw - 36px));
+  max-height: calc(100svh - 48px);
   padding: 28px;
+  overflow-y: auto;
   background: var(--paper);
   color: var(--ink);
   border: 0;
@@ -2114,11 +2116,20 @@ button.seat-open:disabled {
   font-size: 31px;
   letter-spacing: -0.03em;
 }
-.help-dialog > p {
+.help-dialog > p,
+.help-dice > p {
   font-size: 14px;
   line-height: 1.6;
   margin-top: 12px;
   color: #4d6968;
+}
+.help-dice {
+  padding-top: 16px;
+  border-top: 1px solid #bfd0cf;
+}
+.help-dice h3 {
+  margin: 0;
+  font-size: 16px;
 }
 .rules-list {
   padding: 0;

@@ -20,6 +20,29 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   await page.getByLabel("Langue / Language").selectOption("en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "New game" })).toBeVisible();
+  await page.getByRole("button", { name: "How to play", exact: true }).click();
+  const help = page.locator(".help-dialog");
+  await expect(
+    help.getByRole("heading", { name: "How to play", exact: true }),
+  ).toBeVisible();
+  await expect(help.locator(".help-dice")).toContainText(
+    "On every roll, the server draws fresh random bytes with Cloudflare’s Web Crypto API. Values that would favor some faces are discarded, giving each face a 1 in 6 chance.",
+  );
+  await expect(help).not.toContainText(
+    /Purchases cannot alter|paid bonuses|still being balanced|still being tuned/,
+  );
+  const documentation = help.getByRole("link", {
+    name: "Cloudflare Web Crypto documentation (opens in a new tab)",
+    exact: true,
+  });
+  await expect(documentation).toBeVisible();
+  await expect(documentation).toHaveAttribute(
+    "href",
+    "https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#methods",
+  );
+  await expect(documentation).toHaveAttribute("target", "_blank");
+  await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
+  await help.getByRole("button", { name: "Got it", exact: true }).click();
   const quickSettings = page.locator(".welcome-quick-settings");
   await expect(quickSettings.getByRole("slider")).toHaveCount(3);
   const startingCash = quickSettings.getByRole("slider", {

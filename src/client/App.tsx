@@ -587,10 +587,12 @@ function TileInspector({
 function RandomnessPanel({
   value,
   mode,
+  onHelp,
   expanded = false,
 }: {
   value: RandomnessStatus | null;
   mode: RoomConfig["randomnessMode"];
+  onHelp: () => void;
   expanded?: boolean;
 }) {
   const proof = value?.proof;
@@ -615,15 +617,19 @@ function RandomnessPanel({
           <span>↗</span>
         </summary>
         <div className="proof-body">
-          <DiceExplanation />
-          {proof && (
+          {proof ? (
             <p className="proof-result">
               {t(
                 `Dernier lancer : ${proof.dice[0]} + ${proof.dice[1]}`,
                 `Last roll: ${proof.dice[0]} + ${proof.dice[1]}`,
               )}
             </p>
+          ) : (
+            <p>{t("Aucun lancer pour le moment.", "No rolls yet.")}</p>
           )}
+          <button type="button" className="text-button" onClick={onHelp}>
+            {t("Comment fonctionnent les dés ?", "How are the dice rolled?")}
+          </button>
         </div>
       </details>
     );
@@ -741,7 +747,15 @@ function RandomnessPanel({
     </details>
   );
 }
-function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
+function Help({
+  open,
+  onClose,
+  mode,
+}: {
+  open: boolean;
+  onClose: () => void;
+  mode: RoomConfig["randomnessMode"];
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (open) dialog.current?.showModal();
@@ -751,11 +765,12 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
     <dialog
       ref={dialog}
       className="help-dialog"
+      aria-labelledby="help-heading"
       onCancel={onClose}
       onClose={onClose}
     >
       <div className="help-top">
-        <h2>{t("Votre premier tour", "How to play")}</h2>
+        <h2 id="help-heading">{t("Comment jouer", "How to play")}</h2>
         <button
           type="button"
           className="icon-button"
@@ -809,12 +824,21 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
           </span>
         </li>
       </ol>
-      <p className="field-note">
-        {t(
-          "Tous les joueurs ont les mêmes règles. Aucun bonus payant. Les valeurs de départ sont celles fournies ; cette première version conserve une économie de loyers à ajuster.",
-          "The same rules apply to every player, with no paid bonuses. Starting values follow the selected settings; prototype rents are still being tuned.",
+      <section className="help-dice" aria-labelledby="help-dice-heading">
+        <h3 id="help-dice-heading">
+          {t("Le tirage des dés", "How dice are rolled")}
+        </h3>
+        {mode === "secure" ? (
+          <DiceExplanation />
+        ) : (
+          <p>
+            {t(
+              "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
+              "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
+            )}
+          </p>
         )}
-      </p>
+      </section>
       <button type="button" className="button primary" onClick={onClose}>
         {t("C’est parti", "Got it")}
         <Icon name="arrow" />
@@ -1326,6 +1350,10 @@ function MatchView({
               <RandomnessPanel
                 value={room.randomness}
                 mode={config.randomnessMode}
+                onHelp={() => {
+                  closeTools();
+                  onHelp();
+                }}
                 expanded
               />
             )}
@@ -1908,7 +1936,11 @@ function App() {
           </button>
         </div>
       )}
-      <Help open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <Help
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        mode={config.randomnessMode}
+      />
       {!isGame && (
         <footer className="lobby-footer">
           <span>

@@ -288,7 +288,9 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
   await actor.page.keyboard.press("Escape");
   await actor.page.getByRole("button", { name: "Quitter la partie" }).click();
   await actor.page.locator(".settings-trigger").click();
-  await expect(actor.page.locator(".room-settings")).not.toContainText("drand");
+  await expect(
+    actor.page.locator(".settings-dialog .room-settings"),
+  ).not.toContainText("drand");
   await actor.page
     .getByRole("button", { name: "Appliquer les réglages" })
     .click();
