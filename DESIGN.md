@@ -76,6 +76,20 @@ their title or numbers; a hotel the player cannot take yet stays on screen,
 greyed out with a padlock. A healthy connection, the round counter of an
 unlimited match and secondary HUD lines stay off screen.
 
+Later on 2 October 2026 the user found the middle of the board empty and asked
+for a living center that builds up during the match, like the familiar mobile
+and console property games, while staying readable. The lawn becomes a small
+town: a paved plaza where the dice land, a roundabout, four avenues to the
+corners, and facing each side one street of six plots, one per city or resort
+of that side. An unsold plot holds a tree inside an outline in its country's
+color; a bought one shows the lot's own level (flag, house, town house, block,
+hotel tower, landmark with a gold spire) under the owner's color. A crane works
+beside a plot while the Director plays its construction. Cars, a big wheel, a
+carousel, a sailing pond, a helicopter and four fountains add ambient motion
+during a match; lobby previews stay still.
+Nothing in the town may hide a pawn, a lot, the board road or a die at rest;
+layout tests project every town envelope through the camera to prove it.
+
 Drawn cards have a separate illustrated reading moment, using three original
 painted image families with individual effect text. Four small banknote reserves,
 gold coins and owner-coloured straps sit outside the board track; quantities are
@@ -88,7 +102,7 @@ Build the scene with React Three Fiber and Three.js. GSAP owns scene choreograph
 
 ## Colors
 
-Sky blue owns the viewport as a soft radial gradient with a few faint floating tiles, grass owns the board center and ivory carries the track and compact functional controls. Each city group prints its plot in a strong pastel of its country color. Ink preserves readable prices and names; coral identifies the current primary action; gold identifies festivals and their multiplier. Four player colors retain circle, diamond, triangle and square identifiers.
+Sky blue owns the viewport as a soft radial gradient with a few faint floating tiles, a green park town with pale paving owns the board center and ivory carries the track and compact functional controls. Each city group prints its plot in a strong pastel of its country color. Ink preserves readable prices and names; coral identifies the current primary action; gold identifies festivals and their multiplier. Four player colors retain circle, diamond, triangle and square identifiers.
 
 **The Identity Rule.** Ownership combines player color and symbol on the pawn, flag, corner HUD and inspector. Color alone never carries a rule or player identity.
 
@@ -117,7 +131,7 @@ Mobile is best effort. A future touch adaptation may use its own layout; portrai
 
 ## Elevation & Depth
 
-The board has a two-tone physical edge and slightly raised lot faces. Each lot reserves the end nearest the top of the screen for small original buildings (the inner end on the two front sides, the outer end on the two back sides), so buildings never hide the printed name and amount below them. Pawns walk on a road just inside the lots; on the corners they stand on the free inner quarter, beside the landmark. Gabled houses, a compact hotel and a restrained landmark distinguish development without tall towers or layered cornices. Reduce vegetation and corner scenery to recognizable small silhouettes: a palm island, an open-air festival arena and an airport with its tower and airliner. Start is printed flat, with a checkered line, an arrow toward the first lot and the room's salary, so nothing tall stands at the front of the board. The grassy center, with a chalk circle, stays available to the dice, which take the roller's color and show their total on a small scoreboard.
+The board has a two-tone physical edge and slightly raised lot faces. Each lot reserves the end nearest the top of the screen for small original buildings (the inner end on the two front sides, the outer end on the two back sides), so buildings never hide the printed name and amount below them. Pawns walk on a road just inside the lots; on the corners they stand on the free inner quarter, beside the landmark. Gabled houses, a compact hotel and a restrained landmark distinguish development without tall towers or layered cornices. Reduce vegetation and corner scenery to recognizable small silhouettes: a palm island, an open-air festival arena and an airport with its tower and airliner. Start is printed flat, with a checkered line, an arrow toward the first lot and the room's salary, so nothing tall stands at the front of the board. The center is a low town around a paved plaza that stays available to the dice, which take the roller's color and show their total on a small scoreboard. Town heights follow a visibility rule: an object may be no taller than its distance to the lawn edge behind it, so the back road, back lots and pawns always stay in view; the tallest town building (0.68 units) stands lower than a die's top face. Lot buildings remain the authoritative development display; the town plots echo them.
 
 Compact ivory controls use restrained structural shadows, and action buttons retain a darker lower edge for a physical press. Avoid permanent glass overlays across the board. Hover, ownership changes and festivals add local feedback, not general interface ornament.
 
