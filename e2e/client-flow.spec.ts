@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type {
   GameEvent,
   PublicState,
@@ -6,6 +6,25 @@ import type {
 } from "../src/shared/engine/index.js";
 
 test.use({ reducedMotion: "reduce" });
+
+async function expectSecureDiceExplanation(panel: Locator) {
+  await expect(panel).toContainText(
+    "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six. Aucun achat ne modifie les résultats.",
+  );
+  await expect(panel).toContainText(
+    "Les loyers et effets sont encore en cours d’équilibrage.",
+  );
+  const documentation = panel.getByRole("link", {
+    name: "Documentation Web Crypto de Cloudflare (nouvel onglet)",
+    exact: true,
+  });
+  await expect(documentation).toBeVisible();
+  await expect(documentation).toHaveAttribute(
+    "href",
+    "https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#methods",
+  );
+  await expect(documentation).toHaveAttribute("target", "_blank");
+}
 
 async function minimizeOwnDecision(page: Page) {
   // Director completion and React's native dialog opening are separate steps.
@@ -96,9 +115,11 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.locator(".settings-dialog .room-settings"),
   ).not.toContainText("drand");
-  await expect(page.locator(".settings-dialog .room-settings")).toContainText(
-    "Les deux dés sont tirés sur le serveur avec un générateur cryptographique.",
+  const settingsFairness = page.locator(
+    ".settings-dialog .room-settings-fairness",
   );
+  await settingsFairness.locator("summary").click();
+  await expectSecureDiceExplanation(settingsFairness);
   await page.getByRole("button", { name: "Appliquer les réglages" }).click();
   await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
@@ -115,9 +136,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page
     .getByRole("button", { name: "À propos des dés", exact: true })
     .click();
-  await expect(page.locator(".proof-panel")).toContainText(
-    "Chaque face a une chance sur six",
-  );
+  await expectSecureDiceExplanation(page.locator(".proof-panel"));
   await expect(page.locator(".proof-panel")).not.toContainText("drand");
   await expect(
     page.getByRole("button", { name: "Télécharger la preuve" }),

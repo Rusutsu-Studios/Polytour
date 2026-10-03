@@ -3,6 +3,7 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import { money } from "./board-display.js";
+import DiceExplanation from "./DiceExplanation.js";
 import "./RoomSettings.css";
 
 export type RoomSettingsProps = {
@@ -338,39 +339,19 @@ export function RoomSettings({
       </fieldset>
       <details className="room-settings-fairness">
         <summary>{t("Dés et économie", "Dice and economy")}</summary>
-        <p>
-          {config.randomnessMode === "drand"
-            ? t(
-                "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
-                "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
-              )
-            : t(
-                "À chaque lancer, le serveur tire de nouveaux octets aléatoires avec l’API Web Crypto de Cloudflare. Les valeurs qui favoriseraient certaines faces sont écartées : chaque face a une chance sur six. Aucun achat ne modifie les résultats.",
-                "On every roll, the server draws fresh random bytes with Cloudflare’s Web Crypto API. Values that would favor some faces are discarded, giving each face a 1 in 6 chance. Purchases cannot alter the results.",
-              )}{" "}
-          {t(
-            "Les loyers et effets sont encore en cours d’équilibrage.",
-            "Rents and card effects are still being balanced.",
-          )}
-        </p>
-        {config.randomnessMode !== "drand" && (
+        {config.randomnessMode === "drand" ? (
           <p>
-            <a
-              href="https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#methods"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={t(
-                "Documentation Web Crypto de Cloudflare (nouvel onglet)",
-                "Cloudflare Web Crypto documentation (opens in a new tab)",
-              )}
-            >
-              {t(
-                "Documentation Web Crypto de Cloudflare",
-                "Cloudflare Web Crypto documentation",
-              )}
-              <span aria-hidden="true"> ↗</span>
-            </a>
+            {t(
+              "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
+              "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
+            )}{" "}
+            {t(
+              "Les loyers et effets sont encore en cours d’équilibrage.",
+              "Rents and card effects are still being balanced.",
+            )}
           </p>
+        ) : (
+          <DiceExplanation />
         )}
       </details>
       {save && (
