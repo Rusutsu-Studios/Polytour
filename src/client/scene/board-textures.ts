@@ -268,10 +268,14 @@ function polygon(context: Context, points: readonly Point[]) {
   };
 }
 
-/** The joints between stones: only a little deeper than the stones, so the
- * pattern stays a texture and never competes with names and prices. */
-function joint(color: string) {
-  return mix(mix(PAPER, color, 0.64), INK, 0.05);
+/**
+ * The joints between stones: only a little deeper than the stones, so the
+ * pattern stays a texture and never competes with names and prices. Pavements
+ * in the lightest colors (orange, yellow, teal, pink) pass a `depth` so their
+ * joints read as clearly as the others.
+ */
+function joint(color: string, depth = 0) {
+  return mix(mix(PAPER, color, 0.64 + depth), INK, 0.05 + depth / 2);
 }
 
 /** One stone's face in the country's color, varied from stone to stone. */
@@ -308,7 +312,7 @@ const lawn: Pavement = (context, color, width, height, next) => {
 };
 
 const flagstones: Pavement = (context, color, width, height, next) => {
-  context.fillStyle = joint(color);
+  context.fillStyle = joint(color, 0.12);
   context.fillRect(0, 0, width, height);
   for (let y = 0; y < height; ) {
     const row = 44 + Math.round(next() * 22);
@@ -316,7 +320,7 @@ const flagstones: Pavement = (context, color, width, height, next) => {
       const length = 56 + Math.round(next() * 60);
       stone(
         context,
-        rect(context, x + 2, y + 2, length - 4, row - 4, 5),
+        rect(context, x + 2.5, y + 2.5, length - 5, row - 5, 5),
         face(color, next),
       );
       x += length;
@@ -377,7 +381,7 @@ const setts: Pavement = (context, color, width, height, next) => {
 };
 
 const crazyPaving: Pavement = (context, color, width, height, next) => {
-  context.fillStyle = joint(color);
+  context.fillStyle = joint(color, 0.12);
   context.fillRect(0, 0, width, height);
   const cell = 74;
   const corners: Point[][] = [];
@@ -401,29 +405,26 @@ const crazyPaving: Pavement = (context, color, width, height, next) => {
       // Each stone shrinks toward its middle, leaving an even joint.
       const inset = quad.map(([x, y]): Point => {
         const distance = Math.hypot(cx - x, cy - y) || 1;
-        return [
-          x + ((cx - x) * 3.5) / distance,
-          y + ((cy - y) * 3.5) / distance,
-        ];
+        return [x + ((cx - x) * 4) / distance, y + ((cy - y) * 4) / distance];
       });
       stone(context, polygon(context, inset), face(color, next));
     }
 };
 
 const slate: Pavement = (context, color, width, height, next) => {
-  context.fillStyle = joint(color);
+  context.fillStyle = joint(color, 0.12);
   context.fillRect(0, 0, width, height);
   for (let row = 0; row * 70 < height; row++)
     for (let x = row % 2 ? -52 : 0; x < width; x += 104)
       stone(
         context,
-        rect(context, x + 2, row * 70 + 2, 100, 66, 4),
+        rect(context, x + 2.5, row * 70 + 2.5, 99, 65, 4),
         face(color, next, 0.46, 0.04),
       );
 };
 
 const deck: Pavement = (context, color, width, height, next) => {
-  context.fillStyle = joint(color);
+  context.fillStyle = joint(color, 0.12);
   context.fillRect(0, 0, width, height);
   context.lineWidth = 1.2;
   for (let row = 0; row * 40 < height; row++) {
@@ -435,7 +436,7 @@ const deck: Pavement = (context, color, width, height, next) => {
       const plank = face(color, next, 0.44);
       stone(
         context,
-        rect(context, from + 2, row * 40 + 2.5, to - from - 4, 35, 3),
+        rect(context, from + 2.5, row * 40 + 3, to - from - 5, 34, 3),
         plank,
       );
       context.strokeStyle = mix(plank, INK, 0.055);
