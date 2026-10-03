@@ -87,7 +87,7 @@ rows.push({
 rows.push({
   check: `Lobby initial CSS, gzip (${initialCss.size} file(s))`,
   actual: formatBytes(sumGzip(initialCss)),
-  limit: "—",
+  limit: "-",
   ok: null,
 });
 
@@ -111,7 +111,7 @@ const oversized = assets.filter((asset) => asset.bytes > MAX_ASSET_FILE_BYTES);
 const largest = assets[0];
 rows.push({
   check: `Largest static asset${largest ? ` (${largest.file})` : ""}`,
-  actual: largest ? formatBytes(largest.bytes) : "—",
+  actual: largest ? formatBytes(largest.bytes) : "-",
   limit: formatBytes(MAX_ASSET_FILE_BYTES),
   ok: oversized.length === 0,
 });

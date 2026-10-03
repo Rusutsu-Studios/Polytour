@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-<title>Polytour — Jeu de plateau multijoueur</title>
+<title>Polytour - Jeu de plateau multijoueur</title>
 <rect width="1200" height="630" fill="#75d4ed"/>
 <path d="M0 0h610l-72 630H0z" fill="#fffaf0"/>
 <g fill="none" stroke="#fffaf0" stroke-width="2" opacity=".45"><rect x="1085" y="52" width="57" height="57" rx="9" transform="rotate(18 1113 80)"/><rect x="678" y="526" width="38" height="38" rx="6" transform="rotate(-20 697 545)"/></g>

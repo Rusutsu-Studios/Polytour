@@ -830,12 +830,12 @@ function MatchView({
   const networkPoint =
     cloudflarePing.status === "success"
       ? (cloudflarePing.value.colo ??
-        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "—"))
-      : "—";
+        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "-"))
+      : "-";
   const networkLatency =
     cloudflarePing.status === "success"
       ? `${cloudflarePing.value.latencyMs} ms`
-      : "— ms";
+      : "- ms";
   const pauseTrigger = useRef<HTMLButtonElement | null>(null);
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
@@ -1585,8 +1585,8 @@ function MatchView({
                   <p className="leader-note">
                     <Icon name="crown" size={14} />
                     {t(
-                      `Chef de salle : ${leaderName ?? "—"}`,
-                      `Room leader: ${leaderName ?? "—"}`,
+                      `Chef de salle : ${leaderName ?? "-"}`,
+                      `Room leader: ${leaderName ?? "-"}`,
                     )}
                   </p>
                 )}

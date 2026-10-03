@@ -314,7 +314,7 @@ sequenceDiagram
 ```
 
 Per-player redaction: events are broadcast identically to everyone *unless* an
-event carries private data (none planned in v1 — card draws are public). If hidden
+event carries private data (none planned in v1 - card draws are public). If hidden
 info is added later, redact per socket using the seat in the attachment.
 
 ### Timers and disconnects
