@@ -176,6 +176,15 @@ function umbrella(context: Context, x: number, y: number, size: number) {
   context.restore();
 }
 
+export const FESTIVAL_COLORS = [
+  "#e2553f",
+  "#2f8fc4",
+  "#8a5cc2",
+  "#2f9a64",
+  "#f08a2c",
+  "#fffaf0",
+] as const;
+
 /** The colored plot printed at the screen-top end of a lot. */
 function paintPlot(
   context: Context,
@@ -816,5 +825,49 @@ export function seatBadgeTexture(seat: Seat) {
     context.fillStyle = "#fffaf0";
     context.font = `700 70px ${LABEL_FONT}`;
     context.fillText(PLAYER_SYMBOLS[seat], 64, 64);
+  });
+}
+
+/** A gold rosette with the rent multiplier; a hosted festival wears its host's ring. */
+export function medallionTexture(multiplier: number, ring: string) {
+  return canvasTexture(256, 256, (context) => {
+    // Ribbon tails first, so the coin covers their tops.
+    for (const side of [-1, 1]) {
+      context.fillStyle = side < 0 ? "#e2553f" : "#2f8fc4";
+      context.beginPath();
+      context.moveTo(128 + side * 22, 170);
+      context.lineTo(128 + side * 62, 250);
+      context.lineTo(128 + side * 40, 236);
+      context.lineTo(128 + side * 28, 254);
+      context.lineTo(128 + side * 2, 186);
+      context.closePath();
+      context.fill();
+    }
+    context.fillStyle = ring;
+    context.beginPath();
+    for (let point = 0; point < 24; point++) {
+      const angle = (point * Math.PI) / 12;
+      const radius = point % 2 ? 98 : 110;
+      context.lineTo(
+        128 + Math.cos(angle) * radius,
+        112 + Math.sin(angle) * radius,
+      );
+    }
+    context.closePath();
+    context.fill();
+    context.fillStyle = "#ffd24f";
+    context.beginPath();
+    context.arc(128, 112, 84, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = "#fff1b8";
+    context.lineWidth = 6;
+    context.beginPath();
+    context.arc(128, 112, 72, 0, Math.PI * 2);
+    context.stroke();
+    context.fillStyle = "#5b3b06";
+    context.font = `900 82px ${DISPLAY_FONT}`;
+    context.fillText(`×${multiplier}`, 128, 120);
+    context.font = `900 30px ${LABEL_FONT}`;
+    context.fillText("★", 128, 56);
   });
 }

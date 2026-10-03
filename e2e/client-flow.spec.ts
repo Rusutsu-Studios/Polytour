@@ -4,6 +4,7 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -193,12 +194,8 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // The board and the four corner HUDs fit the supported PC viewports.
   // Every secondary panel starts closed; a match needs no page scrolling.
   await expect(page.locator(".journal")).not.toBeVisible();
-  await expect(page.locator(".city-card")).not.toBeVisible();
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  await expect(page.locator(".inspector")).not.toBeVisible();
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     await expect(page.locator(".board-stage")).toHaveCSS(
       "height",
@@ -252,13 +249,13 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
       number,
       { owner: Seat; level: 0 | 1 | 2 | 3 | 4 | 5 }
     > = {
-      4: { owner: 0, level: 1 },
+      3: { owner: 0, level: 1 },
       7: { owner: 1, level: 2 },
       11: { owner: 2, level: 3 },
       15: { owner: 3, level: 4 },
-      20: { owner: 0, level: 5 },
-      25: { owner: 1, level: 4 },
-      30: { owner: 2, level: 5 },
+      19: { owner: 0, level: 5 },
+      26: { owner: 1, level: 4 },
+      29: { owner: 2, level: 5 },
       31: { owner: 3, level: 3 },
     };
     const properties = snapshot.properties.map((property) => ({
@@ -456,11 +453,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator(".standings-label")).toContainText(
     "Classement final",
   );
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     const resultBounds = await page
       .locator(".match-end-panel")
@@ -555,7 +548,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
             )
           );
         }, previousDeadline),
-      { timeout: 30_000 },
+      // A real roll can end the turn (Island, Chance), so the next own decision
+      // may wait for a full bot round, like the other 60 s waits in this file.
+      { timeout: 60_000 },
     )
     .toBe(true);
   // Native decisions protect focus; minimize without sending a gameplay action.
@@ -1088,19 +1083,25 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     });
     return state;
   });
+  // Board choices stay non-modal: nothing travels until a space is picked,
+  // on the board or through the keyboard list of the same legal spaces.
+  const pick = page.locator(".decision-pick");
+  await expect(pick).toContainText("Tour du monde");
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await expect(pick.locator(".decision-confirm")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Choisir le lancer gratuit" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".decision-confirm")).toContainText(
-    "Lancer les dés",
-  );
+    pick.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page
+      .getByLabel("Destination", { exact: true })
+      .locator("option:not([disabled])"),
+  ).toHaveCount(2);
   await page.getByLabel("Destination", { exact: true }).selectOption("31");
-  await expect(page.locator(".decision-confirm")).toContainText("Voyager ici");
-  await expect(page.locator(".ledger-balance")).toContainText("1,95 M");
-  await page.getByRole("button", { name: "Choisir le lancer gratuit" }).click();
-  await expect(page.locator(".decision-confirm")).toContainText(
-    "Lancer les dés",
+  await expect(pick.locator(".decision-confirm")).toContainText(
+    "Voyager à Tokyo · 50 k",
   );
+  await expect(pick.locator(".ledger-balance")).toContainText("1,95 M");
   await page.screenshot({
     path: ".local/verification/decision-travel-regression.png",
   });
@@ -1175,9 +1176,10 @@ test("travel, rent protections and exchanges show the complete legal choice", as
       },
     });
   });
-  await expect(page.locator("#decision-description")).toContainText("Rome");
+  await expect(page.locator("#decision-description")).toContainText("Lisbonne");
+  await page.getByLabel("Ville ciblée", { exact: true }).selectOption("9");
   await expect(page.locator(".decision-confirm")).toContainText(
-    "Échanger Rome contre Porto",
+    "Échanger Lisbonne contre Faro",
   );
   await page.screenshot({
     path: ".local/verification/decision-exchange-regression.png",

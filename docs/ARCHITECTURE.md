@@ -246,14 +246,13 @@ game:
 - **Rule and balance changes never rewrite a match in progress.** Room metadata
   records the `rulesVersion` it was created with and the engine honors the frozen
   config until the game ends (the current maximum is 120 minutes). New rooms use
-  version 4, `sellBackPercent: 100` and `hotelPurchaseRule: "staged-hotels"`.
-  Version-2/version-3 active saves without a sale marker retain 50% refunds;
-  preexisting lobbies freeze `sellBackPercent: 50` when started. Version-2 active saves without
-  a `hotelPurchaseRule` marker retain the old lap-only hotel rule; existing version-2 lobbies pass
-  `"legacy-lap"` when they start. Version-3 rooms retain staged hotels. Loading
-  accepts rules versions 2/3/4 and rejects contradictory hotel or sale markers.
-  State JSON remains `stateVersion: 1`; no schema or class migration is introduced
-  for these optional config fields.
+  version 4: the country-grouped board, `hotelPurchaseRule: "staged-hotels"` and
+  `worldTourRule: "own-free-or-start"`. Version 4 moved Chance, resort and tax
+  squares, so rooms saved under versions 2 and 3 are refused with
+  `incompatible-saved-match` instead of being replayed on the wrong squares. The
+  owner approved that break on 3 October 2026 because no match was running; later
+  rule changes keep the old rules for live matches again. State JSON remains
+  `stateVersion: 1`.
 - A DO class lifecycle change (new, renamed, or deleted class in `migrations`) cannot
   be rolled back or deployed gradually: ship it on its own.
 

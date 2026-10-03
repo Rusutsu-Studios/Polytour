@@ -28,17 +28,11 @@ debug socket has been removed; `/api/health` remains.
   rejected with `players-required` below two. Each player keeps its lobby seat
   number (colour and corner) in the match, so a smaller match can have gaps such
   as seats 0, 1 and 3. Settings are validated and freeze when the match starts.
-- New-room hotel progression is frozen by the server in the optional public config
-  marker `hotelPurchaseRule: "staged-hotels"`. Older saves may omit it or use
-  `"legacy-lap"`. This is not an accepted room-setting input; clients must derive
-  legal construction choices from the engine. This marker leaves action/event
-  shapes unchanged.
-- New-room sale values are frozen by the server as the optional public config
-  marker `sellBackPercent: 100`; older saves may omit it or use `50`. Room creation
-  and settings reject this internal marker. Clients quote sales through the shared
-  engine so the displayed amount matches the server's frozen rules. Action/event
-  shapes stay unchanged, but the protocol version is now 2: older clients hard-code
-  50% refunds and must refresh on welcome before presenting new-room sale quotes.
+- New-room hotel and World Tour rules are frozen by the server in the public config
+  markers `hotelPurchaseRule: "staged-hotels"` and
+  `worldTourRule: "own-free-or-start"`. Neither is an accepted room-setting input;
+  clients must derive legal construction and travel choices from the engine. Action/event shapes and the protocol
+  version remain compatible.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
   `legalActions` supplies the choices; tile indices are0..31 and levels0..5.

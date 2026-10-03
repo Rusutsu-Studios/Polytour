@@ -16,7 +16,7 @@ import {
   propertyRent,
 } from "../../shared/engine/index.js";
 import type { AnimationContext } from "../director/director.js";
-import { director } from "../director/director.js";
+import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import {
   money,
@@ -55,9 +55,10 @@ import {
 } from "./board-layout.js";
 import {
   cornerTexture,
+  FESTIVAL_COLORS,
   lawnTexture,
   lotTexture,
-  markerTexture,
+  medallionTexture,
   noteTexture,
   roadTexture,
   scoreTexture,
@@ -70,6 +71,8 @@ type BoardProps = {
   state: PublicState | null;
   selected: number | null;
   onSelect: (tile: number) => void;
+  /** Legal spaces while the player answers a decision by clicking the board. */
+  targets?: readonly number[] | null;
   preview?: boolean;
   zoom?: number;
   /** Where the roll button sits on screen, in canvas pixels. */
@@ -184,7 +187,8 @@ function TileFace({
   salary,
   onSelect,
   preview,
-  saleAppearance = "normal",
+  dimmed,
+  pickable,
 }: {
   index: number;
   amount: number | null;
@@ -192,7 +196,8 @@ function TileFace({
   salary: number;
   onSelect: (tile: number) => void;
   preview?: boolean;
-  saleAppearance?: "normal" | "available" | "dimmed";
+  dimmed: boolean;
+  pickable: boolean;
 }) {
   const { locale } = useLocale();
   const texture = useMemo(
@@ -220,12 +225,21 @@ function TileFace({
         event.stopPropagation();
         onSelect(index);
       }}
+      onPointerOver={(event) => {
+        if (!pickable) return;
+        event.stopPropagation();
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        if (pickable) document.body.style.cursor = "";
+      }}
     >
       {/* Canvas width runs along play and its height toward the center. */}
       <planeGeometry args={[along - LOT_GAP, depth - LOT_GAP]} />
+      {/* Multiplying the print keeps one texture per tile while choices dim others. */}
       <meshBasicMaterial
         map={texture}
-        color={saleAppearance === "dimmed" ? "#7c8189" : "#ffffff"}
+        color={dimmed ? "#9d98a4" : "#ffffff"}
         toneMapped={false}
       />
     </mesh>
@@ -236,16 +250,22 @@ function BoardTiles({
   state,
   selected,
   onSelect,
+  targets,
   preview,
-  saleSeat,
 }: BoardProps) {
   const mesh = useRef<THREE.InstancedMesh>(null);
   const transforms = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const neutral = useMemo(() => new THREE.Color("#ece6ef"), []);
-  const targets = useMemo(
-    () => (preview ? [] : saleTargets(state, saleSeat)),
-    [state, saleSeat, preview],
+  const dim = useMemo(() => new THREE.Color("#7f7a88"), []);
+  useEffect(() => {
+    if (!targets) document.body.style.cursor = "";
+  }, [targets]);
+  useEffect(
+    () => () => {
+      document.body.style.cursor = "";
+    },
+    [],
   );
   useEffect(() => {
     if (!mesh.current) return;
@@ -268,13 +288,14 @@ function BoardTiles({
       else if (owner != null)
         color.set(PLAYER_COLORS[owner]).lerp(neutral, 0.35);
       else color.copy(neutral);
+      if (targets && !targets.includes(tile.index)) color.lerp(dim, 0.55);
       mesh.current.setColorAt(tile.index, color);
     }
     mesh.current.instanceMatrix.needsUpdate = true;
     mesh.current.computeBoundingSphere();
     if (mesh.current.instanceColor)
       mesh.current.instanceColor.needsUpdate = true;
-  }, [state, selected, transforms, color, neutral, targets]);
+  }, [state, selected, targets, transforms, color, neutral, dim]);
   const salary = state?.config.startSalary ?? ECONOMY.startSalary;
   return (
     <>
@@ -301,6 +322,8 @@ function BoardTiles({
             index={tile.index}
             owner={owner}
             salary={salary}
+            dimmed={Boolean(targets && !targets.includes(tile.index))}
+            pickable={Boolean(targets?.includes(tile.index))}
             amount={
               owner != null && state
                 ? propertyRent(state, tile.index)
@@ -628,85 +651,325 @@ function ResortProps() {
   );
 }
 
-function FestivalFlags({ state }: { state: PublicState | null }) {
-  const badges = useMemo(
+function unitFrameGeometry(inset: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.5, -0.5);
+  shape.lineTo(0.5, -0.5);
+  shape.lineTo(0.5, 0.5);
+  shape.lineTo(-0.5, 0.5);
+  shape.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(-inset, -inset);
+  hole.lineTo(-inset, inset);
+  hole.lineTo(inset, inset);
+  hole.lineTo(inset, -inset);
+  hole.closePath();
+  shape.holes.push(hole);
+  return new THREE.ShapeGeometry(shape);
+}
+
+/** Legal spaces glow in the chooser's colour; the clicked one carries a pin. */
+function PickHighlights({
+  targets,
+  picked,
+  color,
+}: {
+  targets: readonly number[];
+  picked: number | null;
+  color: string;
+}) {
+  const { reducedMotion } = useDirector();
+  const { invalidate } = useThree();
+  const frames = useRef<THREE.InstancedMesh>(null);
+  const fills = useRef<THREE.InstancedMesh>(null);
+  const pin = useRef<THREE.Group>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const frame = useMemo(() => unitFrameGeometry(0.47), []);
+  const fillMaterial = useMemo(
     () =>
-      Array.from({ length: 11 }, (_, multiplier) =>
-        markerTexture(`×${multiplier}`, "#ffcf59", "#634711"),
-      ),
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+        toneMapped: false,
+      }),
     [],
   );
-  const starGeometry = useMemo(() => {
-    const shape = new THREE.Shape();
-    for (let point = 0; point < 10; point++) {
-      const angle = Math.PI / 2 + (point * Math.PI) / 5;
-      const radius = point % 2 === 0 ? 0.11 : 0.048;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      if (point === 0) shape.moveTo(x, y);
-      else shape.lineTo(x, y);
-    }
-    shape.closePath();
-    return new THREE.ShapeGeometry(shape);
-  }, []);
   useEffect(
     () => () => {
-      for (const texture of badges) texture.dispose();
-      starGeometry.dispose();
+      frame.dispose();
+      fillMaterial.dispose();
     },
-    [badges, starGeometry],
+    [frame, fillMaterial],
   );
-  const festivals = state
+  useEffect(() => {
+    fillMaterial.color.set(color);
+    const outlines = frames.current;
+    const glow = fills.current;
+    if (!outlines || !glow) return;
+    targets.forEach((tile, index) => {
+      const [x, z] = tileCenter(tile);
+      const [along, depth] = tileSize(tile);
+      transform.position.set(x, LOT_TOP + 0.0045, z);
+      transform.rotation.set(-Math.PI / 2, 0, tileRotation(tile));
+      transform.scale.set(along - LOT_GAP, depth - LOT_GAP, 1);
+      transform.updateMatrix();
+      outlines.setMatrixAt(index, transform.matrix);
+      transform.position.y = LOT_TOP + 0.003;
+      transform.updateMatrix();
+      glow.setMatrixAt(index, transform.matrix);
+    });
+    outlines.count = glow.count = targets.length;
+    outlines.instanceMatrix.needsUpdate = true;
+    glow.instanceMatrix.needsUpdate = true;
+    outlines.computeBoundingSphere();
+    glow.computeBoundingSphere();
+    invalidate();
+  }, [targets, color, transform, fillMaterial, invalidate]);
+  useFrame((frameState) => {
+    const time = frameState.clock.elapsedTime;
+    fillMaterial.opacity = reducedMotion
+      ? 0.14
+      : 0.06 + 0.13 * (0.5 + 0.5 * Math.sin(time * 4));
+    if (pin.current) {
+      pin.current.position.y = reducedMotion ? 0 : Math.sin(time * 3) * 0.06;
+      pin.current.rotation.y = reducedMotion ? 0 : time * 1.4;
+    }
+    // The board renders on demand; keep frames coming only while choosing.
+    if (!reducedMotion) frameState.invalidate();
+  });
+  const [pinX, pinZ] = picked === null ? [0, 0] : tileCenter(picked);
+  return (
+    <>
+      <instancedMesh
+        ref={fills}
+        args={[undefined, fillMaterial, BOARD.length]}
+        frustumCulled={false}
+        renderOrder={1}
+      >
+        <planeGeometry />
+      </instancedMesh>
+      <instancedMesh
+        ref={frames}
+        args={[frame, undefined, BOARD.length]}
+        frustumCulled={false}
+        renderOrder={2}
+      >
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </instancedMesh>
+      {picked !== null && (
+        <group position={[pinX, LOT_TOP, pinZ]}>
+          <group ref={pin}>
+            <group position={[0, 0.82, 0]}>
+              <mesh
+                position={[0, -0.17, 0]}
+                rotation={[Math.PI, 0, 0]}
+                castShadow
+              >
+                <coneGeometry args={[0.105, 0.32, 16]} />
+                <meshStandardMaterial color={color} roughness={0.55} />
+              </mesh>
+              <mesh castShadow>
+                <sphereGeometry args={[0.15, 18, 14]} />
+                <meshStandardMaterial color={color} roughness={0.55} />
+              </mesh>
+              <mesh>
+                <torusGeometry args={[0.152, 0.026, 8, 24]} />
+                <meshStandardMaterial color="#fffaf0" roughness={0.6} />
+              </mesh>
+            </group>
+          </group>
+        </group>
+      )}
+    </>
+  );
+}
+
+function pennantGeometry() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.5, 0);
+  shape.lineTo(0.5, 0);
+  shape.lineTo(0, -1);
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+const BUNTING_FLAGS = 7;
+const BUNTING_HEIGHT = 0.62;
+const BUNTING_SAG = 0.08;
+const BUNTING_HALF = 0.46;
+
+/** Tile-local z of a festival garland: the screen-top edge of the plot. */
+function buntingZ(index: number) {
+  return screenTop(index) * (LOT_DEPTH / 2 - 0.05);
+}
+
+/** Festival cities keep their country colour; a garland and a medallion mark the fête. */
+function FestivalMarkers({ state }: { state: PublicState | null }) {
+  const masts = useRef<THREE.InstancedMesh>(null);
+  const cords = useRef<THREE.InstancedMesh>(null);
+  const flags = useRef<THREE.InstancedMesh>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+  const pennant = useMemo(pennantGeometry, []);
+  const festivalKey = state
     ? [
         ...new Set([
           ...state.festivalTiles,
           ...(state.championshipHost ? [state.championshipHost.tile] : []),
         ]),
-      ]
-    : [];
+      ].join(",")
+    : "";
+  const festivals = useMemo(
+    () => (festivalKey ? festivalKey.split(",").map(Number) : []),
+    [festivalKey],
+  );
+  const hostTile = state?.championshipHost?.tile ?? null;
+  const hostMultiplier = state?.championshipHost?.multiplier ?? 2;
+  const hostOwner =
+    state && hostTile !== null
+      ? (getProperty(state, hostTile)?.owner ?? null)
+      : null;
+  const initialKey = state?.festivalTiles.join(",") ?? "";
+  const medals = useMemo(() => {
+    const initial = initialKey ? initialKey.split(",").map(Number) : [];
+    return festivals.map((tile) => {
+      const hosted = hostTile === tile;
+      const multiplier = Math.max(
+        initial.includes(tile) ? 2 : 1,
+        hosted ? hostMultiplier : 1,
+      );
+      return {
+        tile,
+        hosted,
+        texture: medallionTexture(
+          Math.min(10, multiplier),
+          hosted && hostOwner !== null ? PLAYER_COLORS[hostOwner] : "#f0a92e",
+        ),
+      };
+    });
+  }, [festivals, initialKey, hostTile, hostMultiplier, hostOwner]);
+  useEffect(
+    () => () => {
+      for (const medal of medals) medal.texture.dispose();
+    },
+    [medals],
+  );
+  useEffect(() => () => pennant.dispose(), [pennant]);
+  useEffect(() => {
+    const mastMesh = masts.current;
+    const cordMesh = cords.current;
+    const flagMesh = flags.current;
+    if (!mastMesh || !cordMesh || !flagMesh) return;
+    let mastCount = 0;
+    let cordCount = 0;
+    let flagCount = 0;
+    for (const tile of festivals) {
+      const angle = tileRotation(tile);
+      const z = buntingZ(tile);
+      for (const side of [-1, 1]) {
+        const [x, worldZ] = tilePoint(tile, side * BUNTING_HALF, z);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT / 2, worldZ);
+        transform.rotation.set(0, 0, 0);
+        transform.scale.set(1, BUNTING_HEIGHT, 1);
+        transform.updateMatrix();
+        mastMesh.setMatrixAt(mastCount++, transform.matrix);
+      }
+      // Two straight cord halves meet at the sagging middle of the garland.
+      for (const side of [-1, 1]) {
+        const [x, worldZ] = tilePoint(tile, (side * BUNTING_HALF) / 2, z);
+        transform.position.set(
+          x,
+          LOT_TOP + BUNTING_HEIGHT - BUNTING_SAG / 2,
+          worldZ,
+        );
+        transform.rotation.set(
+          0,
+          angle,
+          side * Math.atan2(BUNTING_SAG, BUNTING_HALF),
+        );
+        transform.scale.set(Math.hypot(BUNTING_HALF, BUNTING_SAG), 1, 1);
+        transform.updateMatrix();
+        cordMesh.setMatrixAt(cordCount++, transform.matrix);
+      }
+      for (let flag = 0; flag < BUNTING_FLAGS; flag++) {
+        const along =
+          -BUNTING_HALF * 0.86 +
+          (flag * BUNTING_HALF * 1.72) / (BUNTING_FLAGS - 1);
+        const [x, worldZ] = tilePoint(tile, along, z);
+        const drop = BUNTING_SAG * (1 - Math.abs(along) / BUNTING_HALF);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT - drop, worldZ);
+        transform.rotation.set(0, angle, 0);
+        transform.scale.set(0.085, 0.11, 1);
+        transform.updateMatrix();
+        flagMesh.setMatrixAt(flagCount, transform.matrix);
+        flagMesh.setColorAt(
+          flagCount++,
+          color.set(FESTIVAL_COLORS[(flag + tile) % 5]),
+        );
+      }
+    }
+    mastMesh.count = mastCount;
+    cordMesh.count = cordCount;
+    flagMesh.count = flagCount;
+    for (const mesh of [mastMesh, cordMesh, flagMesh]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+  }, [festivals, transform, color]);
   return (
     <>
-      {festivals.map((index) => {
-        const [x, z] = tilePoint(
-          index,
-          0.4,
-          buildingBandZ(index) + screenTop(index) * 0.17,
-        );
-        const multiplier = Math.max(
-          state?.festivalTiles.includes(index) ? 2 : 1,
-          state?.championshipHost?.tile === index
-            ? state.championshipHost.multiplier
-            : 1,
-        );
+      <instancedMesh ref={masts} args={[undefined, undefined, 48]} castShadow>
+        <cylinderGeometry args={[0.012, 0.014, 1, 6]} />
+        <meshStandardMaterial color="#b98a3e" roughness={0.8} />
+      </instancedMesh>
+      <instancedMesh ref={cords} args={[undefined, undefined, 48]}>
+        <boxGeometry args={[1, 0.006, 0.006]} />
+        <meshBasicMaterial color="#6d5a3c" />
+      </instancedMesh>
+      <instancedMesh
+        ref={flags}
+        args={[pennant, undefined, 24 * BUNTING_FLAGS]}
+        castShadow
+      >
+        <meshStandardMaterial side={THREE.DoubleSide} roughness={0.9} />
+      </instancedMesh>
+      {medals.map(({ tile, hosted, texture }) => {
+        const [x, z] = tilePoint(tile, 0, buntingZ(tile));
         return (
-          <group key={index} position={[x, LOT_TOP, z]}>
-            <mesh position={[0, 0.2, 0]} castShadow>
-              <cylinderGeometry args={[0.01, 0.01, 0.4, 6]} />
-              <meshStandardMaterial color="#bc8b30" />
-            </mesh>
-            <mesh position={[0.12, 0.33, -0.12]} rotation={[0, Math.PI / 4, 0]}>
-              <planeGeometry args={[0.3, 0.19]} />
-              <meshBasicMaterial
-                map={badges[Math.min(10, multiplier)]}
-                side={THREE.DoubleSide}
-                toneMapped={false}
-              />
-            </mesh>
-            <mesh
-              geometry={starGeometry}
-              position={[0, 0.46, 0]}
-              rotation={[0, Math.PI / 4, 0]}
-              scale={0.6}
-            >
-              <meshStandardMaterial
-                color="#ffdc6e"
-                emissive="#664a12"
-                emissiveIntensity={0.12}
-              />
-            </mesh>
+          <group key={tile} position={[x, LOT_TOP, z]}>
+            <sprite position={[0, 0.92, 0]} scale={hosted ? 0.44 : 0.38}>
+              <spriteMaterial map={texture} toneMapped={false} />
+            </sprite>
+            {hosted && <FestivalBeams />}
           </group>
         );
       })}
+    </>
+  );
+}
+
+/** Two crossed searchlights mark the city that a player chose to host. */
+function FestivalBeams() {
+  return (
+    <>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[side * 0.16, 0.95, 0]}
+          rotation={[0, Math.PI / 4, side * -0.32]}
+        >
+          <cylinderGeometry args={[0.2, 0.025, 1.9, 14, 1, true]} />
+          <meshBasicMaterial
+            color="#fff1b0"
+            transparent
+            opacity={0.2}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
     </>
   );
 }
@@ -1118,6 +1381,14 @@ function cashTransfer(event: GameEvent) {
 }
 
 /** Fit the whole board between the HUD's reserved top and bottom bands. */
+/** The DOM interface zoom set by CSS media steps on large screens. */
+function interfaceZoom() {
+  const value = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--ui-zoom"),
+  );
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
 function frameBoard(
   camera: THREE.OrthographicCamera,
   width: number,
@@ -1125,12 +1396,14 @@ function frameBoard(
   preview: boolean,
   zoom: number,
 ) {
+  // The HUD grows on large screens, so its reserved bands grow with it.
+  const ui = interfaceZoom();
   const insets = preview
     ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }
     : {
         // The match title and tools above, the current choice below.
-        top: THREE.MathUtils.clamp(height * 0.11, 78, 118),
-        bottom: THREE.MathUtils.clamp(height * 0.125, 86, 134),
+        top: THREE.MathUtils.clamp(height * 0.11, 78 * ui, 118 * ui),
+        bottom: THREE.MathUtils.clamp(height * 0.125, 86 * ui, 134 * ui),
         side: width * 0.04,
       };
   const bounds = new THREE.Box3();
@@ -1758,10 +2031,17 @@ function SceneContent(props: BoardProps) {
       {!preview && state && <CashReserves state={state} />}
       <BoardTiles {...props} />
       <TileFocus {...props} />
+      {!preview && props.targets && (
+        <PickHighlights
+          targets={props.targets}
+          picked={props.selected}
+          color={PLAYER_COLORS[state?.pending?.seat ?? 0]}
+        />
+      )}
       <Towns state={state} preview={preview} handle={towns} />
       <Downtown state={state} preview={preview} handle={downtown} />
       <ResortProps />
-      <FestivalFlags state={state} />
+      <FestivalMarkers state={state} />
       <Landmarks />
       {(state && !preview
         ? state.players.map((player) => player.seat)

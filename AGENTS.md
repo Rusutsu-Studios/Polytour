@@ -18,11 +18,10 @@ a stylized 3D board with juicy, choreographed animations.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
 > 120 minutes. New rooms use staged hotels: buy up to three houses, then return
 > after a completed lap to upgrade an owned three-house city. Direct hotels are
-> an explicit custom exception; saved version-2 rooms retain their earlier rule.
-> New rooms sell cities and resorts back at their full land-plus-standing-building
-> value; saved version-2/3 rooms retain their frozen 50% refund. Forced sales select
-> highlighted properties directly on the board, then confirm in a compact panel.
-> Intermediate economy remains provisional. Keep these instructions
+> an explicit custom exception. The board groups one country per colour, and a
+> World Tour reaches only your own or unowned properties and Start (rules
+> version 4; older saved rooms are refused). Intermediate economy remains
+> provisional. Keep these instructions
 > current when changing commands or paths.
 
 ## Read before working
@@ -192,8 +191,10 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - The board owns the desktop viewport. Four compact player HUDs frame it at the
   corners; the current choice sits near the lower center. Keep history, fairness
   proofs and help behind secondary controls, and show city details on inspection.
-- Validate 1280×720, 1440×900 and 1920×1080 desktop layouts. Mobile is best effort
-  and must not force the desktop match into a dashboard or scrolling card stack.
+- Validate 1280×720, 1440×900 and 1920×1080 desktop layouts. The e2e layout
+  checks also cover 2560×1440 and 3840×2160 (`e2e/desktop-sizes.ts`). Mobile is
+  best effort and must not force the desktop match into a dashboard or scrolling
+  card stack.
 - Two animation systems with a hard boundary: **GSAP** for anything inside the R3F
   scene (camera, pawns, dice, buildings, particles) and for sequencing; **Motion** for
   DOM UI (HUD, dialogs, menus). Don't mix them on the same element.
@@ -250,6 +251,7 @@ queue. `verify` is the one check to require: it fails if any job fails.
 | `typecheck` | `pnpm typecheck`, covering `src/`, `test/`, `e2e/` and `tools/` |
 | `test` | `pnpm test` |
 | `build` | `vite build`, `pnpm check:bundle` (job summary shows the sizes), `wrangler deploy --dry-run` |
+| `changes` | Decides whether `e2e` runs: skipped only for pull requests that change nothing but `.md` files |
 | `e2e` | `pnpm test:e2e`; on failure the Playwright report and traces are uploaded |
 | `cloudflare` | `pnpm check:wrangler` against the PR's base commit |
 | `secrets` | gitleaks over the full history and the tree |

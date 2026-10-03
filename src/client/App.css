@@ -446,6 +446,24 @@
   bottom: auto;
   top: -12px;
 }
+/* On large screens the HUD, choices and dialogs grow with the board, as on a
+   1920×1080 screen. Only DOM layers zoom: the WebGL canvas keeps its own size. */
+.game-shell
+:is(
+  .match-topbar,
+  .game-tools,
+  .player-card,
+  .contextual-action,
+  .inspector-popover,
+  .tool-drawer,
+  .match-end-panel
+),
+.decision-popup,
+.chance-dialog,
+.settings-dialog,
+.help-dialog {
+  zoom: var(--ui-zoom);
+}
 .contextual-action {
   position: absolute;
   z-index: 5;
@@ -687,6 +705,133 @@
 .game-shell .decision-panel[data-busy="true"] {
   max-width: 420px;
   margin: 0 auto;
+}
+/* Board choices stay non-modal and low: the board is the control, this strip
+   confirms it without covering the spaces nearest the bottom of the diamond. */
+.contextual-action:has(.decision-pick) {
+  width: min(780px, calc(100vw - 540px));
+}
+.game-shell .decision-pick {
+  margin: 0 auto;
+  padding: 10px 12px 12px 15px;
+}
+.pick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.game-shell .decision-pick h2 {
+  font-size: 21px;
+  margin-right: auto;
+}
+.game-shell .decision-pick .decision-timer {
+  margin-left: 0;
+}
+.pick-list {
+  max-width: 190px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid #c4c9b8;
+  border-radius: 7px;
+  background: #f6f3e7;
+  color: #173b45;
+  font-size: 14px;
+}
+.pick-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 8px;
+}
+.pick-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px 6px 7px;
+  border-radius: 10px;
+  background: #f1eedf;
+}
+.pick-summary[data-empty="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 11px;
+  background: #f8f4e8;
+  outline: 1.5px dashed #bfc3ae;
+  outline-offset: -1.5px;
+}
+.pick-chip {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  color: #fffaf0;
+  font-size: 19px;
+  font-weight: 900;
+  box-shadow: inset 0 -3px 0 #173b4524;
+}
+.pick-name {
+  display: grid;
+  min-width: 0;
+  line-height: 1.18;
+}
+.pick-name strong {
+  overflow: hidden;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-name small {
+  overflow: hidden;
+  color: #47666c;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-balance {
+  display: grid;
+  justify-items: end;
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.pick-balance b {
+  color: #173b45;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.pick-empty {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #33545a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.pick-empty svg {
+  flex: none;
+  color: var(--coral);
+}
+.pick-actions {
+  display: flex;
+  gap: 8px;
+}
+.game-shell .decision-pick .pick-actions .button {
+  min-height: 52px;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+.game-shell .decision-pick .pick-actions .decision-confirm {
+  min-width: 210px;
+  justify-content: space-between;
 }
 .game-shell .rng-wait {
   background: #ecefdd;
@@ -1266,14 +1411,21 @@
   color: #5e7c7c;
   opacity: 0.65;
 }
+/* Large screens zoom the lobby panels; the preview canvas never zooms, so its
+   area grows through --ui-zoom instead. */
+.lobby-shell
+:is(.topbar, .welcome-copy, .welcome-quick-settings, .lobby-footer) {
+  zoom: var(--ui-zoom);
+}
 .welcome-grid {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 28px;
-  min-height: calc(100svh - 122px);
-  max-width: 1510px;
+  grid-template-columns: calc(360px * var(--ui-zoom)) minmax(0, 1fr);
+  gap: calc(28px * var(--ui-zoom));
+  min-height: calc(100svh - 122px * var(--ui-zoom));
+  max-width: calc(1510px * var(--ui-zoom));
   margin: auto;
-  padding: 8px 48px 24px;
+  padding: calc(8px * var(--ui-zoom)) calc(48px * var(--ui-zoom))
+    calc(24px * var(--ui-zoom));
   align-items: center;
 }
 .welcome-copy {
@@ -1503,7 +1655,11 @@ input::placeholder {
   line-height: 1.6;
 }
 .welcome-world {
-  height: clamp(530px, calc(100svh - 154px), 780px);
+  height: clamp(
+    calc(530px * var(--ui-zoom)),
+    calc(100svh - 154px * var(--ui-zoom)),
+    calc(780px * var(--ui-zoom))
+  );
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);

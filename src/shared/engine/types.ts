@@ -26,6 +26,8 @@ export type GameConfig = {
   readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";
   /** Missing on existing saves: retain the original half-investment sale value. */
   readonly sellBackPercent?: 50 | 100;
+  /** Missing on existing saves: preserve the original travel-anywhere rule. */
+  readonly worldTourRule?: "own-free-or-start" | "legacy-any";
   readonly extraRollOnDouble?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;

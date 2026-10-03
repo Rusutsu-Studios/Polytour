@@ -58,6 +58,8 @@ type PendingDice = {
 };
 type EventRow = { seq: number; json: string; proof: string | null };
 const BOT_NAMES = ["Iris", "Milo", "Nova", "Atlas"] as const;
+/** Frozen per room: 4 is the country-grouped board with restricted World Tours. */
+const RULES_VERSION = 4;
 
 function newToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
@@ -176,7 +178,7 @@ export class GameRoom extends DurableObject<Env> {
         hotelRule !== "legacy-lap")
     ) {
       throw new Error(
-        "Saved match hotel rule does not match its frozen rules version",
+        "Saved match rules do not match its frozen rules version",
       );
     }
     const sellBackPercent = state.config.sellBackPercent;
