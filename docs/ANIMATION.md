@@ -27,8 +27,9 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),
   light vignette, SMAA. Bloom and shadows are the first things to drop on low tiers.
-- **Player identity:** 4 colors chosen to be color-blind distinguishable, each with a
-  pattern/icon too, used on pawns, ownership flags, tile borders, and corner HUDs.
+- **Player identity:** 4 colors chosen to be color-blind distinguishable, used on
+  pawns, roofs, ownership flags, rents and corner HUDs. Color is the only player
+  marker: no per-player symbols or icons.
 - **UI:** compact ivory corner HUDs with bold tabular numerals and a discreet
   action area near the bottom center. Avoid permanent sidebars, oversized card
   grids and glass overlays that cover the board. Details open as dismissible
@@ -91,7 +92,7 @@ flowchart LR
 | `PropertyUpgraded` | Building rises out of the tile with overshoot (elastic ease), dust puff particles, a thunk + sparkle sound. | 0.9 s |
 | Landmark | Slow-mo: camera pushes in, landmark rises, beam of light, confetti in owner color, choir hit. The most expensive moment — earn it. | 2.0 s |
 | `RentPaid` | Coins burst from the payer's pawn, stream along a bezier to the owner's corner HUD. Coin count scales (log) with amount. Big rents: screen-edge red flash, heavier coin sound, both counters tick. | 1.0–1.6 s |
-| `BoughtOut` | Owner's flag tears away, buyer's color and symbol sweep into the tile; "SOLD!" stamp; the old owner's corner HUD reacts. | 1.2 s |
+| `BoughtOut` | Owner's flag tears away, buyer's color sweeps into the tile; "SOLD!" stamp; the old owner's corner HUD reacts. | 1.2 s |
 | `ChampionshipHosted` | Stadium lights sweep the board, spotlight locks on the host city, multiplier badge (×2, ×3…) slams onto it and stays floating. | 1.5 s |
 | `CardDrawn` | Card flies out of the Chance deck, flips in 3D in front of the camera, holds for reading, then flies to its effect. | 1.4 s |
 | `SentToIsland` | Pawn launched in an arc onto the Island corner; waves ripple; pawn gets a small life-ring. | 1.0 s |
@@ -121,8 +122,8 @@ the signature-moment table above.
 
 `client/scene/town-layout.ts` holds the town's geometry and
 `client/scene/Downtown.tsx` draws it. Each city and resort has one plot in the
-street facing its side, in play order. The plot mirrors `viewState`: a tree
-while unsold, then the lot's level under the owner's color (a pool and parasol
+street facing its side, in play order. The plot mirrors `viewState`: an empty
+outline while unsold, then the lot's level under the owner's color (a pool and parasol
 for a resort). Plots, facades, roofs, windows and trees are instanced.
 
 - **Construction:** the property handler that raises a lot's buildings also

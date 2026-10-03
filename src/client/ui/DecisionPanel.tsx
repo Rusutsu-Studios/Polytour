@@ -28,7 +28,6 @@ import {
   levelName,
   money,
   PLAYER_COLORS,
-  PLAYER_SYMBOLS,
   TILE_ICONS,
   tileColor,
   tileName,
@@ -575,11 +574,10 @@ export default function DecisionPanel({
         {debt && (
           <>
             <span
-              className="player-symbol"
+              className="player-dot"
               style={{ color: PLAYER_COLORS[decisionSeat] }}
-            >
-              {PLAYER_SYMBOLS[decisionSeat]}
-            </span>
+              aria-hidden="true"
+            />
             <span>{t("Votre dette à régler", "Settle your debt")}</span>
           </>
         )}
@@ -743,12 +741,10 @@ export default function DecisionPanel({
       >
         <div className="pick-head">
           <span
-            className="player-symbol"
+            className="player-dot"
             style={{ color: PLAYER_COLORS[decisionSeat] }}
             aria-hidden="true"
-          >
-            {PLAYER_SYMBOLS[decisionSeat]}
-          </span>
+          />
           <h2 id="decision-heading">
             {pending.kind === "card-target" ? cardName(pending.card) : copy[0]}
           </h2>
@@ -1088,16 +1084,14 @@ export default function DecisionPanel({
               level={selectedLevel}
               color={PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]}
               resort={resort}
-              symbol={
-                PLAYER_SYMBOLS[construction ? seat : (owner?.seat ?? seat)]
-              }
+              flag
             />
             {owner && (
               <span className="decision-property">
                 <span style={{ color: PLAYER_COLORS[owner.seat] }}>
-                  {PLAYER_SYMBOLS[owner.seat]}
+                  {owner.name}
                 </span>{" "}
-                {owner.name} · {levelName(property?.level ?? 0)}
+                · {levelName(property?.level ?? 0)}
               </span>
             )}
           </div>

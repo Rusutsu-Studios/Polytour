@@ -27,6 +27,18 @@ has been published, and it does not reconstruct earlier development history.
   destinations.
 - Road markings around the board and in the town are softer, so they no longer
   compete with the spaces' names and prices.
+- Board lots are printed in two parts: the city ground, with its buildings and
+  name on a pavement of its country's own style and color, and a concrete price
+  strip showing only the price or the owner's rent. Beaches are one piece of
+  sand, the tax and chance squares are smooth concrete, and unsold plots in the
+  central town no longer hold trees (#57).
+- Country colors are spread further apart so no two groups look alike, and the
+  tax square is named "Impôts" in French and "Taxes" in English (#57).
+- Festival cities fly a tall, vivid swallowtail banner facing the camera with a
+  garland of pennants; the floating multiplier medallion is gone, and the
+  championship host flies a gold banner (#57).
+- Players are identified by color only; per-player symbols are removed from
+  the board, pawns, corner HUDs, cards and menus (#57).
 
 ### Fixed
 
