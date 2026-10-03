@@ -68,6 +68,13 @@ projected rent and remaining cash use shared engine helpers.
 Escape minimizes a decision without sending an action; the bottom prompt reopens
 it. Roll and opponent turns keep their compact bottom prompt.
 
+Unavailable choices explain their prerequisite in a small ivory popup with a
+gold heading, on hover or keyboard focus. Minimized decisions use a bottom tab
+with their title and live countdown. The welcome screen's language control shows
+FR or EN and opens an ivory language menu on hover, click or keyboard activation.
+Chance cards hold for eight seconds; tax payments use the same reading window
+for six seconds, visible to all players. Continue or Escape ends a reading hold.
+
 On 2 October 2026 the user found the game too fast and too wordy. A turn now
 reads like a tabletop game: dice shake, fly and settle, pawns hop tile by tile,
 cards hold long enough to read, and houses rise out of their plot. Bots wait for

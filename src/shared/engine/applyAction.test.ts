@@ -1005,6 +1005,50 @@ describe("wins, rankings and timeouts", () => {
     expect(botDecisionAt(toPublic(custom))).toBe(presented + BOT_TIMING.choice);
     expect(botDecisionAt({ ...toPublic(purchase), pending: null })).toBeNull();
   });
+  it("reserves card and tax reading time before decisions and bot actions", () => {
+    const card = draw(newGame(), "Windfall").state;
+    const motion =
+      1 + DECISION_TIMING.diceAnimation + 3 * DECISION_TIMING.stepAnimation;
+    expect(card.pending?.deadline).toBe(
+      motion +
+        DECISION_TIMING.cardAnimation +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.roll,
+    );
+    expect(botDecisionAt(toPublic(card))).toBe(
+      motion +
+        DECISION_TIMING.cardAnimation +
+        DECISION_TIMING.moneyAnimation +
+        BOT_TIMING.roll,
+    );
+    const taxed = land(grant(newGame(), 1, newGame().activeSeat, 2), 29).state;
+    expect(taxed.pending?.deadline).toBe(
+      motion + DECISION_TIMING.taxAnimation + DECISION_TIMING.roll,
+    );
+    expect(botDecisionAt(toPublic(taxed))).toBe(
+      motion + DECISION_TIMING.taxAnimation + BOT_TIMING.roll,
+    );
+    // Taxes remain bounded even when a payment first needs property sales.
+    const debtor = land(
+      setPlayer(
+        grant(newGame(), 1, newGame().activeSeat, 2),
+        newGame().activeSeat,
+        { cash: 0 },
+      ),
+      29,
+    ).state;
+    expect(debtor.pending?.kind).toBe("sell");
+    const payment = act(debtor, { type: "Sell", tile: 1 }, undefined, 2).state;
+    expect(debtor.pending?.deadline).toBe(
+      motion + DECISION_TIMING.taxAnimation + DECISION_TIMING.sell,
+    );
+    expect(botDecisionAt(toPublic(payment))).toBe(
+      2 +
+        DECISION_TIMING.propertyAnimation +
+        DECISION_TIMING.moneyAnimation +
+        BOT_TIMING.roll,
+    );
+  });
   it("bot choices are always among exposed legal actions", () => {
     for (const difficulty of ["easy", "medium", "hard"] as const) {
       let state = newGame();

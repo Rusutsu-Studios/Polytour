@@ -9,6 +9,21 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-04
+
+### Fixed
+
+- Explain unavailable actions in small ivory popups on hover or keyboard focus,
+  including construction prerequisites, insufficient cash, reconnecting and
+  unsaved room settings (#32).
+- Keep Surprise cards visible for eight seconds and show tax payments to every
+  player in a matching six-second popup; reserve reading time before the next
+  decision and bot action (#31).
+- Show the current language as FR or EN, with a compact menu on hover, click or
+  keyboard activation on the start screen (#43).
+- Use a minimize icon on decision windows and a compact bottom tab that keeps
+  the countdown and reopens the same selection (#50).
+
 ## [0.4.2] - 2026-10-03
 
 ### Fixed

@@ -617,8 +617,17 @@ function animationBudget(events: readonly GameEvent[]): number {
         return total + DECISION_TIMING.cardAnimation;
       case "SalaryPaid":
       case "RentPaid":
-      case "MoneyTransferred":
         return total + DECISION_TIMING.moneyAnimation;
+      case "MoneyTransferred":
+        return (
+          total +
+          (event.reason === "Tax"
+            ? Math.max(
+                DECISION_TIMING.moneyAnimation,
+                DECISION_TIMING.taxAnimation,
+              )
+            : DECISION_TIMING.moneyAnimation)
+        );
       case "BoughtOut":
       case "PropertyBought":
       case "PropertySold":

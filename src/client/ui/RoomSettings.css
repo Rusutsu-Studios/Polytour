@@ -272,15 +272,15 @@
   box-shadow: 0 3px 4px #173b4526;
 }
 
-.room-settings-save:hover:not(:disabled) {
+.room-settings-save:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #24566b;
 }
 
-.room-settings-save:active:not(:disabled) {
+.room-settings-save:active:not(:is(:disabled, [aria-disabled="true"])) {
   transform: translateY(1px);
 }
 
-.room-settings-save:disabled {
+.room-settings-save:is(:disabled, [aria-disabled="true"]) {
   background: #d2dfda;
   color: #47666c;
   box-shadow: none;

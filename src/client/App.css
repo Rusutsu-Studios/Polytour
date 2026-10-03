@@ -140,10 +140,10 @@
   font-size: 20px;
   flex-shrink: 0;
 }
-.icon-button:hover:not(:disabled) {
+.icon-button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fff;
 }
-.icon-button:disabled {
+.icon-button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.4;
 }
 .player-roster {
@@ -568,7 +568,9 @@
     box-shadow 70ms ease-out,
     filter 120ms;
 }
-.game-shell .decision-panel .roll-button:hover:not(:disabled) {
+.game-shell
+  .decision-panel
+  .roll-button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: linear-gradient(#5bbcf8, #2d8fe2 70%);
   transform: none;
   filter: brightness(1.07);
@@ -578,7 +580,9 @@
     0 var(--push) 0 #1a5c9c,
     0 calc(var(--push) + 7px) 16px #0f2d4a52;
 }
-.game-shell .decision-panel .roll-button:active:not(:disabled) {
+.game-shell
+  .decision-panel
+  .roll-button:active:not(:is(:disabled, [aria-disabled="true"])) {
   transform: none;
   translate: 0 calc(var(--push) - 1px);
   box-shadow:
@@ -587,7 +591,7 @@
     0 1px 0 #1a5c9c,
     0 3px 6px #0f2d4a40;
 }
-.game-shell .decision-panel .roll-button:disabled {
+.game-shell .decision-panel .roll-button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.7;
   translate: 0 calc(var(--push) - 1px);
   box-shadow: 0 1px 0 #1a5c9c;
@@ -596,7 +600,9 @@
   filter: drop-shadow(0 2px 0 #1c64a8);
 }
 /* A ring that keeps swelling off the key so the eye lands on it. */
-.game-shell .decision-panel .roll-button:not(:disabled)::after {
+.game-shell
+  .decision-panel
+  .roll-button:not(:is(:disabled, [aria-disabled="true"]))::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1271,20 +1277,7 @@
   align-items: center;
   gap: 18px;
 }
-.language-picker select {
-  min-height: 36px;
-  padding: 6px 28px 6px 10px;
-  border: 1px solid #648b99;
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 14px;
-  cursor: pointer;
-}
-.language-picker select:focus-visible {
-  outline: 3px solid #236cce;
-  outline-offset: 3px;
-}
+
 .graphics-setting {
   display: flex;
   align-items: center;
@@ -1335,7 +1328,7 @@
 .text-button:hover {
   color: var(--coral-dark);
 }
-.text-button:disabled {
+.text-button:is(:disabled, [aria-disabled="true"]) {
   color: #5e7c7c;
   opacity: 0.65;
 }
@@ -1442,14 +1435,14 @@ input::placeholder {
     transform 150ms,
     box-shadow 150ms;
 }
-.button:hover:not(:disabled) {
+.button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   transform: translateY(-2px);
 }
-.button:active:not(:disabled) {
+.button:active:not(:is(:disabled, [aria-disabled="true"])) {
   transform: translateY(1px);
   box-shadow: none;
 }
-.button:disabled {
+.button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.55;
   box-shadow: none;
 }
@@ -1458,7 +1451,7 @@ input::placeholder {
   color: #fffaf0;
   box-shadow: 0 4px 0 var(--coral-dark);
 }
-.button.primary:hover:not(:disabled) {
+.button.primary:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #b8331b;
   box-shadow: 0 6px 0 var(--coral-dark);
 }
@@ -1467,7 +1460,7 @@ input::placeholder {
   color: var(--ink);
   box-shadow: 0 3px 0 #bbd1be;
 }
-.button.secondary:hover:not(:disabled) {
+.button.secondary:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fff;
   box-shadow: 0 5px 0 #bbd1be;
 }
@@ -1640,7 +1633,7 @@ input::placeholder {
   background: #236cce;
   box-shadow: 0 4px 0 #174986;
 }
-.welcome-copy .welcome-play:hover:not(:disabled) {
+.welcome-copy .welcome-play:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #185bb8;
   box-shadow: 0 5px 0 #174986;
 }
@@ -1795,11 +1788,11 @@ button.seat-open {
     background 150ms,
     transform 150ms;
 }
-button.seat-open:hover:not(:disabled) {
+button.seat-open:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #d4f1f4;
   transform: translateY(-2px);
 }
-button.seat-open:disabled {
+button.seat-open:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.55;
   cursor: default;
 }
@@ -1849,11 +1842,11 @@ button.seat-open:disabled {
   background: #ecede1;
   cursor: pointer;
 }
-.seat-remove:hover:not(:disabled) {
+.seat-remove:hover:not(:is(:disabled, [aria-disabled="true"])) {
   color: var(--paper);
   background: var(--coral);
 }
-.seat-remove:disabled {
+.seat-remove:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.55;
   cursor: default;
 }
@@ -2831,11 +2824,13 @@ button.seat-open:disabled {
   .spinner,
   .game-shell
     .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"],
-  .game-shell .decision-panel .roll-button:not(:disabled)::after {
+  .game-shell
+    .decision-panel
+    .roll-button:not(:is(:disabled, [aria-disabled="true"]))::after {
     animation: none;
   }
-  .button:hover:not(:disabled),
-  .button:active:not(:disabled),
+  .button:hover:not(:is(:disabled, [aria-disabled="true"])),
+  .button:active:not(:is(:disabled, [aria-disabled="true"])),
   .game-tool-button:hover {
     transform: none;
   }
@@ -2850,7 +2845,7 @@ button.seat-open:disabled {
   .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"],
 .game-shell[data-reduced-motion="true"]
   .decision-panel
-  .roll-button:not(:disabled)::after {
+  .roll-button:not(:is(:disabled, [aria-disabled="true"]))::after {
   animation: none;
 }
 .flat-board button[data-pick="true"] {

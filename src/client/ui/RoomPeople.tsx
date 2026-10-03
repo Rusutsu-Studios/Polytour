@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Seat } from "../../shared/engine/index.js";
 import type { LobbyState } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
+import ActionButton from "./ActionButton.js";
 import { PLAYER_COLORS } from "./board-display.js";
 import Icon from "./Icon.js";
 import PlayerAvatar from "./PlayerAvatar.js";
@@ -53,12 +54,33 @@ export function RoomLeaderPicker({
                     : t("Joueur", "Player");
             return (
               <li key={entry.seat}>
-                <button
+                <ActionButton
                   type="button"
                   className="room-leader-choice"
                   data-seat={entry.seat}
                   data-leader={current}
                   disabled={disabled || !eligible}
+                  disabledReason={
+                    disabled
+                      ? t(
+                          "En attente de la connexion au serveur.",
+                          "Waiting for the server connection.",
+                        )
+                      : !leader
+                        ? t(
+                            "Seul le chef de salle peut transmettre ce rôle.",
+                            "Only the room leader can pass on this role.",
+                          )
+                        : current
+                          ? t(
+                              "Ce joueur est déjà chef de salle.",
+                              "This player is already the room leader.",
+                            )
+                          : t(
+                              "Choisissez un joueur humain qui dispose de sa propre connexion.",
+                              "Choose a human player with their own connection.",
+                            )
+                  }
                   aria-pressed={current}
                   aria-label={
                     eligible
@@ -78,7 +100,7 @@ export function RoomLeaderPicker({
                     {current && <Icon name="crown" size={12} />}
                     {status}
                   </small>
-                </button>
+                </ActionButton>
               </li>
             );
           })}
@@ -164,13 +186,24 @@ export function LobbySeats({
                   }}
                 />
                 <div>
-                  <button
+                  <ActionButton
                     type="submit"
                     className="button primary"
                     disabled={disabled || !localName.trim()}
+                    disabledReason={
+                      disabled
+                        ? t(
+                            "En attente de la connexion au serveur.",
+                            "Waiting for the server connection.",
+                          )
+                        : t(
+                            "Saisissez le nom du joueur.",
+                            "Enter the player’s name.",
+                          )
+                    }
                   >
                     {t("Ajouter", "Add")}
-                  </button>
+                  </ActionButton>
                   <button
                     type="button"
                     className="text-button"
@@ -201,7 +234,7 @@ export function LobbySeats({
                 ) : (
                   <div className="seat-choices">
                     {leader && (
-                      <button
+                      <ActionButton
                         type="button"
                         className="seat-choice"
                         disabled={disabled}
@@ -213,9 +246,9 @@ export function LobbySeats({
                       >
                         <Icon name="bot" size={16} />
                         Bot
-                      </button>
+                      </ActionButton>
                     )}
-                    <button
+                    <ActionButton
                       type="button"
                       className="seat-choice"
                       disabled={disabled}
@@ -230,7 +263,7 @@ export function LobbySeats({
                     >
                       <Icon name="screen" size={16} />
                       {t("Sur ce PC", "On this PC")}
-                    </button>
+                    </ActionButton>
                   </div>
                 )}
               </div>
@@ -275,7 +308,7 @@ export function LobbySeats({
               </span>
             )}
             {removable && (
-              <button
+              <ActionButton
                 type="button"
                 className="seat-remove"
                 disabled={disabled}
@@ -294,10 +327,10 @@ export function LobbySeats({
                 }
               >
                 <Icon name="close" size={15} />
-              </button>
+              </ActionButton>
             )}
             {leader && player.control === "human" && !local && seat !== you && (
-              <button
+              <ActionButton
                 type="button"
                 className="seat-promote"
                 disabled={disabled}
@@ -309,7 +342,7 @@ export function LobbySeats({
               >
                 <Icon name="crown" size={13} />
                 {t("Nommer chef", "Make leader")}
-              </button>
+              </ActionButton>
             )}
           </li>
         );
@@ -367,7 +400,7 @@ export function WaitingRoom({
               <span className="waiting-actions">
                 {!member.approved ? (
                   <>
-                    <button
+                    <ActionButton
                       type="button"
                       className="button primary"
                       disabled={disabled}
@@ -378,8 +411,8 @@ export function WaitingRoom({
                       onClick={() => onAdmit(member.id)}
                     >
                       {t("Accepter", "Accept")}
-                    </button>
-                    <button
+                    </ActionButton>
+                    <ActionButton
                       type="button"
                       className="button secondary"
                       disabled={disabled}
@@ -390,12 +423,12 @@ export function WaitingRoom({
                       onClick={() => onDeny(member.id)}
                     >
                       {t("Refuser", "Decline")}
-                    </button>
+                    </ActionButton>
                   </>
                 ) : (
                   <>
                     {bots.map((bot) => (
-                      <button
+                      <ActionButton
                         type="button"
                         key={bot.seat}
                         className="button secondary"
@@ -408,9 +441,9 @@ export function WaitingRoom({
                       >
                         <Icon name="bot" size={15} />
                         {t(`Place de ${bot.name}`, `${bot.name}’s seat`)}
-                      </button>
+                      </ActionButton>
                     ))}
-                    <button
+                    <ActionButton
                       type="button"
                       className="icon-button"
                       disabled={disabled}
@@ -421,7 +454,7 @@ export function WaitingRoom({
                       onClick={() => onDeny(member.id)}
                     >
                       <Icon name="close" size={15} />
-                    </button>
+                    </ActionButton>
                   </>
                 )}
               </span>
@@ -454,7 +487,13 @@ export function RoomLock({
     if (!pending) setDraft(null);
   }, [pending]);
   return (
-    <label className="checkbox-label room-lock">
+    <label
+      className="checkbox-label room-lock"
+      data-disabled-reason={t(
+        "En attente de la connexion au serveur.",
+        "Waiting for the server connection.",
+      )}
+    >
       <input
         type="checkbox"
         checked={draft ?? locked}
@@ -537,7 +576,7 @@ export function ReturnToLobby({
   }, [confirming]);
   if (finished)
     return (
-      <button
+      <ActionButton
         type="button"
         className="button primary"
         disabled={disabled}
@@ -545,18 +584,18 @@ export function ReturnToLobby({
       >
         {t("Retour au salon", "Back to the lobby")}
         <Icon name="arrow" />
-      </button>
+      </ActionButton>
     );
   if (!confirming)
     return (
-      <button
+      <ActionButton
         type="button"
         className="button secondary"
         disabled={disabled}
         onClick={() => setConfirming(true)}
       >
         {t("Ramener tout le monde au salon", "Bring everyone to the lobby")}
-      </button>
+      </ActionButton>
     );
   return (
     <div className="return-confirm">
@@ -566,7 +605,7 @@ export function ReturnToLobby({
           "The current game ends for everyone. Seats and settings stay.",
         )}
       </p>
-      <button
+      <ActionButton
         ref={confirmRef}
         type="button"
         className="button primary"
@@ -577,7 +616,7 @@ export function ReturnToLobby({
         }}
       >
         {t("Terminer et revenir au salon", "End and return to the lobby")}
-      </button>
+      </ActionButton>
       <button
         type="button"
         className="text-button"
