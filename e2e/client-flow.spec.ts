@@ -98,6 +98,154 @@ async function minimizeOwnDecision(page: Page) {
   }
 }
 
+test.describe("low graphics", () => {
+  test.use({ deviceScaleFactor: 1.5, reducedMotion: "no-preference" });
+
+  test("persists, changes render cost in place and supports a real roll and reconnect", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    async function rendering(sampleIdle = false) {
+      return page.evaluate(async (sample) => {
+        const modulePath = performance
+          .getEntriesByType("resource")
+          .find((entry) => entry.name.includes("/@react-three_fiber.js"))?.name;
+        if (!modulePath) throw new Error("Expected the loaded R3F module");
+        const { _roots } = (await import(
+          modulePath
+        )) as typeof import("@react-three/fiber");
+        const canvas = document.querySelector("canvas");
+        const scene = canvas && _roots.get(canvas)?.store.getState();
+        if (!scene) throw new Error("Expected the mounted board");
+        const camera = scene.camera as import("three").OrthographicCamera;
+        let shadowLights = 0;
+        scene.scene.traverse((object) => {
+          if (object.type === "DirectionalLight" && object.castShadow)
+            shadowLights += 1;
+        });
+        let idleFrames = 0;
+        if (sample) {
+          const before = scene.gl.info.render.frame;
+          // Sample actual draws without imposing an FPS target on CI hardware.
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          idleFrames = scene.gl.info.render.frame - before;
+        }
+        return {
+          dpr: scene.viewport.dpr,
+          shadows: scene.gl.shadowMap.enabled,
+          shadowLights,
+          idleFrames,
+          width: canvas.width,
+          height: canvas.height,
+          frustum: [camera.left, camera.right, camera.top, camera.bottom],
+        };
+      }, sampleIdle);
+    }
+
+    await page.goto("/");
+    const graphics = page.getByRole("combobox", {
+      name: "Graphismes",
+      exact: true,
+    });
+    await expect(graphics).toHaveValue("standard");
+    await graphics.selectOption("low");
+    await page.reload();
+    await expect(graphics).toHaveValue("low");
+    await page.getByLabel("Votre nom de joueur").fill("Graphics QA");
+    await page.locator(".settings-trigger").click();
+    await page
+      .getByRole("group", { name: "Temps de décision" })
+      .getByRole("radio", { name: "60 s", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Appliquer les réglages" }).click();
+    await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+    const scene = page.locator(".canvas-layer");
+    await expect(scene).toHaveAttribute("data-scene-ready", "true");
+    await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    const roll = page.getByRole("button", {
+      name: "Lancer les dés",
+      exact: true,
+    });
+    await expect(roll).toBeEnabled({ timeout: 60_000 });
+    const low = await rendering();
+    expect(low).toMatchObject({ dpr: 1, shadows: false, shadowLights: 0 });
+    await expect.poll(() => rendering(true)).toMatchObject({ idleFrames: 0 });
+    expect(low.frustum[1] - low.frustum[0]).toBeGreaterThan(10);
+    expect(low.frustum[1] - low.frustum[0]).toBeLessThan(50);
+    const original = await page.locator("canvas").evaluateHandle((element) => {
+      const canvas = element as HTMLCanvasElement;
+      return { canvas, context: canvas.getContext("webgl2") };
+    });
+    await page
+      .getByRole("button", { name: "Vue et animations", exact: true })
+      .click();
+    await graphics.selectOption("standard");
+    await expect.poll(rendering).toMatchObject({
+      dpr: 1.5,
+      shadows: true,
+      shadowLights: 1,
+      frustum: low.frustum,
+    });
+    const standard = await rendering();
+    expect((await rendering(true)).idleFrames).toBeGreaterThan(0);
+    expect(standard.width).toBe(Math.floor(low.width * 1.5));
+    expect(standard.height).toBe(Math.floor(low.height * 1.5));
+    expect(standard.frustum).toEqual(low.frustum);
+    await graphics.selectOption("low");
+    await expect.poll(rendering).toEqual(low);
+    await expect.poll(() => rendering(true)).toMatchObject({ idleFrames: 0 });
+    expect(
+      await page.evaluate((previous) => {
+        const canvas = document.querySelector("canvas");
+        return (
+          canvas === previous.canvas &&
+          canvas?.getContext("webgl2") === previous.context
+        );
+      }, original),
+    ).toBe(true);
+    await original.dispose();
+    await graphics.press("Escape");
+    await roll.click();
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const modulePath = performance
+              .getEntriesByType("resource")
+              .find((entry) =>
+                entry.name.includes("/src/client/director/director.ts"),
+              )?.name;
+            if (!modulePath) throw new Error("Expected the loaded Director");
+            const { director } = await import(modulePath);
+            const snapshot = director.getSnapshot();
+            return (
+              !snapshot.busy &&
+              snapshot.history.some(
+                (event: GameEvent) =>
+                  event.type === "DiceRolled" && event.seat === 0,
+              )
+            );
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    await page.reload();
+    await expect(scene).toHaveAttribute("data-scene-ready", "true");
+    await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    await expect(page.locator(".match-connection")).toHaveAttribute(
+      "data-state",
+      "online",
+    );
+    await expect.poll(rendering).toMatchObject({
+      dpr: 1,
+      shadows: false,
+      shadowLights: 0,
+    });
+    expect(errors).toEqual([]);
+  });
+});
+
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {

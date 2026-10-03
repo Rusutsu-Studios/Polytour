@@ -85,6 +85,30 @@ function LanguagePicker() {
     </label>
   );
 }
+function GraphicsPicker({
+  lowGraphics,
+  onChange,
+  compact = false,
+}: {
+  lowGraphics: boolean;
+  onChange: (low: boolean) => void;
+  compact?: boolean;
+}) {
+  return (
+    <label className="language-picker">
+      <span className={compact ? "sr-only" : undefined}>
+        {t("Graphismes", "Graphics")}
+      </span>
+      <select
+        value={lowGraphics ? "low" : "standard"}
+        onChange={(event) => onChange(event.currentTarget.value === "low")}
+      >
+        <option value="standard">{t("3D · Standard", "3D · Standard")}</option>
+        <option value="low">{t("3D · Léger", "3D · Low")}</option>
+      </select>
+    </label>
+  );
+}
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -868,6 +892,8 @@ function MatchView({
   onSelect,
   zoom,
   onZoom,
+  lowGraphics,
+  onGraphicsChange,
   copied,
   copyRoom,
   onLeave,
@@ -883,6 +909,8 @@ function MatchView({
   onSelect: (tile: number) => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  lowGraphics: boolean;
+  onGraphicsChange: (low: boolean) => void;
   copied: boolean;
   copyRoom: () => Promise<void>;
   onLeave: () => void;
@@ -1116,6 +1144,7 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={credentials.seat}
               zoom={zoom}
+              lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? credentials.seat : undefined}
               saleBlocked={saleBlocked}
@@ -1468,6 +1497,10 @@ function MatchView({
             {tool === "view" && (
               <div className="view-settings">
                 <LanguagePicker />
+                <GraphicsPicker
+                  lowGraphics={lowGraphics}
+                  onChange={onGraphicsChange}
+                />
                 <label htmlFor="animation-speed">
                   {t("Vitesse des animations", "Animation speed")}
                   <select
@@ -1615,6 +1648,21 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [lowGraphics, setLowGraphics] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.lowGraphics") === "true";
+    } catch {
+      return false;
+    }
+  });
+  function changeGraphics(low: boolean) {
+    setLowGraphics(low);
+    try {
+      localStorage.setItem("polytour.lowGraphics", String(low));
+    } catch {
+      // The local choice still works when browser storage is unavailable.
+    }
+  }
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
   useEffect(() => {
@@ -1742,6 +1790,11 @@ function App() {
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
             <LanguagePicker />
+            <GraphicsPicker
+              lowGraphics={lowGraphics}
+              onChange={changeGraphics}
+              compact
+            />
             <button
               type="button"
               className="text-button help-button"
@@ -1876,6 +1929,7 @@ function App() {
                     selected={null}
                     onSelect={setSelected}
                     preview
+                    lowGraphics={lowGraphics}
                   />
                 </Suspense>
               </SceneBoundary>
@@ -2013,6 +2067,7 @@ function App() {
                   selected={null}
                   onSelect={setSelected}
                   preview
+                  lowGraphics={lowGraphics}
                 />
               </Suspense>
             </SceneBoundary>
@@ -2028,6 +2083,8 @@ function App() {
           onSelect={setSelected}
           zoom={zoom}
           onZoom={setZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={changeGraphics}
           copied={copied}
           copyRoom={copyRoom}
           onLeave={leave}
