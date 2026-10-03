@@ -211,9 +211,11 @@ it to the bank.
   doubles roll, and gives that player a travel option for their next turn. At its
   start they may pay 50,000 (legal only with enough cash) to travel clockwise to an
   unowned city or resort, or to one of their own properties when none is free
-  (prototype: any other tile), resolving the destination normally; otherwise, or on
-  timeout, they roll normally. The option expires after that choice. A World Tour
-  move neither counts as a dice roll nor creates a doubles bonus.
+  (prototype: any other tile), resolving the destination normally. A destination
+  behind World Tour is reached by continuing round the board, so that flight
+  passes Start and pays the salary. Otherwise, or on timeout, they roll normally.
+  The option expires after that choice. A World Tour move neither counts as a dice
+  roll nor creates a doubles bonus.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
@@ -342,10 +344,10 @@ properties to *block* a monopoly, which is where the tension comes from.
   It cannot grant a doubles roll. Grand Tour, Jet Set, and Stadium Call move
   **clockwise** along the board, so the lap rule applies: Grand Tour always pays
   salary once and counts a lap, and Stadium Call drawn on tile 19 goes all the way
-  round and does too. (The client may animate a long card move as a teleport; the
-  rule still follows the clockwise path.) Detour moves counter-clockwise and never
-  pays Start, even when it lands on Start. Jet Set ends the turn on World Tour, and
-  Stranded sends the pawn to Island; both use those tiles' rules.
+  round and does too. (The client walks the pawn along that clockwise path, faster
+  on a long move.) Detour moves counter-clockwise and never pays Start, even when
+  it lands on Start. Jet Set ends the turn on World Tour, and Stranded sends the
+  pawn to Island; both use those tiles' rules.
 - A card with no legal target (or no legal effect) does nothing and is discarded.
 - Guardian Angel is offered after a rent amount is known and before it is paid; it
   reduces that rent to zero. Coupon is offered at the same time and halves the rent,

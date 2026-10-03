@@ -37,6 +37,7 @@ import {
   rentCardPayment,
   resortCount,
   toPublic,
+  travelSalary,
   worldTourTargets,
 } from "./index.js";
 
@@ -424,6 +425,69 @@ describe("dice, Island, laps and World Tour", () => {
     expect(travelled.pending?.kind).toBe("buy");
     const finished = act(travelled, { type: "Decline" }).state;
     expect(finished.activeSeat).not.toBe(seat);
+  });
+  it("World Tour to a space behind it walks on round the board and collects salary at Start", () => {
+    const state = newGame();
+    const seat = state.activeSeat;
+    const turn = {
+      ...withActive(setPlayer(state, seat, { position: 24 }), seat),
+      pending: {
+        kind: "travel" as const,
+        seat,
+        fee: 50_000,
+        deadline: 100,
+        targets: [0, 23, 25],
+      },
+    };
+    expect(travelSalary(toPublic(turn), seat, 23)).toBe(400_000);
+    expect(travelSalary(toPublic(turn), seat, 0)).toBe(400_000);
+    expect(travelSalary(toPublic(turn), seat, 25)).toBe(0);
+    // Tile 23 is one space behind World Tour: the flight takes 31 steps.
+    const behind = act(turn, { type: "Travel", tile: 23 });
+    expect(behind.events).toContainEqual({
+      type: "PlayerMoved",
+      seat,
+      from: 24,
+      position: 23,
+      steps: 31,
+      laps: 1,
+    });
+    expect(
+      behind.events.filter((event) => event.type === "SalaryPaid"),
+    ).toEqual([{ type: "SalaryPaid", seat, amount: 400_000, cash: 2_350_000 }]);
+    expect(getPlayer(behind.state, seat)).toMatchObject({
+      position: 23,
+      laps: 1,
+      cash: 2_350_000,
+    });
+    // The clock waits for the fee, a walk no longer than the longest dice
+    // walk, and the salary.
+    expect(behind.state.pending).toMatchObject({
+      kind: "buy",
+      deadline:
+        1 +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.walkAnimation +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.choice,
+    });
+    const ahead = act(turn, { type: "Travel", tile: 25 });
+    expect(
+      ahead.events.filter((event) => event.type === "SalaryPaid"),
+    ).toHaveLength(0);
+    expect(getPlayer(ahead.state, seat)).toMatchObject({
+      position: 25,
+      laps: 0,
+      cash: 1_950_000,
+    });
+    expect(ahead.state.pending).toMatchObject({
+      kind: "buy",
+      deadline:
+        1 +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.stepAnimation +
+        DECISION_TIMING.choice,
+    });
   });
   it("new reference World Tour reaches free properties first, then only the traveller's own", () => {
     let state = newGame(4, {

@@ -19,6 +19,7 @@ import {
   propertyRent,
   rentCardPayment,
   type Seat,
+  travelSalary,
 } from "../../shared/engine/index.js";
 import type { RandomnessStatus } from "../../shared/protocol/index.js";
 import { useDirector } from "../director/director.js";
@@ -388,6 +389,11 @@ export default function DecisionPanel({
     selectedAction?.type === "Sell"
       ? propertyRefund(state, selectedAction.tile)
       : null;
+  // A flight past Start collects the salary on the way.
+  const salary =
+    selectedAction?.type === "Travel"
+      ? travelSalary(state, seat, selectedAction.tile)
+      : 0;
   const projectedCash =
     active &&
     selectedAction &&
@@ -401,7 +407,7 @@ export default function DecisionPanel({
       "ChooseHost",
     ].includes(selectedAction.type) ||
       pending?.kind === "rent-card")
-      ? active.cash + (refund ?? -cost)
+      ? active.cash + (refund ?? salary - cost)
       : null;
   // Every level up to the hotel is shown; the ones this player cannot take
   // now stay visible but locked, so the hotel reads as "not yet".
@@ -830,14 +836,31 @@ export default function DecisionPanel({
                     </div>
                   </dl>
                 )}
-                {travel && active && (
-                  <span className="ledger-balance pick-balance">
-                    {t("Il vous restera", "You keep")}
-                    <b>
-                      {money(active.cash - actionCost(state, pickedAction))}
-                    </b>
-                  </span>
-                )}
+                {travel &&
+                  active &&
+                  (() => {
+                    const salary = travelSalary(state, seat, pickedAction.tile);
+                    return (
+                      <span className="ledger-balance pick-balance">
+                        {t("Il vous restera", "You keep")}
+                        <b>
+                          {money(
+                            active.cash +
+                              salary -
+                              actionCost(state, pickedAction),
+                          )}
+                        </b>
+                        {salary > 0 && (
+                          <small>
+                            {t(
+                              `+${money(salary)} au départ`,
+                              `+${money(salary)} at Start`,
+                            )}
+                          </small>
+                        )}
+                      </span>
+                    );
+                  })()}
               </>
             ) : (
               <span className="pick-empty">
@@ -1131,6 +1154,12 @@ export default function DecisionPanel({
                     <dd>{money(rent)}</dd>
                   </div>
                 )}
+              {salary > 0 && !bankruptcy && (
+                <div>
+                  <dt>{t("Salaire au départ", "Salary at Start")}</dt>
+                  <dd>+{money(salary)}</dd>
+                </div>
+              )}
               {construction && decisionTile !== undefined && !bankruptcy && (
                 <div className="ledger-buyout">
                   <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
@@ -1160,7 +1189,7 @@ export default function DecisionPanel({
                           "Available to settle the debt",
                         )
                       : pending?.kind === "travel"
-                        ? t("Après frais de voyage", "After travel costs")
+                        ? t("Après le voyage", "After the trip")
                         : t("Argent restant", "Cash remaining")}
                   </dt>
                   <dd>{money(projectedCash)}</dd>

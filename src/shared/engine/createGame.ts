@@ -387,6 +387,21 @@ export function worldTourTargets(state: PublicState, seat: Seat): number[] {
   const free = owned(null);
   return free.length > 0 ? free : owned(seat);
 }
+/** Tiles from one space to another going clockwise; the same space is a lap. */
+function clockwiseSteps(from: number, to: number): number {
+  return (to - from + BOARD_SIZE) % BOARD_SIZE || BOARD_SIZE;
+}
+/** The Start salary a flight to this tile collects on its clockwise route. */
+export function travelSalary(
+  state: PublicState,
+  seat: Seat,
+  tile: number,
+): number {
+  const position = getPlayer(state, seat).position;
+  return position + clockwiseSteps(position, tile) >= BOARD_SIZE
+    ? state.config.startSalary
+    : 0;
+}
 export function actionCost(state: PublicState, action: Action): number {
   const pending = state.pending;
   if (!pending) return 0;
@@ -569,13 +584,17 @@ function animationBudget(events: readonly GameEvent[]): number {
       case "DiceRolled":
         return total + DECISION_TIMING.diceAnimation;
       case "PlayerMoved": {
-        // Mirrors the client: a walk hops tile by tile, anything else jumps.
+        // Mirrors the client: a move walks its route tile by tile, a long one
+        // hops faster; only a move without a route jumps.
         const steps = Math.abs(event.steps ?? 0);
         return (
           total +
-          (steps === 0 || steps > 16
+          (steps === 0
             ? DECISION_TIMING.jumpAnimation
-            : steps * DECISION_TIMING.stepAnimation)
+            : Math.min(
+                steps * DECISION_TIMING.stepAnimation,
+                DECISION_TIMING.walkAnimation,
+              ))
         );
       }
       case "SentToIsland":
@@ -841,8 +860,7 @@ function resolver(initial: GameState, context: EngineContext) {
       });
   };
   const moveTo = (seat: Seat, target: number) => {
-    const current = getPlayer(state, seat).position;
-    move(seat, (target - current + BOARD_SIZE) % BOARD_SIZE || BOARD_SIZE);
+    move(seat, clockwiseSteps(getPlayer(state, seat).position, target));
   };
   const roll = (seat: Seat) => {
     const player = getPlayer(state, seat);

@@ -1831,8 +1831,8 @@ function SceneContent(props: BoardProps) {
           const from = event.from ?? before?.position ?? 0;
           const steps = event.steps ?? (event.position - from + 32) % 32;
           await play((timeline) => {
-            if (Math.abs(steps) > 16 || steps === 0) {
-              // Travel and card moves: one long leap to the destination.
+            if (steps === 0) {
+              // A move without a route: one long leap to the destination.
               const [x, y, z] = pawnPosition(event.seat, event.position);
               const half = DECISION_TIMING.jumpAnimation / 2000;
               timeline.to(pawn.position, {
@@ -1853,9 +1853,17 @@ function SceneContent(props: BoardProps) {
               );
             } else {
               // A board-game walk: one hop per tile, a settle on the last.
-              // Corners passed on the way are turned on the road.
-              const duration = DECISION_TIMING.stepAnimation / 1000;
+              // Corners passed on the way are turned on the road. World Tour
+              // and card moves follow the same road past Start, hopping
+              // faster and lower to fit the longest dice walk.
               const count = Math.abs(steps);
+              const pace =
+                Math.min(
+                  DECISION_TIMING.stepAnimation,
+                  DECISION_TIMING.walkAnimation / count,
+                ) / DECISION_TIMING.stepAnimation;
+              const duration = (DECISION_TIMING.stepAnimation / 1000) * pace;
+              const lift = 0.5 * pace;
               for (let step = 1; step <= count; step++) {
                 const tile =
                   (((from + step * Math.sign(steps)) % 32) + 32) % 32;
@@ -1872,7 +1880,7 @@ function SceneContent(props: BoardProps) {
                 timeline.to(
                   pawn.position,
                   {
-                    y: y + 0.5,
+                    y: y + lift,
                     duration: duration * 0.42,
                     ease: "power2.out",
                   },

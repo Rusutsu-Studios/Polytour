@@ -154,8 +154,10 @@ on the central plaza. A small scoreboard then pops up with their total (gold for
 double) and holds long enough to read before the pawn sets off. The shake, throw
 and reveal fit the shared 1.7 s dice budget. Pawns hop one tile per 0.3 s and
 bounce on the last; a corner they only pass counts as a hop but is turned on the
-road, never climbed. Travel and card moves leap in 0.9 s. Reduced motion and skip
-snap straight to the result.
+road, never climbed. World Tour and card moves walk the same clockwise road, past
+Start when their route crosses it; a move longer than twelve tiles hops faster and
+lower so no walk takes more than 3.6 s, the longest dice walk. Reduced motion and
+skip snap straight to the result.
 
 ## Current illustrated moments
 

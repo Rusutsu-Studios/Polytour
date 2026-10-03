@@ -36,6 +36,7 @@ export {
   rentCardPayment,
   resortCount,
   toPublic,
+  travelSalary,
   worldTourTargets,
 } from "./createGame.js";
 export { nextRandom, normalizeSeed, shuffle } from "./rng.js";
