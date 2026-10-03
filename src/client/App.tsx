@@ -32,6 +32,7 @@ import type {
   RoomCredentials,
 } from "../shared/protocol/index.js";
 import { RoomConfigSchema } from "../shared/protocol/index.js";
+import { APP_VERSION } from "../shared/version.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
 import {
@@ -2095,6 +2096,7 @@ function App() {
             {t("2 à 4 joueurs · 32 cases", "2 to 4 players · 32 spaces")}
           </span>
           <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
+          <span>v{APP_VERSION}</span>
         </footer>
       )}
     </main>
