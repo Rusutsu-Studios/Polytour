@@ -162,22 +162,32 @@ function inside(polygon: readonly Vec2[], [x, y]: Vec2) {
   return true;
 }
 
+/** A box or point as the camera sees it, projected once. */
+type Seen = { name: string; nearness: number };
+type Silhouette = Seen & { outline: Vec2[] };
+type Spot = Seen & { screen: Vec2 };
+
+function silhouette(box: Box): Silhouette {
+  return {
+    name: box.name,
+    nearness: nearness([
+      box.center[0],
+      LAWN_TOP + box.height / 2,
+      box.center[1],
+    ]),
+    outline: hull(corners(box).map(([x, y, z]) => screenPoint(x, y, z))),
+  };
+}
+
 /**
  * Conservative: a point inside the box's screen silhouette counts as hidden
  * as soon as it lies farther from the camera than the middle of the box.
  */
-function hides(box: Box, point: readonly [number, number, number]) {
-  const projected = corners(box).map(([x, y, z]) => screenPoint(x, y, z));
-  if (!inside(hull(projected), screenPoint(...point))) return false;
-  const middle: [number, number, number] = [
-    box.center[0],
-    LAWN_TOP + box.height / 2,
-    box.center[1],
-  ];
-  return nearness(point) < nearness(middle);
+function hides(box: Silhouette, point: Spot) {
+  return point.nearness < box.nearness && inside(box.outline, point.screen);
 }
 
-function protectedPoints() {
+function protectedPoints(): Spot[] {
   const points: { at: [number, number, number]; name: string }[] = [];
   for (const tile of BOARD) {
     for (const seat of SEATS) {
@@ -228,8 +238,15 @@ function protectedPoints() {
           at: [dx + (i / 4) * DIE_HALF, LAWN_TOP, dz + (j / 4) * DIE_HALF],
           name: `die ${index}`,
         });
-  return points;
+  return points.map(({ at, name }) => ({
+    name,
+    nearness: nearness(at),
+    screen: screenPoint(...at),
+  }));
 }
+
+// The points depend only on tile positions, which both layouts share.
+const PROTECTED_POINTS = protectedPoints();
 
 function overlap(a: Box, b: Box) {
   return (
@@ -325,12 +342,13 @@ describe.each(["country", "legacy"] as const)("%s town layout", (rule) => {
   });
 
   it("never hides a pawn, a lot, the board road or the dice", () => {
-    const points = protectedPoints();
-    for (const box of boxes)
-      for (const point of points)
-        expect(hides(box, point.at), `${box.name} hides ${point.name}`).toBe(
-          false,
-        );
+    // About 200,000 box/point pairs: one expect per pair took over a second,
+    // so collect every hidden pair and assert once.
+    const hidden: string[] = [];
+    for (const box of boxes.map(silhouette))
+      for (const point of PROTECTED_POINTS)
+        if (hides(box, point)) hidden.push(`${box.name} hides ${point.name}`);
+    expect(hidden).toEqual([]);
   });
 
   it("drives the cars on a closed circuit of paved roads", () => {

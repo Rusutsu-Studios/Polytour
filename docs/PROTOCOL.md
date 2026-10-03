@@ -1,8 +1,10 @@
 # Client ↔ server protocol
 
-JSON text frames over one WebSocket per player (`/ws/room/:code`). Every message is
-a discriminated union on `type`, defined once with Zod in `src/shared/protocol/` and
-imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
+JSON text frames over one WebSocket per player (`/ws/room/:code`). Gameplay and
+diagnostic metadata use a discriminated union on `type`, defined once with Zod in
+`src/shared/protocol/` and imported by both client and worker. A fixed pair of
+transport-only debug ping/pong strings is described below. Binary encoding
+(e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
 ## Implemented playable protocol
@@ -11,14 +13,49 @@ optimization only if profiling says so — messages are small and infrequent.
 the older illustrative launch sketches below wherever they differ. The scaffold
 debug socket has been removed; `/api/health` remains.
 
+- `GET /api/health` returns `{status: "ok"}` with `Cache-Control: no-store`.
+  Adding `?debug=1` includes `diagnostics` (the type in
+  `shared/protocol/worker-diagnostics.ts`): configured Worker name, request
+  hostname, runtime (`cloudflare`, `local` or `unknown`) and nullable Cloudflare
+  entry-point metadata (`colo`, nullable location and region). No room state,
+  visitor geography or IP address is returned. Unknown POP codes remain visible
+  without a location mapping. This endpoint does not locate the room's DO.
+
 - `POST /api/rooms {name, config?}` returns201 and `{roomCode, seat, token}`.
+  Creation attempts first pass the fixed `room-creation` edge key (120/minute per
+  Cloudflare location), then the Matchmaker named `room-admission` (burst 60,
+  refill 1/second, at most 1,000 admissions per UTC day in one persisted record).
+  No allocation key comes from an IP, cookie or request header. Denials return
+  `{error: "rate-limited"}` with HTTP 429, `Retry-After` in seconds and
+  `Cache-Control: no-store`; edge denials use 60 seconds, durable denials wait for
+  refill or UTC-day reset. Gate failures use the HTTP 503 error path below.
 - `POST /api/rooms/:code/join {name}` returns200 and another seat capability.
+  Creation limits do not apply to joining, reconnecting or moves.
+- `/api/health`, `/api/rooms/:code/health` and `/api/queues/:mode/health` report
+  service liveness directly from the Worker, without a Durable Object lookup.
+  Room health validates the code format but does not establish that a room exists.
 - The WebSocket uses `Sec-WebSocket-Protocol: polytour, seat.<token>`, selects
   `polytour` in the response, and checks the same Origin before entering the room.
   Capability tokens never appear in public state, lobby, events, or URLs.
 - First send `sync {lastSeq:null}` for a snapshot, or a known sequence for replay.
   `welcome {protocolVersion,you,seq,snapshot,lobby,randomness}` always comes first.
   Replay then sends the contiguous events and any persisted dice proof receipts.
+- New servers optionally advertise `roomDebugVersion: 1` in `welcome`. Only then,
+  while Debug is open, the client requests `debug-info` once on open/reconnect.
+  The socket-specific `room-diagnostics {value}` response is validated by
+  `shared/protocol/room-diagnostics.ts`. It contains the requesting socket's saved
+  Worker ingress metadata, connected seats' ingress POPs, the `GameRoom` class,
+  local SQLite storage and an optional enforced jurisdiction. Exact physical DO
+  location is always null: it is not exposed by the runtime. No IP, capability,
+  DO identifier or database contents are exposed. Diagnostics are neither game
+  events nor broadcasts and do not change the event sequence or game state.
+- The fixed strings `polytour-debug-ping-v1` / `polytour-debug-pong-v1` measure
+  room WebSocket round-trip time every five seconds while Debug is open, visible
+  and online. `setWebSocketAutoResponse` answers without running game JavaScript,
+  SQL or alarms. The client handles the exact pong before JSON parsing. Its
+  bounded per-socket FIFO retains expired/suspended attempts so a late fixed pong
+  cannot be attributed to a new measurement. Socket replacement resets that FIFO.
+  Old servers without the capability are never sent these new debug messages.
 - Host lobby operations are `start {fillBots}`, `settings {config}`,
   `add-bot {seat}` and `remove-bot {seat}`. A room has four places and starts with
   two to four players. `add-bot` seats a server bot on an empty place (`seat-taken`
@@ -47,7 +84,11 @@ debug socket has been removed; `/api/health` remains.
   retain their future-round commitment, waiting/error status and verified proof;
   their committed round is unchanged on retry. The wire shapes remain compatible.
 - `events {fromSeq,toSeq,events,proofs?}` drives the shared reducer and Director.
-  Snapshots expose no deck, seed, hidden resolution queue, or session token.
+  `CardDrawn` records a uniform draw without replacement using fresh server
+  `EngineContext.chanceEntropy`, independent of seeded setup. This also handles
+  saved decks without a protocol, state schema or rules-version bump. Snapshots
+  expose no remaining deck, seed, Chance entropy, hidden resolution queue or
+  session token. Replay restores saved draws rather than drawing again.
 - Presence derives from live hibernatable sockets. A disconnected human has a
   60-second grace period before server bot takeover; reconnect restores control.
 - With no open player sockets, a room sleeps instead of simulating bots. The match
@@ -65,6 +106,11 @@ debug socket has been removed; `/api/health` remains.
 The prototype client requests a fresh snapshot on reconnect rather than buffering
 offline actions. Chat, emotes, accounts, matchmaking and spectator messages in the
 launch sketches below remain unimplemented.
+
+The shared creation budget can be exhausted by abusive callers; it constrains
+room allocation rather than guaranteeing DDoS resistance or fair player admission.
+Cloudflare's edge counter is local to each location and eventually consistent;
+the durable gate enforces the shared admission budget across locations.
 
 ## Principles
 

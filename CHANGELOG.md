@@ -9,8 +9,19 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Added
+
+- A pause menu with Game, Video, Audio and Debug settings; the game continues
+  while the menu is open, and audio controls are marked coming soon (#35).
+- A five-second Cloudflare ping indicator and on-demand room routing and
+  WebSocket latency diagnostics for connected players.
+
 ### Changed
 
+- Personal settings live in the pause menu; the sliders tool shows fixed match
+  rules. Video settings retain the High/Low graphics control.
+- Removed manual animation finish/skip and speed controls, preserving reduced
+  motion, automatic catch-up and reconnect recovery.
 - Board lots are printed in two parts: the city ground, with its buildings and
   name on a pavement of its country's own style and color, and a concrete price
   strip showing only the price or the owner's rent. Beaches are one piece of
@@ -28,6 +39,10 @@ has been published, and it does not reconstruct earlier development history.
 
 - Invitation links ask only for a nickname and join the invited room, with
   retryable errors, saved-seat recovery and a return to the start screen (#54).
+- Chance draws use fresh server cryptographic randomness, including saved games,
+  so public setup and observed cards cannot reveal the next draw (#46).
+- Shared room-creation limits bound anonymous storage allocation without IP keys;
+  health probes and unknown-room requests no longer create room tables (#46).
 
 ## [0.1.0] - 2026-10-03
 

@@ -27,6 +27,7 @@ export default defineConfig({
         "client-flow.spec.ts",
         "network-flow.spec.ts",
         "language-flow.spec.ts",
+        "pause-menu.spec.ts",
         "invitation-flow.spec.ts",
         "sale-flow.spec.ts",
       ],

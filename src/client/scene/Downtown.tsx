@@ -858,11 +858,13 @@ export function Downtown({
   state,
   config,
   preview = false,
+  lowGraphics = false,
   handle,
 }: {
   state: PublicState | null;
   config?: GameConfig;
   preview?: boolean;
+  lowGraphics?: boolean;
   handle: { current: DowntownHandle | null };
 }) {
   const { reducedMotion } = useDirector();
@@ -886,7 +888,11 @@ export function Downtown({
       />
       <AmbientLife
         animated={
-          !reducedMotion && !preview && state?.status === "active" && visible
+          !reducedMotion &&
+          !lowGraphics &&
+          !preview &&
+          state?.status === "active" &&
+          visible
         }
       />
     </group>

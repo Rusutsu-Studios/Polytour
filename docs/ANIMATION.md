@@ -7,7 +7,7 @@ the original geometry.
 Four compact player HUDs sit at the corners; only the current decision opens a
 contextual action panel. Journal, proof, instructions and inspection tools stay
 closed until requested. Every event the
-server sends should have a satisfying, readable, skippable animation.
+server sends should have a satisfying, readable animation.
 
 This document defines direction and planned animation budgets. Implemented and
 verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CHECKPOINT.md).
@@ -54,18 +54,17 @@ flowchart LR
 - Scene handlers are `async (event, ctx) => void` and resolve within their shared
   `shared/board/timing.ts` budgets. The server includes those motion budgets in
   decision deadlines, including the chance card's reading hold, so a decision
-  clock never runs during an animation. Continue/skip can end the card early.
+  clock never runs during an animation. Continue and Escape can end the card early.
 - **Bot pacing:** a bot acts only after the events that opened its decision have
   played at 1×, plus a short pause (`BOT_TIMING`: 0.7 s before a roll, 1.4 s
   before a choice). The engine's `botDecisionAt` derives that moment from the
   decision deadline, so the Durable Object never computes it, and a bot's turn
   reads like a player's instead of a burst of events.
-- **Speed:** a Director `speed` (1× by default, 1.5×, 2×) is applied to GSAP's global timeline
-  (`gsap.globalTimeline.timeScale(speed)`) **and** to DOM animation: Motion has no
-  global clock, so HUD transitions and money counters read `speed` from the Director
-  store and divide their durations by it. Otherwise the HUD lags behind the scene at 2×.
+- **Playback:** game-event animations play at their normal rate. The Director's
+  per-event `playbackRate` applies only to automatic catch-up, through each GSAP
+  timeline and the card reading hold. DOM panel transitions use fixed durations.
 - **Catch-up:** one server action arrives as one batch and always plays at the
-  chosen speed, however many events it holds. Only a view two or more batches
+  normal rate, however many events it holds. Only a view two or more batches
   behind the server plays at 2.5×; beyond 40 queued events, or when the tab was
   hidden, it snaps straight to `serverState`.
 - **Tab hidden:** `document.visibilitychange` → snap on return, don't queue minutes of animation.
@@ -112,9 +111,9 @@ sparks for purchase, upgrade and buyout events (1.1 seconds at 1×, after the
 0.65 s cash flight). New houses, hotels and landmarks rise out of their plot one
 after another with an overshoot; during that rise the instanced town draws the
 next state for that one tile, and every other tile stays on `viewState`. The Director
-owns the GSAP timeline; skip, reset and reduced motion cancel it and hide its
-effects. A generation guard prevents a cancelled older handler from hiding a
-newly started construction effect. Building bases, cornices and entrances are
+owns the GSAP timeline; state recovery, reset and reduced motion cancel it and
+hide its effects. A generation guard prevents a cancelled older handler from
+hiding a newly started construction effect. Building bases, cornices and entrances are
 instanced; hotels and terraced landmarks stay visually distinct. These are the
 implemented construction accents, not the full sound/particle specification in
 the signature-moment table above.
@@ -136,7 +135,7 @@ for a resort). Plots, facades, roofs, windows and trees are instanced.
   turning circle, the big wheel turns once every 40 s, the carousel spins with
   bobbing horses, a boat sails the pond, the helicopter hops off its pad every
   18 s and the four fountains pulse. Motion reads only the frame clock and
-  never game state. Reduced motion and the lobby previews keep it still.
+  never game state. Low graphics, reduced motion and the lobby previews keep it still.
 - **Readability:** the plaza keeps the dice clear. An object may be no taller
   than its distance to the lawn edge behind it (`visibilityCap`), and the
   tallest building (0.68) stays under a die's top face. `town-layout.test.ts`
@@ -145,7 +144,7 @@ for a resort). Plots, facades, roofs, windows and trees are instanced.
 - **Cost:** about 56 more draw calls per frame including the shadow pass
   (295 against 239, measured with a WebGL hook in software rendering). Ambient
   life keeps the match canvas rendering at 30 fps between game animations
-  instead of idling; reduced motion and lobby previews stay fully on demand.
+  instead of idling; Low graphics, reduced motion and lobby previews stay fully on demand.
 
 ## Current dice feedback
 
@@ -155,8 +154,8 @@ on the central plaza. A small scoreboard then pops up with their total (gold for
 double) and holds long enough to read before the pawn sets off. The shake, throw
 and reveal fit the shared 1.7 s dice budget. Pawns hop one tile per 0.3 s and
 bounce on the last; a corner they only pass counts as a hop but is turned on the
-road, never climbed. Travel and card moves leap in 0.9 s. Reduced motion and skip
-snap straight to the result.
+road, never climbed. Travel and card moves leap in 0.9 s. Reduced motion and state
+recovery snap straight to the result.
 
 ## Current illustrated moments
 
@@ -180,11 +179,12 @@ Escape, the close button or a backdrop click closes it.
 
 The Director now has a separate DOM presenter alongside its scene animator.
 `CardDrawn` waits for a bounded illustrated reading moment (the 3.2 s card
-budget, divided by the playback speed) before the subsequent effects play. Continue and Escape
-resolve that moment; skip, snapshot replacement and reconnect cancel it. This
-reading hold uses the existing decision clock and does not extend a server
-deadline. Reduced motion keeps a static card and its instructions. Card art and
-prompts are documented in [CARD_ART.md](CARD_ART.md).
+budget, divided by the automatic catch-up playback rate) before the subsequent
+effects play. Continue and Escape resolve that moment; state recovery, snapshot
+replacement and reconnect cancel it. This reading hold uses the existing
+decision clock and does not extend a server deadline. Reduced motion keeps a
+static card and its instructions. Card art and prompts are documented in
+[CARD_ART.md](CARD_ART.md).
 
 Four capped banknote reserves and coin piles sit just outside the track. Repeated
 note faces, straps and coin details are instanced. Salary, rent, transfers,
@@ -220,7 +220,8 @@ The server decides the dice. The client must *show* those exact values.
 | HUD money counters | Motion (`animate()`) | `easeOut`, duration scales with log(amount) | 0.4–1.0 s |
 | UI panels | Motion | spring, `stiffness 400, damping 30` | — |
 
-All durations are at 1× and are divided by the Director's `speed`.
+Game-event budgets are at 1× and divide by the Director's per-event `playbackRate`
+only during automatic catch-up. UI transitions keep their normal durations.
 
 Consistency matters more than any single animation: reuse these presets from
 `client/director/easings.ts`, don't invent per-component curves.
@@ -241,11 +242,17 @@ Consistency matters more than any single animation: reuse these presets from
 - Never allocate in `useFrame`; keep temp `Vector3`/`Quaternion` objects module-level.
 - `frameloop="demand"`; call `invalidate()` from GSAP's `onUpdate`. The town's
   ambient life adds a capped 30 fps `invalidate()` loop to the match board;
-  reduced motion and lobby previews skip it and render only on demand.
+  Low graphics, reduced motion and lobby previews skip it and render only on demand.
+- The prototype's optional **Low graphics** setting uses DPR 1 and disables live
+  shadows and pauses decorative town and selection motion. Game-event animations
+  remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. The compact monitor
+  button shows High/Low and switches in one click before joining and in the match
+  toolbar; View and animation shows the same saved local preference. See
+  [PERFORMANCE.md](PERFORMANCE.md) for the software-rendering comparison and limits.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated
   SDF font, or HTML overlays via drei `<Html>` sparingly (they're DOM nodes).
-- Quality tiers (auto via `PerformanceMonitor`, override in settings):
+- Planned quality tiers (auto via `PerformanceMonitor`, override in settings):
 
 | Tier | DPR | Shadows | Bloom | Particles | MSAA/SMAA |
 | --- | --- | --- | --- | --- | --- |

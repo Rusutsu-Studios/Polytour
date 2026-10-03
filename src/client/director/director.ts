@@ -5,7 +5,7 @@ import { applyEvent } from "../../shared/engine/index.js";
 export type AnimationContext = {
   previous: PublicState | null;
   next: PublicState;
-  speed: number;
+  playbackRate: number;
   reducedMotion: boolean;
 };
 export type SceneAnimator = {
@@ -17,23 +17,21 @@ type DirectorState = {
   serverState: PublicState | null;
   viewState: PublicState | null;
   busy: boolean;
-  speed: 1 | 1.5 | 2;
   reducedMotion: boolean;
   history: readonly GameEvent[];
 };
 
 /** Server batches the view may trail before it plays faster to catch up. */
 const CATCH_UP_BATCHES = 2;
-const CATCH_UP_SPEED = 2.5;
+const CATCH_UP_PLAYBACK_RATE = 2.5;
 /** Beyond this backlog, snap to the server state instead of replaying it. */
-const SKIP_BACKLOG = 40;
+const RECOVERY_BACKLOG = 40;
 
 class Director {
   private value: DirectorState = {
     serverState: null,
     viewState: null,
     busy: false,
-    speed: 1,
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
       .matches,
     history: [],
@@ -98,7 +96,8 @@ class Director {
     });
     this.batch += 1;
     for (const event of events) this.queue.push({ event, batch: this.batch });
-    if (this.queue.length > SKIP_BACKLOG || document.hidden) this.skip();
+    if (this.queue.length > RECOVERY_BACKLOG || document.hidden)
+      this.recoverToServer();
     else if (!this.value.busy) void this.drain(this.generation);
   }
   private async drain(generation: number) {
@@ -107,8 +106,8 @@ class Director {
       const entry = this.queue.shift();
       if (!entry) break;
       const { event } = entry;
-      // One server action arrives as one batch and plays at the chosen
-      // speed. Only a view several actions behind the server speeds up.
+      // One server action arrives as one batch and plays at its normal rate.
+      // Only a view several actions behind the server speeds up to catch up.
       const behind = this.batch - entry.batch;
       const previous = this.value.viewState;
       const next =
@@ -122,10 +121,7 @@ class Director {
         const context = {
           previous,
           next,
-          speed:
-            behind >= CATCH_UP_BATCHES
-              ? Math.max(CATCH_UP_SPEED, this.value.speed)
-              : this.value.speed,
+          playbackRate: behind >= CATCH_UP_BATCHES ? CATCH_UP_PLAYBACK_RATE : 1,
           reducedMotion: this.value.reducedMotion,
         };
         await Promise.all([
@@ -138,7 +134,7 @@ class Director {
     }
     if (generation === this.generation) this.update({ busy: false });
   }
-  skip = () => {
+  recoverToServer = () => {
     this.generation += 1;
     this.queue = [];
     this.animator?.cancel();
@@ -147,12 +143,9 @@ class Director {
     this.animator?.snap(this.value.serverState);
     this.presenter?.snap(this.value.serverState);
   };
-  setSpeed(speed: 1 | 1.5 | 2) {
-    this.update({ speed });
-  }
   setReducedMotion(reducedMotion: boolean) {
     this.update({ reducedMotion });
-    if (reducedMotion) this.skip();
+    if (reducedMotion) this.recoverToServer();
   }
 }
 
@@ -162,7 +155,7 @@ export function useDirector() {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) director.skip();
+  if (!document.hidden) director.recoverToServer();
 });
 window
   .matchMedia("(prefers-reduced-motion: reduce)")

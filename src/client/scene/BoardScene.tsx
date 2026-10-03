@@ -88,6 +88,7 @@ type BoardProps = {
   pickSeat?: Seat;
   preview?: boolean;
   zoom?: number;
+  lowGraphics?: boolean;
   /** Where the roll button sits on screen, in canvas pixels. */
   onRollAnchor?: (point: { x: number; y: number }) => void;
   saleSeat?: Seat;
@@ -711,12 +712,15 @@ function PickHighlights({
   targets,
   picked,
   color,
+  lowGraphics = false,
 }: {
   targets: readonly number[];
   picked: number | null;
   color: string;
+  lowGraphics?: boolean;
 }) {
   const { reducedMotion } = useDirector();
+  const staticHighlights = reducedMotion || lowGraphics;
   const { invalidate } = useThree();
   const frames = useRef<THREE.InstancedMesh>(null);
   const fills = useRef<THREE.InstancedMesh>(null);
@@ -766,15 +770,15 @@ function PickHighlights({
   }, [targets, color, transform, fillMaterial, invalidate]);
   useFrame((frameState) => {
     const time = frameState.clock.elapsedTime;
-    fillMaterial.opacity = reducedMotion
+    fillMaterial.opacity = staticHighlights
       ? 0.14
       : 0.06 + 0.13 * (0.5 + 0.5 * Math.sin(time * 4));
     if (pin.current) {
-      pin.current.position.y = reducedMotion ? 0 : Math.sin(time * 3) * 0.06;
-      pin.current.rotation.y = reducedMotion ? 0 : time * 1.4;
+      pin.current.position.y = staticHighlights ? 0 : Math.sin(time * 3) * 0.06;
+      pin.current.rotation.y = staticHighlights ? 0 : time * 1.4;
     }
     // The board renders on demand; keep frames coming only while choosing.
-    if (!reducedMotion) frameState.invalidate();
+    if (!staticHighlights) frameState.invalidate();
   });
   const [pinX, pinZ] = picked === null ? [0, 0] : tileCenter(picked);
   return (
@@ -1494,7 +1498,7 @@ function SceneContent(props: BoardProps) {
   const rule = boardConfig ? boardRule(boardConfig) : "country";
   const chosen =
     props.saleSeat !== undefined ? props.selected : (props.picked ?? null);
-  const { camera, invalidate, size, gl } = useThree();
+  const { camera, invalidate, size, gl, viewport } = useThree();
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
   const diceMaterials = useRef<(THREE.MeshStandardMaterial | null)[]>([]);
@@ -1531,6 +1535,7 @@ function SceneContent(props: BoardProps) {
     [cashTexture, dieGeometry],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: R3F resets the orthographic frustum on DPR changes; restore the board framing.
   useEffect(() => {
     camera.position.set(...CAMERA_OFFSET);
     camera.lookAt(0, LOT_TOP, 0);
@@ -1549,6 +1554,7 @@ function SceneContent(props: BoardProps) {
     camera,
     size.width,
     size.height,
+    viewport.dpr,
     zoom,
     preview,
     invalidate,
@@ -1633,7 +1639,7 @@ function SceneContent(props: BoardProps) {
         });
         timelines.current.set(timeline, resolve);
         build(timeline);
-        timeline.timeScale(context.speed);
+        timeline.timeScale(context.playbackRate);
         timeline.play();
       });
     }
@@ -1710,7 +1716,7 @@ function SceneContent(props: BoardProps) {
           onUpdate: updateCash,
         });
       }, context);
-      // Reset/skip can resolve an older timeline after a newer one began.
+      // State recovery can resolve an older timeline after a newer one began.
       if (generation !== cashEffectGeneration) return false;
       flight.visible = false;
       invalidate();
@@ -2059,7 +2065,7 @@ function SceneContent(props: BoardProps) {
         position={[-6, 11, 4]}
         intensity={1.45}
         color="#fff4dc"
-        castShadow
+        castShadow={!props.lowGraphics}
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-9}
         shadow-camera-right={9}
@@ -2090,6 +2096,7 @@ function SceneContent(props: BoardProps) {
             chosen != null && props.targets.includes(chosen) ? chosen : null
           }
           color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
+          lowGraphics={props.lowGraphics}
         />
       )}
       <Towns
@@ -2102,6 +2109,7 @@ function SceneContent(props: BoardProps) {
         state={state}
         config={boardConfig}
         preview={preview}
+        lowGraphics={props.lowGraphics}
         handle={downtown}
       />
       <ResortProps boardRule={rule} />
@@ -2300,15 +2308,16 @@ export default function BoardScene(props: BoardProps) {
       className="canvas-layer"
       data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
+      data-low-graphics={Boolean(props.lowGraphics)}
       data-sale-active={
         !props.preview && saleTargets(props.state, props.saleSeat).length > 0
       }
     >
       <Canvas
         orthographic
-        shadows={{ type: THREE.PCFShadowMap }}
+        shadows={props.lowGraphics ? false : { type: THREE.PCFShadowMap }}
         frameloop="demand"
-        dpr={[1, 1.5]}
+        dpr={props.lowGraphics ? 1 : [1, 1.5]}
         camera={{ position: [...CAMERA_OFFSET], near: 0.1, far: 100, zoom: 1 }}
         gl={{
           antialias: true,

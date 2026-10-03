@@ -61,7 +61,7 @@ export default function CityCard({
 }) {
   // Subscribing here re-renders the whole card when the language changes.
   useLocale();
-  const { reducedMotion, speed } = useDirector();
+  const { reducedMotion } = useDirector();
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -122,7 +122,7 @@ export default function CityCard({
         data-kind={tile.kind}
         initial={reducedMotion ? false : { opacity: 0.7, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reducedMotion ? 0 : 0.24 / speed }}
+        transition={{ duration: reducedMotion ? 0 : 0.24 }}
       >
         <div className="city-card-topline">
           <div className="city-card-steps">

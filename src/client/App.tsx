@@ -42,6 +42,7 @@ import {
   readCredentials,
   useRoom,
 } from "./net/room.js";
+import { useCloudflarePing } from "./net/use-cloudflare-ping.js";
 import {
   fullMoney,
   levelName,
@@ -62,10 +63,12 @@ import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
+import GraphicsToggle from "./ui/GraphicsToggle.js";
 import Icon from "./ui/Icon.js";
 import InvitationEntry from "./ui/InvitationEntry.js";
 import LuckCardHelp from "./ui/LuckCardHelp.js";
-import { QuickSettings } from "./ui/RoomSettings.js";
+import PauseMenu from "./ui/PauseMenu.js";
+import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
 import "./App.css";
 
@@ -119,7 +122,7 @@ function Logo({ small = false }: { small?: boolean }) {
 function MoneyCounter({ value }: { value: number }) {
   const [display, setDisplay] = useState(value);
   const previous = useRef(value);
-  const { speed, reducedMotion } = useDirector();
+  const { reducedMotion } = useDirector();
   useEffect(() => {
     if (reducedMotion) {
       setDisplay(value);
@@ -127,13 +130,13 @@ function MoneyCounter({ value }: { value: number }) {
       return;
     }
     const controls = animate(previous.current, value, {
-      duration: 0.45 / speed,
+      duration: 0.45,
       ease: "easeOut",
       onUpdate: (amount) => setDisplay(Math.round(amount)),
     });
     previous.current = value;
     return () => controls.stop();
-  }, [value, speed, reducedMotion]);
+  }, [value, reducedMotion]);
   return <>{fullMoney(display)}</>;
 }
 
@@ -870,7 +873,7 @@ function TurnTimer({
   );
 }
 
-type GameTool = "journal" | "proof" | "view" | "room" | null;
+type GameTool = "journal" | "proof" | "rules" | "room" | null;
 
 // THESIS: The PC board fills the screen; the interface occupies its unused corners.
 // OWN-WORLD: sky blue, ivory toy controls, four colored pawn identities, physical buttons.
@@ -886,6 +889,8 @@ function MatchView({
   onSelect,
   zoom,
   onZoom,
+  lowGraphics,
+  onGraphicsChange,
   copied,
   copyRoom,
   onLeave,
@@ -901,6 +906,8 @@ function MatchView({
   onSelect: (tile: number) => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  lowGraphics: boolean;
+  onGraphicsChange: (low: boolean) => void;
   copied: boolean;
   copyRoom: () => Promise<void>;
   onLeave: () => void;
@@ -908,7 +915,22 @@ function MatchView({
   onReplay: () => void;
   debug: boolean;
 }) {
-  const { serverState, busy, speed, history, reducedMotion } = useDirector();
+  const { serverState, busy, history, reducedMotion } = useDirector();
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const cloudflarePing = useCloudflarePing(
+    room.connection === "online",
+    room.connection,
+  );
+  const networkPoint =
+    cloudflarePing.status === "success"
+      ? (cloudflarePing.value.colo ??
+        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "—"))
+      : "—";
+  const networkLatency =
+    cloudflarePing.status === "success"
+      ? `${cloudflarePing.value.latencyMs} ms`
+      : "— ms";
+  const pauseTrigger = useRef<HTMLButtonElement | null>(null);
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
     x: number;
@@ -998,8 +1020,8 @@ function MatchView({
       ? t("Carnet de voyage", "Game log")
       : tool === "proof"
         ? diceToolLabel
-        : tool === "view"
-          ? t("Vue et animations", "View and animation")
+        : tool === "rules"
+          ? t("Réglages de la partie", "Game settings")
           : t("Votre salle", "Your room");
   const latestAction = history
     .map((event) => eventText(event, game))
@@ -1134,6 +1156,7 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={credentials.seat}
               zoom={zoom}
+              lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? credentials.seat : undefined}
               saleBlocked={saleBlocked}
@@ -1142,7 +1165,7 @@ function MatchView({
         </SceneBoundary>
       </div>
 
-      <CardMoment />
+      <CardMoment obscured={pauseOpen} />
 
       <header className="match-topbar">
         <Logo small />
@@ -1221,21 +1244,23 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t("Vue et animations", "View and animation")}
-          title={t("Vue et animations", "View and animation")}
-          aria-expanded={tool === "view"}
-          onClick={(event) => showTool("view", event.currentTarget)}
+          aria-label={t("Réglages de la partie", "Game settings")}
+          title={t("Réglages de la partie", "Game settings")}
+          aria-expanded={tool === "rules"}
+          onClick={(event) => showTool("rules", event.currentTarget)}
         >
           <Icon name="settings" size={18} />
         </button>
+        <GraphicsToggle
+          lowGraphics={lowGraphics}
+          onChange={onGraphicsChange}
+          compact
+        />
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t(
-            "Inviter et voir les réglages",
-            "Invite and view settings",
-          )}
-          title={t("Inviter et voir les réglages", "Invite and view settings")}
+          aria-label={t("Inviter des joueurs", "Invite players")}
+          title={t("Inviter des joueurs", "Invite players")}
           aria-expanded={tool === "room"}
           onClick={(event) => showTool("room", event.currentTarget)}
         >
@@ -1268,13 +1293,20 @@ function MatchView({
           <Icon name="fullscreen" size={17} />
         </button>
         <button
+          ref={pauseTrigger}
           type="button"
           className="game-tool-button"
-          aria-label={t("Quitter la partie", "Leave game")}
-          title={t("Quitter la partie", "Leave game")}
-          onClick={onLeave}
+          aria-label={t("Menu pause", "Pause menu")}
+          title={t("Menu pause", "Pause menu")}
+          aria-haspopup="dialog"
+          aria-expanded={pauseOpen}
+          onClick={() => {
+            setTool(null);
+            setInspectorOpen(false);
+            setPauseOpen(true);
+          }}
         >
-          <Icon name="exit" size={18} />
+          <Icon name="pause" size={18} />
         </button>
       </nav>
 
@@ -1299,7 +1331,7 @@ function MatchView({
                 } as CSSProperties
               }
               animate={{ opacity: player.bankrupt ? 0.7 : 1 }}
-              transition={{ duration: reducedMotion ? 0 : 0.2 / speed }}
+              transition={{ duration: reducedMotion ? 0 : 0.2 }}
             >
               <PlayerAvatar seat={player.seat} />
               <div className="player-card-body">
@@ -1363,7 +1395,7 @@ function MatchView({
             aria-labelledby="winner-heading"
             initial={reducedMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 / speed }}
+            transition={{ duration: reducedMotion ? 0 : 0.35 }}
           >
             <MatchResults
               players={game.players}
@@ -1395,6 +1427,7 @@ function MatchView({
               act={room.act}
               blocked={saleBlocked}
               randomness={room.randomness}
+              obscured={pauseOpen}
               selected={decisionSelected}
               onSelect={salePending ? inspectTile : onSelect}
               picked={picked}
@@ -1418,12 +1451,12 @@ function MatchView({
           <motion.section
             ref={toolRef}
             key={tool}
-            className="tool-drawer"
+            className={`tool-drawer${tool === "rules" ? " tool-drawer--rules" : ""}`}
             aria-labelledby="tool-title"
             initial={reducedMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 / speed }}
+            transition={{ duration: reducedMotion ? 0 : 0.2 }}
           >
             <div className="tool-drawer-head">
               <h2 id="tool-title">{toolsTitle}</h2>
@@ -1483,77 +1516,19 @@ function MatchView({
                 expanded
               />
             )}
-            {tool === "view" && (
-              <div className="view-settings">
-                <LanguagePicker />
-                <label htmlFor="animation-speed">
-                  {t("Vitesse des animations", "Animation speed")}
-                  <select
-                    id="animation-speed"
-                    value={speed}
-                    onChange={(event) =>
-                      director.setSpeed(
-                        Number(event.target.value) as 1 | 1.5 | 2,
-                      )
-                    }
-                  >
-                    <option value={1}>
-                      {t("1× · Prendre le temps", "1× · Normal")}
-                    </option>
-                    <option value={1.5}>
-                      {t("1,5× · Classique", "1.5× · Faster")}
-                    </option>
-                    <option value={2}>
-                      {t("2× · Partie rapide", "2× · Fast")}
-                    </option>
-                  </select>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={reducedMotion}
-                    onChange={(event) =>
-                      director.setReducedMotion(event.target.checked)
-                    }
-                  />
-                  {t("Réduire les animations", "Reduce motion")}
-                </label>
-                <div className="zoom-control">
-                  <span>{t("Taille du plateau", "Board size")}</span>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t("Dézoomer le plateau", "Zoom out")}
-                    disabled={zoom <= 0.8}
-                    onClick={() => onZoom(Math.max(0.8, zoom - 0.1))}
-                  >
-                    −
-                  </button>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    onClick={() => onZoom(1)}
-                  >
-                    {t("Recentrer", "Reset view")}
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t("Zoomer le plateau", "Zoom in")}
-                    disabled={zoom >= 1.3}
-                    onClick={() => onZoom(Math.min(1.3, zoom + 0.1))}
-                  >
-                    +
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={!busy}
-                  onClick={director.skip}
-                >
-                  {t("Terminer l’animation en cours", "Skip current animation")}
-                </button>
+            {tool === "rules" && (
+              <div className="match-rules">
+                <p className="field-note">
+                  {t(
+                    "Les réglages sont fixés pour toute la durée de cette partie.",
+                    "Settings are fixed for the duration of this game.",
+                  )}
+                </p>
+                <RoomSettingsFields
+                  config={config}
+                  disabled
+                  onChange={() => {}}
+                />
               </div>
             )}
             {tool === "room" && (
@@ -1574,13 +1549,6 @@ function MatchView({
                       : t("Copier l’invitation", "Copy invite")}
                   </button>
                 </div>
-                <p className="field-note">
-                  {t(
-                    "Les réglages sont fixés pour toute la durée de cette partie.",
-                    "Settings are fixed for the duration of this game.",
-                  )}
-                </p>
-                <RoomSettings config={config} disabled onChange={() => {}} />
               </div>
             )}
           </motion.section>
@@ -1589,15 +1557,43 @@ function MatchView({
 
       <div className="match-caption">
         <span>{latestAction}</span>
-        <button
-          type="button"
-          className="text-button"
-          disabled={!busy}
-          onClick={director.skip}
-        >
-          {busy ? t("Passer l’animation ↗", "Skip animation ↗") : ""}
-        </button>
       </div>
+      <span
+        className="match-network"
+        role="status"
+        aria-live="off"
+        title={
+          cloudflarePing.status === "success"
+            ? t(
+                "Dernière mesure du ping Cloudflare. Détails dans Débogage.",
+                "Last Cloudflare ping measurement. Details in Debug.",
+              )
+            : t(
+                "Ping Cloudflare indisponible. Détails dans Débogage.",
+                "Cloudflare ping unavailable. Details in Debug.",
+              )
+        }
+      >
+        {networkPoint} · {networkLatency}
+      </span>
+      {pauseOpen && (
+        <PauseMenu
+          onClose={() => {
+            setPauseOpen(false);
+            pauseTrigger.current?.focus();
+          }}
+          onLeave={onLeave}
+          zoom={zoom}
+          onZoom={onZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={onGraphicsChange}
+          connection={room.connection}
+          ping={cloudflarePing}
+          roomDebug={room.roomDebug}
+          ownSeat={credentials.seat}
+          onDebugActiveChange={room.setDebugActive}
+        />
+      )}
       {debug && (
         <div id="frame-monitor" className="frame-monitor">
           {t(
@@ -1642,6 +1638,21 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [lowGraphics, setLowGraphics] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.lowGraphics") === "true";
+    } catch {
+      return false;
+    }
+  });
+  function changeGraphics(low: boolean) {
+    setLowGraphics(low);
+    try {
+      localStorage.setItem("polytour.lowGraphics", String(low));
+    } catch {
+      // The local choice still works when browser storage is unavailable.
+    }
+  }
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
   useEffect(() => {
@@ -1772,6 +1783,11 @@ function App() {
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
             <LanguagePicker />
+            <GraphicsToggle
+              lowGraphics={lowGraphics}
+              onChange={changeGraphics}
+              compact
+            />
             <button
               type="button"
               className="text-button help-button"
@@ -1927,6 +1943,7 @@ function App() {
                     selected={null}
                     onSelect={setSelected}
                     preview
+                    lowGraphics={lowGraphics}
                   />
                 </Suspense>
               </SceneBoundary>
@@ -2066,6 +2083,7 @@ function App() {
                   selected={null}
                   onSelect={setSelected}
                   preview
+                  lowGraphics={lowGraphics}
                 />
               </Suspense>
             </SceneBoundary>
@@ -2081,6 +2099,8 @@ function App() {
           onSelect={setSelected}
           zoom={zoom}
           onZoom={setZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={changeGraphics}
           copied={copied}
           copyRoom={copyRoom}
           onLeave={leave}
