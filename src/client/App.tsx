@@ -62,6 +62,7 @@ import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
 import Icon from "./ui/Icon.js";
+import LuckCardHelp from "./ui/LuckCardHelp.js";
 import { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
 import "./App.css";
@@ -695,10 +696,12 @@ function Help({
   open,
   onClose,
   mode,
+  config,
 }: {
   open: boolean;
   onClose: () => void;
   mode: RoomConfig["randomnessMode"];
+  config: GameConfig;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -730,6 +733,16 @@ function Help({
           "Two to four players, with friends or bots.",
         )}
       </p>
+      <button
+        type="button"
+        className="text-button help-card-shortcut"
+        onClick={() =>
+          dialog.current?.querySelector<HTMLElement>(".help-cards h3")?.focus()
+        }
+      >
+        {t("Voir les 16 cartes Surprise", "View all 16 luck cards")}
+        <Icon name="arrow" size={15} />
+      </button>
       <ol className="rules-list">
         <li>
           <b>{t("Lancez et voyagez", "Roll and move")}</b>
@@ -768,6 +781,7 @@ function Help({
           </span>
         </li>
       </ol>
+      {open && <LuckCardHelp config={config} />}
       <section className="help-dice" aria-labelledby="help-dice-heading">
         <h3 id="help-dice-heading">
           {t("Le tirage des dés", "How dice are rolled")}
@@ -2073,6 +2087,7 @@ function App() {
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         mode={config.randomnessMode}
+        config={game?.config ?? previewConfig}
       />
       {!isGame && (
         <footer className="lobby-footer">
