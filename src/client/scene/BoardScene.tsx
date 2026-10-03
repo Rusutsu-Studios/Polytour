@@ -35,6 +35,7 @@ import {
   tilePrice,
 } from "../ui/board-display.js";
 import "./BoardScene.css";
+import { useAmbientMotion } from "./ambient.js";
 import {
   BOARD_BOTTOM,
   BOARD_HALF,
@@ -72,7 +73,7 @@ import {
   scoreTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
-import { BeachUmbrella, Landmarks } from "./Landmarks.js";
+import { BeachUmbrella, LANDMARK_PEAKS, Landmarks } from "./Landmarks.js";
 
 type BoardProps = {
   state: PublicState | null;
@@ -1393,6 +1394,7 @@ function frameBoard(
     const [x, z] = tileCenter(tile);
     add(x, LOT_TOP + (isCorner(tile) ? 0.95 : 0.8), z);
   }
+  for (const [x, y, z] of LANDMARK_PEAKS) add(x, y, z);
   const availableWidth = Math.max(1, width - insets.side * 2);
   const availableHeight = Math.max(1, height - insets.top - insets.bottom);
   const unitsPerPixel = Math.max(
@@ -1419,6 +1421,11 @@ function SceneContent(props: BoardProps) {
   const chosen =
     props.saleSeat !== undefined ? props.selected : (props.picked ?? null);
   const { camera, invalidate, size, gl, viewport } = useThree();
+  const ambient = useAmbientMotion({
+    state,
+    preview,
+    lowGraphics: props.lowGraphics,
+  });
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
   const diceMaterials = useRef<(THREE.MeshStandardMaterial | null)[]>([]);
@@ -2037,12 +2044,17 @@ function SceneContent(props: BoardProps) {
         state={state}
         config={boardConfig}
         preview={preview}
-        lowGraphics={props.lowGraphics}
+        animated={ambient}
         handle={downtown}
       />
       <ResortProps boardRule={rule} />
       <FestivalMarkers state={state} />
-      <Landmarks boardRule={rule} />
+      <Landmarks
+        boardRule={rule}
+        state={state}
+        animated={ambient}
+        lowGraphics={props.lowGraphics}
+      />
       {(state && !preview
         ? state.players.map((player) => player.seat)
         : ([0, 1, 2, 3] as const)

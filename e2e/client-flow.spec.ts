@@ -4,6 +4,7 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { APP_VERSION } from "../src/shared/version.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
@@ -1895,3 +1896,79 @@ test("match card help uses the active salary and saved economy rather than welco
   await page.keyboard.press("Escape");
   await expect(help).toBeVisible();
 });
+
+for (const locale of ["fr", "en"] as const) {
+  test(`the ${locale} footer opens release notes with keyboard dismissal and readable layouts`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      (language) => localStorage.setItem("polytour.locale", language),
+      locale,
+    );
+    await page.goto("/");
+    const trigger = page.getByRole("button", {
+      name:
+        locale === "fr"
+          ? `Version ${APP_VERSION} : voir les nouveautés`
+          : `Version ${APP_VERSION}: view changelog`,
+    });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", {
+      name: locale === "fr" ? "Nouveautés" : "What's new",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("heading", { name: `v${APP_VERSION}`, exact: true }),
+    ).toBeVisible();
+    await expect(dialog).toContainText(
+      "The Championship corner is now a stadium",
+    );
+    await expect(
+      dialog.getByRole("heading", { name: "v0.1.0", exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      dialog
+        .getByRole("heading", {
+          name: locale === "fr" ? "Modifications" : "Changed",
+          exact: true,
+        })
+        .first(),
+    ).toBeVisible();
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      const bounds = await dialog.boundingBox();
+      expect(bounds).not.toBeNull();
+      if (!bounds) throw new Error("Release dialog has no bounds");
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.y).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(size.width);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(size.height);
+      await page.screenshot({
+        path: `.local/verification/changelog-${locale}-${size.width}.png`,
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const history = dialog.getByRole("region");
+    await history.focus();
+    await page.keyboard.press("End");
+    await expect
+      .poll(() => history.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await dialog
+      .getByRole("button", {
+        name: locale === "fr" ? "Fermer les nouveautés" : "Close changelog",
+      })
+      .click();
+    await expect(trigger).toBeFocused();
+  });
+}

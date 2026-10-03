@@ -31,7 +31,6 @@ import type {
   RoomCredentials,
 } from "../shared/protocol/index.js";
 import { RoomCodeSchema, RoomConfigSchema } from "../shared/protocol/index.js";
-import { APP_VERSION } from "../shared/version.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
 import {
@@ -57,6 +56,7 @@ import {
   isBoardPick,
 } from "./ui/board-pick.js";
 import CardMoment from "./ui/CardMoment.js";
+import Changelog from "./ui/Changelog.js";
 import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
@@ -2197,7 +2197,7 @@ function App() {
             {t("2 à 4 joueurs · 32 cases", "2 to 4 players · 32 spaces")}
           </span>
           <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
-          <span>v{APP_VERSION}</span>
+          <Changelog />
         </footer>
       )}
     </main>
