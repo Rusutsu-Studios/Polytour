@@ -16,6 +16,7 @@ import {
   applyTimeout,
   botAction,
   botDecisionAt,
+  buyoutPrice,
   CHANCE_CARDS,
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -27,7 +28,10 @@ import {
   previewPropertyRent,
   propertyOwner,
   propertyRent,
+  propertyRentAt,
+  rentBoost,
   rentCardPayment,
+  resortCount,
   toPublic,
 } from "./index.js";
 
@@ -1085,6 +1089,45 @@ describe("property rent previews", () => {
     );
     expect(JSON.stringify(state)).toBe(before);
     expect(getProperty(state, 2)?.owner).toBeNull();
+  });
+  it("names the one bonus that multiplies a city's rent", () => {
+    let state = grant(newGame(), 1, 0);
+    expect(rentBoost(state, 1)).toBeNull();
+    state = grant(state, 2, 0);
+    expect(rentBoost(state, 1)).toEqual({ multiplier: 2, source: "country" });
+    state = { ...state, championshipHost: { tile: 1, multiplier: 3 } };
+    expect(rentBoost(state, 1)).toEqual({
+      multiplier: 3,
+      source: "championship",
+    });
+    // An initial festival multiplies the rent of a city nobody owns yet.
+    const bank = { ...newGame(), festivalTiles: [4] };
+    expect(rentBoost(bank, 4)).toEqual({ multiplier: 2, source: "festival" });
+    expect(rentBoost(bank, 5)).toBeNull();
+    expect(rentBoost(bank, 0)).toBeNull();
+  });
+  it("prices every build level under the city's current bonus", () => {
+    const state = {
+      ...grant(grant(newGame(), 1, 0, 2), 2, 0),
+      festivalTiles: [1],
+    };
+    const before = JSON.stringify(state);
+    expect(propertyRentAt(state, 1, 2)).toBe(propertyRent(state, 1));
+    expect(propertyRentAt(state, 1, 0)).toBe(24_000);
+    expect(propertyRentAt(state, 1, 4)).toBe(336_000);
+    // Landmarks never take a bonus.
+    expect(propertyRentAt(state, 1, 5)).toBe(240_000);
+    expect(JSON.stringify(state)).toBe(before);
+  });
+  it("prices a buyout only for an owned city below the landmark", () => {
+    let state = grant(newGame(), 1, 0, 2);
+    expect(buyoutPrice(state, 1)).toBe(getTileInvestedValue(1, 2) * 2);
+    expect(buyoutPrice(state, 2)).toBeNull();
+    state = grant(grant(state, 5, 0), 12, 0);
+    expect(buyoutPrice(state, 5)).toBeNull();
+    expect(resortCount(state, 0)).toBe(2);
+    expect(resortCount(state, 1)).toBe(0);
+    expect(buyoutPrice(grant(state, 1, 0, 5), 1)).toBeNull();
   });
   it("retains an owned host for upgrades but clears transfer hosts and excludes Landmark multipliers", () => {
     let state = grant(grant(newGame(), 1, 0, 3), 2, 0);

@@ -566,55 +566,6 @@
 .game-shell .destination-choice select {
   min-height: 42px;
 }
-.inspector-popover {
-  position: absolute;
-  z-index: 8;
-  right: 24px;
-  bottom: 155px;
-  width: 280px;
-  border-radius: 14px;
-  box-shadow:
-    0 6px 0 #488aa380,
-    0 10px 30px #17485926;
-}
-.popover-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  width: 25px;
-  height: 25px;
-  background: #f0efdd;
-}
-.game-shell .inspector {
-  padding: 20px;
-  border-radius: 14px;
-  background: #fffaf0;
-}
-.game-shell .inspector-head {
-  padding-right: 17px;
-}
-.game-shell .inspector h3 {
-  font-size: 17px;
-}
-.game-shell .tile-select {
-  font-size: 12px;
-  background: #f0f0df;
-  border-color: #bcc4b1;
-  margin-top: 13px;
-}
-.game-shell .ownership {
-  font-size: 11px;
-}
-.game-shell .property-numbers {
-  gap: 30px;
-}
-.game-shell .property-numbers dd {
-  font-size: 21px;
-}
-.game-shell .tile-rule {
-  color: #4d6b66;
-}
 .tool-drawer {
   position: absolute;
   z-index: 9;
@@ -1237,8 +1188,7 @@
 .welcome-form > input,
 .join-form input,
 .settings-fields select,
-.destination-choice select,
-.tile-select {
+.destination-choice select {
   width: 100%;
   border: 1px solid #5eaca4;
   background: #c8eee4;
@@ -1851,65 +1801,10 @@ button.seat-open:disabled {
   border-radius: 8px;
   margin-top: 18px;
 }
-.inspector {
-  padding: 20px 22px;
-  border-radius: 16px;
-  background: #c4e7d7;
-}
-.inspector-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.tile-icon {
-  width: 41px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  font-size: 26px;
-  color: #183e45;
-}
 .small-label {
   font-size: 10px;
   font-weight: 650;
   color: #4e6b66;
-}
-.inspector h3 {
-  font-size: 17px;
-  font-weight: 850;
-  margin-top: 3px;
-}
-.tile-select {
-  padding: 7px 9px;
-  font-size: 11px;
-  margin-top: 16px;
-  background: #dcf0e2;
-  border-color: #88bbaa;
-}
-.ownership {
-  font-size: 11px;
-  color: #3e605b;
-  margin-top: 14px;
-}
-.ownership span {
-  font-size: 13px;
-  margin-right: 4px;
-}
-.property-numbers {
-  display: flex;
-  gap: 30px;
-  margin: 14px 0 0;
-}
-.property-numbers dt {
-  font-size: 10px;
-  color: #4a6f68;
-}
-.property-numbers dd {
-  margin: 4px 0 0;
-  font-size: 18px;
-  font-weight: 850;
-  font-variant-numeric: tabular-nums;
 }
 .festival-badge {
   margin-top: 13px;
@@ -2405,9 +2300,6 @@ button.seat-open:disabled {
     top: 92px;
     max-height: calc(100svh - 220px);
   }
-  .inspector-popover {
-    bottom: 132px;
-  }
   .match-caption {
     left: 245px;
     right: 245px;
@@ -2598,11 +2490,6 @@ button.seat-open:disabled {
   .game-shell
     .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"] {
     width: min(320px, 100%);
-  }
-  .inspector-popover {
-    width: min(280px, calc(100vw - 24px));
-    bottom: 118px;
-    right: 12px;
   }
   .tool-drawer {
     top: 92px;

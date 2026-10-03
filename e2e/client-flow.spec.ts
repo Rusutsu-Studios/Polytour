@@ -7,6 +7,18 @@ import type {
 
 test.use({ reducedMotion: "reduce" });
 
+// Board inspection steps space by space; the card is the deed, not a list.
+async function inspectSpace(page: Page, index: number) {
+  const card = page.locator(".city-card");
+  await expect(card).toBeVisible();
+  const next = page.getByRole("button", { name: "Case suivante", exact: true });
+  for (let step = 0; step <= 32; step++) {
+    if ((await card.getAttribute("data-space")) === String(index)) return;
+    await next.click();
+  }
+  throw new Error(`The inspection card never reached space ${index}`);
+}
+
 async function minimizeOwnDecision(page: Page) {
   // Director completion and React's native dialog opening are separate steps.
   // Wait for the current decision to be represented before opening a board tool.
@@ -183,7 +195,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   // The board and the four corner HUDs fit the supported PC viewports.
   // Every secondary panel starts closed; a match needs no page scrolling.
   await expect(page.locator(".journal")).not.toBeVisible();
-  await expect(page.locator(".inspector")).not.toBeVisible();
+  await expect(page.locator(".city-card")).not.toBeVisible();
   for (const size of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
@@ -563,9 +575,13 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page
     .getByRole("button", { name: "Explorer le plateau", exact: true })
     .click();
-  await page.getByLabel("Explorer une case").selectOption("31");
-  await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
-  await expect(page.locator(".property-numbers")).toContainText("400 k");
+  await inspectSpace(page, 31);
+  await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
+  // The deed lists every building level with its cost and its rent.
+  const deedRows = page.locator(".city-card-table tbody tr");
+  await expect(deedRows).toHaveCount(6);
+  await expect(deedRows.first()).toContainText("400 k");
+  await expect(deedRows.nth(4)).toContainText("+500 k");
   // An explicitly inspected city stays selected when another pawn moves.
   // Presentation-only snapshot, restored before the real reconnect below.
   const beforeMovement = await page.evaluate(async () => {
@@ -593,9 +609,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     });
     return snapshot;
   });
-  await expect(page.getByLabel("Explorer une case")).toHaveValue("31");
-  await expect(page.locator("#inspector-title")).toHaveText("Tokyo");
-  await expect(page.locator(".property-numbers")).toContainText("400 k");
+  await expect(page.locator(".city-card")).toHaveAttribute("data-space", "31");
+  await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
+  await expect(deedRows.first()).toContainText("400 k");
   await page.evaluate(async (snapshot) => {
     const modulePath =
       performance
@@ -606,8 +622,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     const { director } = await import(modulePath);
     director.reset(snapshot);
   }, beforeMovement);
-  await page.getByLabel("Explorer une case").press("Escape");
-  await expect(page.locator(".inspector")).not.toBeVisible();
+  await page
+    .getByRole("button", { name: "Case suivante", exact: true })
+    .press("Escape");
+  await expect(page.locator(".city-card")).not.toBeVisible();
   await expect(
     page.getByRole("button", { name: "Explorer le plateau", exact: true }),
   ).toBeFocused();
