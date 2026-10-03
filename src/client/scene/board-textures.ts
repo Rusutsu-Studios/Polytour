@@ -401,7 +401,10 @@ const crazyPaving: Pavement = (context, color, width, height, next) => {
       // Each stone shrinks toward its middle, leaving an even joint.
       const inset = quad.map(([x, y]): Point => {
         const distance = Math.hypot(cx - x, cy - y) || 1;
-        return [x + ((cx - x) * 3.5) / distance, y + ((cy - y) * 3.5) / distance];
+        return [
+          x + ((cx - x) * 3.5) / distance,
+          y + ((cy - y) * 3.5) / distance,
+        ];
       });
       stone(context, polygon(context, inset), face(color, next));
     }
