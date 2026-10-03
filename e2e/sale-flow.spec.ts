@@ -563,6 +563,25 @@ test("country travel and championship pick the same legal targets on the board a
     );
     await destination.selectOption("3");
     await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    if (size.width === 1440) {
+      const diceTool = page.getByRole("button", {
+        name: "À propos des dés",
+        exact: true,
+      });
+      await diceTool.click();
+      await page
+        .getByRole("button", {
+          name: "Comment fonctionnent les dés ?",
+          exact: true,
+        })
+        .click();
+      await expect(page.locator(".help-dialog")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".help-dialog")).not.toBeVisible();
+      await expect(diceTool).toBeFocused();
+      await expect(destination).toHaveValue("3");
+      await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    }
     expect(room.intents).toHaveLength(0);
   }
   // The server owns the target list. Selecting a host remains reversible until
