@@ -141,6 +141,22 @@ app.post("/api/rooms/:roomCode/join", async (context) => {
     return context.json(result, result.error === "room-not-found" ? 404 : 409);
   return context.json(result, 200, { "Cache-Control": "no-store" });
 });
+app.post("/api/rooms/:roomCode/leave", async (context) => {
+  if (!sameOrigin(context.req.raw))
+    return context.json({ error: "origin-rejected" }, 403);
+  const code = RoomCodeSchema.safeParse(context.req.param("roomCode"));
+  if (!code.success) return context.json({ error: "invalid-room" }, 400);
+  const token = context.req
+    .header("Authorization")
+    ?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+  if (!token) return context.json({ error: "unauthorized" }, 401);
+  const result = await context.env.GAME_ROOM.getByName(code.data).leave(token);
+  return context.json(
+    result,
+    "error" in result ? (result.error === "room-not-found" ? 404 : 401) : 200,
+    { "Cache-Control": "no-store" },
+  );
+});
 app.get("/api/rooms/:roomCode", async (context) => {
   if (context.req.header("Upgrade"))
     return context.json({ error: "invalid-route" }, 400);

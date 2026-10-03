@@ -51,6 +51,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Fixed
 
+- Leaving a lobby releases the player's places and room connections and passes
+  leadership to another player, including rooms with local or waiting players.
 - Invitation links ask only for a nickname and join the invited room, with
   retryable errors, saved-seat recovery and a return to the start screen (#54).
 - Chance draws use fresh server cryptographic randomness, including saved games,
