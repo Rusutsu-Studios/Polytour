@@ -402,6 +402,27 @@ Verification on this machine:
 - On the two back sides, a pawn standing on the road can hide part of the price
   of its own lot; the inspector and decision dialogs still show it.
 
+## Pause menu preparation — 3 October 2026
+
+Branch: `codex/pause-menu-settings`, based on `f74b053`. The pause icon opens
+Continue, Settings and Leave while the match, deadlines and Director keep
+running. Settings use Game, Video, Audio and Debug tabs. Audio is marked coming
+soon for issue #35; Debug measures the same-origin Worker's HTTP round trip
+only while its tab is active. The sliders icon displays fixed room rules, while
+the invitation tool displays the room code.
+
+User animation speed and both manual finish/skip controls have been removed.
+Automatic catch-up, reconnect recovery and reduced motion remain. This replaces
+the speed/skip controls described in the historical checks above.
+
+Local verification: TypeScript, Biome, 130 unit/Worker tests, production build,
+bundle budgets and Wrangler configuration checks pass. All 20 browser scenarios
+pass, including the complete four-seat authoritative match, reconnect and live
+legacy drand verification. Four new scenarios use authored protocol fixtures to
+test modal priority, local settings, ping success/failure/timeout/cleanup and
+leave confirmation. Browser captures cover 1280x720, 1440x900 and 1920x1080.
+No remote runtime or production deployment is asserted by these local checks.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,

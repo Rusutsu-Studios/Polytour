@@ -79,7 +79,7 @@ results and the distinction between live gameplay and presentation fixtures.
 
 - [ ] Art direction spike: 1 country + 1 pawn + dice + tile in Blender → glTF pipeline
 - [ ] R3F scene: board, tiles (instanced), pawns, buildings per level, camera rig
-- [x] Director queue + `viewState`/`serverState` stores, speed control, catch-up
+- [x] Director queue + `viewState`/`serverState` stores, automatic catch-up and recovery
 - [ ] Handlers for every event in [PROTOCOL.md](PROTOCOL.md) (placeholder-quality where needed)
 - [x] Keyframed dice
 - [x] Initial HUD, money, decision and countdown implementation (before the PC layout replacement)
@@ -87,7 +87,7 @@ results and the distinction between live gameplay and presentation fixtures.
       contextual decisions and closed-by-default journal/proof/help/inspection tools
 - [x] Verify mouse/keyboard UI, overlay dismissal, reduced-animation toggle and whole-board
       visibility at 1280×720, 1440×900 and 1920×1080
-- [x] Verify 2× speed, real match countdown and active-event skip through a real roll
+- [x] Verify reduced motion, real match countdown and automatic presentation recovery
 - [x] Presentation fixtures: building levels 1–5, six purchase choices at 1280×720
       without HUD collisions, and an off-turn debtor's decision (Worker unmodified)
 - [x] Confirm the PC replacement against the remote Worker Preview

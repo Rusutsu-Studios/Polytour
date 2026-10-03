@@ -1212,7 +1212,7 @@ function SceneContent(props: BoardProps) {
         });
         timelines.current.set(timeline, resolve);
         build(timeline);
-        timeline.timeScale(context.speed);
+        timeline.timeScale(context.playbackRate);
         timeline.play();
       });
     }
@@ -1289,7 +1289,7 @@ function SceneContent(props: BoardProps) {
           onUpdate: updateCash,
         });
       }, context);
-      // Reset/skip can resolve an older timeline after a newer one began.
+      // State recovery can resolve an older timeline after a newer one began.
       if (generation !== cashEffectGeneration) return false;
       flight.visible = false;
       invalidate();

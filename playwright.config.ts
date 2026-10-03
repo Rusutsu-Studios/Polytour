@@ -2,8 +2,10 @@ import { defineConfig } from "@playwright/test";
 
 const remoteBaseURL = process.env.POLYTOUR_BASE_URL;
 const isCI = Boolean(process.env.CI);
-const devURL = "http://127.0.0.1:5173";
-const productionURL = "http://127.0.0.1:4173";
+const devPort = process.env.POLYTOUR_DEV_PORT ?? "5173";
+const previewPort = process.env.POLYTOUR_PREVIEW_PORT ?? "4173";
+const devURL = `http://127.0.0.1:${devPort}`;
+const productionURL = `http://127.0.0.1:${previewPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -25,6 +27,7 @@ export default defineConfig({
         "client-flow.spec.ts",
         "network-flow.spec.ts",
         "language-flow.spec.ts",
+        "pause-menu.spec.ts",
       ],
       use: { baseURL: remoteBaseURL ?? devURL },
     },
@@ -38,14 +41,13 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: "pnpm dev --host 127.0.0.1 --port 5173 --strictPort",
+          command: `pnpm dev --host 127.0.0.1 --port ${devPort} --strictPort`,
           url: `${devURL}/api/health`,
           reuseExistingServer: !isCI,
           timeout: 120_000,
         },
         {
-          command:
-            "pnpm exec vite build && pnpm exec vite preview --host 127.0.0.1 --port 4173 --strictPort",
+          command: `pnpm exec vite build && pnpm exec vite preview --host 127.0.0.1 --port ${previewPort} --strictPort`,
           url: `${productionURL}/api/health`,
           reuseExistingServer: !isCI,
           timeout: 120_000,

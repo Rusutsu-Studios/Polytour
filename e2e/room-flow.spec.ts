@@ -286,9 +286,17 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
   });
   // Leaving a legacy room must not carry its hidden mode into a new UI room.
   await actor.page.keyboard.press("Escape");
-  await actor.page.getByRole("button", { name: "Quitter la partie" }).click();
+  await actor.page.getByRole("button", { name: "Menu pause" }).click();
+  await actor.page
+    .getByRole("button", { name: "Quitter", exact: true })
+    .click();
+  await actor.page
+    .getByRole("button", { name: "Quitter la partie", exact: true })
+    .click();
   await actor.page.locator(".settings-trigger").click();
-  await expect(actor.page.locator(".room-settings")).not.toContainText("drand");
+  await expect(
+    actor.page.locator(".settings-dialog .room-settings"),
+  ).not.toContainText("drand");
   await actor.page
     .getByRole("button", { name: "Appliquer les réglages" })
     .click();
