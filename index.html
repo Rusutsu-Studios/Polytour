@@ -4,10 +4,90 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#75d4ed" />
-    <title>Polytour</title>
+    <title>Polytour — Jeu de plateau multijoueur en ligne</title>
+    <meta
+      name="description"
+      content="Jouez à Polytour, un jeu de plateau immobilier pour 2 à 4 joueurs. Achetez des villes, construisez et jouez entre amis ou contre des bots dans votre navigateur."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://polytour.fun/" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Polytour" />
+    <meta property="og:url" content="https://polytour.fun/" />
+    <meta property="og:title" content="Polytour — Jeu de plateau multijoueur en ligne" />
+    <meta
+      property="og:description"
+      content="Jouez à Polytour, un jeu de plateau immobilier pour 2 à 4 joueurs. Achetez des villes, construisez et jouez entre amis ou contre des bots dans votre navigateur."
+    />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:locale:alternate" content="en_GB" />
+    <meta property="og:image" content="https://polytour.fun/social-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Plateau de jeu Polytour avec ses villes et ses pions" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Polytour — Jeu de plateau multijoueur en ligne" />
+    <meta
+      name="twitter:description"
+      content="Jouez à Polytour, un jeu de plateau immobilier pour 2 à 4 joueurs. Achetez des villes, construisez et jouez entre amis ou contre des bots dans votre navigateur."
+    />
+    <meta name="twitter:image" content="https://polytour.fun/social-card.png" />
+    <meta name="twitter:image:alt" content="Plateau de jeu Polytour avec ses villes et ses pions" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": ["VideoGame", "WebApplication"],
+        "name": "Polytour",
+        "url": "https://polytour.fun/",
+        "description": "Un jeu de plateau immobilier pour 2 à 4 joueurs, entre amis ou contre des bots dans un navigateur.",
+        "image": "https://polytour.fun/social-card.png",
+        "inLanguage": ["fr", "en"],
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Web browser",
+        "browserRequirements": "Requires JavaScript",
+        "numberOfPlayers": {
+          "@type": "QuantitativeValue",
+          "minValue": 2,
+          "maxValue": 4
+        }
+      }
+    </script>
+    <style>
+      .site-intro {
+        box-sizing: border-box;
+        max-width: 720px;
+        margin: 10vh auto;
+        padding: 32px;
+        color: #173b45;
+        background: #fffaf0;
+        border-radius: 16px;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        line-height: 1.6;
+      }
+      .site-intro h1 { font-size: 44px; margin: 0; }
+      .site-intro img { width: 48px; height: 48px; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="site-intro">
+        <img src="/favicon.svg" alt="" width="48" height="48" />
+        <h1>Polytour</h1>
+        <p>Un jeu de plateau immobilier en ligne pour 2 à 4 joueurs.</p>
+        <p>
+          Voyagez de ville en ville, achetez des terrains, construisez des maisons
+          et des hôtels, et percevez des loyers. Créez une salle privée pour jouer
+          entre amis ou retrouvez trois bots pour une partie dans votre navigateur.
+        </p>
+        <p>Disponible en français et en anglais, sur un plateau 3D pour ordinateur.</p>
+        <noscript><p>Activez JavaScript pour ouvrir le jeu et rejoindre une partie.</p></noscript>
+      </main>
+    </div>
     <script type="module" src="/src/client/main.tsx"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import gsap from "gsap";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { type BoardRule, getBoard } from "../../shared/board/index.js";
 import type { GameConfig, PublicState } from "../../shared/engine/index.js";
@@ -9,7 +9,6 @@ import {
   economyRule,
   getProperty,
 } from "../../shared/engine/index.js";
-import { useDirector } from "../director/director.js";
 import { PLAYER_COLORS, tileColor } from "../ui/board-display.js";
 import { LAWN_TOP, visibleFaces } from "./board-layout.js";
 import { mix } from "./board-textures.js";
@@ -41,8 +40,6 @@ export type DowntownHandle = {
   draw: (state: PublicState | null, growth: TownGrowth | null) => void;
 };
 
-/** Ambient life renders at this rate between game animations. */
-const AMBIENT_FRAME_MS = 1000 / 30;
 const CAR_SPEED = 0.42;
 const CAR_COLORS = [
   "#fffaf0",
@@ -483,7 +480,6 @@ function circuitBuffer() {
 }
 
 function AmbientLife({ animated }: { animated: boolean }) {
-  const { invalidate } = useThree();
   const circuit = useMemo(circuitBuffer, []);
   const bodies = useRef<THREE.InstancedMesh>(null);
   const cabins = useRef<THREE.InstancedMesh>(null);
@@ -511,15 +507,6 @@ function AmbientLife({ animated }: { animated: boolean }) {
     for (const mesh of [body, gondola])
       if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
   }, []);
-
-  useEffect(() => {
-    if (!animated) {
-      invalidate();
-      return;
-    }
-    const timer = window.setInterval(() => invalidate(), AMBIENT_FRAME_MS);
-    return () => window.clearInterval(timer);
-  }, [animated, invalidate]);
 
   useFrame(({ clock }) => {
     // Reduced motion freezes the town at a tidy moment.
@@ -858,26 +845,16 @@ export function Downtown({
   state,
   config,
   preview = false,
-  lowGraphics = false,
+  animated,
   handle,
 }: {
   state: PublicState | null;
   config?: GameConfig;
   preview?: boolean;
-  lowGraphics?: boolean;
+  /** Ambient life plays; see `useAmbientMotion`, which keeps frames coming. */
+  animated: boolean;
   handle: { current: DowntownHandle | null };
 }) {
-  const { reducedMotion } = useDirector();
-  const [visible, setVisible] = useState(
-    () => document.visibilityState !== "hidden",
-  );
-  useEffect(() => {
-    const changed = () => setVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", changed);
-    return () => document.removeEventListener("visibilitychange", changed);
-  }, []);
-  // Lobby previews stay still: they are decoration, and an idle lobby should
-  // not keep rendering a 3D scene.
   return (
     <group>
       <TownBuildings
@@ -886,15 +863,7 @@ export function Downtown({
         preview={preview}
         handle={handle}
       />
-      <AmbientLife
-        animated={
-          !reducedMotion &&
-          !lowGraphics &&
-          !preview &&
-          state?.status === "active" &&
-          visible
-        }
-      />
+      <AmbientLife animated={animated} />
     </group>
   );
 }
