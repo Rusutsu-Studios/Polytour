@@ -18,7 +18,7 @@ import "./LuckCardHelp.css";
 /** A reference catalogue: browsing cards never draws or plays one. */
 export default function LuckCardHelp({ config }: { config: GameConfig }) {
   const { t } = useLocale();
-  const { reducedMotion, speed } = useDirector();
+  const { reducedMotion } = useDirector();
   const id = useId();
   const [selected, setSelected] = useState<{
     card: ChanceCard;
@@ -127,7 +127,7 @@ export default function LuckCardHelp({ config }: { config: GameConfig }) {
               data-tone={card.tone}
               initial={reducedMotion ? false : { opacity: 0.8, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: reducedMotion ? 0 : 0.24 / speed }}
+              transition={{ duration: reducedMotion ? 0 : 0.24 }}
             >
               <header>
                 <span>{t("Carte Surprise", "Luck card")}</span>

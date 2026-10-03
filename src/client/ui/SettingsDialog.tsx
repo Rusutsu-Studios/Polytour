@@ -20,7 +20,7 @@ export default function SettingsDialog(props: RoomSettingsProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const { reducedMotion, speed } = useDirector();
+  const { reducedMotion } = useDirector();
   const dismiss = () => setOpen(false);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function SettingsDialog(props: RoomSettingsProps) {
               initial={reducedMotion ? false : { opacity: 0.8, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
-                duration: reducedMotion ? 0 : 0.24 / speed,
+                duration: reducedMotion ? 0 : 0.24,
                 ease: "easeOut",
               }}
             >

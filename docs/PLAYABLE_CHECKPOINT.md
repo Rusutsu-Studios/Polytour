@@ -471,6 +471,138 @@ Verification on this branch:
 - All 21 end-to-end scenarios pass, including the local production Worker's
   four-seat match, reconnect and legacy drand verification.
 
+## Pause menu preparation — 3 October 2026
+
+Branch: `codex/pause-menu-settings`, based on `f74b053`. The pause icon opens
+Continue, Settings and Leave while the match, deadlines and Director keep
+running. Settings use Game, Video, Audio and Debug tabs. Audio is marked coming
+soon for issue #35; Debug measures the same-origin static Cloudflare asset's HTTP round trip
+each second while its panel and browser page are visible and online, and
+displays the game service, host and actual Cloudflare
+entry point with its code, location and broad region. The location mapping is
+bundled from Cloudflare's official Status API (341 geographic POPs). A tiny
+bottom-right `AMS · 42 ms` indicator keeps the last sample outside Debug. The
+probe validates a static text sentinel and reads the current response's `Cf-Ray`
+suffix. Existing asset-first routing serves it without invoking a Worker or DO;
+the browser ping does not call `/api/health`. The
+sliders icon displays fixed room rules, while
+the invitation tool displays the room code.
+
+User animation speed and both manual finish/skip controls have been removed.
+Automatic catch-up, reconnect recovery and reduced motion remain. This replaces
+the speed/skip controls described in the historical checks above.
+
+Local verification: TypeScript, Biome, 143 unit/Worker tests, production build,
+bundle budgets and Wrangler configuration checks pass. All 20 browser scenarios
+passed for the initial pause-menu commit, including the complete four-seat
+authoritative match, reconnect and live legacy drand verification. For the static
+probe revision, all 16 existing browser scenarios and eight focused menu scenarios
+pass. The focused rerun follows a commit-phase teardown fix: closing Debug stops
+its timer and network listeners before any further browser event can start a probe.
+They use authored protocol fixtures to
+test modal priority, local settings, ping success/failure/timeout/cleanup and
+leave confirmation, and distinguish Cloudflare, local and unknown POP responses.
+Network and game reconnects immediately restart the measurement. Tests also cover
+one-second scheduling, offline/hidden suspension, a transport ignoring cancellation,
+five-second timeout recovery and rejecting responses from superseded measurements.
+Browser captures cover 1280x720, 1440x900 and 1920x1080; Debug and the tiny badge
+additionally cover 390x844 without horizontal overflow or player-card overlap.
+Metadata shown in these captures is a fixture.
+No remote runtime or production deployment is asserted by these local checks.
+
+## Room routing and latency diagnostics — 3 October 2026
+
+Debug now joins the connected seats' Cloudflare ingress POPs and regions to their
+shared GameRoom and its local SQLite storage. The current socket's public Worker
+endpoint is shown separately from the static HTTP probe. Physical DO location and
+server hostname are explicitly unavailable; an optional jurisdiction is a placement
+restriction, not an execution DC. No internal Cloudflare credentials, player IPs,
+seat capabilities, object identifiers or database contents reach the diagnostic UI.
+
+A bounded graph holds sixty real room WebSocket RTT samples, with minimum, mean
+and maximum. Samples run every five seconds only while Debug and the page are
+visible and online. A fixed native DO WebSocket auto-response avoids waking game
+JavaScript, SQL and alarms. The existing one-second static HTTP probe remains
+asset-first. At five-second cadence, the room probes account for about 36 DO
+compute-request equivalents per active debugger-hour under the 20:1 incoming
+WebSocket ratio; they create no additional Worker HTTP polling. One authenticated
+metadata message on opening/reconnect reads socket attachments, without querying
+game rows. It can wake the DO; after the room-allocation integration below, its
+constructor only checks for an existing schema rather than creating tables.
+
+The client accepts newer optional capability numbers without rejecting the game
+welcome, but sends diagnostic messages only for the supported version. Per-socket
+FIFO slots preserve expired requests so delayed fixed replies cannot invent a new
+latency after menu closure, visibility changes or a same-socket resync. New sockets
+reset samples and refresh routing metadata. Gameplay protocol version and frozen
+rules remain unchanged.
+
+Local TypeScript, Biome, 162 unit/Worker tests, 100 simulated games, production build,
+bundle budgets, Wrangler configuration and deployment dry run pass. Backend tests
+exercise real workerd authenticated sockets and hibernation: the fixed ping does
+not enter the JavaScript message handler, touch SQL, change alarms or mutate state.
+
+The 16 existing browser scenarios pass, including the complete authoritative match,
+reconnect and live legacy drand verification. All 11 pause/settings/debug cases are
+verified: 26 of 27 scenarios passed in the full run, then the graph capture and the
+remaining stale-pong case passed after a test-only WebSocket observer setup fix.
+Coverage includes five-second socket cadence, one-time metadata, old capability
+fallback, hidden/offline/close suspension, reconnection, FIFO late-reply rejection,
+real timed samples, sixty-point history, pause gaps and FR/EN accessibility.
+Captures at 1280x720, 1440x900, 1920x1080 and 390x844 have no horizontal overflow.
+The illustrated FRA/Europe and IAD/North America paths are authored fixtures,
+not evidence of geographically distributed remote players.
+
+A real browser check of the Cloudflare branch Preview at implementation revision
+`a9b3261` on 3 October 2026 succeeds: room creation returns 201, the server advertises
+debug capability 1, the socket reports ZRH / Zurich / Europe, and two real room RTT
+samples produce the graph (64 ms latest, 75 ms mean). Its DO location and jurisdiction
+remain null. Closing Debug stops both probe streams; reconnecting renews metadata
+and the graph. The check observes one metadata request per opening/connection,
+zero health calls and zero page errors. This verifies one connection to a branch
+Preview, not a geographically distributed group or production deployment. The
+previously recorded remote SQLite quota blockage is no longer present in this check.
+
+## Five-second match HUD and concise room details — 3 October 2026
+
+The user's follow-up makes the static HTTP badge a live match indicator: it
+refreshes every five seconds even with Debug closed, while the game connection is
+online and the page is visible. Debug shares that same stream. Hiding the page,
+going offline or leaving the match stops the probe; connectivity changes still
+refresh it immediately. These requests remain asset-first and do not execute
+Worker or DO code. The room WebSocket graph and its metadata stay Debug-only.
+
+The jurisdiction and physical DO host/DC rows are removed from the FR/EN interface,
+along with their unused formatting. The protocol retains its compatible metadata
+shape. This supersedes the earlier one-second Debug-only HTTP probe and the
+explicit unavailable DO location rows described above.
+
+TypeScript, Biome, 162 unit/Worker tests, production build and bundle budgets pass.
+All 26 non-live browser scenarios pass in one run, including the real production
+gameplay/reconnection flow and 11 pause/settings/debug cases. HTTP checks cover
+five-second cadence outside Debug, one shared stream, hidden/offline/leave cleanup,
+network refresh and timeout recovery. Room diagnostics remain Debug-only. The
+removed labels are absent in FR/EN; captures at 1280x720, 1440x900, 1920x1080 and
+390x844 retain usable layout without horizontal overflow. Some clock-controlled
+fixtures leave the 3D backdrop unrendered; their diagnostic values are illustrative.
+
+## Integration with current main — 3 October 2026
+
+Merge `8d8530f` into the pause/settings branch. The new country board, central town,
+title-deed inspection, board destination/sale selection, player turn timers and
+full cash balances remain. Shared dice help and saved-match migration retain their
+upstream behavior. The pause menu, fixed room settings, five-second static HTTP
+badge and Debug-only room WebSocket diagnostics remain together. Newly added UI
+components use fixed motion durations after the animation-speed control removal.
+
+TypeScript, Biome, all 214 unit/Worker tests, 100 reference-economy simulations,
+production build, bundle budgets, Cloudflare configuration and deployment dry run
+pass. All 34 non-live browser scenarios pass in one run, including four isolated
+seats finishing an authoritative local Worker match and reconnecting. The merged
+protocol, room-rule markers, title-deed and board selection paths are exercised
+alongside the pause/settings/debug flows. Desktop captures and bounds checks cover
+1280x720, 1440x900, 1920x1080, 2560x1440 and 3840x2160; Debug also covers 390x844.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,
@@ -544,3 +676,40 @@ Local verification:
   179.2 kB gzip against the 250 kB limit.
 
 These results use the local Worker. They do not establish a production deployment.
+
+
+## Pause settings integration with graphics and room protection — 3 October 2026
+
+The integration retains main through `3f74335`: nickname-only invitations,
+card catalogue and saved-economy explanations, application version, town
+occlusion, High/Low graphics, secure Chance entropy and room-allocation guards.
+A shared graphics control remains on the welcome screen and match toolbar and
+also appears in the pause menu's Video tab. Card-help motion uses a fixed duration
+after removing the animation-speed preference. Match rules stay behind the
+sliders tool; personal settings remain in the pause menu.
+
+The GameRoom native WebSocket reply and authenticated attachment-only metadata
+path coexist with `schemaReady`. The constructor checks for an existing schema;
+only `init()` creates tables. Cleanup retains empty storage. Every live engine
+context retains fresh Chance entropy, and the new admission and Worker-only
+health paths are preserved.
+
+Local verification:
+
+- TypeScript, Biome, all 268 unit/Worker tests and 14 release-tooling tests pass.
+  One initial Worker HTTP diagnostic test exceeded the five-second startup
+  timeout; the complete suite then passed without changing code or timeouts.
+- All 48 non-live browser scenarios pass on the UI integration (`cf39fd0`),
+  including the real four-seat match, invitations, graphics and all eleven
+  pause/settings/debug cases. Desktop coverage includes 1280x720, 1440x900,
+  1920x1080, 2560x1440 and 3840x2160; Debug also covers 390x844.
+- After the latest backend integration, 23 targeted scenarios pass across two
+  runs: all eleven pause/settings/debug cases, graphics persistence/render cost/
+  real roll/reconnect, cards, invitations, authoritative match/reconnection,
+  version and Worker routing. Client assets are unchanged by that backend merge.
+- One hundred reference-economy simulations terminate and preserve per-event
+  money, card, ownership and replay invariants. Production build, bundle budgets,
+  version consistency, Cloudflare configuration and deployment dry run pass.
+
+These are local integration checks. GitHub CI and remote deployment verification
+are recorded in the pull request separately.

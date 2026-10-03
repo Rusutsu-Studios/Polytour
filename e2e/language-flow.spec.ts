@@ -142,10 +142,13 @@ test("English local match switches language without rejoining or changing game s
   );
   const url = page.url();
   const socketCount = sockets;
+  await page.getByRole("button", { name: "Pause menu", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
-    .getByRole("button", { name: "View and animation", exact: true })
-    .click();
-  await page.getByLabel("Langue / Language").selectOption("fr");
+    .locator(".pause-dialog")
+    .getByLabel("Language", { exact: true })
+    .selectOption("fr");
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),

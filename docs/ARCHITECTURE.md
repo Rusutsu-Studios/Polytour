@@ -56,6 +56,73 @@ WebSocket upgrades. Each live match is a `GameRoom` Durable Object: a single-thr
 strongly consistent actor that owns the game state, the players' sockets, and the
 turn timers. Everything that outlives a match (accounts, results, ratings) goes to D1.
 
+## Browser diagnostics
+
+The match HUD measures the full HTTP round trip to the same-origin static asset
+`GET /connection-probe.txt`, without browser caching, every five seconds while
+the match is connected, the browser page is visible and the browser is online. Only
+one request can be pending; a five-second timeout releases it even if the
+transport never settles after cancellation. Browser connectivity changes,
+game reconnects and returning to a visible page immediately restart measurement,
+discarding superseded responses. Commit-phase teardown removes timers and listeners
+and aborts pending work. A small bottom-right `AMS · 42 ms` indicator and the
+Debug tab share this stream; closing Debug leaves the static HUD probe running.
+Leaving the match stops it. The probe validates its complete sentinel
+body before accepting a sample, so an SPA fallback cannot look like a successful
+measurement. The response's `Cf-Ray` suffix identifies the current Cloudflare
+entry point, and its URL identifies the contacted hostname, including a branch
+Preview. Its readable location and broad region
+come from a bundled snapshot of the [official Cloudflare Status components
+API](https://www.cloudflarestatus.com/api/v2/components.json), retrieved on
+3 October 2026 (`shared/protocol/cloudflare-locations.ts`). Updating that snapshot means
+joining POP components' `group_id` to the seven geographic region groups and
+extracting the final three-letter code from each POP name. Product components
+are excluded. The snapshot contains 341 POPs; new codes still display when unmapped.
+
+Without `Cf-Ray`, loopback hosts show local execution. Missing POP metadata stays
+unknown. Visitor
+`cf.city`, `cf.country` and `cf.region` are never used as a server location.
+The HTTP ping is separate from the WebSocket game latency, and this entry point
+does not identify the game socket's entry point or the room's Durable Object location.
+With `assets.run_worker_first` limited to `/api/*` and `/ws/*`, the probe is served
+directly by Workers Static Assets without invoking Worker JavaScript or a Durable
+Object. It remains a network request; static asset requests are free and unlimited
+under this configuration. The existing `/api/health?debug=1` endpoint remains
+available for on-demand operational checks and is not called by the browser ping.
+See Cloudflare's [response headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-ray),
+[static asset billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
+and [DO location](https://developers.cloudflare.com/durable-objects/reference/data-location/).
+
+The same Debug view also measures the existing game WebSocket's round trip every
+five seconds, after the server advertises the optional debug capability in
+`welcome`. A fixed `setWebSocketAutoResponse` pair responds without waking
+hibernating game JavaScript, touching SQLite or scheduling a DO alarm. A bounded
+per-socket FIFO keeps expired attempts across menu/visibility changes so late
+constant replies cannot produce a false fresh latency. Closing Debug stops the
+room-diagnostic timers. At this cadence, 720 incoming messages per hour correspond to
+36 DO compute-request equivalents per hour per active debugger under the
+[20:1 WebSocket billing ratio](https://developers.cloudflare.com/durable-objects/platform/pricing/#compute-billing).
+Outgoing messages are free; these pings add no Worker HTTP requests. They are not
+entirely unmetered DO messages.
+
+One authenticated `debug-info` message on open/reconnect obtains a routing snapshot
+from WebSocket attachments: the current socket's public Worker endpoint/ingress,
+and each connected seat's ingress POP. The diagnostic handler reads no game SQL
+rows. Metadata requests can wake the DO; its constructor only checks for an
+existing schema. They expose no IP addresses, seat capabilities, object identifiers
+or database contents. This metadata is sent
+only to the requesting room member. It is refreshed after reconnection or when an
+initial measurement was interrupted, without continuous metadata polling.
+
+The route diagram joins those player entry points to one shared `GameRoom` with
+its local SQLite database. A DO's exact execution POP and physical server hostname
+have no documented runtime getters; their unhelpful placeholder rows are omitted
+from the UI, along with the jurisdiction row.
+`ctx.id.jurisdiction` is an enforced restriction, not the execution DC, and is null
+for the current unrestricted rooms. `request.cf.colo` is ingress metadata and must
+never be substituted for a DO's location. HTTP and WebSocket round trips are
+shown separately; subtracting them would not reliably measure Worker-to-DO latency.
+
 ## System overview
 
 ```mermaid
