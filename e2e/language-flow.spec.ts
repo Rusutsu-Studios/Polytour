@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -20,6 +21,29 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   await page.getByLabel("Langue / Language").selectOption("en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "New game" })).toBeVisible();
+  await page.getByRole("button", { name: "How to play", exact: true }).click();
+  const help = page.locator(".help-dialog");
+  await expect(
+    help.getByRole("heading", { name: "How to play", exact: true }),
+  ).toBeVisible();
+  await expect(help.locator(".help-dice")).toContainText(
+    "On every roll, the server draws fresh random bytes with Cloudflare’s Web Crypto API. Values that would favor some faces are discarded, giving each face a 1 in 6 chance.",
+  );
+  await expect(help).not.toContainText(
+    /Purchases cannot alter|paid bonuses|still being balanced|still being tuned/,
+  );
+  const documentation = help.getByRole("link", {
+    name: "Cloudflare Web Crypto documentation (opens in a new tab)",
+    exact: true,
+  });
+  await expect(documentation).toBeVisible();
+  await expect(documentation).toHaveAttribute(
+    "href",
+    "https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#methods",
+  );
+  await expect(documentation).toHaveAttribute("target", "_blank");
+  await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
+  await help.getByRole("button", { name: "Got it", exact: true }).click();
   const quickSettings = page.locator(".welcome-quick-settings");
   await expect(quickSettings.getByRole("slider")).toHaveCount(3);
   const startingCash = quickSettings.getByRole("slider", {
@@ -38,17 +62,21 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   ).toHaveValue("2010000");
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-trigger")).toBeFocused();
-  for (const size of [
-    { width: 1280, height: 720 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+  for (const size of DESKTOP_SIZES) {
     await page.setViewportSize(size);
     await expect(page.locator(".welcome-board-preview canvas")).toBeVisible();
     const preview = await page.locator(".welcome-board-preview").boundingBox();
     expect(preview?.height).toBeGreaterThan(340);
     const settingsBounds = await quickSettings.boundingBox();
-    expect(settingsBounds?.height).toBeLessThan(220);
+    // Large screens zoom the panels; compactness is judged at that zoom.
+    const uiZoom = await page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--ui-zoom",
+        ),
+      ),
+    );
+    expect(settingsBounds?.height).toBeLessThan(220 * uiZoom);
     expect(
       (settingsBounds?.x ?? 0) + (settingsBounds?.width ?? 0),
     ).toBeLessThanOrEqual(size.width);
@@ -130,9 +158,18 @@ test("English local match switches language without rejoining or changing game s
   await page
     .getByRole("button", { name: "Explorer le plateau", exact: true })
     .click();
-  await expect(page.getByLabel("Explorer une case")).toContainText(
-    "Grand départ",
-  );
+  // The card speaks the new locale: its step controls and the space it names.
+  const card = page.locator(".city-card");
+  await expect(card).toBeVisible();
+  const nextSpace = page.getByRole("button", {
+    name: "Case suivante",
+    exact: true,
+  });
+  for (let step = 0; step <= 32; step++) {
+    if ((await card.getAttribute("data-space")) === "0") break;
+    await nextSpace.click();
+  }
+  await expect(page.locator("#city-card-title")).toHaveText("Grand départ");
   await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Lancer les dés", exact: true })

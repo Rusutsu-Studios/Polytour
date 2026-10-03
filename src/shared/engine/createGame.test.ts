@@ -33,7 +33,7 @@ describe("createGame", () => {
       result: null,
       startedAt: 100,
       matchDeadline: 7_200_100,
-      config: { hotelPurchaseRule: "staged-hotels" },
+      config: { hotelPurchaseRule: "staged-hotels", economyRule: "reference" },
     });
     expect(state.pending).toEqual({
       kind: "roll",
@@ -122,6 +122,59 @@ describe("createGame", () => {
       { now: 0 },
     );
     expect(legacy.state.config.hotelPurchaseRule).toBe("legacy-lap");
+  });
+  it("freezes the country board and reference rules when no new-game markers are supplied", () => {
+    const game = createGame(
+      {
+        ...DEFAULT_GAME_CONFIG,
+        boardRule: undefined,
+        economyRule: undefined,
+        sellBackPercent: undefined,
+      },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(toPublic(game.state).config).toMatchObject({
+      boardRule: "country",
+      economyRule: "reference",
+      sellBackPercent: 100,
+    });
+    const legacy = createGame(
+      {
+        ...DEFAULT_GAME_CONFIG,
+        boardRule: "legacy",
+        economyRule: "prototype",
+        sellBackPercent: 50,
+      },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(legacy.state.config).toMatchObject({
+      boardRule: "legacy",
+      economyRule: "prototype",
+      sellBackPercent: 50,
+    });
+    expect(() =>
+      createGame(
+        {
+          ...DEFAULT_GAME_CONFIG,
+          boardRule: "anywhere" as "legacy",
+        },
+        SEATS,
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("board rule");
+    expect(() =>
+      createGame(
+        { ...DEFAULT_GAME_CONFIG, sellBackPercent: 75 as 50 },
+        SEATS,
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("50 or 100");
   });
   it("validates identities, counts, integer money, positive deadlines and supported festivals", () => {
     expect(() =>

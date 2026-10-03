@@ -30,6 +30,10 @@ import {
 } from "../shared/protocol/index.js";
 import type { DiceCommitment, DiceProof } from "../shared/randomness/types.js";
 import { prepareDice, resolveDice } from "./randomness.js";
+import {
+  CURRENT_STATE_VERSION,
+  migrateSavedState,
+} from "./state-migrations.js";
 
 type RoomMeta = { roomCode: string; config: RoomConfig; createdAt: number };
 type StoredSeat = {
@@ -54,6 +58,19 @@ type PendingDice = {
 };
 type EventRow = { seq: number; json: string; proof: string | null };
 const BOT_NAMES = ["Iris", "Milo", "Nova", "Atlas"] as const;
+/** 2–3 are original production rooms; 5 combines the board and reference rules. */
+const RULES_VERSION = 5;
+function frozenRules(version: number | null) {
+  if (version !== 2 && version !== 3 && version !== 4 && version !== 5)
+    throw new Error("Unsupported saved rules version");
+  return {
+    boardRule: version === 5 ? ("country" as const) : ("legacy" as const),
+    economyRule: version >= 4 ? ("reference" as const) : ("prototype" as const),
+    hotelPurchaseRule:
+      version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
+    sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
+  };
+}
 
 function newToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
@@ -135,27 +152,54 @@ export class GameRoom extends DurableObject<Env> {
         "SELECT seq,json FROM state WHERE id=1",
       )
       .toArray()[0];
+    if (!row && this.readMeta("room") === null) return null;
     const rulesVersion = this.readMeta<number>("rulesVersion");
-    if (
-      (row || this.readMeta("room") !== null) &&
-      (this.readMeta<number>("stateVersion") !== 1 ||
-        (rulesVersion !== 2 && rulesVersion !== 3))
-    ) {
-      throw new Error(
-        "Unsupported saved match version; this room cannot use different rules silently",
-      );
+    const frozen = frozenRules(rulesVersion);
+    // A deploy restarts every room mid-game, so this build has to read what the
+    // previous one wrote: climb the saved shape to CURRENT_STATE_VERSION, and
+    // refuse a shape no ladder reaches rather than hand the engine something it
+    // does not understand. docs/ARCHITECTURE.md -> Deploys and games in progress.
+    const migrated = migrateSavedState(
+      row ? (JSON.parse(row.json) as unknown) : null,
+      this.readMeta<number>("stateVersion") ?? Number.NaN,
+    );
+    if (migrated.changed) {
+      // Persist the climbed state before any caller broadcasts from it.
+      this.ctx.storage.transactionSync(() => {
+        if (row)
+          this.ctx.storage.sql.exec(
+            "UPDATE state SET json=? WHERE id=1",
+            JSON.stringify(migrated.state),
+          );
+        this.writeMeta("stateVersion", CURRENT_STATE_VERSION);
+      });
     }
     if (!row) return null;
-    const state = JSON.parse(row.json) as GameState;
+    const state = migrated.state as GameState;
     const hotelRule = state.config.hotelPurchaseRule;
+    const economy = state.config.economyRule;
+    const prototypeEconomy = economy === undefined || economy === "prototype";
+    const board = state.config.boardRule;
+    const sale = state.config.sellBackPercent;
     if (
-      (rulesVersion === 3 && hotelRule !== "staged-hotels") ||
+      (rulesVersion !== null &&
+        rulesVersion >= 4 &&
+        (hotelRule !== frozen.hotelPurchaseRule ||
+          economy !== frozen.economyRule ||
+          board !== frozen.boardRule ||
+          sale !== frozen.sellBackPercent)) ||
+      (rulesVersion !== null &&
+        rulesVersion <= 3 &&
+        ((board !== undefined && board !== "legacy") ||
+          (sale !== undefined && sale !== 50))) ||
+      (rulesVersion === 3 &&
+        (hotelRule !== "staged-hotels" || !prototypeEconomy)) ||
       (rulesVersion === 2 &&
-        hotelRule !== undefined &&
-        hotelRule !== "legacy-lap")
+        ((hotelRule !== undefined && hotelRule !== "legacy-lap") ||
+          !prototypeEconomy))
     ) {
       throw new Error(
-        "Saved match hotel rule does not match its frozen rules version",
+        "Saved match rules do not match its frozen rules version",
       );
     }
     return { seq: row.seq, state };
@@ -183,8 +227,8 @@ export class GameRoom extends DurableObject<Env> {
         config: RoomConfigSchema.parse(config),
         createdAt: Date.now(),
       } satisfies RoomMeta);
-      this.writeMeta("stateVersion", 1);
-      this.writeMeta("rulesVersion", 3);
+      this.writeMeta("stateVersion", CURRENT_STATE_VERSION);
+      this.writeMeta("rulesVersion", RULES_VERSION);
       this.ctx.storage.sql.exec(
         "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
         name,
@@ -235,6 +279,7 @@ export class GameRoom extends DurableObject<Env> {
           ? "finished"
           : "playing",
       config: room.config,
+      ...frozenRules(this.readMeta<number>("rulesVersion")),
       seats: ([0, 1, 2, 3] as const).map((seat) => {
         const entry = seats.find((candidate) => candidate.seat === seat);
         return {
@@ -597,14 +642,12 @@ export class GameRoom extends DurableObject<Env> {
     });
     const seed = crypto.getRandomValues(new Uint32Array(1))[0];
     const startedAt = Date.now();
+    const rulesVersion = this.readMeta<number>("rulesVersion");
     const result = createGame(
       {
         ...room.config,
         gameId: room.roomCode,
-        hotelPurchaseRule:
-          this.readMeta<number>("rulesVersion") === 2
-            ? "legacy-lap"
-            : "staged-hotels",
+        ...frozenRules(rulesVersion),
       },
       allSeats,
       seed,

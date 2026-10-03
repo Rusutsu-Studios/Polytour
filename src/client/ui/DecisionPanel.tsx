@@ -1,14 +1,18 @@
 import { motion } from "motion/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BOARD } from "../../shared/board/index.js";
+import { getBoard, ruleEconomy } from "../../shared/board/index.js";
 import type { BuildLevel } from "../../shared/board/types.js";
 import {
   type Action,
   actionCost,
+  buyoutPriceAt,
+  championshipCost,
+  economyRule,
   getProperty,
   legalActions,
   maxBuildLevel,
+  nextChampionship,
   type PublicState,
   previewPropertyRent,
   propertyRefund,
@@ -24,8 +28,17 @@ import {
   money,
   PLAYER_COLORS,
   PLAYER_SYMBOLS,
+  TILE_ICONS,
+  tileColor,
   tileName,
+  tilePrice,
 } from "./board-display.js";
+import {
+  type BoardPickAction,
+  boardPickActions,
+  isBoardPick,
+} from "./board-pick.js";
+import CityIllustration from "./CityIllustration.js";
 import { cardName } from "./chance-display.js";
 import Icon from "./Icon.js";
 import "./DecisionPanel.css";
@@ -38,6 +51,8 @@ export type DecisionPanelProps = {
   randomness: RandomnessStatus | null;
   selected: number | null;
   onSelect: (tile: number) => void;
+  picked: number | null;
+  onPick: (tile: number) => void;
 };
 type ConstructionAction = Extract<Action, { type: "Buy" | "Build" }>;
 type DestinationAction = Extract<Action, { tile: number }>;
@@ -60,15 +75,15 @@ const COPY = {
   ],
   travel: [
     "Choisissez votre destination",
-    "Sélectionnez une case sur le plateau.",
+    "Cliquez une case en surbrillance ou utilisez la liste.",
     "Choose a destination",
-    "Select a space on the board.",
+    "Click a highlighted space or use the list.",
   ],
   host: [
-    "Accueillir un festival",
-    "Choisissez la ville qui accueillera le festival.",
-    "Host a festival",
-    "Choose the city that will host the festival.",
+    "Championnat",
+    "Cliquez l’une de vos villes en surbrillance ou utilisez la liste.",
+    "Championship",
+    "Click one of your highlighted cities or use the list.",
   ],
   "card-target": [
     "Choisir une ville",
@@ -109,25 +124,34 @@ function actionLabel(action: Action, state: PublicState): string {
       );
     case "Travel":
       return t("Voyager ici", "Travel here");
-    case "ChooseHost":
-      return t("Accueillir le festival", "Host the festival");
+    case "ChooseHost": {
+      const cost = actionCost(state, action);
+      return state.championshipHost?.tile === action.tile
+        ? t("Renouveler le championnat", "Renew the championship")
+        : cost > 0
+          ? t(
+              `Organiser le championnat · ${money(cost)}`,
+              `Host the championship · ${money(cost)}`,
+            )
+          : t("Organiser le championnat", "Host the championship");
+    }
     case "ChooseTarget":
       if (state.pending?.kind === "card-target") {
         const pending = state.pending;
         if (pending.card === "Land Swap" && pending.sourceTile !== undefined)
           return t(
-            `Échanger ${tileName(pending.sourceTile)} contre ${tileName(action.tile)}`,
-            `Swap ${tileName(pending.sourceTile)} for ${tileName(action.tile)}`,
+            `Échanger ${tileName(pending.sourceTile, state.config)} contre ${tileName(action.tile, state.config)}`,
+            `Swap ${tileName(pending.sourceTile, state.config)} for ${tileName(action.tile, state.config)}`,
           );
         if (pending.card === "Contractor")
           return t(
-            `Offrir un niveau à ${tileName(action.tile)}`,
-            `Add a level to ${tileName(action.tile)}`,
+            `Offrir un niveau à ${tileName(action.tile, state.config)}`,
+            `Add a level to ${tileName(action.tile, state.config)}`,
           );
         if (pending.card === "Earthquake")
           return t(
-            `Retirer un niveau à ${tileName(action.tile)}`,
-            `Remove a level from ${tileName(action.tile)}`,
+            `Retirer un niveau à ${tileName(action.tile, state.config)}`,
+            `Remove a level from ${tileName(action.tile, state.config)}`,
           );
       }
       return t("Choisir cette ville", "Choose this city");
@@ -145,6 +169,75 @@ function actionLabel(action: Action, state: PublicState): string {
             )
           : t("Passer", "Pass");
   }
+}
+function pickConfirmLabel(action: BoardPickAction, state: PublicState): string {
+  switch (action.type) {
+    case "Travel":
+      return t(
+        `Voyager à ${tileName(action.tile, state.config)} · ${money(actionCost(state, action))}`,
+        `Travel to ${tileName(action.tile, state.config)} · ${money(actionCost(state, action))}`,
+      );
+    case "ChooseHost": {
+      const fee = championshipCost(state, action.tile);
+      const verb =
+        state.championshipHost?.tile === action.tile
+          ? t("Renouveler le championnat", "Renew the Championship")
+          : t("Organiser le championnat", "Host the Championship");
+      return `${verb} · ${fee > 0 ? money(fee) : t("gratuit", "free")}`;
+    }
+    case "ChooseTarget":
+      return actionLabel(action, state);
+  }
+}
+/** One line describing what the clicked space means for this decision. */
+function pickDetail(action: BoardPickAction, state: PublicState): string {
+  const tile = action.tile;
+  const property = getProperty(state, tile);
+  const owner =
+    property?.owner != null
+      ? state.players.find((player) => player.seat === property.owner)
+      : undefined;
+  const resort = getBoard(state.config)[tile].kind === "resort";
+  if (action.type === "ChooseHost") {
+    const championship = nextChampionship(state, tile);
+    const multiplier = championship.multiplier;
+    const hosted = propertyRent(
+      { ...state, championshipHost: championship },
+      tile,
+    );
+    return t(
+      `Loyer ${money(propertyRent(state, tile))} → ${money(hosted)} · ×${multiplier}`,
+      `Rent ${money(propertyRent(state, tile))} → ${money(hosted)} · ×${multiplier}`,
+    );
+  }
+  if (action.type === "ChooseTarget")
+    return owner
+      ? `${owner.name} · ${levelName(property?.level ?? 0)}`
+      : levelName(property?.level ?? 0);
+  if (getBoard(state.config)[tile].kind === "start")
+    return t(
+      `Salaire de ${money(state.config.startSalary)} à l’arrivée`,
+      `Collect ${money(state.config.startSalary)} on arrival`,
+    );
+  if (owner)
+    return resort
+      ? t(
+          `Votre station · loyer ${money(propertyRent(state, tile))}`,
+          `Your resort · rent ${money(propertyRent(state, tile))}`,
+        )
+      : t(
+          `Votre ville · ${levelName(property?.level ?? 0)} · construire`,
+          `Your city · ${levelName(property?.level ?? 0)} · build`,
+        );
+  return resort
+    ? t(
+        `Station libre · ${money(tilePrice(tile, state) ?? 0)}`,
+        `Unowned resort · ${money(tilePrice(tile, state) ?? 0)}`,
+      )
+    : t(
+        `Ville libre · terrain ${money(tilePrice(tile, state) ?? 0)}`,
+        `Unowned city · land ${money(tilePrice(tile, state) ?? 0)}`,
+      );
 }
 function confirmLabel(action: Action, state: PublicState): string {
   switch (action.type) {
@@ -180,205 +273,6 @@ function confirmLabel(action: Action, state: PublicState): string {
   }
 }
 
-function IsoBuilding({
-  x,
-  y,
-  scale = 1,
-  color,
-  tower = false,
-  landmark = false,
-}: {
-  x: number;
-  y: number;
-  scale?: number;
-  color: string;
-  tower?: boolean;
-  landmark?: boolean;
-}) {
-  const height = tower ? 78 : 42;
-  return (
-    <g transform={`translate(${x} ${y}) scale(${scale})`}>
-      <polygon
-        points={`0,40 42,64 42,${64 + height} 0,${40 + height}`}
-        fill="#fffaf0"
-      />
-      <polygon
-        points={`42,64 84,40 84,${40 + height} 42,${64 + height}`}
-        fill="#d6dfd4"
-      />
-      {tower ? (
-        <>
-          <polygon points="-4,39 42,12 88,39 42,66" fill={color} />
-          <polygon
-            points="42,66 88,39 88,45 42,72"
-            fill="#173b45"
-            opacity=".17"
-          />
-          <polygon
-            points="12,37 42,20 73,37 42,55"
-            fill="#fffaf0"
-            opacity=".38"
-          />
-        </>
-      ) : (
-        <>
-          <polygon points="-6,41 36,1 91,31 45,70" fill={color} />
-          <polygon
-            points="45,70 91,31 88,44 45,78"
-            fill="#173b45"
-            opacity=".2"
-          />
-          <polygon
-            points="-6,41 36,1 36,12 0,47"
-            fill="#fffaf0"
-            opacity=".15"
-          />
-        </>
-      )}
-      {(tower ? [0, 1, 2] : [0]).map((row) => (
-        <g key={row} transform={`translate(0 ${row * 18})`}>
-          <polygon points="8,55 18,61 18,71 8,65" fill="#2f8296" />
-          <polygon points="26,65 36,71 36,81 26,75" fill="#2f8296" />
-          <polygon points="51,72 62,66 62,76 51,82" fill="#285d6c" />
-          <polygon points="69,61 79,55 79,65 69,71" fill="#285d6c" />
-        </g>
-      ))}
-      <polygon
-        points={`27,${47 + height} 37,${53 + height} 37,${64 + height} 27,${58 + height}`}
-        fill="#225567"
-      />
-      <polygon
-        points={`-3,${40 + height} 42,${66 + height} 87,${40 + height} 87,${47 + height} 42,${74 + height} -3,${47 + height}`}
-        fill="#c4cfb9"
-      />
-      {landmark && (
-        <>
-          <polygon points="30,25 42,-34 56,26 43,36" fill="#ffcb55" />
-          <polygon points="42,-34 56,26 43,36" fill="#cf9227" />
-          <path d="M42-35v-17" stroke="#173b45" strokeWidth="2" />
-          <path d="M43-52h17l-4 5 4 5H43" fill={color} />
-        </>
-      )}
-    </g>
-  );
-}
-
-// Original vector toy geometry, matching the game's isometric board materials.
-function CityIllustration({
-  level,
-  color,
-  resort = false,
-  symbol,
-}: {
-  level: BuildLevel;
-  color: string;
-  resort?: boolean;
-  symbol?: string;
-}) {
-  return (
-    <svg
-      className="decision-city-art"
-      viewBox="0 0 340 245"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <ellipse
-        cx="171"
-        cy="211"
-        rx="137"
-        ry="17"
-        fill="#173b45"
-        opacity=".10"
-      />
-      <polygon points="24,145 170,75 316,145 170,222" fill="#d2d8bd" />
-      <polygon points="24,145 170,213 170,228 24,160" fill="#b8c497" />
-      <polygon points="170,213 316,145 316,160 170,228" fill="#91a475" />
-      <polygon
-        points="32,144 170,82 308,144 170,208"
-        fill={resort ? "#a3decc" : "#b5cd70"}
-      />
-      <path
-        d="m74 143 98 46 97-46"
-        stroke="#eaf0c3"
-        strokeWidth="8"
-        fill="none"
-      />
-      <path
-        d="m86 125 86 41 75-36"
-        stroke="#eaf0c3"
-        strokeWidth="5"
-        fill="none"
-      />
-      {resort ? (
-        <>
-          <ellipse cx="190" cy="168" rx="45" ry="18" fill="#63bdcf" />
-          <ellipse cx="188" cy="166" rx="35" ry="12" fill="#9fe2e2" />
-          <IsoBuilding x={86} y={83} scale={0.7} color={color} />
-          <path d="M232 153v-46" stroke="#a48048" strokeWidth="5" />
-          <path d="m231 108-35-14 26-2 7-29 13 27 27 3-36 15" fill="#478b50" />
-          <path d="M206 156v-31" stroke="#906430" strokeWidth="3" />
-          <path d="m183 130 22-20 24 20Z" fill={color} />
-        </>
-      ) : level === 0 ? (
-        <>
-          <polygon points="111,143 169,116 226,143 169,170" fill="#90b64c" />
-          <path
-            d="m111 143 58-27 57 27-57 27Z"
-            fill="none"
-            stroke="#f5edcc"
-            strokeWidth="3"
-            strokeDasharray="6 5"
-          />
-        </>
-      ) : level === 1 ? (
-        <IsoBuilding x={126} y={58} color={color} />
-      ) : level === 2 ? (
-        <>
-          <IsoBuilding x={95} y={66} scale={0.83} color={color} />
-          <IsoBuilding x={171} y={90} scale={0.73} color={color} />
-        </>
-      ) : level === 3 ? (
-        <>
-          <IsoBuilding x={157} y={44} scale={0.7} color={color} />
-          <IsoBuilding x={82} y={78} scale={0.7} color={color} />
-          <IsoBuilding x={162} y={109} scale={0.7} color={color} />
-        </>
-      ) : (
-        <IsoBuilding
-          x={128}
-          y={29}
-          scale={0.98}
-          color={color}
-          tower
-          landmark={level === 5}
-        />
-      )}
-      <path d="M69 159v-32" stroke="#526c46" strokeWidth="5" />
-      <path d="m68 106 17 26-17 9-17-9Z" fill="#64974e" />
-      <path d="m68 106 17 26-17 9Z" fill="#4c7d42" />
-      <ellipse cx="260" cy="157" rx="13" ry="5" fill="#708c50" />
-      <path d="M260 155v-30" stroke="#9a7745" strokeWidth="3" />
-      <path d="m260 126-22-8 16-4 5-20 9 19 19 4-26 9" fill="#679b4e" />
-      {symbol && (
-        <g transform="translate(246 179)">
-          <path d="M0 0v-38" stroke="#526b50" strokeWidth="2" />
-          <path d="M1-38h27l-5 9 5 9H1Z" fill={color} />
-          <text
-            x="12"
-            y="-25"
-            textAnchor="middle"
-            fontSize="11"
-            fill="#fffaf0"
-            fontWeight="700"
-          >
-            {symbol}
-          </text>
-        </g>
-      )}
-    </svg>
-  );
-}
-
 export default function DecisionPanel({
   state,
   seat,
@@ -387,6 +281,8 @@ export default function DecisionPanel({
   randomness,
   selected,
   onSelect,
+  picked,
+  onPick,
 }: DecisionPanelProps) {
   const { t } = useLocale();
   const { busy, reducedMotion, speed, viewState } = useDirector();
@@ -394,6 +290,8 @@ export default function DecisionPanel({
   const [selection, setSelection] = useState<{
     decision: string;
     action: string;
+    pending: PublicState["pending"];
+    tile: number | null;
   } | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -416,8 +314,12 @@ export default function DecisionPanel({
     (action): action is DestinationAction => "tile" in action,
   );
   const freeRoll = actions.find((action) => action.type === "Roll");
+  const boardPick = ownTurn && isBoardPick(state);
+  const pickActions = boardPick ? boardPickActions(state, seat) : [];
+  const pickedAction = pickActions.find((action) => action.tile === picked);
   const destinationChoice =
-    destinations.find((action) => action.tile === selected) ?? destinations[0];
+    destinations.find((action) => action.tile === selected) ??
+    (pending?.kind === "sell" ? undefined : destinations[0]);
   const choices = constructions.length
     ? constructions
     : destinations.length
@@ -428,10 +330,16 @@ export default function DecisionPanel({
       ? freeRoll
       : (destinationChoice ?? choices[0]);
   const selectedAction =
-    selection?.decision === decisionKey
-      ? (actions.find((action) => actionKey(action) === selection.action) ??
-        fallbackChoice)
-      : fallbackChoice;
+    pending?.kind === "sell"
+      ? selection?.pending === pending &&
+        selection.action === "Decline:" &&
+        selection.tile === selected
+        ? actions.find((action) => action.type === "Decline")
+        : destinationChoice
+      : selection?.decision === decisionKey
+        ? (actions.find((action) => actionKey(action) === selection.action) ??
+          fallbackChoice)
+        : fallbackChoice;
   const decline = actions.find((action) => action.type === "Decline");
   const decisionTile =
     pending && "tile" in pending
@@ -442,7 +350,8 @@ export default function DecisionPanel({
   const property =
     decisionTile !== undefined ? getProperty(state, decisionTile) : undefined;
   const resort =
-    decisionTile !== undefined && BOARD[decisionTile].kind === "resort";
+    decisionTile !== undefined &&
+    getBoard(state.config)[decisionTile].kind === "resort";
   const owner =
     property?.owner != null
       ? state.players.find((player) => player.seat === property.owner)
@@ -452,12 +361,21 @@ export default function DecisionPanel({
     selectedAction && "level" in selectedAction
       ? selectedAction.level
       : (property?.level ?? 0);
+  const hosting = selectedAction?.type === "ChooseHost";
   const rent =
     decisionTile === undefined
       ? null
       : construction || selectedAction?.type === "Buyout"
         ? previewPropertyRent(state, decisionTile, seat, selectedLevel)
-        : propertyRent(state, decisionTile);
+        : hosting
+          ? propertyRent(
+              {
+                ...state,
+                championshipHost: nextChampionship(state, decisionTile),
+              },
+              decisionTile,
+            )
+          : propertyRent(state, decisionTile);
   const cost = selectedAction
     ? pending?.kind === "rent-card"
       ? rentCardPayment(
@@ -473,9 +391,15 @@ export default function DecisionPanel({
   const projectedCash =
     active &&
     selectedAction &&
-    (["Buy", "Build", "Buyout", "PayIsland", "Travel", "Sell"].includes(
-      selectedAction.type,
-    ) ||
+    ([
+      "Buy",
+      "Build",
+      "Buyout",
+      "PayIsland",
+      "Travel",
+      "Sell",
+      "ChooseHost",
+    ].includes(selectedAction.type) ||
       pending?.kind === "rent-card")
       ? active.cash + (refund ?? -cost)
       : null;
@@ -498,7 +422,10 @@ export default function DecisionPanel({
       pending.kind === "buy"
         ? 0
         : (getProperty(state, pending.tile)?.level ?? 0) + 1;
-    const last = Math.max(4, ruleCap);
+    const last = Math.min(
+      ruleEconomy(economyRule(state.config)).topLevel,
+      Math.max(4, ruleCap),
+    );
     for (let level = first; level <= last; level++) {
       const legal = constructions.find((action) => action.level === level);
       levelSteps.push({
@@ -523,11 +450,18 @@ export default function DecisionPanel({
               "Hôtel après votre premier tour complet",
               "Hotel after your first complete lap",
             )
-          : t("Pas encore disponible", "Not available yet");
+          : level === 3
+            ? t(
+                "3 maisons après votre premier tour complet",
+                "Three houses after your first complete lap",
+              )
+            : t("Pas encore disponible", "Not available yet");
   const modalOpen = Boolean(
     ownTurn &&
       pending &&
       pending.kind !== "roll" &&
+      pending.kind !== "sell" &&
+      !boardPick &&
       !busy &&
       !rngBusy &&
       dismissed !== decisionKey,
@@ -541,8 +475,8 @@ export default function DecisionPanel({
           cardName(pending.card),
           pending.card === "Land Swap" && pending.sourceTile !== undefined
             ? t(
-                `Votre ville de ${tileName(pending.sourceTile)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
-                `Your city of ${tileName(pending.sourceTile)} will be swapped for the selected city. Buildings stay on each property.`,
+                `Votre ville de ${tileName(pending.sourceTile, state.config)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
+                `Your city of ${tileName(pending.sourceTile, state.config)} will be swapped for the selected city. Buildings stay on each property.`,
               )
             : pending.card === "Contractor"
               ? t(
@@ -556,7 +490,15 @@ export default function DecisionPanel({
         ]
       : pending?.kind === "buy" && resort
         ? [t("Acheter une station", "Buy a resort"), ""]
-        : decisionCopy(pending?.kind ?? "roll");
+        : pending?.kind === "host" && decline
+          ? [
+              decisionCopy("host")[0],
+              t(
+                `Déplacer le championnat coûte ${money(ruleEconomy(economyRule(state.config)).championshipFee)}, le renouveler est gratuit. Chaque édition ajoute ×1 au loyer de la ville hôte.`,
+                `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
+              ),
+            ]
+          : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
@@ -582,7 +524,12 @@ export default function DecisionPanel({
     if (dismissed === decisionKey && !modalOpen) resumeRef.current?.focus();
   }, [dismissed, decisionKey, modalOpen]);
   function choose(action: Action) {
-    setSelection({ decision: decisionKey, action: actionKey(action) });
+    setSelection({
+      decision: decisionKey,
+      action: actionKey(action),
+      pending,
+      tile: selected,
+    });
     if ("tile" in action) onSelect(action.tile);
   }
   function dismiss() {
@@ -607,7 +554,8 @@ export default function DecisionPanel({
   )?.name;
   // Only what the player acts on: their own countdown, and a debt warning.
   const debt = ownTurn && pending?.kind === "sell";
-  const timer = ownTurn && pending && !rngBusy;
+  // The rolling player's clock is the bar on their HUD; a decision shows its seconds here.
+  const timer = ownTurn && pending && pending.kind !== "roll" && !rngBusy;
   const kicker =
     debt || timer ? (
       <div className="decision-kicker">
@@ -637,6 +585,334 @@ export default function DecisionPanel({
       </div>
     ) : null;
 
+  if (debt && !busy && !rngBusy)
+    return (
+      <section
+        className="decision-panel decision-sale"
+        data-kind="sell"
+        data-own="true"
+        data-busy={blocked}
+        aria-labelledby="decision-heading"
+        aria-describedby="sale-instruction"
+        aria-busy={blocked}
+      >
+        <div className="sale-topline">
+          <h2 id="decision-heading">
+            {bankruptcy
+              ? t("Déclarer faillite ?", "Declare bankruptcy?")
+              : t("Vendre une ville", "Sell a city")}
+          </h2>
+          <dl className="sale-ledger">
+            <div>
+              <dt>{t("Dette", "Debt")}</dt>
+              <dd>{money(Math.max(0, -(active?.cash ?? 0)))}</dd>
+            </div>
+            {!bankruptcy && projectedCash !== null && (
+              <div data-negative={projectedCash < 0}>
+                <dt>
+                  {projectedCash < 0
+                    ? t("Dette après vente", "Debt after sale")
+                    : t("Argent après vente", "Cash after sale")}
+                </dt>
+                <dd>{money(Math.abs(projectedCash))}</dd>
+              </div>
+            )}
+          </dl>
+          {timer && (
+            <span
+              className="decision-timer"
+              role="timer"
+              aria-label={t(
+                `${countdown} secondes restantes`,
+                `${countdown} seconds remaining`,
+              )}
+            >
+              {countdown}s
+            </span>
+          )}
+        </div>
+        <div className="sale-controls">
+          {bankruptcy ? (
+            <p id="sale-instruction" className="sale-warning">
+              {t(
+                "Définitif : vos propriétés retournent à la banque.",
+                "Final: your properties return to the bank.",
+              )}
+            </p>
+          ) : (
+            <div
+              id="sale-instruction"
+              className="sale-selection"
+              role="status"
+              aria-live="polite"
+            >
+              <div>
+                <strong>
+                  {decisionTile !== undefined
+                    ? tileName(decisionTile, state.config)
+                    : t("Choisissez une ville", "Choose a city")}
+                </strong>
+                <span>
+                  {property
+                    ? levelName(property.level)
+                    : t(
+                        "Cliquez une ville en surbrillance",
+                        "Click a highlighted city",
+                      )}
+                </span>
+              </div>
+              {refund !== null && <b>+{money(refund)}</b>}
+            </div>
+          )}
+          <div className="sale-confirmation">
+            {decline && (
+              <button
+                type="button"
+                className="button quiet"
+                disabled={blocked}
+                onClick={() => {
+                  if (bankruptcy) setSelection(null);
+                  else choose(decline);
+                }}
+              >
+                {bankruptcy
+                  ? t("Revenir aux ventes", "Back to property sales")
+                  : t("Déclarer faillite", "Declare bankruptcy")}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`button primary sale-confirm ${bankruptcy ? "decision-bankruptcy" : ""}`}
+              disabled={blocked || !selectedAction}
+              onClick={confirm}
+            >
+              {blocked
+                ? t("Veuillez patienter…", "Please wait…")
+                : selectedAction
+                  ? confirmLabel(selectedAction, state)
+                  : t("Choisissez une ville", "Choose a city")}
+              <Icon name="arrow" size={18} />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+
+  if (boardPick && pending && !busy && !rngBusy) {
+    const travel = pending.kind === "travel";
+    const pickLabel = travel
+      ? t("Destination", "Destination")
+      : pending.kind === "host"
+        ? t("Ville hôte", "Host city")
+        : t("Ville ciblée", "Target city");
+    const hint =
+      travel && pickActions.length === 0
+        ? t(
+            `Il faut ${money(pending.fee)} pour voyager. Lancez les dés pour continuer.`,
+            `Travel costs ${money(pending.fee)}. Roll the dice to continue.`,
+          )
+        : pending.kind === "card-target"
+          ? `${copy[1]} ${t("Cliquez-la sur le plateau.", "Click it on the board.")}`
+          : copy[1];
+    return (
+      <motion.section
+        className="decision-panel decision-compact decision-pick"
+        data-kind={pending.kind}
+        data-own="true"
+        data-busy={blocked}
+        data-picked={Boolean(pickedAction)}
+        aria-labelledby="decision-heading"
+        aria-describedby="decision-description"
+        aria-busy={blocked}
+        initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reducedMotion ? 0 : 0.22 / speed }}
+      >
+        <div className="pick-head">
+          <span
+            className="player-symbol"
+            style={{ color: PLAYER_COLORS[decisionSeat] }}
+            aria-hidden="true"
+          >
+            {PLAYER_SYMBOLS[decisionSeat]}
+          </span>
+          <h2 id="decision-heading">
+            {pending.kind === "card-target" ? cardName(pending.card) : copy[0]}
+          </h2>
+          {pickActions.length > 0 && (
+            <select
+              className="pick-list"
+              aria-label={pickLabel}
+              value={pickedAction?.tile ?? ""}
+              disabled={blocked}
+              onChange={(event) => {
+                if (event.target.value !== "")
+                  onPick(Number(event.target.value));
+              }}
+            >
+              <option value="" disabled>
+                {t(
+                  `Liste des cases (${pickActions.length})`,
+                  `List of spaces (${pickActions.length})`,
+                )}
+              </option>
+              {pickActions.map((action) => (
+                <option key={actionKey(action)} value={action.tile}>
+                  {tileName(action.tile, state.config)}
+                  {action.type === "ChooseHost"
+                    ? ` · ×${nextChampionship(state, action.tile).multiplier}${championshipCost(state, action.tile) > 0 ? ` · ${money(championshipCost(state, action.tile))}` : ""}`
+                    : ""}
+                </option>
+              ))}
+            </select>
+          )}
+          <span
+            className="decision-timer"
+            role="timer"
+            aria-label={t(
+              `${countdown} secondes restantes`,
+              `${countdown} seconds remaining`,
+            )}
+          >
+            {countdown}s
+          </span>
+        </div>
+        <div className="pick-body">
+          <div className="pick-summary" data-empty={!pickedAction}>
+            {pickedAction ? (
+              <>
+                <span
+                  className="pick-chip"
+                  style={{
+                    backgroundColor: tileColor(pickedAction.tile, state.config),
+                  }}
+                  aria-hidden="true"
+                >
+                  {TILE_ICONS[getBoard(state.config)[pickedAction.tile].kind]}
+                </span>
+                <span className="pick-name">
+                  <strong>{tileName(pickedAction.tile, state.config)}</strong>
+                  <small>{pickDetail(pickedAction, state)}</small>
+                </span>
+                {pickedAction.type === "ChooseHost" && active && (
+                  <dl className="decision-ledger pick-host-ledger">
+                    <div>
+                      <dt>{t("À payer", "Amount due")}</dt>
+                      <dd>
+                        {money(championshipCost(state, pickedAction.tile))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("Nouveau loyer", "New rent")}</dt>
+                      <dd>
+                        {money(
+                          propertyRent(
+                            {
+                              ...state,
+                              championshipHost: nextChampionship(
+                                state,
+                                pickedAction.tile,
+                              ),
+                            },
+                            pickedAction.tile,
+                          ),
+                        )}
+                      </dd>
+                    </div>
+                    <div className="ledger-balance">
+                      <dt>{t("Argent restant", "Cash remaining")}</dt>
+                      <dd>
+                        {money(
+                          active.cash -
+                            championshipCost(state, pickedAction.tile),
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                )}
+                {travel && active && (
+                  <span className="ledger-balance pick-balance">
+                    {t("Il vous restera", "You keep")}
+                    <b>
+                      {money(active.cash - actionCost(state, pickedAction))}
+                    </b>
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="pick-empty">
+                <Icon name="pin" size={19} />
+                <span id="decision-description">{hint}</span>
+              </span>
+            )}
+          </div>
+          <div className="pick-actions">
+            {freeRoll && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={blocked}
+                onClick={() => act(freeRoll)}
+              >
+                <Icon name="dice" size={18} />
+                {t("Lancer les dés", "Roll the dice")}
+              </button>
+            )}
+            {decline && (
+              <button
+                type="button"
+                className="button quiet"
+                disabled={blocked}
+                onClick={() => act(decline)}
+              >
+                {actionLabel(decline, state)}
+              </button>
+            )}
+            {pickedAction && (
+              <button
+                type="button"
+                className="button primary decision-confirm"
+                disabled={blocked}
+                onClick={() => act(pickedAction)}
+              >
+                {blocked
+                  ? t("Veuillez patienter…", "Please wait…")
+                  : pickConfirmLabel(pickedAction, state)}
+                <Icon name="arrow" size={20} />
+              </button>
+            )}
+          </div>
+        </div>
+        {pickedAction && (
+          <p id="decision-description" className="sr-only">
+            {hint}
+          </p>
+        )}
+      </motion.section>
+    );
+  }
+
+  const statusTitle = rngBusy
+    ? randomness?.status === "error"
+      ? t("Le lancer se fait attendre", "Waiting for the dice")
+      : t("Les dés se préparent", "Preparing the dice")
+    : ownTurn && !busy
+      ? copy[0]
+      : shownSeat === seat
+        ? t("Votre tour", "Your turn")
+        : t(
+            `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
+            `${shownName ?? t("Votre adversaire", "Your opponent")} is playing`,
+          );
+  // Someone else's turn, or an animation in progress: the board and the active
+  // HUD already show it, so the bottom of the screen stays empty.
+  if (!modalOpen && !rngBusy && !(ownTurn && !busy))
+    return (
+      <p className="sr-only" role="status">
+        {statusTitle}
+      </p>
+    );
+
   if (!modalOpen)
     return (
       <section
@@ -647,20 +923,19 @@ export default function DecisionPanel({
         aria-labelledby="decision-heading"
       >
         {kicker}
-        <h2 id="decision-heading">
-          {rngBusy
-            ? randomness?.status === "error"
-              ? t("Le lancer se fait attendre", "Waiting for the dice")
-              : t("Les dés se préparent", "Preparing the dice")
-            : ownTurn && !busy
-              ? copy[0]
-              : shownSeat === seat
-                ? t("Votre tour", "Your turn")
-                : t(
-                    `${shownName ?? t("Votre adversaire", "Your opponent")} joue`,
-                    `${shownName ?? t("Votre adversaire", "Your opponent")} is playing`,
-                  )}
-        </h2>
+        {ownTurn && pending?.kind === "roll" && !rngBusy && (
+          <span
+            className="sr-only"
+            role="timer"
+            aria-label={t(
+              `${countdown} secondes pour lancer`,
+              `${countdown} seconds to roll`,
+            )}
+          >
+            {countdown}s
+          </span>
+        )}
+        <h2 id="decision-heading">{statusTitle}</h2>
         {rngBusy && randomness?.commitment?.mode === "drand" && (
           <p>
             {t(
@@ -698,12 +973,14 @@ export default function DecisionPanel({
                   type="button"
                   key={actionKey(action)}
                   className="button primary roll-button"
+                  aria-label={actionLabel(action, state)}
                   disabled={blocked}
                   onClick={() => act(action)}
                 >
                   <Icon name="dice" size={24} />
-                  {actionLabel(action, state)}
-                  <Icon name="arrow" />
+                  {action.type === "Roll"
+                    ? t("Lancer", "Roll")
+                    : actionLabel(action, state)}
                 </button>
               ))
             )}
@@ -761,7 +1038,7 @@ export default function DecisionPanel({
           {bankruptcy
             ? t("Déclarer faillite ?", "Declare bankruptcy?")
             : decisionTile !== undefined
-              ? tileName(decisionTile)
+              ? tileName(decisionTile, state.config)
               : copy[0]}
         </h2>
         {(bankruptcy || copy[1]) && (
@@ -847,13 +1124,30 @@ export default function DecisionPanel({
                 pending?.kind !== "rent-card" && (
                   <div>
                     <dt>
-                      {construction || pending?.kind === "buyout"
+                      {construction || pending?.kind === "buyout" || hosting
                         ? t("Nouveau loyer", "New rent")
                         : t("Loyer actuel", "Current rent")}
                     </dt>
                     <dd>{money(rent)}</dd>
                   </div>
                 )}
+              {construction && decisionTile !== undefined && !bankruptcy && (
+                <div className="ledger-buyout">
+                  <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
+                  <dd>
+                    {(() => {
+                      const price = buyoutPriceAt(
+                        state,
+                        decisionTile,
+                        selectedLevel,
+                      );
+                      return price === null
+                        ? t("Protégé", "Protected")
+                        : money(price);
+                    })()}
+                  </dd>
+                </div>
+              )}
               {projectedCash !== null && !bankruptcy && (
                 <div
                   className="ledger-balance"
@@ -953,7 +1247,9 @@ export default function DecisionPanel({
               <label htmlFor="destination">
                 {pending?.kind === "sell"
                   ? t("Propriété à vendre", "Property to sell")
-                  : t("Destination", "Destination")}
+                  : pending?.kind === "host"
+                    ? t("Ville hôte", "Host city")
+                    : t("Destination", "Destination")}
               </label>
               <select
                 id="destination"
@@ -972,10 +1268,12 @@ export default function DecisionPanel({
               >
                 {destinations.map((action) => (
                   <option key={actionKey(action)} value={action.tile}>
-                    {tileName(action.tile)}
+                    {tileName(action.tile, state.config)}
                     {action.type === "Sell"
                       ? ` · ${money(propertyRefund(state, action.tile))}`
-                      : ""}
+                      : action.type === "ChooseHost"
+                        ? ` · ×${nextChampionship(state, action.tile).multiplier}${actionCost(state, action) > 0 ? ` · ${money(actionCost(state, action))}` : ""}`
+                        : ""}
                   </option>
                 ))}
               </select>
@@ -1005,8 +1303,8 @@ export default function DecisionPanel({
                       type="button"
                       className="button secondary"
                       aria-label={t(
-                        `Choisir le voyage vers ${tileName(destinationChoice.tile)}`,
-                        `Choose travel to ${tileName(destinationChoice.tile)}`,
+                        `Choisir le voyage vers ${tileName(destinationChoice.tile, state.config)}`,
+                        `Choose travel to ${tileName(destinationChoice.tile, state.config)}`,
                       )}
                       aria-pressed={selectedAction?.type === "Travel"}
                       disabled={blocked}

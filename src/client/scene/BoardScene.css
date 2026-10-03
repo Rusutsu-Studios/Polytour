@@ -1,0 +1,54 @@
+.sale-labels {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  pointer-events: none;
+}
+.sale-tile-quote {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 27px;
+  padding: 3px 6px;
+  border: 2px solid #26764c;
+  border-radius: 5px;
+  background: #fffaf0;
+  color: #17472f;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.sale-tile-check {
+  width: 13px;
+  height: 13px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  line-height: 11px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.sale-tile-quote:hover:not(:disabled) {
+  background: #e2f3d7;
+}
+.sale-tile-quote[aria-pressed="true"] {
+  border-color: #9e6817;
+  background: #ffdb75;
+  color: #4f350b;
+}
+.sale-tile-quote:focus-visible {
+  outline: 3px solid #174b61;
+  outline-offset: 3px;
+}
+.sale-tile-quote:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}

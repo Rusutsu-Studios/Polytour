@@ -336,24 +336,17 @@ export function RoomSettings({
           ))}
         </div>
       </fieldset>
-      <details className="room-settings-fairness">
-        <summary>{t("Dés et économie", "Dice and economy")}</summary>
-        <p>
-          {config.randomnessMode === "drand"
-            ? t(
-                "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
-                "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
-              )
-            : t(
-                "Les deux dés sont tirés sur le serveur avec un générateur cryptographique. Aucun achat ne modifie les résultats.",
-                "Both dice are rolled on the server with a cryptographic generator. Purchases cannot alter the results.",
-              )}{" "}
-          {t(
-            "Les loyers et effets sont encore en cours d’équilibrage.",
-            "Rents and card effects are still being balanced.",
-          )}
-        </p>
-      </details>
+      {config.randomnessMode === "drand" && (
+        <details className="room-settings-fairness">
+          <summary>{t("Source des dés", "Dice source")}</summary>
+          <p>
+            {t(
+              "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
+              "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
+            )}
+          </p>
+        </details>
+      )}
       {save && (
         <button
           type="button"

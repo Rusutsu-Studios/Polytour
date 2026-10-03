@@ -1,15 +1,30 @@
 import { AnimatePresence, animate, motion } from "motion/react";
 import type { CSSProperties, ErrorInfo, ReactNode } from "react";
-import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
-import { BOARD, ECONOMY } from "../shared/board/index.js";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ECONOMY, getBoard } from "../shared/board/index.js";
 import type {
+  GameConfig,
   GameEvent,
   PlayerState,
   PublicState,
   Seat,
   WinKind,
 } from "../shared/engine/index.js";
-import { getProperty, netWorth, propertyRent } from "../shared/engine/index.js";
+import {
+  decisionWindow,
+  getProperty,
+  legalActions,
+  netWorth,
+  propertyRefund,
+} from "../shared/engine/index.js";
 import type {
   LobbyState,
   RandomnessStatus,
@@ -26,6 +41,7 @@ import {
   useRoom,
 } from "./net/room.js";
 import {
+  fullMoney,
   levelName,
   money,
   PLAYER_COLORS,
@@ -35,9 +51,16 @@ import {
   tileName,
   tilePrice,
 } from "./ui/board-display.js";
+import {
+  boardPickActions,
+  boardPickKey,
+  isBoardPick,
+} from "./ui/board-pick.js";
 import CardMoment from "./ui/CardMoment.js";
+import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
+import DiceExplanation from "./ui/DiceExplanation.js";
 import Icon from "./ui/Icon.js";
 import { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
@@ -108,7 +131,7 @@ function MoneyCounter({ value }: { value: number }) {
     previous.current = value;
     return () => controls.stop();
   }, [value, speed, reducedMotion]);
-  return <>{money(display)}</>;
+  return <>{fullMoney(display)}</>;
 }
 
 function PlayerAvatar({ seat }: { seat: Seat }) {
@@ -344,32 +367,80 @@ function MatchResults({
 function BoardFallback({
   state,
   onSelect,
+  saleTargets,
+  saleSelected,
+  saleBlocked = false,
+  targets,
+  picked,
+  config,
 }: {
   state: PublicState | null;
   onSelect: (tile: number) => void;
+  saleTargets?: readonly number[];
+  saleSelected?: number | null;
+  saleBlocked?: boolean;
+  targets?: readonly number[] | null;
+  picked?: number | null;
+  config?: GameConfig;
 }) {
+  const choices = targets ?? saleTargets;
+  const chosen = targets != null ? picked : saleSelected;
+  const boardConfig = state?.config ?? config;
   return (
     <section
       className="flat-board"
+      data-sale-active={saleTargets !== undefined}
+      data-pick-active={targets != null}
       aria-label={t("Plateau accessible", "Accessible board")}
     >
       <p className="flat-board-note">
         {t("Vue légère du plateau", "Simple board view")}
       </p>
-      {BOARD.map((tile) => (
+      {getBoard(boardConfig).map((tile) => (
         <button
           type="button"
           key={tile.index}
-          style={{ "--tile-color": tileColor(tile.index) } as CSSProperties}
+          style={
+            {
+              "--tile-color": tileColor(tile.index, boardConfig),
+            } as CSSProperties
+          }
+          data-sale={saleTargets?.includes(tile.index) || undefined}
+          data-pick={targets?.includes(tile.index) || undefined}
+          aria-pressed={
+            choices?.includes(tile.index) ? chosen === tile.index : undefined
+          }
+          aria-label={
+            state && saleTargets?.includes(tile.index)
+              ? t(
+                  `Choisir ${tileName(tile.index, boardConfig)} à vendre · ${money(propertyRefund(state, tile.index))}`,
+                  `Select ${tileName(tile.index, boardConfig)} to sell · ${money(propertyRefund(state, tile.index))}`,
+                )
+              : undefined
+          }
+          disabled={
+            choices !== undefined &&
+            (saleBlocked || !choices.includes(tile.index))
+          }
           onClick={() => onSelect(tile.index)}
         >
-          <span>{tileName(tile.index)}</span>
+          <span>{tileName(tile.index, boardConfig)}</span>
           <b>
-            {state && getProperty(state, tile.index)?.owner != null
-              ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
-              : tilePrice(tile.index) != null
-                ? money(tilePrice(tile.index) ?? 0)
-                : TILE_ICONS[tile.kind]}
+            {state && saleTargets?.includes(tile.index)
+              ? `+${money(propertyRefund(state, tile.index))}`
+              : state && getProperty(state, tile.index)?.owner != null
+                ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
+                : tilePrice(
+                      tile.index,
+                      state ?? (config ? { config } : null),
+                    ) != null
+                  ? money(
+                      tilePrice(
+                        tile.index,
+                        state ?? (config ? { config } : null),
+                      ) ?? 0,
+                    )
+                  : TILE_ICONS[tile.kind]}
           </b>
         </button>
       ))}
@@ -391,23 +462,23 @@ function eventText(event: GameEvent, state: PublicState): string | null {
       );
     case "PropertyBought":
       return t(
-        `${name} achète ${tileName(event.tile)} · ${money(event.amount)}`,
-        `${name} buys ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} achète ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+        `${name} buys ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
       );
     case "PropertyUpgraded":
       return t(
-        `${name} construit à ${tileName(event.tile)} · ${levelName(event.level)}`,
-        `${name} builds in ${tileName(event.tile)} · ${levelName(event.level)}`,
+        `${name} construit à ${tileName(event.tile, state?.config)} · ${levelName(event.level)}`,
+        `${name} builds in ${tileName(event.tile, state?.config)} · ${levelName(event.level)}`,
       );
     case "BoughtOut":
       return t(
-        `${name} rachète ${tileName(event.tile)} · ${money(event.amount)}`,
-        `${name} buys out ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} rachète ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+        `${name} buys out ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
       );
     case "PropertySold":
       return t(
-        `${name} vend ${tileName(event.tile)} · ${money(event.amount)}`,
-        `${name} sells ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} vend ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+        `${name} sells ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
       );
     case "RentPaid":
       return t(
@@ -438,8 +509,8 @@ function eventText(event: GameEvent, state: PublicState): string | null {
     case "ChampionshipChanged":
       return event.host
         ? t(
-            `Festival à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
-            `Festival in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
+            `Championnat à ${tileName(event.host.tile, state?.config)} · loyers ×${event.host.multiplier}`,
+            `Championship in ${tileName(event.host.tile, state?.config)} · rent ×${event.host.multiplier}`,
           )
         : null;
     case "MoneyTransferred":
@@ -456,140 +527,16 @@ function eventText(event: GameEvent, state: PublicState): string | null {
       return null;
   }
 }
-function TileInspector({
-  state,
-  selected,
-  onSelect,
-}: {
-  state: PublicState;
-  selected: number | null;
-  onSelect: (tile: number) => void;
-}) {
-  const index =
-    selected ??
-    state.players.find((player) => player.seat === state.activeSeat)
-      ?.position ??
-    0;
-  const tile = BOARD[index];
-  const property = getProperty(state, index);
-  const owner =
-    property?.owner != null
-      ? state.players.find((player) => player.seat === property.owner)
-      : null;
-  const rent = property ? propertyRent(state, index) : null;
-  return (
-    <section className="inspector" aria-labelledby="inspector-title">
-      <div className="inspector-head">
-        <span
-          className="tile-icon"
-          style={{ backgroundColor: tileColor(index) }}
-        >
-          {TILE_ICONS[tile.kind]}
-        </span>
-        <div>
-          <span className="small-label">
-            {t(`Case ${index + 1} / 32`, `Space ${index + 1} / 32`)}
-          </span>
-          <h3 id="inspector-title">{tileName(index)}</h3>
-        </div>
-      </div>
-      <label className="sr-only" htmlFor="tile-inspection">
-        {t("Explorer une case", "Inspect a space")}
-      </label>
-      <select
-        id="tile-inspection"
-        className="tile-select"
-        value={index}
-        onChange={(event) => onSelect(Number(event.target.value))}
-      >
-        {BOARD.map((item) => (
-          <option key={item.index} value={item.index}>
-            {item.index + 1}. {tileName(item.index)}
-          </option>
-        ))}
-      </select>
-      {property ? (
-        <>
-          <div className="ownership">
-            {owner ? (
-              <>
-                <span style={{ color: PLAYER_COLORS[owner.seat] }}>
-                  {PLAYER_SYMBOLS[owner.seat]}
-                </span>{" "}
-                {owner.name} · {levelName(property.level)}
-              </>
-            ) : (
-              t("Disponible à l’achat", "Available to buy")
-            )}
-          </div>
-          <dl className="property-numbers">
-            <div>
-              <dt>{t("Terrain", "Land")}</dt>
-              <dd>{money(tilePrice(index) ?? 0)}</dd>
-            </div>
-            <div>
-              <dt>
-                {owner
-                  ? t("Loyer actuel", "Current rent")
-                  : t("Loyer terrain", "Base rent")}
-              </dt>
-              <dd>{money(rent ?? 0)}</dd>
-            </div>
-          </dl>
-          {(state.championshipHost?.tile === index ||
-            state.festivalTiles.includes(index)) && (
-            <p className="festival-badge">
-              {t("★ Festival · loyer ×", "★ Festival · rent ×")}
-              {state.championshipHost?.tile === index
-                ? state.championshipHost.multiplier
-                : 2}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="tile-rule">
-          {tile.kind === "start"
-            ? t(
-                `Recevez ${money(state.config.startSalary)} en passant par le départ.`,
-                `Receive ${money(state.config.startSalary)} when passing Start.`,
-              )
-            : tile.kind === "island"
-              ? t(
-                  "Un double ou le paiement de la traversée vous permet de repartir.",
-                  "Roll doubles or pay the fare to leave.",
-                )
-              : tile.kind === "championship"
-                ? t(
-                    "Installez un festival dans l’une de vos villes pour multiplier ses loyers.",
-                    "Host a festival in one of your cities to multiply its rent.",
-                  )
-                : tile.kind === "world-tour"
-                  ? t(
-                      "Au prochain tour, choisissez une destination plutôt que de lancer les dés.",
-                      "On your next turn, choose a destination instead of rolling.",
-                    )
-                  : tile.kind === "chance"
-                    ? t(
-                        "Piochez une carte. Fortune, voyage ou surprise au programme.",
-                        "Draw a card and follow its instructions.",
-                      )
-                    : t(
-                        "La taxe est calculée selon votre fortune.",
-                        "Tax is based on your net worth.",
-                      )}
-        </p>
-      )}
-    </section>
-  );
-}
 
 function RandomnessPanel({
   value,
   mode,
+  onHelp,
   expanded = false,
 }: {
   value: RandomnessStatus | null;
   mode: RoomConfig["randomnessMode"];
+  onHelp: () => void;
   expanded?: boolean;
 }) {
   const proof = value?.proof;
@@ -614,20 +561,19 @@ function RandomnessPanel({
           <span>↗</span>
         </summary>
         <div className="proof-body">
-          <p>
-            {t(
-              "Chaque lancer utilise de nouveaux octets aléatoires générés par le serveur Cloudflare. Chaque face a une chance sur six, avec la même méthode pour tous les joueurs. Aucun avantage payant ne modifie les dés.",
-              "Each roll uses fresh random bytes generated by the Cloudflare server. Each face has a one-in-six chance, using the same method for every player. Paid bonuses cannot change the dice.",
-            )}
-          </p>
-          {proof && (
+          {proof ? (
             <p className="proof-result">
               {t(
                 `Dernier lancer : ${proof.dice[0]} + ${proof.dice[1]}`,
                 `Last roll: ${proof.dice[0]} + ${proof.dice[1]}`,
               )}
             </p>
+          ) : (
+            <p>{t("Aucun lancer pour le moment.", "No rolls yet.")}</p>
           )}
+          <button type="button" className="text-button" onClick={onHelp}>
+            {t("Comment fonctionnent les dés ?", "How are the dice rolled?")}
+          </button>
         </div>
       </details>
     );
@@ -745,7 +691,15 @@ function RandomnessPanel({
     </details>
   );
 }
-function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
+function Help({
+  open,
+  onClose,
+  mode,
+}: {
+  open: boolean;
+  onClose: () => void;
+  mode: RoomConfig["randomnessMode"];
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (open) dialog.current?.showModal();
@@ -755,11 +709,12 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
     <dialog
       ref={dialog}
       className="help-dialog"
+      aria-labelledby="help-heading"
       onCancel={onClose}
       onClose={onClose}
     >
       <div className="help-top">
-        <h2>{t("Votre premier tour", "How to play")}</h2>
+        <h2 id="help-heading">{t("Comment jouer", "How to play")}</h2>
         <button
           type="button"
           className="icon-button"
@@ -789,8 +744,8 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
           <b>{t("Achetez et construisez", "Buy and build")}</b>
           <span>
             {t(
-              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes et les festivals l’augmentent.",
-              "Choose land or a building. Other players pay rent when they land there; complete city groups and festivals increase the rent.",
+              "Choisissez un terrain ou un bâtiment. Vos visiteurs paient le loyer ; les collections de villes, les festivals et le championnat l’augmentent.",
+              "Choose land or a building. Other players pay rent when they land there; complete city groups, festivals and the championship increase the rent.",
             )}
           </span>
         </li>
@@ -813,12 +768,21 @@ function Help({ open, onClose }: { open: boolean; onClose: () => void }) {
           </span>
         </li>
       </ol>
-      <p className="field-note">
-        {t(
-          "Tous les joueurs ont les mêmes règles. Aucun bonus payant. Les valeurs de départ sont celles fournies ; cette première version conserve une économie de loyers à ajuster.",
-          "The same rules apply to every player, with no paid bonuses. Starting values follow the selected settings; prototype rents are still being tuned.",
+      <section className="help-dice" aria-labelledby="help-dice-heading">
+        <h3 id="help-dice-heading">
+          {t("Le tirage des dés", "How dice are rolled")}
+        </h3>
+        {mode === "secure" ? (
+          <DiceExplanation />
+        ) : (
+          <p>
+            {t(
+              "Cette ancienne salle conserve ses dés drand : chaque lancer attend un signal public et sa signature vérifiée.",
+              "This older room keeps its drand dice: each roll waits for a public beacon and a verified signature.",
+            )}
+          </p>
         )}
-      </p>
+      </section>
       <button type="button" className="button primary" onClick={onClose}>
         {t("C’est parti", "Got it")}
         <Icon name="arrow" />
@@ -855,6 +819,36 @@ function MatchClock({
     >
       {text}
     </time>
+  );
+}
+
+// The deciding player's remaining time, as a bar under their name. The engine's
+// deadline also holds the animations that open the decision, so the bar waits
+// at full until the player's own window starts, then drains in real time.
+// CSS runs the drain: no per-second re-render, and it stays smooth.
+function TurnTimer({
+  pending,
+  config,
+}: {
+  pending: PublicState["pending"];
+  config: GameConfig;
+}) {
+  const startedAt = useRef(Date.now());
+  if (!pending) return <div className="player-timer" aria-hidden="true" />;
+  const windowMs = decisionWindow(config, pending.kind);
+  const delay = pending.deadline - windowMs - startedAt.current;
+  return (
+    <div className="player-timer" aria-hidden="true">
+      <span
+        className="player-timer-fill"
+        style={
+          {
+            "--timer-window": `${windowMs}ms`,
+            "--timer-delay": `${delay}ms`,
+          } as CSSProperties
+        }
+      />
+    </div>
   );
 }
 
@@ -898,15 +892,85 @@ function MatchView({
 }) {
   const { serverState, busy, speed, history, reducedMotion } = useDirector();
   const [tool, setTool] = useState<GameTool>(null);
+  const [rollAnchor, setRollAnchor] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [saleSelection, setSaleSelection] = useState<{
+    gameId: string;
+    pending: PublicState["pending"];
+    tile: number;
+  } | null>(null);
   const overlayTrigger = useRef<HTMLButtonElement | null>(null);
-  const inspectorRef = useRef<HTMLElement | null>(null);
   const toolRef = useRef<HTMLElement | null>(null);
   const decidingSeat = game.pending?.seat ?? game.activeSeat;
   const ownPlayer = game.players.find(
     (player) => player.seat === credentials.seat,
   );
+  const authoritative = serverState ?? game;
+  const salePending =
+    authoritative.status === "active" &&
+    authoritative.pending?.kind === "sell" &&
+    authoritative.pending.seat === credentials.seat &&
+    !authoritative.players.find((player) => player.seat === credentials.seat)
+      ?.bankrupt
+      ? authoritative.pending
+      : null;
+  const saleTargets = salePending
+    ? legalActions(authoritative, credentials.seat).flatMap((action) =>
+        action.type === "Sell" ? [action.tile] : [],
+      )
+    : [];
+  const saleBlocked =
+    busy ||
+    room.pending ||
+    room.connection !== "online" ||
+    (room.randomness !== null && room.randomness.status !== "resolved");
+  // A new decision or recovered snapshot requires a fresh, deliberate choice.
+  const saleSelected =
+    salePending &&
+    !busy &&
+    room.connection === "online" &&
+    saleSelection?.gameId === authoritative.gameId &&
+    saleSelection.pending === salePending &&
+    saleTargets.includes(saleSelection.tile)
+      ? saleSelection.tile
+      : null;
+  const decisionSelected = salePending ? saleSelected : selected;
+  // Travel, festival and card choices are answered by clicking the board.
+  const decisionState = serverState ?? game;
+  const picking =
+    !busy &&
+    (room.randomness === null || room.randomness.status === "resolved") &&
+    decisionState.status === "active" &&
+    decisionState.pending?.seat === credentials.seat &&
+    !ownPlayer?.bankrupt &&
+    isBoardPick(decisionState);
+  const pickTargets = useMemo(
+    () =>
+      picking
+        ? boardPickActions(decisionState, credentials.seat).map(
+            (action) => action.tile,
+          )
+        : null,
+    [picking, decisionState, credentials.seat],
+  );
+  const pickKey = boardPickKey(decisionState);
+  const [pick, setPick] = useState<{
+    key: string;
+    tile: number;
+    pending: PublicState["pending"];
+  } | null>(null);
+  const picked =
+    pickTargets &&
+    room.connection === "online" &&
+    pick?.key === pickKey &&
+    pick.pending === decisionState.pending &&
+    pickTargets.includes(pick.tile)
+      ? pick.tile
+      : null;
   const diceToolLabel =
     config.randomnessMode === "drand"
       ? t("Dés et preuve", "Dice and proof")
@@ -937,19 +1001,66 @@ function MatchView({
     overlayTrigger.current?.focus();
   }
   function inspectTile(tile: number) {
+    if (salePending) {
+      if (saleBlocked || !saleTargets.includes(tile)) return;
+      setSaleSelection({
+        gameId: authoritative.gameId,
+        pending: salePending,
+        tile,
+      });
+      setInspectorOpen(false);
+      setTool(null);
+      return;
+    }
     overlayTrigger.current = null;
     onSelect(tile);
     setInspectorOpen(true);
     setTool(null);
   }
+  function choosePick(tile: number) {
+    if (!saleBlocked && pickTargets?.includes(tile))
+      setPick({ key: pickKey, tile, pending: decisionState.pending });
+  }
+  function selectOnBoard(tile: number) {
+    // While choosing, other spaces are inert so a misclick never opens a panel.
+    if (pickTargets) choosePick(tile);
+    else inspectTile(tile);
+  }
   useEffect(() => {
-    if (!tool && !inspectorOpen) return;
+    setSaleSelection((previous) =>
+      previous &&
+      (previous.gameId !== authoritative.gameId ||
+        previous.pending !== salePending ||
+        room.connection !== "online" ||
+        busy)
+        ? null
+        : previous,
+    );
+  }, [authoritative.gameId, salePending, room.connection, busy]);
+  useEffect(() => {
+    setPick((previous) =>
+      previous &&
+      (previous.key !== pickKey ||
+        previous.pending !== decisionState.pending ||
+        room.connection !== "online" ||
+        busy)
+        ? null
+        : previous,
+    );
+  }, [pickKey, decisionState.pending, room.connection, busy]);
+  useEffect(() => {
+    if (salePending || picking) {
+      setInspectorOpen(false);
+      setTool(null);
+    }
+  }, [salePending, picking]);
+  useEffect(() => {
+    if (!tool) return;
     const frame = requestAnimationFrame(() => {
-      const panel = tool ? toolRef.current : inspectorRef.current;
-      panel?.querySelector<HTMLButtonElement>("button")?.focus();
+      toolRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [tool, inspectorOpen]);
+  }, [tool]);
   useEffect(() => {
     const closeOverlays = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -976,7 +1087,17 @@ function MatchView({
     <>
       <div className="board-stage">
         <SceneBoundary
-          fallback={<BoardFallback state={game} onSelect={inspectTile} />}
+          fallback={
+            <BoardFallback
+              state={game}
+              onSelect={selectOnBoard}
+              targets={pickTargets}
+              picked={picked}
+              saleTargets={salePending ? saleTargets : undefined}
+              saleSelected={saleSelected}
+              saleBlocked={saleBlocked}
+            />
+          }
         >
           <Suspense
             fallback={
@@ -988,9 +1109,16 @@ function MatchView({
           >
             <BoardScene
               state={game}
-              selected={selected}
-              onSelect={inspectTile}
+              selected={decisionSelected}
+              onSelect={selectOnBoard}
+              targets={pickTargets}
+              picked={picked}
+              pickKey={pickKey}
+              pickSeat={credentials.seat}
               zoom={zoom}
+              onRollAnchor={setRollAnchor}
+              saleSeat={salePending ? credentials.seat : undefined}
+              saleBlocked={saleBlocked}
             />
           </Suspense>
         </SceneBoundary>
@@ -1174,6 +1302,12 @@ function MatchView({
                     </span>
                   )}
                 </div>
+                <TurnTimer
+                  // A new decision restarts the bar, even for the same seat.
+                  key={active ? game.pending?.deadline : "idle"}
+                  pending={active ? game.pending : null}
+                  config={game.config}
+                />
                 <div
                   className="player-cash"
                   title={t(
@@ -1225,6 +1359,15 @@ function MatchView({
           <motion.div
             key="decision"
             className="contextual-action"
+            style={
+              rollAnchor
+                ? ({
+                    "--roll-x": `${rollAnchor.x}px`,
+                    "--roll-y": `${rollAnchor.y}px`,
+                  } as CSSProperties)
+                : undefined
+            }
+            data-sale={Boolean(salePending && !busy)}
             initial={false}
             animate={{ opacity: 1 }}
           >
@@ -1232,42 +1375,27 @@ function MatchView({
               state={serverState ?? game}
               seat={credentials.seat}
               act={room.act}
-              blocked={room.pending || room.connection !== "online"}
+              blocked={saleBlocked}
               randomness={room.randomness}
-              selected={selected}
-              onSelect={onSelect}
+              selected={decisionSelected}
+              onSelect={salePending ? inspectTile : onSelect}
+              picked={picked}
+              onPick={choosePick}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
+      {inspectorOpen && (
+        <CityCard
+          state={game}
+          seat={credentials.seat}
+          selected={selected}
+          onSelect={onSelect}
+          onClose={closeTools}
+        />
+      )}
       <AnimatePresence>
-        {inspectorOpen && (
-          <motion.aside
-            ref={inspectorRef}
-            key="inspector"
-            className="inspector-popover"
-            aria-label={t("Inspection du plateau", "Board inspection")}
-            initial={reducedMotion ? false : { opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 / speed }}
-          >
-            <button
-              type="button"
-              className="popover-close icon-button"
-              aria-label={t("Fermer l’inspection", "Close inspection")}
-              onClick={closeTools}
-            >
-              <Icon name="close" size={16} />
-            </button>
-            <TileInspector
-              state={game}
-              selected={selected}
-              onSelect={onSelect}
-            />
-          </motion.aside>
-        )}
         {tool && (
           <motion.section
             ref={toolRef}
@@ -1330,6 +1458,10 @@ function MatchView({
               <RandomnessPanel
                 value={room.randomness}
                 mode={config.randomnessMode}
+                onHelp={() => {
+                  closeTools();
+                  onHelp();
+                }}
                 expanded
               />
             )}
@@ -1483,7 +1615,7 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const { serverState, viewState } = useDirector();
+  const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
   useEffect(() => {
     if (
@@ -1586,11 +1718,22 @@ function App() {
   const isGame = credentials && game;
   const debug = new URLSearchParams(window.location.search).has("debug");
   const blockActions = room.pending || room.connection !== "online";
+  const previewConfig: GameConfig = {
+    ...config,
+    gameId: "preview",
+    boardRule: room.lobby?.boardRule ?? "country",
+    economyRule: room.lobby?.economyRule ?? "reference",
+    hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
+    sellBackPercent: room.lobby?.sellBackPercent ?? 100,
+  };
   const host = credentials?.seat === room.lobby?.hostSeat;
   const seated =
     room.lobby?.seats.filter((seat) => seat.control !== null).length ?? 0;
   return (
-    <main className={isGame ? "game-shell" : "lobby-shell"}>
+    <main
+      className={isGame ? "game-shell" : "lobby-shell"}
+      data-reduced-motion={reducedMotion}
+    >
       {!isGame && (
         <header className="topbar">
           <span className="brand-button">
@@ -1711,7 +1854,13 @@ function App() {
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
-                fallback={<BoardFallback state={null} onSelect={setSelected} />}
+                fallback={
+                  <BoardFallback
+                    state={null}
+                    config={previewConfig}
+                    onSelect={setSelected}
+                  />
+                }
               >
                 <Suspense
                   fallback={
@@ -1723,6 +1872,7 @@ function App() {
                 >
                   <BoardScene
                     state={null}
+                    config={previewConfig}
                     selected={null}
                     onSelect={setSelected}
                     preview
@@ -1842,7 +1992,13 @@ function App() {
           </div>
           <div className="room-preview">
             <SceneBoundary
-              fallback={<BoardFallback state={null} onSelect={setSelected} />}
+              fallback={
+                <BoardFallback
+                  state={null}
+                  config={previewConfig}
+                  onSelect={setSelected}
+                />
+              }
             >
               <Suspense
                 fallback={
@@ -1853,6 +2009,7 @@ function App() {
               >
                 <BoardScene
                   state={null}
+                  config={previewConfig}
                   selected={null}
                   onSelect={setSelected}
                   preview
@@ -1912,7 +2069,11 @@ function App() {
           </button>
         </div>
       )}
-      <Help open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <Help
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        mode={config.randomnessMode}
+      />
       {!isGame && (
         <footer className="lobby-footer">
           <span>

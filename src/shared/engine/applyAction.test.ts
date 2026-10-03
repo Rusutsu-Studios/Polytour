@@ -16,26 +16,39 @@ import {
   applyTimeout,
   botAction,
   botDecisionAt,
+  buyoutPrice,
+  buyoutPriceAt,
   CHANCE_CARDS,
   createGame,
   DEFAULT_GAME_CONFIG,
+  economyRule,
   getPlayer,
   getProperty,
   getTileInvestedValue,
   legalActions,
+  maxBuildLevel,
   netWorth,
   previewPropertyRent,
   propertyOwner,
+  propertyRefund,
   propertyRent,
+  propertyRentAt,
+  rentBoost,
   rentCardPayment,
+  resortCount,
   toPublic,
+  worldTourTargets,
 } from "./index.js";
 
 const SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
   (name, index) => ({ playerId: `player-${index}`, name, control: "human" }),
 );
+/** Saved prototype rooms (rules versions 2–3) keep these rules; see the reference block below. */
 const CONFIG: GameConfig = {
   ...DEFAULT_GAME_CONFIG,
+  economyRule: "prototype",
+  boardRule: "legacy",
+  sellBackPercent: 100,
   roundLimit: 20,
   timeLimitMinutes: undefined,
   festivalCount: 0,
@@ -110,7 +123,11 @@ function land(
     dice,
   );
 }
-function draw(state: GameState, card: ChanceCard, tile = 3) {
+function draw(
+  state: GameState,
+  card: ChanceCard,
+  tile = state.config.boardRule === "country" ? 12 : 3,
+) {
   return land({ ...state, deck: [card], discard: [] }, tile);
 }
 function withActive(state: GameState, seat: Seat): GameState {
@@ -264,8 +281,8 @@ describe("property economy and build unlocking", () => {
     expect(bought.state.bankLedger).toBe(210_000 - 400_000);
     expect(netWorth(bought.state, seat)).toBe(2_400_000);
     expect(bought.state.activeSeat).not.toBe(seat);
-    expect(getTileInvestedValue(1, 4)).toBe(360_000);
-    expect(getTileInvestedValue(31, 4)).toBe(1_500_000);
+    expect(getTileInvestedValue(1, 4, "prototype")).toBe(360_000);
+    expect(getTileInvestedValue(31, 4, "prototype")).toBe(1_500_000);
   });
   it("unlocks Hotel after a lap and Landmark only on landing on one's Hotel", () => {
     let state = newGame();
@@ -296,7 +313,7 @@ describe("property economy and build unlocking", () => {
   it("uses the greatest country, festival or Championship modifier once", () => {
     let state = newGame();
     const seat = state.activeSeat;
-    state = grant(grant(state, 1, seat, 4), 2, seat);
+    state = grant(grant(grant(state, 1, seat, 4), 2, seat), 3, seat);
     expect(propertyRent(state, 1)).toBe(336_000);
     state = {
       ...state,
@@ -408,23 +425,152 @@ describe("dice, Island, laps and World Tour", () => {
     const finished = act(travelled, { type: "Decline" }).state;
     expect(finished.activeSeat).not.toBe(seat);
   });
+  it("new reference World Tour reaches free properties first, then only the traveller's own", () => {
+    let state = newGame(4, {
+      ...CONFIG,
+      economyRule: "reference",
+      boardRule: "country",
+    });
+    const seat = state.activeSeat;
+    const rival = other(state);
+    state = grant(grant(grant(state, 1, seat, 2), 2, rival), 5, rival);
+    let next = land(state, 24).state;
+    while (next.pending?.seat !== seat)
+      next = act(
+        next,
+        next.pending?.kind === "roll" ? { type: "Roll" } : { type: "Decline" },
+        [3, 4],
+      ).state;
+    expect(next.pending).toMatchObject({ kind: "travel", seat });
+    const targets = next.pending?.kind === "travel" ? next.pending.targets : [];
+    // With free properties left, the traveller's own spaces are excluded too.
+    expect(targets).toEqual([
+      3, 4, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23, 25, 26, 27, 29,
+      31,
+    ]);
+    expect(legalActions(next, seat)).not.toContainEqual({
+      type: "Travel",
+      tile: 2,
+    });
+    for (const tile of [0, 1, 2, 12, 8, 16, 30])
+      expect(
+        applyAction(next, seat, { type: "Travel", tile }, { now: 1 }).ok,
+      ).toBe(false);
+    const fullyOwned = {
+      ...next,
+      properties: next.properties.map((property) => ({
+        ...property,
+        owner: property.tile === 1 ? seat : rival,
+      })),
+    };
+    expect(worldTourTargets(fullyOwned, seat)).toEqual([1]);
+    const home = act(
+      {
+        ...fullyOwned,
+        pending: {
+          kind: "travel",
+          seat,
+          targets: [1],
+          fee: 50_000,
+          deadline: 30_000,
+        },
+      },
+      { type: "Travel", tile: 1 },
+    ).state;
+    expect(getPlayer(home, seat)).toMatchObject({
+      position: 1,
+      laps: 1,
+      cash: 2_350_000,
+      travelPending: false,
+    });
+    // A save without the economy marker keeps its original travel-anywhere rule.
+    const { economyRule: _marker, ...legacyConfig } = next.config;
+    expect(
+      worldTourTargets({ ...toPublic(next), config: legacyConfig }, seat),
+    ).toHaveLength(31);
+  });
 });
 describe("forced sales and bankruptcy", () => {
-  it("pauses after a mandatory rent, allows a refund and resumes the landing", () => {
+  it("quotes land and every standing building at full investment, independently of toll bonuses", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    for (const level of [0, 1, 2, 3, 4, 5] as const) {
+      state = grant(state, 1, seat, level);
+      expect(propertyRefund(state, 1)).toBe(
+        getTileInvestedValue(1, level, "prototype", "legacy"),
+      );
+    }
+    state = grant(grant(state, 31, seat, 4), 5, seat);
+    expect(propertyRefund(state, 31)).toBe(1_500_000);
+    expect(propertyRefund(state, 5)).toBe(200_000);
+    expect(
+      propertyRefund(
+        {
+          ...state,
+          festivalTiles: [31],
+          championshipHost: { tile: 31, multiplier: 8 },
+        },
+        31,
+      ),
+    ).toBe(1_500_000);
+  });
+  it("keeps half-investment refunds on preexisting saves without a frozen sale marker", () => {
     let state = newGame();
     const seat = state.activeSeat;
     state = grant(grant(state, 4, other(state), 1), 6, seat);
+    const { sellBackPercent: _marker, ...legacyConfig } = state.config;
+    state = setPlayer({ ...state, config: legacyConfig }, seat, {
+      cash: 10_000,
+    });
+    expect(propertyRefund(state, 6)).toBe(50_000);
+    const debtor = land(state, 4).state;
+    const sold = act(debtor, { type: "Sell", tile: 6 });
+    expect(getPlayer(sold.state, seat).cash).toBe(6_000);
+    expect(sold.events).toContainEqual({
+      type: "PropertySold",
+      seat,
+      tile: 6,
+      amount: 50_000,
+    });
+    expect(sold.state.config).not.toHaveProperty("sellBackPercent");
+  });
+  it("allows a sale to cover debt that the old half-price quote could not cover", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(state, 4, other(state), 2), 6, seat);
     state = setPlayer(state, seat, { cash: 10_000 });
     const debtor = land(state, 4).state;
+    expect(getPlayer(debtor, seat).cash).toBe(-80_000);
     expect(debtor.pending).toMatchObject({ kind: "sell", seat, targets: [6] });
-    expect(getPlayer(debtor, seat).cash).toBe(-44_000);
-    const sold = act(debtor, { type: "Sell", tile: 6 }).state;
-    expect(getPlayer(sold, seat)).toMatchObject({
-      cash: 6_000,
+    const sold = act(debtor, { type: "Sell", tile: 6 });
+    expect(getPlayer(sold.state, seat)).toMatchObject({
+      cash: 20_000,
       bankrupt: false,
       properties: [],
     });
-    expect(propertyOwner(sold, 6)).toBeNull();
+    expect(sold.events).toContainEqual({
+      type: "PropertySold",
+      seat,
+      tile: 6,
+      amount: 100_000,
+    });
+    expect(getProperty(sold.state, 6)).toMatchObject({ owner: null, level: 0 });
+  });
+  it("pauses after a mandatory rent, allows a refund and resumes the landing", () => {
+    let state = newGame(4, { ...CONFIG, boardRule: "country" });
+    const seat = state.activeSeat;
+    state = grant(grant(state, 3, other(state), 1), 5, seat);
+    state = setPlayer(state, seat, { cash: 10_000 });
+    const debtor = land(state, 3).state;
+    expect(debtor.pending).toMatchObject({ kind: "sell", seat, targets: [5] });
+    expect(getPlayer(debtor, seat).cash).toBe(-44_000);
+    const sold = act(debtor, { type: "Sell", tile: 5 }).state;
+    expect(getPlayer(sold, seat)).toMatchObject({
+      cash: 56_000,
+      bankrupt: false,
+      properties: [],
+    });
+    expect(propertyOwner(sold, 5)).toBeNull();
     expect(sold.pending?.kind).toBe("roll");
   });
   it("skips impossible sales, absorbs the written-off debt and returns properties/cards", () => {
@@ -454,19 +600,19 @@ describe("forced sales and bankruptcy", () => {
     });
   });
   it("resolves Birthday payers in order, including another player's forced sale", () => {
-    let state = newGame();
+    let state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
     const payer = state.turnOrder.find(
       (candidate) => candidate !== seat,
     ) as Seat;
-    state = grant(state, 6, payer);
+    state = grant(state, 5, payer);
     state = setPlayer(state, payer, { cash: 20_000 });
     const result = draw(state, "Birthday").state;
     expect(result.pending).toMatchObject({ kind: "sell", seat: payer });
     expect(result.activeSeat).toBe(seat);
-    const settled = act(result, { type: "Sell", tile: 6 }).state;
+    const settled = act(result, { type: "Sell", tile: 5 }).state;
     expect(getPlayer(settled, seat).cash).toBe(2_150_000);
-    expect(getPlayer(settled, payer).cash).toBe(20_000);
+    expect(getPlayer(settled, payer).cash).toBe(70_000);
   });
   it("timeout sells cheapest refunds repeatedly until solvent", () => {
     let state = newGame();
@@ -491,13 +637,13 @@ describe("forced sales and bankruptcy", () => {
         .filter((event) => event.type === "PropertySold")
         .map((event) => event.tile),
     ).toEqual([1, 2]);
-    expect(getPlayer(timeout.state, seat).cash).toBe(20_000);
+    expect(getPlayer(timeout.state, seat).cash).toBe(160_000);
   });
 });
 
 describe("all sixteen Chance cards", () => {
   it("movement cards follow clockwise laps, Detour never pays Start, and corner cards end doubles", () => {
-    const state = newGame();
+    const state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
     const grand = draw(state, "Grand Tour");
     expect(getPlayer(grand.state, seat)).toMatchObject({
@@ -505,9 +651,10 @@ describe("all sixteen Chance cards", () => {
       laps: 1,
       cash: 2_400_000,
     });
+    // Detour steps back from the first Chance square without any salary.
     const detour = draw(state, "Detour");
     expect(getPlayer(detour.state, seat)).toMatchObject({
-      position: 0,
+      position: 9,
       laps: 0,
       cash: 2_000_000,
     });
@@ -521,7 +668,7 @@ describe("all sixteen Chance cards", () => {
       travelPending: true,
     });
     expect(jet.activeSeat).not.toBe(seat);
-    const stadium = draw(grant(state, 1, seat), "Stadium Call", 19).state;
+    const stadium = draw(grant(state, 1, seat), "Stadium Call", 28).state;
     expect(stadium.pending).toMatchObject({ kind: "host", targets: [1] });
     expect(getPlayer(stadium, seat)).toMatchObject({
       position: 16,
@@ -653,11 +800,11 @@ describe("all sixteen Chance cards", () => {
 describe("wins, rankings and timeouts", () => {
   it("detects Triple, Line and Resort wins with their documented precedence", () => {
     for (const [tiles, last, kind] of [
-      [[1, 2, 4, 6, 7, 9, 10], 11, "triple-monopoly"],
-      [[1, 2, 4, 5, 6], 7, "line-monopoly"],
-      [[5, 12, 21], 28, "resort-monopoly"],
+      [[1, 2, 3, 5, 6, 7, 9, 10], 11, "triple-monopoly"],
+      [[1, 2, 3, 4, 5, 6], 7, "line-monopoly"],
+      [[4, 14, 18], 25, "resort-monopoly"],
     ] as const) {
-      let state = newGame();
+      let state = newGame(4, { ...CONFIG, boardRule: "country" });
       const seat = state.activeSeat;
       for (const tile of tiles) state = grant(state, tile, seat);
       const bought = act(land(state, last).state, {
@@ -675,7 +822,7 @@ describe("wins, rankings and timeouts", () => {
       tripleMonopoly: false,
     });
     const seat = state.activeSeat;
-    for (const tile of [1, 2, 4, 5, 6]) state = grant(state, tile, seat);
+    for (const tile of [1, 2, 3, 4, 5, 6]) state = grant(state, tile, seat);
     expect(
       act(land(state, 7).state, { type: "Buy", level: 0 }).state.status,
     ).toBe("active");
@@ -687,10 +834,14 @@ describe("wins, rankings and timeouts", () => {
     expect(applyTimeout(timed, { now: 1_199_999 }).state.status).toBe("active");
   });
   it("settles pending sales and sequential mandatory payments fairly before time-limit ranking", () => {
-    let state = newGame(4, { ...CONFIG, timeLimitMinutes: 20 });
+    let state = newGame(4, {
+      ...CONFIG,
+      boardRule: "country",
+      timeLimitMinutes: 20,
+    });
     const seat = state.activeSeat;
     const payer = other(state);
-    state = grant(state, 6, payer);
+    state = grant(state, 5, payer);
     state = setPlayer(state, payer, { cash: 20_000 });
     const waiting = draw(state, "Birthday").state;
     expect(waiting.pending).toMatchObject({ kind: "sell", seat: payer });
@@ -698,7 +849,7 @@ describe("wins, rankings and timeouts", () => {
     expect(ended.state.result?.kind).toBe("time-limit");
     expect(ended.state.pending).toBeNull();
     expect(getPlayer(ended.state, seat).cash).toBe(2_150_000);
-    expect(getPlayer(ended.state, payer).cash).toBe(20_000);
+    expect(getPlayer(ended.state, payer).cash).toBe(70_000);
     expect(ended.events.some((event) => event.type === "DiceRolled")).toBe(
       false,
     );
@@ -854,10 +1005,10 @@ describe("configurable captured room options", () => {
 
 describe("rounding and simultaneous win edges", () => {
   it("charges Tax from current invested value including every house and Hotel", () => {
-    let state = newGame();
+    let state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
     state = grant(grant(state, 1, seat, 3), 31, seat, 4);
-    const taxed = land(state, 29).state;
+    const taxed = land(state, 30).state;
     expect(getPlayer(taxed, seat).cash).toBe(1_829_000);
   });
   it.each([
@@ -905,13 +1056,13 @@ describe("rounding and simultaneous win edges", () => {
     },
   );
   it("gives the active player priority when a Land Swap completes two Triple Monopolies", () => {
-    let state = newGame(2);
+    let state = newGame(2, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
     const rival = other(state);
-    for (const tile of [2, 13, 15, 25, 26, 27])
+    for (const tile of [2, 3, 13, 15, 26, 27])
       state = grant(state, tile, seat, 5);
     state = grant(state, 31, seat, 4);
-    for (const tile of [4, 6, 7, 9, 10, 11, 30])
+    for (const tile of [5, 6, 7, 9, 10, 11, 29])
       state = grant(state, tile, rival, 5);
     state = grant(state, 1, rival);
     const swap = draw(state, "Land Swap").state;
@@ -1077,7 +1228,11 @@ describe("frozen staged hotel construction", () => {
 
 describe("property rent previews", () => {
   it("projects purchase ownership and country/festival modifiers without mutating live state", () => {
-    const state = grant(newGame(), 1, 0);
+    const state = grant(
+      grant(newGame(4, { ...CONFIG, boardRule: "country" }), 1, 0),
+      3,
+      0,
+    );
     const before = JSON.stringify(state);
     expect(previewPropertyRent(state, 2, 0, 1)).toBe(84_000);
     expect(previewPropertyRent({ ...state, festivalTiles: [2] }, 2, 1, 1)).toBe(
@@ -1085,6 +1240,47 @@ describe("property rent previews", () => {
     );
     expect(JSON.stringify(state)).toBe(before);
     expect(getProperty(state, 2)?.owner).toBeNull();
+  });
+  it("names the one bonus that multiplies a city's rent", () => {
+    let state = grant(newGame(), 1, 0);
+    expect(rentBoost(state, 1)).toBeNull();
+    state = grant(state, 2, 0);
+    expect(rentBoost(state, 1)).toEqual({ multiplier: 2, source: "country" });
+    state = { ...state, championshipHost: { tile: 1, multiplier: 3 } };
+    expect(rentBoost(state, 1)).toEqual({
+      multiplier: 3,
+      source: "championship",
+    });
+    // An initial festival multiplies the rent of a city nobody owns yet.
+    const bank = { ...newGame(), festivalTiles: [4] };
+    expect(rentBoost(bank, 4)).toEqual({ multiplier: 2, source: "festival" });
+    expect(rentBoost(bank, 5)).toBeNull();
+    expect(rentBoost(bank, 0)).toBeNull();
+  });
+  it("prices every build level under the city's current bonus", () => {
+    const state = {
+      ...grant(grant(newGame(), 1, 0, 2), 2, 0),
+      festivalTiles: [1],
+    };
+    const before = JSON.stringify(state);
+    expect(propertyRentAt(state, 1, 2)).toBe(propertyRent(state, 1));
+    expect(propertyRentAt(state, 1, 0)).toBe(24_000);
+    expect(propertyRentAt(state, 1, 4)).toBe(336_000);
+    // Landmarks never take a bonus.
+    expect(propertyRentAt(state, 1, 5)).toBe(240_000);
+    expect(JSON.stringify(state)).toBe(before);
+  });
+  it("prices a buyout only for an owned city below the landmark", () => {
+    let state = grant(newGame(), 1, 0, 2);
+    expect(buyoutPrice(state, 1)).toBe(
+      getTileInvestedValue(1, 2, "prototype", "legacy") * 2,
+    );
+    expect(buyoutPrice(state, 2)).toBeNull();
+    state = grant(grant(state, 5, 0), 12, 0);
+    expect(buyoutPrice(state, 5)).toBeNull();
+    expect(resortCount(state, 0)).toBe(2);
+    expect(resortCount(state, 1)).toBe(0);
+    expect(buyoutPrice(grant(state, 1, 0, 5), 1)).toBeNull();
   });
   it("retains an owned host for upgrades but clears transfer hosts and excludes Landmark multipliers", () => {
     let state = grant(grant(newGame(), 1, 0, 3), 2, 0);
@@ -1095,5 +1291,372 @@ describe("property rent previews", () => {
     expect(previewPropertyRent(state, 0, 0, 0)).toBe(0);
     expect(state.championshipHost).toEqual({ tile: 1, multiplier: 5 });
     expect(getProperty(state, 1)).toMatchObject({ owner: 0, level: 3 });
+  });
+});
+
+describe("combined reference rules on the country board", () => {
+  it("quotes Madrid's remapped prices, full investment sales, additive boosts and protected Hotel consistently", () => {
+    let state = newGame(4, {
+      ...CONFIG,
+      economyRule: "reference",
+      boardRule: "country",
+      sellBackPercent: 100,
+    });
+    const seat = state.activeSeat;
+    state = grant(grant(grant(state, 1, seat), 2, seat), 3, seat, 2);
+    state = {
+      ...state,
+      festivalTiles: [3],
+      championshipHost: { tile: 3, multiplier: 2 },
+    };
+    expect(propertyRefund(state, 3)).toBe(160_000);
+    expect(buyoutPrice(state, 3)).toBe(320_000);
+    expect(rentBoost(state, 3)).toEqual({ multiplier: 4, source: "combined" });
+    expect(propertyRent(state, 3)).toBe(240_000);
+    expect(propertyRentAt(state, 3, 4)).toBe(720_000);
+    expect(previewPropertyRent(state, 3, other(state), 4)).toBe(540_000);
+    expect(buyoutPriceAt(state, 3, 4)).toBeNull();
+    const hotel = grant(state, 3, seat, 4);
+    expect(propertyRefund(hotel, 3)).toBe(360_000);
+    expect(buyoutPrice(hotel, 3)).toBeNull();
+    expect(propertyRent(hotel, 3)).toBe(propertyRentAt(state, 3, 4));
+  });
+  it("counts regrouped resorts and applies festival rent using the reference rates", () => {
+    let state = newGame(4, {
+      ...CONFIG,
+      economyRule: "reference",
+      boardRule: "country",
+    });
+    const seat = state.activeSeat;
+    state = grant(grant(state, 4, seat), 14, seat);
+    state = { ...state, festivalTiles: [4] };
+    expect(resortCount(state, seat)).toBe(2);
+    expect(propertyRent(state, 4)).toBe(100_000);
+    expect(rentBoost(state, 4)).toEqual({ multiplier: 2, source: "festival" });
+    expect(buyoutPrice(state, 4)).toBeNull();
+    expect(propertyRefund(state, 4)).toBe(200_000);
+  });
+});
+
+/** Reference economy also works on the explicitly frozen original tour. */
+const REFERENCE: GameConfig = { ...CONFIG, economyRule: "reference" };
+function reference(count = 4, config: GameConfig = REFERENCE): GameState {
+  return newGame(count, config);
+}
+function nextSeat(state: GameState): Seat {
+  const order = state.turnOrder;
+  return order[(order.indexOf(state.activeSeat) + 1) % order.length];
+}
+
+describe("reference economy on the original board", () => {
+  it("marks new games as reference and reads an unmarked save as prototype", () => {
+    const { economyRule: _marker, ...unmarked } = DEFAULT_GAME_CONFIG;
+    const created = createGame(unmarked, SEATS, 7, { now: 0 }).state;
+    expect(created.config.economyRule).toBe("reference");
+    expect(economyRule(unmarked)).toBe("prototype");
+    expect(() =>
+      createGame(
+        { ...unmarked, economyRule: "classic" as "reference" },
+        SEATS,
+        7,
+        { now: 0 },
+      ),
+    ).toThrow("Unsupported economy rule");
+  });
+  it("caps a city at two houses before the first lap, three after, and the Hotel on a later visit", () => {
+    const state = reference();
+    const seat = state.activeSeat;
+    const first = land(state, 6).state;
+    expect(first.pending).toMatchObject({ kind: "buy", maxLevel: 2 });
+    expect(legalActions(first, seat)).not.toContainEqual({
+      type: "Buy",
+      level: 3,
+    });
+    const owned = land(grant(state, 6, seat, 2), 6).state;
+    expect(owned.pending?.kind).not.toBe("build");
+    const lapped = setPlayer(state, seat, { laps: 1 });
+    const second = land(lapped, 6).state;
+    expect(second.pending).toMatchObject({ kind: "buy", maxLevel: 3 });
+    const bought = act(second, { type: "Buy", level: 3 }).state;
+    expect(getProperty(bought, 6)?.level).toBe(3);
+    const revisit = land(withActive(bought, seat), 6).state;
+    expect(revisit.pending).toMatchObject({ kind: "build", maxLevel: 4 });
+    const contractor = draw(grant(state, 6, seat, 1), "Contractor").state;
+    expect(contractor.pending).toMatchObject({ targets: [6] });
+    expect(
+      draw(grant(state, 6, seat, 2), "Contractor").state.pending?.kind,
+    ).not.toBe("card-target");
+  });
+  it("previews the buyout price of each level, with Hotels and resorts protected", () => {
+    const state = reference();
+    // Tile 9 (Venice values): land 140 k + three houses at 100 k = 440 k.
+    expect(buyoutPriceAt(state, 9, 3)).toBe(880_000);
+    expect(buyoutPriceAt(state, 9, 0)).toBe(280_000);
+    expect(buyoutPriceAt(state, 9, 4)).toBeNull();
+    expect(buyoutPriceAt(state, 5, 0)).toBeNull();
+    expect(buyoutPriceAt(newGame(), 9, 4)).toBe(2 * 580_000);
+  });
+  it("charges the reference rents and adds each modifier, capped at ten", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    state = grant(state, 31, seat, 3);
+    expect(propertyRent(state, 31)).toBe(600_000);
+    state = grant(state, 30, seat);
+    expect(propertyRent(state, 31)).toBe(1_200_000);
+    expect(propertyRent(state, 30)).toBe(70_000);
+    state = {
+      ...state,
+      festivalTiles: [31],
+      championshipHost: { tile: 31, multiplier: 2 },
+    };
+    // Country, festival and a ×2 championship each add one: ×4.
+    expect(propertyRent(state, 31)).toBe(2_400_000);
+    state = { ...state, championshipHost: { tile: 31, multiplier: 10 } };
+    expect(propertyRent(state, 31)).toBe(6_000_000);
+  });
+  it("charges 25/50/100 k per resort, doubles a festival resort and draws festivals on resorts", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    state = grant(state, 5, seat);
+    expect(propertyRent(state, 5)).toBe(25_000);
+    state = grant(state, 12, seat);
+    expect(propertyRent(state, 5)).toBe(50_000);
+    state = grant(state, 21, seat);
+    expect(propertyRent(state, 5)).toBe(100_000);
+    expect(propertyRent({ ...state, festivalTiles: [5] }, 5)).toBe(200_000);
+    const resorts = [5, 12, 21, 28];
+    const festivals = (rule: GameConfig["economyRule"]) =>
+      Array.from({ length: 30 }, (_, seed) =>
+        createGame(
+          { ...DEFAULT_GAME_CONFIG, economyRule: rule, boardRule: "legacy" },
+          SEATS,
+          seed,
+          {
+            now: 0,
+          },
+        ).state.festivalTiles.filter((tile) => resorts.includes(tile)),
+      ).flat();
+    expect(festivals("reference").length).toBeGreaterThan(0);
+    expect(festivals("prototype")).toEqual([]);
+  });
+  it("protects Hotels from buyout and Land Swap, lets Earthquake hit them and has no Landmark", () => {
+    const fresh = reference();
+    const seat = fresh.activeSeat;
+    const owner = other(fresh);
+    const hotel = grant(fresh, 1, owner, 4);
+    const rented = land(hotel, 1);
+    // Passing Start pays the salary before the Hotel rent.
+    expect(getPlayer(rented.state, seat).cash).toBe(2_400_000 - 150_000);
+    expect(rented.state.activeSeat).not.toBe(seat);
+    expect(rented.events).not.toContainEqual(
+      expect.objectContaining({
+        type: "DecisionOpened",
+        pending: expect.objectContaining({ kind: "buyout" }),
+      }),
+    );
+    // Below the Hotel, a buyout still pays the owner twice the investment.
+    const houses = land(grant(fresh, 1, owner, 3), 1).state;
+    expect(houses.pending).toMatchObject({ kind: "buyout", price: 420_000 });
+    const quake = draw(hotel, "Earthquake").state;
+    expect(quake.pending).toMatchObject({ kind: "card-target", targets: [1] });
+    expect(
+      getProperty(act(quake, { type: "ChooseTarget", tile: 1 }).state, 1)
+        ?.level,
+    ).toBe(3);
+    const swap = draw(grant(grant(hotel, 2, owner), 6, seat, 1), "Land Swap");
+    expect(swap.state.pending).toMatchObject({
+      kind: "card-target",
+      targets: [2],
+      sourceTile: 6,
+    });
+    const ownHotel = setPlayer(grant(fresh, 1, seat, 4), seat, { laps: 3 });
+    expect(maxBuildLevel(ownHotel, seat, 1, false)).toBe(4);
+    const visit = land(ownHotel, 1);
+    expect(visit.state.activeSeat).not.toBe(seat);
+    expect(visit.events.some((event) => event.type === "DecisionOpened")).toBe(
+      true,
+    );
+    expect(
+      visit.events.some(
+        (event) =>
+          event.type === "DecisionOpened" && event.pending.kind === "build",
+      ),
+    ).toBe(false);
+  });
+  it("charges 50 k to move the championship, renews it for free and never restarts it", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    state = grant(grant(state, 1, seat), 6, seat);
+    const first = land(state, 16).state;
+    expect(legalActions(first, seat)).toEqual([
+      { type: "Decline" },
+      { type: "ChooseHost", tile: 1 },
+      { type: "ChooseHost", tile: 6 },
+    ]);
+    const declined = act(first, { type: "Decline" }).state;
+    expect(declined.championshipHost).toBeNull();
+    expect(getPlayer(declined, seat).cash).toBe(2_000_000);
+    const hosted = act(first, { type: "ChooseHost", tile: 1 });
+    expect(hosted.state.championshipHost).toEqual({ tile: 1, multiplier: 2 });
+    expect(hosted.events).toContainEqual({
+      type: "MoneyTransferred",
+      from: seat,
+      to: null,
+      amount: 50_000,
+      reason: "Championship",
+    });
+    const visit = (from: GameState) => land(withActive(from, seat), 16).state;
+    const moved = act(visit(hosted.state), { type: "ChooseHost", tile: 6 });
+    expect(moved.state.championshipHost).toEqual({ tile: 6, multiplier: 3 });
+    expect(getPlayer(moved.state, seat).cash).toBe(2_000_000 - 100_000);
+    const renewed = act(visit(moved.state), { type: "ChooseHost", tile: 6 });
+    expect(renewed.state.championshipHost).toEqual({ tile: 6, multiplier: 4 });
+    expect(getPlayer(renewed.state, seat).cash).toBe(2_000_000 - 100_000);
+    const capped = act(
+      visit({
+        ...renewed.state,
+        championshipHost: { tile: 6, multiplier: 10 },
+      }),
+      { type: "ChooseHost", tile: 1 },
+    ).state;
+    expect(capped.championshipHost).toEqual({ tile: 1, multiplier: 10 });
+    // Without 50 k, only a free renewal remains.
+    const poor = land(
+      setPlayer(
+        { ...state, championshipHost: { tile: 6, multiplier: 3 } },
+        seat,
+        { cash: 40_000 },
+      ),
+      16,
+    ).state;
+    expect(legalActions(poor, seat)).toEqual([
+      { type: "Decline" },
+      { type: "ChooseHost", tile: 6 },
+    ]);
+  });
+  it("times a paid championship out to a free renewal or a decline", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    state = grant(grant(state, 1, seat), 6, seat);
+    const open = land(state, 16).state;
+    if (!open.pending) throw new Error("Expected a host decision");
+    const declined = applyTimeout(open, { now: open.pending.deadline });
+    expect(declined.state.championshipHost).toBeNull();
+    expect(getPlayer(declined.state, seat).cash).toBe(2_000_000);
+    const own = land(
+      { ...state, championshipHost: { tile: 6, multiplier: 2 } },
+      16,
+    ).state;
+    if (!own.pending) throw new Error("Expected a host decision");
+    const renewed = applyTimeout(own, { now: own.pending.deadline });
+    expect(renewed.state.championshipHost).toEqual({ tile: 6, multiplier: 3 });
+    for (const choice of [open, own])
+      expect(legalActions(choice, seat)).toContainEqual(
+        botAction(choice, seat, "medium"),
+      );
+  });
+  it("keeps the championship on its city through buyouts and refunds a full sale", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    const owner = other(state);
+    state = grant(state, 1, owner, 1);
+    state = { ...state, championshipHost: { tile: 1, multiplier: 3 } };
+    const rented = land(state, 1);
+    expect(getPlayer(rented.state, seat).cash).toBe(2_400_000 - 75_000);
+    expect(rented.state.pending).toMatchObject({
+      kind: "buyout",
+      price: 220_000,
+    });
+    const bought = act(rented.state, { type: "Buyout" }).state;
+    expect(bought.championshipHost).toEqual({ tile: 1, multiplier: 3 });
+    let debtor = grant(grant(reference(), 4, owner, 1), 6, seat, 3);
+    debtor = setPlayer(debtor, seat, { cash: 10_000 });
+    debtor = { ...debtor, championshipHost: { tile: 6, multiplier: 2 } };
+    const selling = land(debtor, 4).state;
+    expect(selling.pending).toMatchObject({ kind: "sell", seat, targets: [6] });
+    const sold = act(selling, { type: "Sell", tile: 6 }).state;
+    expect(getPlayer(sold, seat).cash).toBe(10_000 - 33_000 + 250_000);
+    expect(propertyOwner(sold, 6)).toBeNull();
+    expect(sold.championshipHost).toEqual({ tile: 6, multiplier: 2 });
+  });
+  it("charges 200 k to leave the Island and releases after the third failed escape", () => {
+    const state = reference();
+    const next = nextSeat(state);
+    const waiting = land(
+      setPlayer(state, next, { position: 8, onIsland: true }),
+      0,
+    ).state;
+    expect(waiting.pending).toMatchObject({
+      kind: "island",
+      seat: next,
+      fee: 200_000,
+    });
+    const second = act(
+      setPlayer(waiting, next, { islandTurns: 1 }),
+      { type: "Roll" },
+      [1, 2],
+    ).state;
+    expect(getPlayer(second, next)).toMatchObject({
+      onIsland: true,
+      islandTurns: 2,
+    });
+    const third = act(
+      setPlayer(waiting, next, { islandTurns: 2 }),
+      { type: "Roll" },
+      [1, 2],
+    ).state;
+    expect(getPlayer(third, next)).toMatchObject({
+      position: 8,
+      onIsland: false,
+      islandTurns: 0,
+    });
+    const paid = act(waiting, { type: "PayIsland" }).state;
+    expect(getPlayer(paid, next).cash).toBe(2_000_000 - 200_000);
+  });
+  it("flies World Tour only to free properties, or to own ones when none is free", () => {
+    const config = { ...REFERENCE, lineMonopoly: false, tripleMonopoly: false };
+    const state = reference(4, config);
+    const next = nextSeat(state);
+    const rival = state.turnOrder.find(
+      (seat) => seat !== state.activeSeat && seat !== next,
+    );
+    if (rival === undefined) throw new Error("Expected a third seat");
+    const traveller = (from: GameState) =>
+      land(setPlayer(from, next, { position: 24, travelPending: true }), 0)
+        .state;
+    const tiles = state.properties.map((property) => property.tile);
+    const some = traveller(grant(grant(state, 1, rival), 2, next));
+    expect(some.pending).toMatchObject({
+      kind: "travel",
+      seat: next,
+      fee: 50_000,
+      targets: tiles.filter((tile) => tile !== 1 && tile !== 2),
+    });
+    let full = state;
+    for (const tile of tiles)
+      full = grant(
+        full,
+        tile,
+        [2, 5, 12].includes(tile)
+          ? next
+          : tile === 21
+            ? state.activeSeat
+            : rival,
+      );
+    expect(traveller(full).pending).toMatchObject({
+      kind: "travel",
+      targets: [2, 5, 12],
+    });
+  });
+  it("taxes 10 % of property value with no minimum", () => {
+    const state = reference();
+    const seat = state.activeSeat;
+    const none = land(state, 29);
+    expect(getPlayer(none.state, seat).cash).toBe(2_000_000);
+    expect(none.events.some((event) => event.type === "MoneyTransferred")).toBe(
+      false,
+    );
+    const owned = land(grant(grant(state, 1, seat, 3), 31, seat, 4), 29);
+    expect(getPlayer(owned.state, seat).cash).toBe(2_000_000 - 171_000);
   });
 });

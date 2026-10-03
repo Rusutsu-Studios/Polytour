@@ -402,6 +402,75 @@ Verification on this machine:
 - On the two back sides, a pawn standing on the road can hide part of the price
   of its own lot; the inspector and decision dialogs still show it.
 
+## Living town in the center — 2 October 2026
+
+The user found the middle of the board empty and asked for a livelier center
+that builds up during the match, as in familiar mobile and console property
+games, while the board stays readable. The lawn became a small original town
+(see DESIGN.md and ANIMATION.md → Current town in the center). No rule, event,
+protocol or Worker code changes.
+
+- `client/scene/town-layout.ts` places a paved dice plaza, a roundabout, four
+  avenues with turning circles and one street of six plots per side, one plot
+  per city or resort in play order. `town-layout.test.ts` adds four tests:
+  plots match the board, nothing overlaps or sits on a road, the car circuit
+  stays on paved roads, and no town envelope hides a pawn spot, a lot print,
+  the board road or a die at rest when projected through the camera.
+- `client/scene/Downtown.tsx` draws the plots from `viewState` (tree when
+  unsold, then the lot's level under the owner's color) and replays their
+  construction with a crane inside the existing property animation.
+- Ambient cars, big wheel, carousel, boat, helicopter and fountains render at
+  30 fps between game animations on the match board; lobby previews and
+  reduced motion keep them still. A first CI run showed why previews must stay
+  still: the fake-clock socket scenarios advance minutes of browser time in a
+  room lobby, and an animated preview turned that into thousands of software
+  renders.
+
+Verification on this machine:
+
+- 132 unit/Worker tests (4 new town tests), TypeScript and Biome pass.
+- The match was inspected at 1280×720, 1440×900 and 1920×1080 at the start
+  of a match, with a partly owned fixture and with every plot owned. A
+  synthetic landmark upgrade shows the crane and the rising tower. Prices,
+  names, pawns and dice stay unobstructed.
+- A WebGL hook counts 295 draw calls per frame with the town, against 239
+  before, both including the shadow pass. Software-rendered frame rates are
+  not hardware evidence; the 60 fps desktop target still needs a hardware run.
+## Property sale values and board selection — 2 October 2026
+
+New rooms freeze rules version 4 and return 100% of the nominal land and standing
+building costs when a property is sold. Existing version-2 and version-3 rooms,
+including their pre-existing lobbies, retain their 50% refund. Rent modifiers and
+buyout premiums do not increase the sale value. This is Polytour tuning; the
+reference screenshot establishes the interaction, but not its refund formula.
+
+Forced sales now select cities directly on the board. Sellable owned lots stay
+white, other lots dim, and selecting a city marks it and shows its refund. A
+compact lower-center panel shows the debt, proceeds and projected balance before
+an explicit confirmation. The normal board appearance returns after the sale
+decision. Keyboard selection works through the quoted board buttons, and the
+flat-board fallback uses the same contrast and legal targets.
+
+Selection is cleared on a new decision or recovery snapshot. Clicks on other
+properties cannot replace the selected city, and pending actions block further
+input. Protocol version 2 requires older clients to refresh before quoting the
+new rules; the server remains authoritative for ownership and money.
+
+Verification on this branch:
+
+- TypeScript, Biome and 138 unit/Worker tests pass.
+- 100 deterministic simulations terminate and preserve money, replay, card,
+  ownership and legal-decision invariants.
+- Production build, bundle budgets, Cloudflare configuration guard and deploy
+  dry run pass.
+- Four sale-specific browser scenarios pass using local HTTP/WebSocket fixtures
+  and shared-engine events. Real Chromium rendering is inspected at 1280×720,
+  1440×900 and 1920×1080 with normal and reduced motion. All 24 city/resort targets
+  are selected at each size (72 clicks), plus keyboard confirmation, off-turn debt,
+  pending-action blocking, successive sales and snapshot recovery.
+- All 21 end-to-end scenarios pass, including the local production Worker's
+  four-seat match, reconnect and legacy drand verification.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,
@@ -411,3 +480,42 @@ matchmaking, audio and advanced artwork remain future work. Current geometry and
 graphics are original; no competitor art or purchasable gameplay boosts are used.
 Mobile/touch adaptation and physical phone performance are optional later work,
 separate from completing the current PC checkpoint.
+
+
+## Combined PR integration — 3 October 2026
+
+The candidate composes PRs #19, #21–24, #26–28 and #47. New rooms use rules
+version 5 and protocol version 3. Version-2/3 saves and pre-existing lobbies keep
+their original board, prices, Hotel progression, refunds and travel choices;
+clients refresh for the protocol change. This supersedes the separate version-4
+branch checkpoints above without remapping existing saved tile indices.
+
+The country board uses all twenty reference city rows. Deeds, legal construction
+choices, travel/hosting/card picks, refunds and town plots select the same frozen
+room rules. Scene integration preserves passing pawns at corners, resort
+bungalows, festival markers, the living town and the lawn roll control. Large
+screen projection avoids double scaling; informative timers remain accurate
+across rerenders and visible with reduced motion.
+
+Local verification on the combined candidate:
+
+- TypeScript and Biome pass; 182 unit/Worker tests pass.
+- 100 reference/country and 100 prototype/legacy simulated games preserve money,
+  cards, ownership, replay and legal decisions, and all terminate.
+- All 23 standard browser scenarios pass, including the local production
+  Worker's authoritative four-seat match/reconnect and actual board picking.
+  The separate live legacy-drand scenario also passes: a future commitment,
+  verified public beacon, independent verification, reconnect and proof download.
+- Desktop controls and sale targets work at 1280×720, 1440×900, 1920×1080,
+  2560×1440 and 3840×2160. A country-board travel and championship regression
+  verifies pointer/keyboard selection and explicit confirmation.
+- Production build, bundle budgets, append-only Cloudflare configuration checks
+  and deploy dry run pass. Initial JavaScript is 178.7 kB gzip (250 kB limit).
+- Five sequential solo starts each send one start and receive the created game,
+  with no page errors. An earlier startup failure did not reproduce after the
+  code stopped changing during the browser run.
+
+These checks validate the local candidate. They do not establish GitHub merge,
+production publication, hardware frame rate or human-playtest balance. With a
+20-round simulation cap, 95% of reference and 91% of prototype matches reach the
+cap; the small sample is a correctness check, not proof of a balanced economy.

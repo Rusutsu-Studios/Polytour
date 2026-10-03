@@ -1,0 +1,338 @@
+/* Inspecting a space opens a large title deed over the board, in the same
+   ribbon-and-ivory language as the buy popup. */
+.city-card-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(880px, calc(100vw - 48px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  margin: auto;
+  border: 0;
+  border-radius: 16px;
+  overflow: visible;
+  color: #173b45;
+  background: #fffaf0;
+  box-shadow:
+    0 8px 0 #3f7f8c,
+    0 23px 70px #173b454d;
+}
+.city-card-dialog::backdrop {
+  background: #173b4561;
+}
+.city-card-ribbon {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  translate: -50% 0;
+  top: -22px;
+  min-width: 300px;
+  max-width: calc(100% - 90px);
+  padding: 11px 35px;
+  color: #fffaf0;
+  background: #2f7f8e;
+  border-radius: 5px;
+  box-shadow: 0 5px 0 #1d5a68;
+}
+.city-card-ribbon::before,
+.city-card-ribbon::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 13px;
+  width: 24px;
+  height: 38px;
+  background: #246c7b;
+}
+.city-card-ribbon::before {
+  right: calc(100% - 3px);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 25% 50%);
+}
+.city-card-ribbon::after {
+  left: calc(100% - 3px);
+  clip-path: polygon(0 0, 100% 0, 75% 50%, 100% 100%, 0 100%);
+}
+.city-card-ribbon h2 {
+  margin: 0;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 25px;
+  line-height: 1.1;
+  font-weight: 900;
+  text-align: center;
+}
+/* One height for every space, so the step arrows stay under the pointer. */
+.city-card {
+  display: flex;
+  flex-direction: column;
+  min-height: min(500px, calc(100svh - 64px));
+  max-height: calc(100svh - 64px);
+  overflow-y: auto;
+  padding: 34px 30px 24px;
+  border-radius: inherit;
+}
+.city-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.city-card-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* A fixed width keeps the next arrow in place while stepping. */
+.city-card-place {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 124px;
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #3f5f63;
+}
+.city-card-kind-name {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #5d777a;
+}
+.city-card-kind {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #183e45;
+}
+.city-card .city-card-step,
+.city-card .city-card-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #eeecd9;
+}
+.city-card .city-card-step[data-back="true"] svg {
+  rotate: 180deg;
+}
+.city-card-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 26px;
+  margin-top: 14px;
+  align-items: start;
+}
+.city-card .city-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: -6px 0 -4px;
+}
+.city-card-owner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 11px;
+  background: #eef0dd;
+}
+.city-card-owner[data-owned="true"] {
+  background: #e9f1e6;
+}
+.city-card-pawn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 17px;
+  color: #fffaf0;
+  background: #9bb09a;
+}
+.city-card-owner strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+.city-card-owner small {
+  display: block;
+  font-size: 13px;
+  color: #47666c;
+  margin-top: 2px;
+}
+.city-card-boost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding: 7px 11px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #5d4b12;
+  background: #f6d97c;
+  box-shadow: 0 2px 0 #d3ae45;
+}
+.city-card-boost[data-source="country"] {
+  color: #1f4b3a;
+  background: #bfe3c4;
+  box-shadow: 0 2px 0 #87bf90;
+}
+.city-card-ledger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 0;
+}
+.city-card-ledger dt {
+  font-size: 12px;
+  font-weight: 650;
+  color: #4a6f68;
+}
+.city-card-ledger dd {
+  margin: 3px 0 0;
+  font-size: 20px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.city-card-ledger .ledger-main dd {
+  font-size: 32px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: #173b45;
+}
+.city-card-table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  border-top: 7px solid #78bda7;
+  font-variant-numeric: tabular-nums;
+}
+.city-card-table caption {
+  caption-side: top;
+  padding-bottom: 7px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4a6f68;
+}
+.city-card-table th,
+.city-card-table td {
+  padding: 7px 9px;
+  text-align: right;
+  font-size: 15px;
+  white-space: nowrap;
+  border-bottom: 1px solid #e2e3cf;
+}
+.city-card-table thead th {
+  padding-top: 8px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #4a6f68;
+  background: #f4f2e2;
+}
+.city-card-table th[scope="row"],
+.city-card-table thead th:first-child {
+  text-align: left;
+}
+.city-card-table th[scope="row"] {
+  font-weight: 750;
+}
+.city-card-table td {
+  font-weight: 800;
+}
+.city-card-table td[data-muted="true"] {
+  font-weight: 650;
+  color: #7c8f8c;
+  text-decoration: line-through;
+  text-decoration-color: #7c8f8c8c;
+}
+.city-card-table .city-card-boosted {
+  color: #7a5a00;
+}
+.city-card-table thead .city-card-boosted {
+  background: #f6e3a3;
+}
+.city-card-table tr[data-current="true"] th,
+.city-card-table tr[data-current="true"] td {
+  background: #dff0e3;
+}
+.city-card-table tr[data-current="true"] th[scope="row"] {
+  box-shadow: inset 4px 0 0 #2f7f8e;
+}
+.city-card-now {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  vertical-align: 1px;
+  color: #fffaf0;
+  background: #2f7f8e;
+}
+.city-card-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #557370;
+}
+.city-card-rule {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 520px;
+  margin: auto;
+  text-align: center;
+}
+.city-card-rule-icon {
+  width: 74px;
+  height: 74px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  font-size: 40px;
+  color: #183e45;
+}
+.city-card-rule .tile-rule {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+  color: #2f5359;
+}
+.city-card-rule .city-card-boost {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .city-card-dialog {
+    width: calc(100vw - 24px);
+  }
+  .city-card {
+    min-height: 0;
+    padding: 32px 16px 18px;
+  }
+  .city-card-columns {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .city-card .city-art {
+    max-width: 240px;
+    margin: auto;
+  }
+  .city-card-ribbon {
+    min-width: 0;
+    padding: 10px 24px;
+  }
+  .city-card-ribbon h2 {
+    font-size: 20px;
+  }
+}

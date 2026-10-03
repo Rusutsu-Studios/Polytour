@@ -69,8 +69,8 @@ results and the distinction between live gameplay and presentation fixtures.
 - [x] Accessible DOM board fallback alongside the 3D client; full four-browser game test
 - [x] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
       connect to an uninitialized room rejected, alarm-driven timeout
-- [ ] Deploy safety: `stateVersion` migration on load, `rulesVersion` in game state, and a test
-      that restarts a DO mid-game and checks every client resumes (see
+- [x] Deploy safety: `stateVersion` migration ladder on load, `rulesVersion` frozen per match,
+      and a test that restarts a DO mid-game and checks every client resumes (see
       [ARCHITECTURE.md → Deploys and games in progress](ARCHITECTURE.md#deploys-and-games-in-progress))
 
 **Done when:** four people can finish a full game over the internet with refreshes and dropped connections mid-game.
