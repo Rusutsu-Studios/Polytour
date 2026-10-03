@@ -9,7 +9,23 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+### Changed
+
+- Festival cities return to the garland of pennants between two masts, now in
+  vivid colors, instead of the face-on banner; the floating multiplier stays
+  gone and the championship host keeps its searchlights (#78).
+- Milan/Berlin and Prague/Vienne stand on smooth concrete slabs, square and long
+  staggered, in muted slate-lavender and warm-taupe colors that no other region
+  uses, so they no longer resemble Tokyo and Osaka (#78).
+
+## [0.2.0] - 2026-10-03
+
 ### Added
+
+- Automatic version preparation for each pull request, with shared instructions
+  for Codex and Claude and a CI check that rejects an unchanged application version.
 
 - Play opens a lobby with three bots instead of starting at once; friends who
   enter the room code take a bot's place (#30).
@@ -43,10 +59,9 @@ has been published, and it does not reconstruct earlier development history.
   central town no longer hold trees (#57).
 - Country colors are spread further apart so no two groups look alike, and the
   tax square is named "Impôts" in French and "Taxes" in English (#57).
-- Festival cities hang a garland of vivid pennants between two masts; the
-  floating multiplier medallion is gone, and the championship host keeps its
-  searchlights. Milan/Berlin and Prague/Vienne stand on smooth concrete slabs in
-  muted colors of their own.
+- Festival cities fly a tall, vivid swallowtail banner facing the camera with a
+  garland of pennants; the floating multiplier medallion is gone, and the
+  championship host flies a gold banner (#57).
 - Players are identified by color only; per-player symbols are removed from
   the board, pawns, corner HUDs, cards and menus (#57).
 
