@@ -71,6 +71,7 @@ import {
   LobbySeats,
   PlayerAvatar,
   ReturnToLobby,
+  RoomLeaderPicker,
   RoomLock,
   WaitingNotice,
   WaitingRoom,
@@ -1153,20 +1154,6 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t("Explorer le plateau", "Inspect the board")}
-          title={t("Explorer le plateau", "Inspect the board")}
-          aria-expanded={inspectorOpen}
-          onClick={(event) => {
-            overlayTrigger.current = event.currentTarget;
-            setInspectorOpen((value) => !value);
-            setTool(null);
-          }}
-        >
-          <Icon name="search" size={18} />
-        </button>
-        <button
-          type="button"
-          className="game-tool-button"
           aria-label={t("Réglages de la partie", "Game settings")}
           title={t("Réglages de la partie", "Game settings")}
           aria-expanded={tool === "rules"}
@@ -1174,11 +1161,6 @@ function MatchView({
         >
           <Icon name="settings" size={18} />
         </button>
-        <GraphicsToggle
-          lowGraphics={lowGraphics}
-          onChange={onGraphicsChange}
-          compact
-        />
         <button
           type="button"
           className="game-tool-button"
@@ -1404,7 +1386,6 @@ function MatchView({
           state={game}
           seat={controlSeat}
           selected={selected}
-          onSelect={onSelect}
           onClose={closeTools}
         />
       )}
@@ -1538,40 +1519,6 @@ function MatchView({
                       disabled={room.connection !== "online"}
                       onChange={room.lock}
                     />
-                    {(room.lobby?.seats ?? []).some(
-                      (entry) =>
-                        entry.control === "human" &&
-                        entry.controller === null &&
-                        entry.seat !== own,
-                    ) && (
-                      <ul className="leader-transfer">
-                        {(room.lobby?.seats ?? [])
-                          .filter(
-                            (entry) =>
-                              entry.control === "human" &&
-                              entry.controller === null &&
-                              entry.seat !== own,
-                          )
-                          .map((entry) => (
-                            <li key={entry.seat}>
-                              <span>{entry.name}</span>
-                              <button
-                                type="button"
-                                className="seat-promote"
-                                disabled={room.connection !== "online"}
-                                aria-label={t(
-                                  `Nommer ${entry.name} chef de salle`,
-                                  `Make ${entry.name} the room leader`,
-                                )}
-                                onClick={() => room.transferHost(entry.seat)}
-                              >
-                                <Icon name="crown" size={13} />
-                                {t("Nommer chef", "Make leader")}
-                              </button>
-                            </li>
-                          ))}
-                      </ul>
-                    )}
                     <ReturnToLobby
                       finished={game.status === "finished"}
                       disabled={room.connection !== "online"}
@@ -1589,6 +1536,14 @@ function MatchView({
                       `Room leader: ${leaderName ?? "—"}`,
                     )}
                   </p>
+                )}
+                {room.lobby && (
+                  <RoomLeaderPicker
+                    lobby={room.lobby}
+                    leader={leader}
+                    disabled={room.pending || room.connection !== "online"}
+                    onTransferHost={room.transferHost}
+                  />
                 )}
               </div>
             )}

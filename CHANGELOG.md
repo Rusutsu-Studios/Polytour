@@ -26,6 +26,11 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Changed
 
+- During a match, graphics quality lives only in Pause > Video, with separate
+  High and Low choices. Removed the toolbar magnifier and previous/next arrows
+  from clicked-space details.
+- Room leaders choose a successor from compact player portraits in the room
+  panel. The shared avatar renderer also accepts future custom portraits.
 - Protocol version 4: open browsers reload after the deploy that ships it.
 - Personal settings live in the pause menu; the sliders tool shows fixed match
   rules. Video settings retain the High/Low graphics control.

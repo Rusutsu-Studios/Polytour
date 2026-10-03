@@ -713,3 +713,34 @@ Local verification:
 
 These are local integration checks. GitHub CI and remote deployment verification
 are recorded in the pull request separately.
+
+## Match controls and room portraits — 3 October 2026
+
+During a match, Pause > Settings > Video is the only graphics-quality control,
+with High and Low choices side by side. The toolbar magnifier is removed.
+Clicked-space details retain the deed and close controls, without previous/next
+navigation. Board clicks, keyboard access and forced-sale selection remain usable.
+The room panel shows every occupied seat's avatar and name, marks the current
+leader and allows that leader to choose another eligible human. The shared avatar
+renderer accepts an optional custom portrait and falls back to the pawn on failure.
+
+Local verification on the branch based on `2d27b37`:
+
+- TypeScript, Biome and all 285 unit/Worker tests pass.
+- All 49 standard browser scenarios pass across local dev and production-build
+  runs. Existing lobby tests now wait for each command's server acknowledgment,
+  rather than issuing another command as soon as the preceding lobby update arrives.
+- A real Alice/Bea/Cora/bot room transfers leadership Alice → Cora → Alice during
+  play. Both browser clients receive the new role and permissions; local players
+  and bots remain ineligible, and pending transfers disable the portrait choices.
+- Graphics switching, keyboard radio selection, persisted quality, a real roll
+  and reconnection pass. French and English labels remain usable.
+- Room and Video captures fit 1280×720, 1440×900 and 1920×1080. Existing sale,
+  decision and menu layout scenarios also cover 2560×1440 and 3840×2160.
+- The production build, bundle budgets, Wrangler configuration, version check
+  and deployment dry run pass. The initial lobby JavaScript is 197.6 kB gzip.
+
+The mechanical design detector retains advisories about the established toy-game
+palette, compact typography and physical-control styling. Browser captures provide
+the visual acceptance evidence. These results establish local behavior; production
+publication has not been performed for this change.

@@ -45,7 +45,11 @@ it updates board labels, cards, decisions and tools without reconnecting the roo
 
 The toolbar's pause icon opens Continue, Settings and Leave while the match
 continues. Personal settings use Game, Video, Audio and Debug tabs. Game holds
-language; Video holds reduced motion and board size; Audio is marked coming soon.
+language; Video holds High/Low graphics choices side by side, reduced motion and
+board size; Audio is marked coming soon. Graphics quality has no match-toolbar
+control. Board inspection opens only from a clicked space, without step arrows.
+The room panel presents player avatars with names below; the leader chooses an
+eligible successor there. Avatars share one renderer prepared for custom portraits.
 The match HUD measures the HTTP round trip to a static Cloudflare asset every five
 seconds while the match is connected and the browser page is visible and online,
 restarting on connectivity changes. Debug shares this stream,

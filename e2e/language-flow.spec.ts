@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
@@ -156,20 +157,11 @@ test("English local match switches language without rejoining or changing game s
   expect(
     await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
   ).toBe(before);
-  await page
-    .getByRole("button", { name: "Explorer le plateau", exact: true })
-    .click();
-  // The card speaks the new locale: its step controls and the space it names.
+  await clickBoardSpace(page, 0);
+  // The clicked space's deed speaks the new locale.
   const card = page.locator(".city-card");
   await expect(card).toBeVisible();
-  const nextSpace = page.getByRole("button", {
-    name: "Case suivante",
-    exact: true,
-  });
-  for (let step = 0; step <= 32; step++) {
-    if ((await card.getAttribute("data-space")) === "0") break;
-    await nextSpace.click();
-  }
+  await expect(card).toHaveAttribute("data-space", "0");
   await expect(page.locator("#city-card-title")).toHaveText("Grand départ");
   await page.keyboard.press("Escape");
   await page

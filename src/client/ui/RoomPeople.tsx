@@ -5,23 +5,85 @@ import type { LobbyState } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import { PLAYER_COLORS } from "./board-display.js";
 import Icon from "./Icon.js";
+import PlayerAvatar from "./PlayerAvatar.js";
 import "./RoomPeople.css";
 
 const SEATS = [0, 1, 2, 3] as const;
 
-export function PlayerAvatar({ seat }: { seat: Seat }) {
+export { PlayerAvatar };
+
+/** The same avatar renderer is used in the lobby, HUD and leader choices. */
+export function RoomLeaderPicker({
+  lobby,
+  leader,
+  disabled,
+  onTransferHost,
+}: {
+  lobby: LobbyState;
+  leader: boolean;
+  disabled: boolean;
+  onTransferHost: (seat: Seat) => void;
+}) {
+  const { t } = useLocale();
   return (
-    <div
-      className="player-avatar"
-      aria-hidden="true"
-      style={{ "--player-color": PLAYER_COLORS[seat] } as CSSProperties}
-    >
-      <i className="avatar-head">
-        <i className="avatar-cap" />
-        <i className="avatar-eyes" />
-      </i>
-      <i className="avatar-body" />
-    </div>
+    <section className="room-leader-picker" aria-labelledby="room-leader-title">
+      <h3 id="room-leader-title">
+        {leader
+          ? t("Changer le chef de salle", "Change room leader")
+          : t("Joueurs", "Players")}
+      </h3>
+      <ul>
+        {lobby.seats
+          .filter((entry) => entry.control !== null)
+          .map((entry) => {
+            const current = entry.seat === lobby.hostSeat;
+            const eligible =
+              leader &&
+              !current &&
+              entry.control === "human" &&
+              entry.controller === null;
+            const status = current
+              ? t("Chef de salle", "Room leader")
+              : entry.control === "bot"
+                ? t("Bot", "Bot")
+                : entry.controller !== null
+                  ? t("Joueur local", "Local player")
+                  : !entry.online
+                    ? t("Absent", "Away")
+                    : t("Joueur", "Player");
+            return (
+              <li key={entry.seat}>
+                <button
+                  type="button"
+                  className="room-leader-choice"
+                  data-seat={entry.seat}
+                  data-leader={current}
+                  disabled={disabled || !eligible}
+                  aria-pressed={current}
+                  aria-label={
+                    eligible
+                      ? t(
+                          `Nommer ${entry.name} chef de salle`,
+                          `Make ${entry.name} the room leader`,
+                        )
+                      : entry.name
+                  }
+                  onClick={() => onTransferHost(entry.seat)}
+                >
+                  <PlayerAvatar seat={entry.seat} />
+                  <strong className="room-leader-name" title={entry.name}>
+                    {entry.name}
+                  </strong>
+                  <small className="room-leader-status">
+                    {current && <Icon name="crown" size={12} />}
+                    {status}
+                  </small>
+                </button>
+              </li>
+            );
+          })}
+      </ul>
+    </section>
   );
 }
 
