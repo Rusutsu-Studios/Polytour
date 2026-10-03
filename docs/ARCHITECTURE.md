@@ -37,8 +37,13 @@ turn timers. Everything that outlives a match (accounts, results, ratings) goes 
 ## Browser diagnostics
 
 The pause menu's Debug tab measures the full HTTP round trip to the same-origin
-Worker using `GET /api/health?debug=1`, without caching, every ten seconds while
-the tab is open. The same response identifies the configured `polytour` service
+Worker using `GET /api/health?debug=1`, without caching, every second while
+the Debug panel and browser page are visible and the browser is online. Only
+one request can be pending; a five-second timeout releases it even if the
+transport never settles after cancellation. Browser connectivity changes,
+game reconnects and returning to a visible page immediately restart measurement,
+discarding superseded responses. Closing the panel removes timers and listeners
+and aborts pending work. The same response identifies the configured `polytour` service
 and the contacted hostname, including a branch Preview. `request.cf.colo`
 identifies the Cloudflare entry point. Its readable location and broad region
 come from a bundled snapshot of the [official Cloudflare Status components

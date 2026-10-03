@@ -2,6 +2,7 @@ import {
   expect,
   type Locator,
   type Page,
+  type Route,
   test,
   type WebSocketRoute,
 } from "@playwright/test";
@@ -30,6 +31,20 @@ const CLOUDFLARE_HEALTH = {
     cloudflare: {
       colo: "FRA",
       location: "Frankfurt, Germany",
+      region: "Europe",
+    },
+  },
+} satisfies { status: "ok"; diagnostics: WorkerDiagnostics };
+
+const ZURICH_HEALTH = {
+  status: "ok",
+  diagnostics: {
+    worker: "polytour-reconnected",
+    hostname: "reconnected.polytour.example",
+    runtime: "cloudflare",
+    cloudflare: {
+      colo: "ZRH",
+      location: "Zurich, Switzerland",
       region: "Europe",
     },
   },
@@ -123,6 +138,10 @@ async function enterMatch(page: Page) {
     snapshot,
     messages,
     connections: () => connections,
+    async disconnect() {
+      if (!socket) throw new Error("Expected an open match socket");
+      await socket.close({ code: 1011, reason: "Fixture reconnect" });
+    },
     send(events: GameEvent[]) {
       if (!socket) throw new Error("Expected an open match socket");
       const fromSeq = sequence + 1;
@@ -140,6 +159,33 @@ async function openSettings(page: Page) {
   await expect(
     page.getByRole("tab", { name: "Jeu", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+}
+
+async function freezeClock(page: Page) {
+  const frozenAt = Date.now();
+  await page.clock.install({ time: frozenAt });
+  await page.clock.pauseAt(frozenAt + 1000);
+}
+
+async function setBrowserOnline(page: Page, online: boolean) {
+  await page.evaluate((value) => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value });
+    window.dispatchEvent(new Event(value ? "online" : "offline"));
+  }, online);
+}
+
+async function setDocumentVisibility(page: Page, visible: boolean) {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: !value,
+    });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: value ? "visible" : "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, visible);
 }
 
 test("pause keeps the clock and authoritative updates running without losing modal focus", async ({
@@ -303,7 +349,7 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
   ).toBe(roomCredentials);
 });
 
-test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on timeout or exit", async ({
+test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when leaving", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -338,9 +384,7 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
     // Later measurements wait for the browser's timeout or tab cleanup to abort.
   });
   const match = await enterMatch(page);
-  const frozenAt = Date.now();
-  await page.clock.install({ time: frozenAt });
-  await page.clock.pauseAt(frozenAt + 1000);
+  await freezeClock(page);
   await openSettings(page);
   await page.clock.runFor(30_000);
   expect(requests).toBe(0);
@@ -393,7 +437,7 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
     });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.clock.runFor(10_000);
+  await page.clock.runFor(1000);
   await expect(status).toHaveText("Indisponible");
   expect(requests).toBe(2);
   await page.getByRole("tab", { name: "Audio", exact: true }).click();
@@ -402,13 +446,11 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   await expect(status).toHaveText("Mesure en cours…");
   await expect.poll(() => requests).toBe(3);
-  await page.clock.runFor(5000);
-  await expect(status).toHaveText("Indisponible");
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-debug-ping-aborts",
     "1",
   );
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   await expect.poll(() => requests).toBe(4);
   await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
@@ -429,6 +471,162 @@ test("Cloudflare HTTP ping runs only in Debug, handles failure, and aborts on ti
   await page.clock.runFor(30_000);
   expect(requests).toBe(5);
   expect(match.connections()).toBe(1);
+});
+
+test("Debug immediately refreshes the Cloudflare entry after online or network changes and sleeps while hidden", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: new EventTarget(),
+    });
+  });
+  let response: unknown = CLOUDFLARE_HEALTH;
+  let requests = 0;
+  await page.route("**/api/health**", (route) => {
+    requests += 1;
+    return route.fulfill({ json: response });
+  });
+  const match = await enterMatch(page);
+  await freezeClock(page);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  const panel = page.locator(".pause-debug");
+  const entry = diagnosticValue(panel, "Point d’entrée Cloudflare");
+  await expect(entry).toContainText("FRA");
+  expect(requests).toBe(1);
+  await page.clock.runFor(999);
+  expect(requests).toBe(1);
+  await page.clock.runFor(1);
+  await expect.poll(() => requests).toBe(2);
+  response = ZURICH_HEALTH;
+  await setBrowserOnline(page, true);
+  await expect(entry).toContainText("ZRH");
+  await expect(diagnosticValue(panel, "Worker")).toHaveText(
+    "polytour-reconnected",
+  );
+  await expect(diagnosticValue(panel, "Hôte")).toHaveText(
+    "reconnected.polytour.example",
+  );
+  expect(requests).toBe(3);
+  response = CLOUDFLARE_HEALTH;
+  await page.evaluate(() => {
+    const connection = (navigator as Navigator & { connection: EventTarget })
+      .connection;
+    connection.dispatchEvent(new Event("change"));
+  });
+  await expect(entry).toContainText("FRA");
+  expect(requests).toBe(4);
+  await setBrowserOnline(page, false);
+  await page.clock.runFor(5000);
+  expect(requests).toBe(4);
+  response = ZURICH_HEALTH;
+  await setBrowserOnline(page, true);
+  await expect(entry).toContainText("ZRH");
+  expect(requests).toBe(5);
+  await setDocumentVisibility(page, false);
+  await page.clock.runFor(5000);
+  expect(requests).toBe(5);
+  response = CLOUDFLARE_HEALTH;
+  await setDocumentVisibility(page, true);
+  await expect(entry).toContainText("FRA");
+  expect(requests).toBe(6);
+  response = ZURICH_HEALTH;
+  await match.disconnect();
+  await expect(entry).toContainText("ZRH");
+  expect(requests).toBe(7);
+  await page.clock.runFor(1000);
+  await expect.poll(() => match.connections()).toBe(2);
+  await expect(diagnosticValue(panel, "Connexion de la partie")).toHaveText(
+    "Connectée",
+  );
+  await expect.poll(() => requests).toBeGreaterThanOrEqual(8);
+  const beforeClosing = requests;
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await setBrowserOnline(page, true);
+  await page.evaluate(() =>
+    (
+      navigator as Navigator & { connection: EventTarget }
+    ).connection.dispatchEvent(new Event("change")),
+  );
+  await page.clock.runFor(5000);
+  expect(requests).toBe(beforeClosing);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await setBrowserOnline(page, true);
+  await page.clock.runFor(5000);
+  expect(requests).toBe(beforeClosing);
+  expect(match.connections()).toBe(2);
+});
+
+test("an abort-ignoring request cannot latch Debug polling or replace a newer entry point", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    let bodiesRead = 0;
+    window.fetch = async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      // Deliberately uncooperative transport: a stale response can arrive after cancellation.
+      if (!url.includes("/api/health")) return originalFetch(input, init);
+      const response = await originalFetch(input, {
+        ...init,
+        signal: undefined,
+      });
+      const readJSON = response.json.bind(response);
+      response.json = async () => {
+        const body: unknown = await readJSON();
+        bodiesRead += 1;
+        document.documentElement.dataset.debugBodiesRead = String(bodiesRead);
+        return body;
+      };
+      return response;
+    };
+  });
+  const pending: Route[] = [];
+  await page.route("**/api/health**", (route) => {
+    pending.push(route);
+  });
+  await enterMatch(page);
+  await freezeClock(page);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  const panel = page.locator(".pause-debug");
+  const entry = diagnosticValue(panel, "Point d’entrée Cloudflare");
+  await expect.poll(() => pending.length).toBe(1);
+  await page.clock.runFor(4999);
+  expect(pending).toHaveLength(1);
+  // Timeout must free the slot independently of the first fetch settling.
+  await page.clock.runFor(1001);
+  await expect.poll(() => pending.length).toBe(2);
+  await pending[1].fulfill({ json: ZURICH_HEALTH });
+  await expect(entry).toContainText("ZRH");
+  await pending[0].fulfill({ json: CLOUDFLARE_HEALTH });
+  // The obsolete request's body has been parsed before asserting the current UI.
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-debug-bodies-read",
+    "2",
+  );
+  await expect(entry).toContainText("ZRH");
+  await expect(diagnosticValue(panel, "Worker")).toHaveText(
+    "polytour-reconnected",
+  );
+  await page.clock.runFor(1000);
+  await expect.poll(() => pending.length).toBe(3);
+  await setBrowserOnline(page, true);
+  await expect.poll(() => pending.length).toBe(4);
+  await pending[3].fulfill({ json: ZURICH_HEALTH });
+  await expect(entry).toContainText("ZRH");
+  await pending[2].fulfill({ json: CLOUDFLARE_HEALTH });
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-debug-bodies-read",
+    "4",
+  );
+  await expect(entry).toContainText("ZRH");
+  await page.getByRole("tab", { name: "Audio", exact: true }).click();
+  await page.clock.runFor(10_000);
+  expect(pending).toHaveLength(4);
 });
 
 test("Cloudflare diagnostics translate and distinguish local or older health responses", async ({

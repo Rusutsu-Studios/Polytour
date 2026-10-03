@@ -408,7 +408,8 @@ Branch: `codex/pause-menu-settings`, based on `f74b053`. The pause icon opens
 Continue, Settings and Leave while the match, deadlines and Director keep
 running. Settings use Game, Video, Audio and Debug tabs. Audio is marked coming
 soon for issue #35; Debug measures the same-origin Worker's HTTP round trip
-only while its tab is active, and displays the Worker, host and actual Cloudflare
+each second while its panel and browser page are visible and online, and
+displays the Worker, host and actual Cloudflare
 entry point with its code, location and broad region. The location mapping is
 bundled from Cloudflare's official Status API (341 geographic POPs). The
 sliders icon displays fixed room rules, while
@@ -421,10 +422,14 @@ the speed/skip controls described in the historical checks above.
 Local verification: TypeScript, Biome, 143 unit/Worker tests, production build,
 bundle budgets and Wrangler configuration checks pass. All 20 browser scenarios
 passed for the initial pause-menu commit, including the complete four-seat
-authoritative match, reconnect and live legacy drand verification. The five
-focused menu scenarios pass after adding location metadata. They use authored protocol fixtures to
+authoritative match, reconnect and live legacy drand verification. The seven
+focused menu scenarios pass after adding location metadata and reconnect recovery.
+They use authored protocol fixtures to
 test modal priority, local settings, ping success/failure/timeout/cleanup and
 leave confirmation, and distinguish Cloudflare, local and legacy responses.
+Network and game reconnects immediately restart the measurement. Tests also cover
+one-second scheduling, offline/hidden suspension, a transport ignoring cancellation,
+five-second timeout recovery and rejecting responses from superseded measurements.
 Browser captures cover 1280x720, 1440x900 and 1920x1080; Debug additionally covers
 390x844 without horizontal overflow. Metadata shown in these captures is a fixture.
 No remote runtime or production deployment is asserted by these local checks.

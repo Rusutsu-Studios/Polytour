@@ -10,46 +10,94 @@ import "./PauseMenu.css";
 type Page = "menu" | "settings" | "confirm-leave";
 type SettingsTab = "game" | "video" | "audio" | "debug";
 const TABS: readonly SettingsTab[] = ["game", "video", "audio", "debug"];
-const PING_INTERVAL_MS = 10_000;
+const PING_INTERVAL_MS = 1_000;
 const PING_TIMEOUT_MS = 5_000;
 
-type PingState =
+type PingState = (
   | { status: "loading" }
   | { status: "success"; value: WorkerPing }
-  | { status: "error" };
+  | { status: "error" }
+) & { connection: string };
 
-function useWorkerPing(active: boolean) {
-  const [ping, setPing] = useState<PingState>({ status: "loading" });
+function useWorkerPing(active: boolean, connection: string) {
+  const [ping, setPing] = useState<PingState>({
+    status: "loading",
+    connection,
+  });
   useEffect(() => {
     if (!active) return;
     let disposed = false;
-    let controller: AbortController | null = null;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+    type Attempt = {
+      controller: AbortController;
+      timeout: ReturnType<typeof setTimeout> | undefined;
+    };
+    let pending: Attempt | null = null;
+    const cancelPending = () => {
+      const attempt = pending;
+      pending = null;
+      if (!attempt) return;
+      clearTimeout(attempt.timeout);
+      attempt.controller.abort();
+    };
     const measure = async () => {
-      if (controller) return;
-      controller = new AbortController();
-      timeout = setTimeout(() => controller?.abort(), PING_TIMEOUT_MS);
+      if (disposed || pending || document.hidden || !navigator.onLine) return;
+      const attempt: Attempt = {
+        controller: new AbortController(),
+        timeout: undefined,
+      };
+      pending = attempt;
+      attempt.timeout = setTimeout(() => {
+        if (pending !== attempt) return;
+        // Release the slot without waiting for an interrupted transport to settle.
+        pending = null;
+        attempt.controller.abort();
+        if (!disposed) setPing({ status: "error", connection });
+      }, PING_TIMEOUT_MS);
       try {
-        const value = await measureWorkerPing(controller.signal);
-        if (!disposed) setPing({ status: "success", value });
+        const value = await measureWorkerPing(attempt.controller.signal);
+        if (!disposed && pending === attempt) {
+          setPing({ status: "success", value, connection });
+        }
       } catch {
-        if (!disposed) setPing({ status: "error" });
+        if (!disposed && pending === attempt)
+          setPing({ status: "error", connection });
       } finally {
-        clearTimeout(timeout);
-        controller = null;
+        clearTimeout(attempt.timeout);
+        // A superseded request must not unlock or overwrite a newer measurement.
+        if (pending === attempt) pending = null;
       }
     };
-    setPing({ status: "loading" });
-    void measure();
+    const restart = () => {
+      cancelPending();
+      if (!navigator.onLine) {
+        setPing({ status: "error", connection });
+      } else {
+        setPing({ status: "loading", connection });
+        void measure();
+      }
+    };
+    const network = (navigator as Navigator & { connection?: EventTarget })
+      .connection;
+    window.addEventListener("online", restart);
+    window.addEventListener("offline", restart);
+    document.addEventListener("visibilitychange", restart);
+    network?.addEventListener("change", restart);
+    restart();
     const interval = setInterval(() => void measure(), PING_INTERVAL_MS);
     return () => {
       disposed = true;
       clearInterval(interval);
-      clearTimeout(timeout);
-      controller?.abort();
+      window.removeEventListener("online", restart);
+      window.removeEventListener("offline", restart);
+      document.removeEventListener("visibilitychange", restart);
+      network?.removeEventListener("change", restart);
+      cancelPending();
     };
-  }, [active]);
-  return ping;
+  }, [active, connection]);
+  // Hide a previous connection's data before its replacement effect starts.
+  return ping.connection === connection
+    ? ping
+    : { status: "loading" as const, connection };
 }
 
 export type PauseMenuProps = {
@@ -87,7 +135,10 @@ export default function PauseMenu({
     Partial<Record<SettingsTab, HTMLButtonElement | null>>
   >({});
   const returnTo = useRef<"continue" | "settings" | "leave">("continue");
-  const ping = useWorkerPing(page === "settings" && tab === "debug");
+  const ping = useWorkerPing(
+    page === "settings" && tab === "debug",
+    connection,
+  );
   const diagnostics = ping.status === "success" ? ping.value.diagnostics : null;
   const unavailable = t("Indisponible", "Unavailable");
   const regions: Record<string, string> = {
@@ -486,17 +537,17 @@ export default function PauseMenu({
                                 locale === "fr" ? "fr-CH" : "en-GB",
                               )}
                             </time>
-                            {t(" · Toutes les 10 s.", " · Every 10 s.")}
+                            {t(" · Chaque seconde.", " · Every second.")}
                           </>
                         ) : ping.status === "error" ? (
                           t(
-                            "Mesure impossible. Nouvelle tentative dans 10 s.",
-                            "Could not measure. Retrying in 10 s.",
+                            "Mesure impossible. Nouvelle tentative dès que la connexion le permet.",
+                            "Could not measure. Retrying when the connection allows.",
                           )
                         ) : (
                           t(
-                            "Actualisation toutes les 10 s.",
-                            "Updated every 10 s.",
+                            "Actualisation chaque seconde.",
+                            "Updated every second.",
                           )
                         )}
                       </p>

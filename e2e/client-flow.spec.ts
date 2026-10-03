@@ -7,7 +7,7 @@ import type {
 
 test.use({ reducedMotion: "reduce" });
 
-async function minimizeOwnDecision(page: Page) {
+async function minimizeOwnDecision(page: Page, timeout = 30_000) {
   // Director completion and React's native dialog opening are separate steps.
   // Wait for the current decision to be represented before opening a board tool.
   await expect
@@ -40,7 +40,7 @@ async function minimizeOwnDecision(page: Page) {
               ?.getAttribute("data-decision") === key
           );
         }),
-      { timeout: 30_000 },
+      { timeout },
     )
     .toBe(true);
   if (await page.locator(".decision-popup[open]").count()) {
@@ -52,6 +52,7 @@ async function minimizeOwnDecision(page: Page) {
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {
+  test.setTimeout(240_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
@@ -501,7 +502,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect
     .poll(() => page.locator(".match-clock").innerText())
     .not.toBe(previousTime);
-  const previousDeadline = await page.evaluate(async () => {
+  const previousOwnRolls = await page.evaluate(async () => {
     const modulePath =
       performance
         .getEntriesByType("resource")
@@ -509,15 +510,17 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
           entry.name.includes("/src/client/director/director.ts"),
         )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
-    return director.getSnapshot().serverState?.pending?.deadline as
-      | number
-      | undefined;
+    return director
+      .getSnapshot()
+      .history.filter(
+        (event: GameEvent) => event.type === "DiceRolled" && event.seat === 0,
+      ).length;
   });
   await roll.click();
   await expect
     .poll(
       async () =>
-        page.evaluate(async (deadline) => {
+        page.evaluate(async (ownRolls) => {
           const modulePath =
             performance
               .getEntriesByType("resource")
@@ -526,23 +529,20 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
               )?.name ?? "/src/client/director/director.ts";
           const { director } = await import(modulePath);
           const snapshot = director.getSnapshot();
-          const state = snapshot.viewState as PublicState | null;
           return (
             !snapshot.busy &&
-            state?.pending != null &&
-            state.pending.seat === 0 &&
-            state.pending.deadline !== deadline &&
-            snapshot.history.some(
+            snapshot.history.filter(
               (event: GameEvent) =>
                 event.type === "DiceRolled" && event.seat === 0,
-            )
+            ).length > ownRolls
           );
-        }, previousDeadline),
+        }, previousOwnRolls),
       { timeout: 30_000 },
     )
     .toBe(true);
-  // Native decisions protect focus; minimize without sending a gameplay action.
-  await minimizeOwnDecision(page);
+  // A legal roll may hand the turn to the bots. Let their server-paced turns
+  // finish before checking tools during the next stable human decision.
+  await minimizeOwnDecision(page, 120_000);
   await page
     .getByRole("button", { name: "Carnet de voyage", exact: true })
     .click();
@@ -615,7 +615,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(
     page.getByRole("button", { name: "Menu pause", exact: true }),
   ).toBeVisible();
-  await minimizeOwnDecision(page);
+  await minimizeOwnDecision(page, 120_000);
   await page.getByRole("button", { name: "Comment jouer" }).click();
   await expect(page.locator("dialog")).toBeVisible();
   await page.getByRole("button", { name: "C’est parti" }).click();
