@@ -1115,6 +1115,75 @@ describe("Authoritative private rooms", () => {
     expect(JSON.stringify(snapshot)).not.toMatch(/rngState|"deck"|token_hash/);
   });
 
+  it("resumes every seat and its deadline after a deploy restarts a live match", async () => {
+    const { credentials, inboxes, state, seq } = await startFour();
+    inboxes[state.activeSeat].send({
+      type: "intent",
+      id: "roll",
+      atSeq: seq,
+      action: { type: "Roll" },
+    });
+    const rolled = await Promise.all(
+      inboxes.map((inbox) => inbox.next("events")),
+    );
+    const toSeq = rolled[0].toSeq;
+    const played = rolled[0].events.reduce(applyEvent, state);
+    const stub = env.GAME_ROOM.getByName(credentials[0].roomCode);
+    const readSchedule = () =>
+      runInDurableObject(stub, async (_instance, durableState) => ({
+        timers: durableState.storage.sql
+          .exec<{ kind: string; fire_at: number }>(
+            "SELECT kind,fire_at FROM timers ORDER BY kind",
+          )
+          .toArray(),
+        alarm: await durableState.storage.getAlarm(),
+      }));
+    const before = await readSchedule();
+    // Guard the comparison below against an empty table passing vacuously.
+    expect(before.timers.map((timer) => timer.kind)).toContain("decision");
+
+    // A deploy restarts every Durable Object and drops every socket at once.
+    await evictDurableObject(stub);
+
+    // Half resume from their last sequence and replay, half ask for a snapshot:
+    // both recovery paths have to land on the same authoritative state.
+    const resumed = await Promise.all(
+      credentials.map((credential, seat) =>
+        connect(credential, seat < 2 ? seq : null),
+      ),
+    );
+    const welcomes = await Promise.all(
+      resumed.map((inbox) => inbox.next("welcome")),
+    );
+    for (const [seat, welcome] of welcomes.entries()) {
+      expect(resumed[seat].received[0]?.type).toBe("welcome");
+      expect(welcome.you.seat).toBe(seat);
+      expect(welcome.seq).toBe(toSeq);
+      expect(welcome.lobby.status).toBe("playing");
+      // A deploy reconnect is far shorter than the 60 s grace, so no seat
+      // becomes a bot and nobody loses their turn to the restart.
+      expect(welcome.lobby.seats.map((entry) => entry.control)).toEqual([
+        "human",
+        "human",
+        "human",
+        "human",
+      ]);
+    }
+    for (const inbox of resumed.slice(0, 2)) {
+      const replay = await inbox.next("events");
+      expect(replay.events).toEqual(rolled[0].events);
+      expect(replay.toSeq).toBe(toSeq);
+    }
+    for (const welcome of welcomes.slice(2))
+      expect(welcome.snapshot).toEqual(played);
+    expect(
+      welcomes.slice(0, 2).every((welcome) => welcome.snapshot === null),
+    ).toBe(true);
+    // The restart lands on the same decision deadline and the same alarm, so a
+    // deploy costs a reconnect and never a turn.
+    expect(await readSchedule()).toEqual(before);
+  });
+
   it("rejects a late human roll before a delayed decision alarm commits dice", async () => {
     const { credentials, inboxes, state, seq } = await startFour();
     const stub = env.GAME_ROOM.getByName(credentials[0].roomCode);

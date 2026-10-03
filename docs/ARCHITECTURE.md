@@ -235,9 +235,13 @@ game:
 - The 60 s `grace:<seat>` timer is far longer than a deploy reconnect, so a deploy
   never hands a seat to a bot.
 - **New code must load games saved by the previous version.** `meta` stores a
-  `stateVersion`; on load the DO migrates older state JSON step by step before
-  handing it to the engine. Never ship a state shape change without its migration
-  and a test that loads the previous shape.
+  `stateVersion`; on load the DO climbs the ladder in `worker/state-migrations.ts`
+  one version at a time before handing the state to the engine, then persists the
+  result. Never ship a state shape change without appending its step and a test
+  that loads the previous shape. A save the ladder cannot reach is refused as
+  `incompatible-saved-match` rather than played under a shape the engine does not
+  understand; that includes a save written by a newer build, which is what a
+  rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Room metadata
   records the `rulesVersion` it was created with and the engine honors the frozen
   config until the game ends (the current maximum is 120 minutes). New rooms use

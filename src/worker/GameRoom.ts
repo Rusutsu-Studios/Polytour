@@ -30,6 +30,10 @@ import {
 } from "../shared/protocol/index.js";
 import type { DiceCommitment, DiceProof } from "../shared/randomness/types.js";
 import { prepareDice, resolveDice } from "./randomness.js";
+import {
+  CURRENT_STATE_VERSION,
+  migrateSavedState,
+} from "./state-migrations.js";
 
 type RoomMeta = { roomCode: string; config: RoomConfig; createdAt: number };
 type StoredSeat = {
@@ -135,18 +139,34 @@ export class GameRoom extends DurableObject<Env> {
         "SELECT seq,json FROM state WHERE id=1",
       )
       .toArray()[0];
+    if (!row && this.readMeta("room") === null) return null;
     const rulesVersion = this.readMeta<number>("rulesVersion");
-    if (
-      (row || this.readMeta("room") !== null) &&
-      (this.readMeta<number>("stateVersion") !== 1 ||
-        (rulesVersion !== 2 && rulesVersion !== 3))
-    ) {
+    if (rulesVersion !== 2 && rulesVersion !== 3) {
       throw new Error(
         "Unsupported saved match version; this room cannot use different rules silently",
       );
     }
+    // A deploy restarts every room mid-game, so this build has to read what the
+    // previous one wrote: climb the saved shape to CURRENT_STATE_VERSION, and
+    // refuse a shape no ladder reaches rather than hand the engine something it
+    // does not understand. docs/ARCHITECTURE.md -> Deploys and games in progress.
+    const migrated = migrateSavedState(
+      row ? (JSON.parse(row.json) as unknown) : null,
+      this.readMeta<number>("stateVersion") ?? Number.NaN,
+    );
+    if (migrated.changed) {
+      // Persist the climbed state before any caller broadcasts from it.
+      this.ctx.storage.transactionSync(() => {
+        if (row)
+          this.ctx.storage.sql.exec(
+            "UPDATE state SET json=? WHERE id=1",
+            JSON.stringify(migrated.state),
+          );
+        this.writeMeta("stateVersion", CURRENT_STATE_VERSION);
+      });
+    }
     if (!row) return null;
-    const state = JSON.parse(row.json) as GameState;
+    const state = migrated.state as GameState;
     const hotelRule = state.config.hotelPurchaseRule;
     if (
       (rulesVersion === 3 && hotelRule !== "staged-hotels") ||
