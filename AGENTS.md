@@ -59,7 +59,7 @@ Howler and partysocket remain planned; see TECH_STACK.md.
 ```
 src/
   shared/     # Pure TS, no DOM, no Workers APIs. Imported by both sides.
-    engine/   # Rules engine: applyAction(state, seat, action, { now }) -> { state, events }; applyEvent reducer
+    engine/   # Rules engine: applyAction(state, seat, action, EngineContext) -> { state, events }; applyEvent reducer
     board/    # Board definition + economy config (data, not code)
     protocol/ # Zod schemas + types for every WS/HTTP message
   worker/     # Worker entry (Hono), GameRoom + Matchmaker Durable Objects, D1 access
@@ -108,11 +108,16 @@ verification commands exist; local browser/proof evidence stays gitignored.
    dice, positions, or turn order.
 2. **The engine is pure and deterministic.** `shared/engine` has no I/O, no
    `Date.now()`, no `Math.random()`. Live dice arrive through `EngineContext.dice`
-   from fresh server Web Crypto (or verified legacy drand). The private seeded PRNG handles shuffles and
-   reproducible simulation. Time is passed in as input. Same inputs → same outputs.
+   from fresh server Web Crypto (or verified legacy drand). Live Chance draws use
+   fresh server Web Crypto through `EngineContext.chanceEntropy`, with uniform
+   rejection sampling among remaining cards. Live callers must supply Chance
+   entropy; seeded tests and simulations stay reproducible. Time is passed in as
+   input. Same inputs → same outputs.
 3. **The RNG seed never leaves the server.** Clients receive dice results and card
-   draws as events, never the seed or the deck order. Public drand proofs after
-   beacon publication are separate from the private deck seed.
+   draws as events, never the seed or the remaining deck. Live Chance and dice
+   must not depend on the seeded setup sequence, even if public turn order and
+   festivals allow that seed to be inferred. Public drand proofs after beacon
+   publication are separate from live Chance entropy.
 4. **Events drive animation; snapshots drive recovery.** Clients animate the event
    stream in order. On join/reconnect they get a snapshot and snap the view to it.
    Public state only ever changes through the shared reducer `applyEvent`, on both
@@ -130,10 +135,21 @@ verification commands exist; local browser/proof evidence stays gitignored.
   `server.accept()` or `addEventListener` inside a DO.
 - Per-connection identity (playerId, seat) goes in `ws.serializeAttachment()` (≤16 KB);
   anything else must be reloaded from SQLite after hibernation. The constructor runs
-  on every wake-up — keep it cheap (schema setup inside `blockConcurrencyWhile` only).
+  on every wake-up — keep it cheap: check for existing tables inside
+  `blockConcurrencyWhile`; create the schema only in `init()`. Unknown and cleaned-up
+  rooms must not recreate tables on lookup, join, socket callbacks or alarms.
   Presence comes from `ctx.getWebSockets(tag)`, never from a stored flag.
 - Connecting never creates a room: only `init()` (from `POST /api/rooms` or the
   Matchmaker) does. The Worker checks `Origin` before forwarding any WS upgrade.
+- `POST /api/rooms` uses the fixed `room-creation` edge key (120/minute per
+  Cloudflare location), then the existing Matchmaker named `room-admission`:
+  burst 60, refill 1/second, at most 1,000 admissions per UTC day in one persisted
+  record. Never derive allocation keys from IPs, cookies or request headers.
+  These gates cover creation attempts only; joins, reconnects and moves keep their
+  existing path. Rejections return 429 with `Retry-After` and `no-store`; gate
+  failures return 503. Health routes answer in the Worker without a DO lookup.
+  Shared budgets constrain allocation but can be exhausted by abusive callers;
+  they do not guarantee DDoS resistance or fair admission among players.
 - **No `setTimeout`/`setInterval` in DOs** (they block hibernation). All timers
   (decision deadline, disconnect grace, bot think time) go in a `timers` SQLite table;
   the single DO alarm is always set to the earliest `fire_at`. Decision deadlines are

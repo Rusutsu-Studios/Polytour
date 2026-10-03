@@ -11,12 +11,28 @@ the URL. The client keeps it in sessionStorage, so refresh restores its seat in
 that browser session. Accounts, Turnstile, signed cookies, D1 results and R2 replay
 archives below remain the planned launch architecture rather than implemented auth.
 
+`POST /api/rooms` first uses the `ROOM_CREATION_RATE_LIMIT` binding with the fixed
+server key `room-creation`: 120 requests per minute per Cloudflare location. After
+Origin/body validation, the existing Matchmaker named `room-admission` atomically
+enforces a burst of 60, refill of one admission per second, and at most 1,000
+admissions per UTC day. It persists one `room-creation-budget` record, independent
+of caller IPs, cookies and headers. An admission is spent on the creation attempt,
+even if room initialization later fails; collision retries share that admission.
+These gates do not apply to joins, reconnects or gameplay. Denials return JSON 429
+with `Retry-After` and `Cache-Control: no-store`; gate failures return JSON 503.
+Health endpoints answer in the Worker without looking up any Durable Object.
+The edge limit is location-local and eventually consistent; the durable budget
+constrains allocation across locations. Neither guarantees complete DDoS resistance
+or fair admission: abusive callers can exhaust the shared budget. See
+[CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md#room-allocation-controls).
+
 Besides `seats`, the room stores a `members` table (people waiting for a place:
 an approval, a bot's seat or the next game, each with a capability hash) and a
 `local_seats` table (players sharing a device with a controller seat; they have no
 token of their own). `meta` holds the leader seat (`host`, default 0 for older
-rooms) and the `locked` flag; both tables are created with `IF NOT EXISTS` on
-wake, so saved rooms need no state migration. Sockets are matched to seats and
+rooms) and the `locked` flag. Both tables are created with the room; a room
+saved before them gains them with `IF NOT EXISTS` when it next wakes (unknown
+rooms still allocate nothing), so saved rooms need no state migration. Sockets are matched to seats and
 members through their attachments rather than tags, so a waiting member's socket
 stays open when that person takes a place. Spectating members do not count as an
 audience: with only them connected, the room sleeps like an abandoned match.
@@ -25,6 +41,10 @@ Persisted alarms drive bots, decision deadlines, disconnect grace, real-time mat
 expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
 survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
+Live Chance draws receive fresh Web Crypto through `EngineContext.chanceEntropy`
+and select uniformly among remaining cards with rejection sampling, without
+replacement. This is independent of seeded setup and applies to saved decks without
+a state schema or rules-version bump; seeded draws remain a simulation fallback.
 When no player socket remains open, the room stops bot moves, decision alarms
 and entropy retries. It retains the real match deadline and each disconnect grace
 timer, then expires normally; reconnect restores the pending work without moving
@@ -156,8 +176,12 @@ stateDiagram-v2
 
 Connecting never creates a room. A WebSocket upgrade for a code whose DO has not
 been initialized (never created, or already cleaned up) is rejected, so guessing
-codes can't spawn rooms. `init()` refuses to run twice, which also turns a room-code
-collision into a retry with a fresh code.
+codes can't create room tables. The constructor only checks whether the `meta`
+table exists; schema creation is deferred solely to `init()`. Unknown lookups,
+joins and upgrades write no room schema. Cleanup deletes storage without recreating
+tables; later socket callbacks, alarms and lookups retain that empty state.
+`init()` refuses to run twice, which also turns a room-code collision into a retry
+with a fresh code.
 
 ### Storage (DO SQLite)
 
@@ -192,7 +216,7 @@ sequenceDiagram
   alt atSeq ≠ current seq
     DO-->>C: {type:"reject", id, reason:"stale"}
   else current
-    DO->>E: applyAction(state, seat, action, { now })
+    DO->>E: applyAction(state, seat, action, EngineContext with fresh Chance entropy)
     alt illegal
       E-->>DO: error
       DO-->>C: {type:"reject", id, reason}
@@ -269,10 +293,16 @@ game:
   interpret new board indices. Internal rule markers are server-owned and cannot
   be submitted as room settings. The state migration ladder checks older shapes
   before engine access; no Durable Object class migration is introduced.
+- Fresh live Chance selection preserves the saved remaining deck, discard and held
+  cards. It needs no state schema or rules-version change; legacy drand dice keep
+  their original commitments and source.
 - A DO class lifecycle change (new, renamed, or deleted class in `migrations`) cannot
   be rolled back or deployed gradually: ship it on its own.
 
 ## Matchmaker Durable Object
+
+The implemented class currently serves the fixed `room-admission` creation budget
+described above. Queue matchmaking remains planned:
 
 One instance per queue, e.g. `getByName("quick-4p")`. Holds hibernatable sockets of
 waiting players, groups them by rating band (widening over time via a timer), then:

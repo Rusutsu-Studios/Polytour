@@ -21,6 +21,7 @@ import type {
 import {
   applyEvent,
   botDecisionAt,
+  CHANCE_CARDS,
   toPublic,
 } from "../src/shared/engine/index.js";
 import type {
@@ -350,7 +351,7 @@ describe("Authoritative private rooms", () => {
     );
   });
 
-  it("leaves an empty schema after room cleanup and ignores close callbacks", async () => {
+  it("leaves no application tables after room cleanup and ignores close callbacks", async () => {
     const host = await create();
     const inbox = await connect(host);
     await inbox.next("welcome");
@@ -379,15 +380,61 @@ describe("Authoritative private rooms", () => {
     );
     expect(missingJoin.status).toBe(404);
     expect(await missingJoin.json()).toEqual({ error: "room-not-found" });
+    const tables = () =>
+      runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql
+          .exec(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('meta','seats','state','events','timers','commands')",
+          )
+          .toArray(),
+      );
+    expect(await tables()).toEqual([]);
+    await evictDurableObject(stub);
+    expect((await stub.fetch(`${origin}/missing`)).status).toBe(404);
+    expect(await tables()).toEqual([]);
+  });
+
+  it("keeps unknown room reads, joins, health checks and alarms storage-free", async () => {
+    const stub = env.GAME_ROOM.getByName("UNKNWN");
+    const health = await stub.fetch(`${origin}/health`);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ kind: "game-room", status: "ok" });
+    const missing = await stub.fetch(`${origin}/api/rooms/UNKNWN`);
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: "room-not-found" });
+    expect(await stub.join("Visitor")).toEqual({ error: "room-not-found" });
+    const upgrade = await stub.fetch(
+      new Request(`${origin}/ws/room/UNKNWN`, {
+        headers: { Origin: origin, Upgrade: "websocket" },
+      }),
+    );
+    expect(upgrade.status).toBe(404);
+    expect(await upgrade.json()).toEqual({ error: "room-not-found" });
+    await runInDurableObject(stub, async (instance, durableState) => {
+      const room = instance as unknown as { alarm(): Promise<void> };
+      await room.alarm();
+      expect(
+        durableState.storage.sql
+          .exec(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('meta','seats','state','events','timers','commands')",
+          )
+          .toArray(),
+      ).toEqual([]);
+      expect(await durableState.storage.getAlarm()).toBeNull();
+    });
+    await evictDurableObject(stub);
+    const afterEviction = await stub.fetch(`${origin}/api/rooms/UNKNWN`);
+    expect(afterEviction.status).toBe(404);
+    expect(await afterEviction.json()).toEqual({ error: "room-not-found" });
     expect(
-      await runInDurableObject(stub, (_instance, durableState) => ({
-        meta: durableState.storage.sql.exec("SELECT k FROM meta").toArray()
-          .length,
-        timers: durableState.storage.sql
-          .exec("SELECT kind FROM timers")
-          .toArray().length,
-      })),
-    ).toEqual({ meta: 0, timers: 0 });
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql
+          .exec(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'",
+          )
+          .toArray(),
+      ),
+    ).toEqual([]);
   });
 
   it("broadcasts lobby disconnects without adding grace timers or extending cleanup", async () => {
@@ -1147,6 +1194,90 @@ describe("Authoritative private rooms", () => {
     ).toBe(true);
     expect(events.proofs?.[0].proof.mode).toBe("secure");
     expect(JSON.stringify(events)).not.toMatch(/rngState|"deck"|token_hash/);
+  });
+
+  it("uses fresh server entropy for a Chance draw from a previously saved seeded deck", async () => {
+    const host = await create();
+    const original = await connect(host);
+    await original.next("welcome");
+    original.send({
+      type: "lobby",
+      id: "start-chance-test",
+      op: { type: "start", fillBots: true },
+    });
+    await original.next("events");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          activeSeat: host.seat,
+          deck: CHANCE_CARDS,
+          discard: [],
+          players: saved.players.map((player) =>
+            player.seat === host.seat
+              ? { ...player, position: 24, travelPending: true }
+              : player,
+          ),
+          pending: {
+            kind: "travel",
+            seat: host.seat,
+            fee: 0,
+            targets: [12],
+            deadline: Date.now() + 60_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
+      );
+    });
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.snapshot?.pending?.kind).toBe("travel");
+    const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation(((
+      values: Uint32Array,
+    ) => {
+      expect(values).toBeInstanceOf(Uint32Array);
+      values.fill(5);
+      return values;
+    }) as typeof crypto.getRandomValues);
+    try {
+      resumed.send({
+        type: "intent",
+        id: "secure-chance",
+        atSeq: welcome.seq,
+        action: { type: "Travel", tile: 12 },
+      });
+      const drawn = await resumed.next("events");
+      expect(drawn.events).toContainEqual({
+        type: "CardDrawn",
+        seat: host.seat,
+        card: CHANCE_CARDS[5],
+        kept: false,
+      });
+      expect(entropy).toHaveBeenCalledOnce();
+      expect(JSON.stringify(drawn)).not.toMatch(
+        /chanceEntropy|rngState|"deck"/,
+      );
+      const stored = await runInDurableObject(
+        stub,
+        (_instance, durableState) =>
+          durableState.storage.sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+      );
+      expect(stored).not.toContain("chanceEntropy");
+      expect((JSON.parse(stored) as GameState).deck).not.toContain(
+        CHANCE_CARDS[5],
+      );
+    } finally {
+      entropy.mockRestore();
+    }
   });
 
   it("recovers persisted state after eviction and always welcomes before replay", async () => {
@@ -1964,6 +2095,38 @@ describe("Room leader, waiting room and shared screens", () => {
     ]);
     for (const bots of [4, -1, 1.5])
       expect((await createRoom({ name: "Alex", bots })).status).toBe(400);
+  });
+
+  it("gives a room saved before the waiting room its new tables when it wakes", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    // A room created by the previous build has neither people table.
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec("DROP TABLE members");
+      durableState.storage.sql.exec("DROP TABLE local_seats");
+    });
+    await evictDurableObject(stub);
+    expect(await lobbyOf(host.roomCode)).toMatchObject({
+      hostSeat: 0,
+      locked: false,
+      waiting: [],
+    });
+    const hostSocket = await connect(host);
+    await hostSocket.next("welcome");
+    expect(
+      await roomOp(hostSocket, "lock", { type: "lock", locked: true }),
+    ).toBe("ack");
+    expect((await join(host.roomCode, "Bo")).seat).toBeNull();
+    expect(
+      await roomOp(hostSocket, "sam", {
+        type: "add-local",
+        seat: 1,
+        name: "Sam",
+      }),
+    ).toBe("ack");
+    const lobby = await lobbyOf(host.roomCode);
+    expect(lobby.waiting.map((member) => member.name)).toEqual(["Bo"]);
+    expect(lobby.seats[1]).toMatchObject({ name: "Sam", controller: 0 });
   });
 
   it("hands the leader role to another person, who then runs the room", async () => {
