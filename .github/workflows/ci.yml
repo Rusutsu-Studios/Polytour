@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - 'codex/**'
+    tags:
+      - 'v*'
   merge_group:
   workflow_dispatch:
 
@@ -39,6 +41,19 @@ jobs:
             exit 1
           }
       - uses: ./.github/actions/setup
+      - name: Check release version and changelog
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            pnpm check:version --base "$BASE_SHA"
+          else
+            pnpm check:version
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            pnpm check:version --tag "$GITHUB_REF_NAME"
+          fi
       # Formatting, lint, import order, and the AGENTS.md rules encoded in
       # biome.json: shared/client/worker import boundaries, no Math.random or
       # Date in shared/, no timers or non-hibernating sockets in worker/.
@@ -69,6 +84,7 @@ jobs:
       - uses: ./.github/actions/setup
       # Engine tests and Worker/DO tests inside workerd. Vitest fails on
       # `.only` in CI and annotates failures on the diff.
+      - run: pnpm test:version
       - run: pnpm test
       - run: pnpm sim -- --games 100
 

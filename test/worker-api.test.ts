@@ -3,7 +3,23 @@ import {
   waitOnExecutionContext,
 } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
+import packageMetadata from "../package.json" with { type: "json" };
 import worker from "../src/worker/index.js";
+
+describe("Application version", () => {
+  it("serves the package version without storage bindings or cached responses", async () => {
+    const context = createExecutionContext();
+    const response = await worker.fetch(
+      new Request("https://example.test/api/version"),
+      {} as Env,
+      context,
+    );
+    await waitOnExecutionContext(context);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({ version: packageMetadata.version });
+  });
+});
 
 describe("Unavailable room service", () => {
   it("identifies the verified Durable Object write limit without leaking details", async () => {

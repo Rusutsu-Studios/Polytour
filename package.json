@@ -1,7 +1,7 @@
 {
   "name": "polytour",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@11.28.3",
   "scripts": {
@@ -11,6 +11,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
+    "test:version": "node --test tools/release/release.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "sim": "tsx tools/sim/run.ts",
@@ -18,6 +19,8 @@
     "check:drand": "tsx tools/randomness/live-check.ts",
     "check:bundle": "node tools/ci/check-bundle-size.ts",
     "check:wrangler": "node tools/ci/check-wrangler-config.ts",
+    "check:version": "node tools/release/check-version.ts",
+    "version:bump": "node tools/release/bump-version.ts",
     "build": "pnpm typecheck && vite build",
     "preview": "pnpm run build && vite preview",
     "deploy": "pnpm run build && wrangler deploy",

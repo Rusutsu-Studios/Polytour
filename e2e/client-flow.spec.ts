@@ -1051,14 +1051,22 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
     const { viewState, serverState } = director.getSnapshot();
     return [viewState.players[0].cash, serverState.players[0].cash];
   });
-  expect(balances).toEqual([2_000_000, 2_150_000]);
+  // Bots may transfer cash before the human's first turn (for example Birthday).
+  // This presentation check measures Windfall against the captured live balance.
+  const cashBeforeCard = original.players[0].cash;
+  const cashAfterCard = cashBeforeCard + 150_000;
+  expect(balances).toEqual([cashBeforeCard, cashAfterCard]);
   await page.screenshot({ path: ".local/verification/card-fortune.png" });
   await page.getByRole("button", { name: "Continuer", exact: false }).click();
   await page.clock.runFor(1500);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toHaveText(/2\s150\s000/);
+  ).toContainText(
+    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(
+      cashAfterCard,
+    ),
+  );
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeFocused();
@@ -1371,4 +1379,208 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     const { director } = await import(modulePath);
     director.reset(state);
   }, original);
+});
+
+const LUCK_CARD_TITLES = {
+  fr: [
+    "Grand tour",
+    "Naufrage",
+    "Jet-set",
+    "Direction le championnat",
+    "Bonne fortune",
+    "Stationnement",
+    "Anniversaire",
+    "Contrôle fiscal",
+    "Ange gardien",
+    "Bon de réduction",
+    "Tremblement de terre",
+    "Échange de terrain",
+    "Détour",
+    "Coup de pouce",
+    "Liberté",
+    "Solidarité",
+  ],
+  en: [
+    "Grand Tour",
+    "Stranded",
+    "Jet Set",
+    "Championship call",
+    "Windfall",
+    "Parking fine",
+    "Birthday",
+    "Tax audit",
+    "Guardian angel",
+    "Rent coupon",
+    "Earthquake",
+    "Land swap",
+    "Detour",
+    "Contractor",
+    "Jailbreak",
+    "Charity",
+  ],
+} as const;
+
+for (const locale of ["fr", "en"] as const) {
+  test(`the ${locale} luck-card catalogue explains all cards and preserves keyboard focus`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/");
+    await page.getByLabel("Langue / Language").selectOption(locale);
+    const helpTrigger = page.getByRole("button", {
+      name: locale === "fr" ? "Comment jouer" : "How to play",
+      exact: true,
+    });
+    await helpTrigger.click();
+    const help = page.locator(".help-dialog");
+    const catalogue = help.locator(".help-cards");
+    await expect(
+      catalogue.getByRole("heading", {
+        name: locale === "fr" ? "Cartes Surprise" : "Luck cards",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(16);
+    const detail = page.locator(".luck-card-dialog");
+    const closeCard = detail.locator(".luck-card-close");
+    const backToCards = detail.locator(".luck-card-back");
+    const backLabel = locale === "fr" ? "Retour aux cartes" : "Back to cards";
+    for (const title of LUCK_CARD_TITLES[locale]) {
+      const card = catalogue
+        .locator(".luck-card-button")
+        .filter({ hasText: title });
+      await expect(card).toHaveCount(1);
+      await card.click();
+      await expect(detail).toBeVisible();
+      await expect(
+        detail.getByRole("heading", { name: title, exact: true }),
+      ).toBeVisible();
+      await expect(detail.locator(".luck-card-impact")).not.toBeEmpty();
+      await expect(detail.locator(".luck-card-description")).not.toBeEmpty();
+      await expect(detail.locator(".luck-card-notes")).not.toBeEmpty();
+      await expect(closeCard).toHaveAccessibleName(backLabel);
+      await expect(backToCards).toHaveAccessibleName(backLabel);
+      await closeCard.click();
+      await expect(detail).not.toBeVisible();
+      await expect(help).toBeVisible();
+      await expect(card).toBeFocused();
+    }
+
+    const firstCard = catalogue.locator(".luck-card-button").first();
+    await firstCard.focus();
+    await page.keyboard.press("Enter");
+    await expect(detail).toBeVisible();
+    await expect(
+      detail.getByRole("heading", {
+        name: LUCK_CARD_TITLES[locale][0],
+        exact: true,
+      }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(backToCards).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(closeCard).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(backToCards).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(detail).not.toBeVisible();
+    await expect(help).toBeVisible();
+    await expect(firstCard).toBeFocused();
+
+    // A second Escape closes the parent. Reopening starts on the catalogue.
+    await page.keyboard.press("Escape");
+    await expect(help).not.toBeVisible();
+    await expect(helpTrigger).toBeFocused();
+    await helpTrigger.click();
+    await expect(help).toBeVisible();
+    await expect(detail).not.toBeVisible();
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(16);
+    const lastCard = catalogue.locator(".luck-card-button").last();
+    await lastCard.click();
+    await expect(
+      detail.getByRole("heading", {
+        name: LUCK_CARD_TITLES[locale][15],
+        exact: true,
+      }),
+    ).toBeVisible();
+    await backToCards.click();
+    await expect(lastCard).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+}
+
+test("match card help uses the active salary and saved economy rather than welcome defaults", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Votre nom de joueur").fill("Card help match");
+  await page.getByRole("button", { name: "Jouer avec 3 bots" }).click();
+  await expect(
+    page.getByRole("button", { name: "Lancer les dés", exact: true }),
+  ).toBeEnabled({ timeout: 60_000 });
+  // A legacy presentation fixture differs deliberately from welcome settings.
+  // It does not modify the authoritative room or send a game action.
+  await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const state = director.getSnapshot().serverState as PublicState | null;
+    if (!state) throw new Error("Expected a match for card help");
+    director.reset({
+      ...state,
+      config: {
+        ...state.config,
+        startSalary: 760_000,
+        economyRule: "prototype",
+        boardRule: "legacy",
+      },
+      activeSeat: 0,
+      pending: {
+        kind: "roll",
+        seat: 0,
+        deadline: Date.now() + 60_000,
+      },
+    });
+  });
+  await page
+    .getByRole("button", { name: "Comment jouer", exact: true })
+    .click();
+  const help = page.locator(".help-dialog");
+  const catalogue = help.locator(".help-cards");
+  await expect(catalogue.locator(".luck-card-button")).toHaveCount(16);
+  const detail = page.locator(".luck-card-dialog");
+  await catalogue
+    .locator(".luck-card-button")
+    .filter({ hasText: "Grand tour" })
+    .click();
+  await expect(detail.locator(".luck-card-description")).toContainText("760 k");
+  await expect(detail.locator(".luck-card-description")).not.toContainText(
+    "400 k",
+  );
+  await page.keyboard.press("Escape");
+  await catalogue
+    .locator(".luck-card-button")
+    .filter({ hasText: "Tremblement de terre" })
+    .click();
+  await expect(detail.locator(".luck-card-description")).toContainText(
+    "monuments",
+  );
+  await expect(detail.locator(".luck-card-description")).not.toContainText(
+    "hôtels compris",
+  );
+  await page.keyboard.press("Escape");
+  await catalogue
+    .locator(".luck-card-button")
+    .filter({ hasText: "Échange de terrain" })
+    .click();
+  await expect(detail.locator(".luck-card-description")).toContainText(
+    "hors monuments",
+  );
+  await page.keyboard.press("Escape");
+  await expect(help).toBeVisible();
 });
