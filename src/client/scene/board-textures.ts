@@ -83,6 +83,10 @@ const mixB = new THREE.Color();
 export function mix(color: string, other: string, amount: number) {
   return `#${mixA.set(color).lerp(mixB.set(other), amount).getHexString()}`;
 }
+/** Road markings stay close to the asphalt so they never compete with the tiles. */
+const ASPHALT = "#86929a";
+const ROAD_PAINT = mix(ASPHALT, "#eef1ea", 0.4);
+const ROAD_CURB = mix(ASPHALT, "#dfe4dc", 0.55);
 
 /** Board prints use the compact amounts of a printed board: 350K, 1,2M. */
 export function boardAmount(value: number, locale: Locale) {
@@ -593,8 +597,8 @@ export function lawnTexture(boardRule: BoardRule = "country") {
       const [x, z] = cornerDirection(corner);
       context.save();
       context.rotate(Math.atan2(z, x));
-      context.strokeStyle = "#f4f1e8";
-      context.lineWidth = 0.014;
+      context.strokeStyle = ROAD_PAINT;
+      context.lineWidth = 0.012;
       context.setLineDash([0.07, 0.06]);
       context.beginPath();
       context.moveTo(AVENUE_START + 0.05, 0);
@@ -607,7 +611,7 @@ export function lawnTexture(boardRule: BoardRule = "country") {
     disc(0, 0, RING_RADIUS + RING_HALF_WIDTH + 0.05, "#ece4d2");
     disc(0, 0, RING_RADIUS + RING_HALF_WIDTH, "#88939b");
     context.setLineDash([0.07, 0.06]);
-    ring(RING_RADIUS, 0.012, "#f4f1e8");
+    ring(RING_RADIUS, 0.012, ROAD_PAINT);
     context.setLineDash([]);
     disc(0, 0, PLAZA_RADIUS, "#efe5cf");
     ring(PLAZA_RADIUS - 0.03, 0.035, "#dccdb0");
@@ -726,15 +730,15 @@ export function roadTexture() {
   const unit = size / (INNER_HALF * 2);
   const road = ROAD_WIDTH * unit;
   return canvasTexture(size, size, (context) => {
-    context.fillStyle = "#86929a";
+    context.fillStyle = ASPHALT;
     context.fillRect(0, 0, size, size);
-    context.strokeStyle = "#eef1ea";
-    context.lineWidth = 5;
+    context.strokeStyle = ROAD_PAINT;
+    context.lineWidth = 4;
     context.setLineDash([22, 18]);
     context.strokeRect(road / 2, road / 2, size - road, size - road);
     context.setLineDash([]);
-    context.strokeStyle = "#dfe4dc";
-    context.lineWidth = 7;
+    context.strokeStyle = ROAD_CURB;
+    context.lineWidth = 5;
     context.strokeRect(
       road - 3,
       road - 3,

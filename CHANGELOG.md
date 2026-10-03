@@ -14,6 +14,8 @@ has been published, and it does not reconstruct earlier development history.
 - World Tour can fly to your own cities and resorts as well as unowned ones in
   rooms created from now on (rules version 6). Rooms already created keep their
   destinations.
+- Road markings around the board and in the town are softer, so they no longer
+  compete with the spaces' names and prices.
 
 ### Fixed
 
