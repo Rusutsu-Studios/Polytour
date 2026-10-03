@@ -12,10 +12,10 @@ has been published, and it does not reconstruct earlier development history.
 ### Changed
 
 - Board lots are printed in two parts: the city ground, with its buildings and
-  name on one plain ground in the country's color, and a concrete price strip
-  showing only the price or the owner's rent. The tax and chance squares are
-  smooth concrete, and unsold plots in the central town no longer hold trees
-  (#57).
+  name on a pavement of its country's own style and color, and a concrete price
+  strip showing only the price or the owner's rent. Beaches are one piece of
+  sand, the tax and chance squares are smooth concrete, and unsold plots in the
+  central town no longer hold trees (#57).
 - Players are identified by color only; per-player symbols are removed from
   the board, pawns, corner HUDs, cards and menus (#57).
 

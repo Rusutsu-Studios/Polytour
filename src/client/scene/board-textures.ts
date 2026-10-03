@@ -227,33 +227,245 @@ function paintConcrete(
   speckle(context, seed, width, height, "#fbfafc", "#dedae3", y);
 }
 
-/**
- * A city's ground: one plain surface in its country's color, like grass or
- * slate, so the eight countries read apart by color and nothing competes with
- * the houses. Only beaches mix two materials.
- */
-function paintCityGround(
+type Point = readonly [number, number];
+
+/** A raised paving stone: lit along its top edge, shaded along its lower one. */
+function stone(context: Context, path: () => void, face: string) {
+  context.save();
+  context.fillStyle = mix(face, INK, 0.2);
+  context.translate(1.5, 2);
+  path();
+  context.fill();
+  context.fillStyle = mix(face, "#ffffff", 0.4);
+  context.translate(-2.5, -3);
+  path();
+  context.fill();
+  context.restore();
+  context.fillStyle = face;
+  path();
+  context.fill();
+}
+
+function rect(
+  context: Context,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius = 3,
+) {
+  return () => {
+    context.beginPath();
+    context.roundRect(x, y, width, height, radius);
+  };
+}
+
+function polygon(context: Context, points: readonly Point[]) {
+  return () => {
+    context.beginPath();
+    for (const [x, y] of points) context.lineTo(x, y);
+    context.closePath();
+  };
+}
+
+/** The joints between stones: the country's color, deeper and a touch darker. */
+function joint(color: string) {
+  return mix(mix(PAPER, color, 0.82), INK, 0.22);
+}
+
+/** One stone's face in the country's color, varied from stone to stone. */
+function face(color: string, next: () => number, light = 0.36, spread = 0.14) {
+  return mix(PAPER, color, light + next() * spread);
+}
+
+type Pavement = (
   context: Context,
   color: string,
   width: number,
   height: number,
-  seed: number,
-) {
-  const base = mix(PAPER, color, 0.66);
-  const sheen = context.createLinearGradient(0, 0, 0, height);
-  sheen.addColorStop(0, mix(base, "#ffffff", 0.1));
-  sheen.addColorStop(1, mix(base, INK, 0.05));
-  context.fillStyle = sheen;
+  next: () => number,
+) => void;
+
+const lawn: Pavement = (context, color, width, height, next) => {
+  const base = mix(PAPER, color, 0.68);
+  context.fillStyle = base;
   context.fillRect(0, 0, width, height);
-  speckle(
-    context,
-    seed,
-    width,
-    height,
-    mix(base, "#ffffff", 0.22),
-    mix(base, INK, 0.08),
-  );
-}
+  context.fillStyle = mix(base, "#ffffff", 0.1);
+  for (let y = 0; y < height; y += 64) context.fillRect(0, y, width, 32);
+  context.lineWidth = 2;
+  context.lineCap = "round";
+  const blades = Math.round((width * height) / 240);
+  for (let blade = 0; blade < blades; blade++) {
+    const [x, y, length] = [next() * width, next() * height, 4 + next() * 5];
+    context.strokeStyle =
+      next() < 0.6 ? mix(base, INK, 0.16) : mix(base, "#ffffff", 0.32);
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x + (next() - 0.5) * 4, y - length);
+    context.stroke();
+  }
+};
+
+const flagstones: Pavement = (context, color, width, height, next) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  for (let y = 0; y < height; ) {
+    const row = 44 + Math.round(next() * 22);
+    for (let x = -Math.round(next() * 50); x < width; ) {
+      const length = 56 + Math.round(next() * 60);
+      stone(
+        context,
+        rect(context, x + 3, y + 3, length - 6, row - 6, 5),
+        face(color, next),
+      );
+      x += length;
+    }
+    y += row;
+  }
+};
+
+const mosaic: Pavement = (context, color, width, height) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  const [light, dark] = [mix(PAPER, color, 0.22), mix(PAPER, color, 0.7)];
+  for (let y = 0; y < height; y += 16)
+    for (let x = 0; x < width; x += 16) {
+      const wave = (y + 208 + Math.sin((x + 8) / 34) * 20) % 80;
+      context.fillStyle = wave < 22 ? dark : light;
+      context.fillRect(x + 1.5, y + 1.5, 13, 13);
+    }
+};
+
+const herringbone: Pavement = (context, color, width, height, next) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  // Staircases of a horizontal and a vertical brick, repeated along (1, 1)
+  // and offset by (2, -2) bricks' widths, tile the plane without gaps.
+  const unit = 22;
+  for (let step = -4; step <= 24; step++)
+    for (let stair = -8; stair <= 8; stair++) {
+      const x = (step + 2 * stair) * unit;
+      const y = (step - 2 * stair) * unit;
+      if (x < -3 * unit || y < -3 * unit || x > width || y > height) continue;
+      stone(
+        context,
+        rect(context, x + 2.5, y + 2.5, 2 * unit - 5, unit - 5, 3),
+        face(color, next),
+      );
+      stone(
+        context,
+        rect(context, x + 2.5, y + unit + 2.5, unit - 5, 2 * unit - 5, 3),
+        face(color, next),
+      );
+    }
+};
+
+const setts: Pavement = (context, color, width, height, next) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  for (let row = 0; row * 38 < height; row++)
+    for (let x = row % 2 ? -22 : 0; x < width; ) {
+      const size = 38 + Math.round(next() * 12);
+      stone(
+        context,
+        rect(context, x + 3, row * 38 + 3, size - 6, 32, 11),
+        face(color, next),
+      );
+      x += size;
+    }
+};
+
+const crazyPaving: Pavement = (context, color, width, height, next) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  const cell = 74;
+  const corners: Point[][] = [];
+  for (let row = 0; row * cell <= height + cell; row++)
+    corners.push(
+      Array.from({ length: Math.ceil(width / cell) + 2 }, (_, column) => [
+        (column - 0.5) * cell + (next() - 0.5) * 36,
+        (row - 0.5) * cell + (next() - 0.5) * 36,
+      ]),
+    );
+  for (let row = 0; row + 1 < corners.length; row++)
+    for (let column = 0; column + 1 < corners[row].length; column++) {
+      const quad = [
+        corners[row][column],
+        corners[row][column + 1],
+        corners[row + 1][column + 1],
+        corners[row + 1][column],
+      ];
+      const cx = quad.reduce((sum, [x]) => sum + x, 0) / 4;
+      const cy = quad.reduce((sum, [, y]) => sum + y, 0) / 4;
+      // Each stone shrinks toward its middle, leaving an even joint.
+      const inset = quad.map(([x, y]): Point => {
+        const distance = Math.hypot(cx - x, cy - y) || 1;
+        return [x + ((cx - x) * 5) / distance, y + ((cy - y) * 5) / distance];
+      });
+      stone(context, polygon(context, inset), face(color, next));
+    }
+};
+
+const slate: Pavement = (context, color, width, height, next) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  for (let row = 0; row * 70 < height; row++)
+    for (let x = row % 2 ? -52 : 0; x < width; x += 104)
+      stone(
+        context,
+        rect(context, x + 3, row * 70 + 3, 98, 64, 4),
+        face(color, next, 0.44, 0.1),
+      );
+};
+
+const deck: Pavement = (context, color, width, height, next) => {
+  context.fillStyle = joint(color);
+  context.fillRect(0, 0, width, height);
+  context.lineWidth = 1.2;
+  for (let row = 0; row * 40 < height; row++) {
+    const butt = 60 + next() * (width - 120);
+    for (const [from, to] of [
+      [0, butt],
+      [butt, width],
+    ]) {
+      const plank = face(color, next, 0.38);
+      stone(
+        context,
+        rect(context, from + 2, row * 40 + 2.5, to - from - 4, 35, 3),
+        plank,
+      );
+      context.strokeStyle = mix(plank, INK, 0.1);
+      for (const offset of [12, 25]) {
+        const y = row * 40 + offset + next() * 3;
+        context.beginPath();
+        context.moveTo(from + 6, y);
+        context.bezierCurveTo(
+          from + (to - from) * 0.35,
+          y - 2,
+          from + (to - from) * 0.65,
+          y + 2,
+          to - 6,
+          y,
+        );
+        context.stroke();
+      }
+    }
+  }
+};
+
+// Each country paves its cities its own way, in its own color, as on the
+// reference boards: a lawn, flagstones, a wave mosaic, herringbone bricks,
+// cobbles, crazy paving, slate and a timber deck.
+const COUNTRY_PAVEMENTS: readonly Pavement[] = [
+  lawn,
+  flagstones,
+  mosaic,
+  herringbone,
+  setts,
+  crazyPaving,
+  slate,
+  deck,
+];
 
 /** A tax form with a red stamp, lying on the concrete of the tax office. */
 function taxForm(context: Context, x: number, y: number, size: number) {
@@ -299,10 +511,73 @@ function taxForm(context: Context, x: number, y: number, size: number) {
 }
 
 /**
- * The city ground at the screen-top end of a lot: its country's plain ground,
- * a beach or the tax office's concrete. Buildings stand on its top `band` and
- * the name below them. No label repeats ownership or development: the houses
- * already show both, in the owner's color.
+ * A whole beach, the one lot printed in a single piece: sea at the screen-top
+ * end, a foamy shoreline, then grainy sand all the way to the edge.
+ */
+function paintBeach(
+  context: Context,
+  index: number,
+  width: number,
+  height: number,
+  band: number,
+) {
+  const next = noise(index + 7);
+  const shore = band * 0.62;
+  const sea = context.createLinearGradient(0, 0, 0, shore);
+  sea.addColorStop(0, "#41b9d6");
+  sea.addColorStop(1, "#8ee0ec");
+  context.fillStyle = sea;
+  context.fillRect(0, 0, width, shore + 16);
+  context.strokeStyle = "#e6fbff";
+  context.lineWidth = 5;
+  for (const y of [band * 0.18, band * 0.38]) {
+    context.beginPath();
+    for (let x = 0; x <= width; x += 30)
+      context.quadraticCurveTo(x + 15, y - 8, x + 30, y);
+    context.stroke();
+  }
+  // Foam, wet sand and dry sand follow the same wavy shoreline.
+  const coast = (offset: number) => {
+    context.beginPath();
+    context.moveTo(0, height);
+    context.lineTo(0, shore + offset);
+    for (let x = 0; x < width; x += 30)
+      context.quadraticCurveTo(
+        x + 15,
+        shore + offset + ((x / 30) % 2 ? 7 : -7),
+        x + 30,
+        shore + offset,
+      );
+    context.lineTo(width, height);
+    context.closePath();
+  };
+  for (const [offset, fill] of [
+    [-4, "#ffffff"],
+    [3, "#e3c88b"],
+    [15, "#f2dda8"],
+  ] as const) {
+    coast(offset);
+    context.fillStyle = fill;
+    context.fill();
+  }
+  const sand = shore + 22;
+  speckle(context, index, width, height - sand, "#fcf0d0", "#dcc187", sand);
+  context.strokeStyle = "#e3c991";
+  context.lineWidth = 3;
+  for (let ripple = 0; ripple < 7; ripple++) {
+    const [x, y] = [next() * width, sand + 20 + next() * (height - sand - 30)];
+    context.beginPath();
+    context.arc(x, y, 14 + next() * 10, Math.PI * 1.15, Math.PI * 1.85);
+    context.stroke();
+  }
+  umbrella(context, width * 0.68, band * 0.58, band * 0.62);
+}
+
+/**
+ * The city ground at the screen-top end of a lot: its country's pavement or
+ * the tax office's concrete. Buildings stand on its top `band` and the name
+ * below them. No label repeats ownership or development: the houses already
+ * show both, in the owner's color.
  */
 function paintGround(
   context: Context,
@@ -314,34 +589,13 @@ function paintGround(
 ) {
   const tile = getBoard(boardRule)[index];
   if (tile.kind === "city") {
-    paintCityGround(
+    COUNTRY_PAVEMENTS["ABCDEFGH".indexOf(tile.country)](
       context,
       tileColor(index, { boardRule }),
       width,
       height,
-      index + 1,
+      noise(index + 1),
     );
-    return;
-  }
-  if (tile.kind === "resort") {
-    const shore = band * 0.6;
-    const sea = context.createLinearGradient(0, 0, 0, shore);
-    sea.addColorStop(0, "#41b9d6");
-    sea.addColorStop(1, "#8ee0ec");
-    context.fillStyle = sea;
-    context.fillRect(0, 0, width, shore);
-    context.strokeStyle = "#e6fbff";
-    context.lineWidth = 5;
-    for (const y of [band * 0.18, band * 0.38]) {
-      context.beginPath();
-      for (let x = 0; x <= width; x += 30)
-        context.quadraticCurveTo(x + 15, y - 8, x + 30, y);
-      context.stroke();
-    }
-    context.fillStyle = "#f3dfaa";
-    context.fillRect(0, shore, width, height - shore);
-    speckle(context, index, width, height - shore, "#fbeecb", "#e2c98d", shore);
-    umbrella(context, width * 0.68, band * 0.58, band * 0.62);
     return;
   }
   if (tile.kind === "tax") {
@@ -386,8 +640,11 @@ export function lotTexture(index: number, print: LotPrint) {
       );
       return;
     }
-    // City ground: buildings at the top, the name just above the price strip.
-    paintGround(context, index, width, ground, band, boardRule);
+    // Beaches are one piece of sand; every other lot has a city ground with
+    // its buildings and name, then a separate concrete price strip.
+    const beach = tile.kind === "resort";
+    if (beach) paintBeach(context, index, width, height, band);
+    else paintGround(context, index, width, ground, band, boardRule);
     context.fillStyle = INK;
     fitText(
       context,
@@ -399,23 +656,25 @@ export function lotTexture(index: number, print: LotPrint) {
       800,
       LABEL_FONT,
     );
-    // Price strip: concrete with the purchase price in ink, or the rent in the
-    // owner's color. A dark seam and the strip's lit edge part it from the
-    // ground; a shade along its far edge finishes the slab.
-    paintConcrete(
-      context,
-      index + 101,
-      width,
-      strip,
-      ground,
-      forSale ? "#ffffff" : CONCRETE,
-    );
-    context.fillStyle = "#1d3a4666";
-    context.fillRect(0, ground - 2, width, 4);
-    context.fillStyle = "#ffffffd9";
-    context.fillRect(0, ground + 2, width, 4);
-    context.fillStyle = "#1d3a461a";
-    context.fillRect(0, height - 6, width, 6);
+    if (!beach) {
+      // A dark seam and the strip's lit edge part it from the ground; a shade
+      // along its far edge finishes the slab.
+      paintConcrete(
+        context,
+        index + 101,
+        width,
+        strip,
+        ground,
+        forSale ? "#ffffff" : CONCRETE,
+      );
+      context.fillStyle = "#1d3a4666";
+      context.fillRect(0, ground - 2, width, 4);
+      context.fillStyle = "#ffffffd9";
+      context.fillRect(0, ground + 2, width, 4);
+      context.fillStyle = "#1d3a461a";
+      context.fillRect(0, height - 6, width, 6);
+    }
+    // The purchase price in ink, or the rent in the owner's color.
     const figure =
       tile.kind === "tax"
         ? `${ECONOMY.taxPercent} %`
