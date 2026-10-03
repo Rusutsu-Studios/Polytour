@@ -9,7 +9,12 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
 ### Added
+
+- Automatic version preparation for each pull request, with shared instructions
+  for Codex and Claude and a CI check that rejects an unchanged application version.
 
 - Play opens a lobby with three bots instead of starting at once; friends who
   enter the room code take a bot's place (#30).

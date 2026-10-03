@@ -104,9 +104,17 @@ Feature branches have isolated Worker Preview storage. Production deploys from
 ## Versions and releases
 
 The application release version comes from `package.json`. It appears in the
-welcome footer and the uncached `GET /api/version` response. Intermediate builds
-may share a version; include the Git commit and deployment URL in bug reports.
-Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+welcome footer and the uncached `GET /api/version` response. Every pull request,
+including documentation and maintenance, advances the version above its base and
+records its changes in [CHANGELOG.md](CHANGELOG.md). Codex and Claude Code follow
+the same required preparation workflow in [AGENTS.md](AGENTS.md): fetch the base,
+write concrete notes, then run `pnpm version:prepare patch --base origin/main`
+before the final commit or updating the pull request. Patch is the default; the
+command preserves an already prepared version when rerun. CI blocks a pull
+request or merge-queue entry that has not advanced the version.
+
+Iterations of one open pull request may share its prepared version. Include the
+Git commit and deployment URL in bug reports to identify the exact build.
 
 Polytour follows the `MAJOR.MINOR.PATCH` conventions of
 [Semantic Versioning](https://semver.org/): fixes use patch releases, features use
