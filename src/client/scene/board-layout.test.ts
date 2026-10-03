@@ -9,8 +9,10 @@ import {
   INNER_HALF,
   LOT_DEPTH,
   LOT_TOP,
+  PRICE_BAND,
   passingSpot,
   pawnSpot,
+  priceBandZ,
   ROAD_WIDTH,
   reserveAnchor,
   screenPoint,
@@ -122,6 +124,28 @@ describe("board layout", () => {
       );
       expect(screenPoint(band[0], LOT_TOP, band[1])[1]).toBeGreaterThan(
         screenPoint(print[0], LOT_TOP, print[1])[1],
+      );
+    }
+  });
+
+  it("prints the price strip below the city ground, clear of its buildings", () => {
+    // The name sits on the ground between the building plot and the strip.
+    expect(BUILDING_BAND + PRICE_BAND).toBeLessThan(LOT_DEPTH - 0.3);
+    for (const tile of BOARD) {
+      if (tile.index % 8 === 0) continue;
+      const [bandX, bandZ] = tilePoint(
+        tile.index,
+        0,
+        buildingBandZ(tile.index),
+      );
+      const [priceX, priceZ] = tilePoint(tile.index, 0, priceBandZ(tile.index));
+      expect(screenPoint(priceX, LOT_TOP, priceZ)[1]).toBeLessThan(
+        screenPoint(bandX, LOT_TOP, bandZ)[1],
+      );
+      // The strip ends exactly at the lot's screen-bottom edge.
+      expect(Math.abs(priceBandZ(tile.index)) + PRICE_BAND / 2).toBeCloseTo(
+        LOT_DEPTH / 2,
+        9,
       );
     }
   });
