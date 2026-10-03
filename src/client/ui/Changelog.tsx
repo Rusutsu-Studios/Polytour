@@ -17,6 +17,17 @@ function releases(source: string) {
     .map((match) => ({ version: match[1], date: match[2], body: match[3] }));
 }
 
+function inlineNote(text: string) {
+  return text.split(/(`[^`]+`)/g).map((part, index) =>
+    part.startsWith("`") ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: Static source tokens never reorder independently.
+      <code key={index}>{part.slice(1, -1)}</code>
+    ) : (
+      part
+    ),
+  );
+}
+
 export default function Changelog() {
   const { t, locale } = useLocale();
   const id = useId();
@@ -179,13 +190,17 @@ export default function Changelog() {
                               <ul key={block}>
                                 {block.split(/\r?\n(?=- )/).map((item) => (
                                   <li key={item}>
-                                    {item.slice(2).replace(/\r?\n\s*/g, " ")}
+                                    {inlineNote(
+                                      item.slice(2).replace(/\r?\n\s*/g, " "),
+                                    )}
                                   </li>
                                 ))}
                               </ul>
                             );
                           return (
-                            <p key={block}>{block.replace(/\r?\n/g, " ")}</p>
+                            <p key={block}>
+                              {inlineNote(block.replace(/\r?\n/g, " "))}
+                            </p>
                           );
                         })}
                     </div>

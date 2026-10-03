@@ -132,6 +132,10 @@
   font-size: 15px;
   line-height: 1.65;
 }
+.changelog-release code {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
 .changelog-footer {
   display: flex;
   justify-content: space-between;
