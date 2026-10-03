@@ -296,23 +296,47 @@ type Pavement = (
   next: () => number,
 ) => void;
 
-/** A smooth ground with a faint grain, like render or polished stone. */
-const smooth: Pavement = (context, color, width, height, next) => {
-  const base = mix(PAPER, color, 0.5);
-  const sheen = context.createLinearGradient(0, 0, 0, height);
-  sheen.addColorStop(0, mix(base, "#ffffff", 0.1));
-  sheen.addColorStop(1, mix(base, INK, 0.04));
-  context.fillStyle = sheen;
-  context.fillRect(0, 0, width, height);
-  speckle(
-    context,
-    Math.floor(next() * 0xffffffff),
-    width,
-    height,
-    mix(base, "#ffffff", 0.2),
-    mix(base, INK, 0.06),
-  );
-};
+/**
+ * Smooth concrete slabs: flat faces with a fine grain and thin saw-cut joints,
+ * offset by `stagger` from one row to the next.
+ */
+function concreteSlabs(
+  slabWidth: number,
+  slabHeight: number,
+  stagger: number,
+): Pavement {
+  return (context, color, width, height, next) => {
+    const base = mix(PAPER, color, 0.52);
+    context.fillStyle = base;
+    context.fillRect(0, 0, width, height);
+    speckle(
+      context,
+      Math.floor(next() * 0xffffffff),
+      width,
+      height,
+      mix(base, "#ffffff", 0.24),
+      mix(base, INK, 0.08),
+    );
+    const cut = mix(base, INK, 0.2);
+    const lip = mix(base, "#ffffff", 0.45);
+    for (let row = 0; row * slabHeight < height; row++) {
+      const y = row * slabHeight;
+      for (let x = row % 2 ? -stagger : 0; x < width; x += slabWidth) {
+        // Each slab is poured a shade apart, as real concrete is.
+        context.fillStyle = next() < 0.5 ? "#ffffff12" : "#1d3a460c";
+        context.fillRect(x, y, slabWidth, slabHeight);
+        context.fillStyle = cut;
+        context.fillRect(x - 1, y, 2.5, slabHeight);
+        context.fillStyle = lip;
+        context.fillRect(x + 1.5, y, 1.5, slabHeight);
+      }
+      context.fillStyle = cut;
+      context.fillRect(0, y - 1, width, 2.5);
+      context.fillStyle = lip;
+      context.fillRect(0, y + 1.5, width, 1.5);
+    }
+  };
+}
 
 const lawn: Pavement = (context, color, width, height, next) => {
   const base = mix(PAPER, color, 0.56);
@@ -443,14 +467,15 @@ const deck: Pavement = (context, color, width, height, next) => {
 };
 
 // Each country paves its cities its own way, in its own color, as on the
-// reference boards: a lawn, flagstones, a wave mosaic, smooth render for
-// Italy-Germany and Czechia-Austria, crazy paving, slate and a timber deck.
+// reference boards: a lawn, flagstones, a wave mosaic, square concrete slabs
+// for Italy-Germany, long concrete slabs for Czechia-Austria, crazy paving,
+// slate and a timber deck.
 const COUNTRY_PAVEMENTS: readonly Pavement[] = [
   lawn,
   flagstones,
   mosaic,
-  smooth,
-  smooth,
+  concreteSlabs(100, 100, 0),
+  concreteSlabs(150, 74, 75),
   crazyPaving,
   slate,
   deck,
@@ -1156,50 +1181,5 @@ export function noteTexture() {
     context.beginPath();
     context.ellipse(128, 64, 39, 34, 0, 0, Math.PI * 2);
     context.fill();
-  });
-}
-
-/**
- * A festival banner: a swallowtail flag in vivid colors with a gold trim and a
- * white star. Its right edge is the mast side; the notch is at the free end.
- * A championship host flies the gold version.
- */
-export function bannerTexture(hosted: boolean) {
-  return canvasTexture(512, 200, (context) => {
-    const [top, bottom] = hosted
-      ? ["#ffd84a", "#f5a000"]
-      : ["#ff8a1e", "#ff4f2e"];
-    const notch = 92;
-    const shape = () => {
-      context.beginPath();
-      context.moveTo(0, 6);
-      context.lineTo(506, 6);
-      context.lineTo(506, 194);
-      context.lineTo(0, 194);
-      context.lineTo(notch, 100);
-      context.closePath();
-    };
-    const cloth = context.createLinearGradient(0, 0, 0, 200);
-    cloth.addColorStop(0, top);
-    cloth.addColorStop(1, bottom);
-    shape();
-    context.fillStyle = cloth;
-    context.fill();
-    // Gold trim along both long edges, clipped to the swallowtail.
-    context.save();
-    shape();
-    context.clip();
-    context.fillStyle = hosted ? "#fff3b8" : "#ffd23f";
-    context.fillRect(0, 22, 512, 12);
-    context.fillRect(0, 166, 512, 12);
-    context.fillStyle = "#ffffff59";
-    context.fillRect(0, 6, 512, 10);
-    context.restore();
-    context.fillStyle = "#ffffff";
-    context.font = `900 104px ${DISPLAY_FONT}`;
-    context.fillText("★", 318, 104);
-    // A darker hem where the flag wraps the mast.
-    context.fillStyle = hosted ? "#c98200" : "#c8361f";
-    context.fillRect(486, 6, 20, 188);
   });
 }
