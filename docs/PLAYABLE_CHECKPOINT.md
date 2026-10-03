@@ -483,6 +483,16 @@ Captures at 1280x720, 1440x900, 1920x1080 and 390x844 have no horizontal overflo
 The illustrated FRA/Europe and IAD/North America paths are authored fixtures,
 not evidence of geographically distributed remote players.
 
+A real browser check of the Cloudflare branch Preview at implementation revision
+`a9b3261` on 3 October 2026 succeeds: room creation returns 201, the server advertises
+debug capability 1, the socket reports ZRH / Zurich / Europe, and two real room RTT
+samples produce the graph (64 ms latest, 75 ms mean). Its DO location and jurisdiction
+remain null. Closing Debug stops both probe streams; reconnecting renews metadata
+and the graph. The check observes one metadata request per opening/connection,
+zero health calls and zero page errors. This verifies one connection to a branch
+Preview, not a geographically distributed group or production deployment. The
+previously recorded remote SQLite quota blockage is no longer present in this check.
+
 ## Follow-up scope
 
 Exact reference economy/settings comparison, balance, desktop performance,

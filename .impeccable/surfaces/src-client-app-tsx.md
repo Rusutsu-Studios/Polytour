@@ -64,7 +64,8 @@ there are no manual speed or finish-animation controls.
 ## Verification and unresolved work
 
 Check 1280x720, 1440x900 and 1920x1080; use both a real local match and authored
-developed-board fixtures. Remote runtime is presently blocked by a confirmed
-Cloudflare free-tier SQLite write quota. Local checks do not establish a playable
-remote Preview until the allowance resets. Record dated evidence and revision in
-PLAYABLE_CHECKPOINT.md. Balance remains provisional and target-PC FPS unmeasured.
+developed-board fixtures. A real Cloudflare branch Preview room was verified on
+3 October 2026 at implementation revision a9b3261, including ZRH socket metadata,
+room RTT, stopped Debug traffic and reconnect recovery. Record dated evidence and
+revision in PLAYABLE_CHECKPOINT.md; one connection does not establish distributed
+human gameplay or production. Balance remains provisional and target-PC FPS unmeasured.
