@@ -66,7 +66,10 @@ export function useRoom(credentials: RoomCredentials | null) {
   const [connection, setConnection] = useState<Connection>("offline");
   const [error, setError] = useState<string | null>(null);
   const [randomness, setRandomness] = useState<RandomnessStatus | null>(null);
-  const [pending, setPending] = useState(false);
+  // What awaits the room's answer: a lobby operation's type, or "intent".
+  // Screens show waiting only for their own command, not for every quick one.
+  const [pendingOp, setPendingOp] = useState<string | null>(null);
+  const pending = pendingOp !== null;
   const [retry, setRetry] = useState(0);
   const socket = useRef<WebSocket | null>(null);
   const sequence = useRef(0);
@@ -170,7 +173,7 @@ export function useRoom(credentials: RoomCredentials | null) {
                 : message.randomness,
             );
             director.reset(message.snapshot);
-            setPending(false);
+            setPendingOp(null);
             pendingId.current = null;
             if (requestTimer.current) clearTimeout(requestTimer.current);
             break;
@@ -201,7 +204,7 @@ export function useRoom(credentials: RoomCredentials | null) {
           case "reject":
             if (message.id === pendingId.current) {
               pendingId.current = null;
-              setPending(false);
+              setPendingOp(null);
               if (requestTimer.current) clearTimeout(requestTimer.current);
             }
             if (message.type === "reject") {
@@ -331,7 +334,7 @@ export function useRoom(credentials: RoomCredentials | null) {
         if (disposed || socket.current !== ws) return;
         requestSync.current = null;
         if (requestTimer.current) clearTimeout(requestTimer.current);
-        setPending(false);
+        setPendingOp(null);
         pendingId.current = null;
         if (incompatible) {
           setConnection("offline");
@@ -410,11 +413,11 @@ export function useRoom(credentials: RoomCredentials | null) {
     setError(null);
     if ("id" in message) {
       pendingId.current = message.id;
-      setPending(true);
+      setPendingOp(message.type === "lobby" ? message.op.type : message.type);
       if (requestTimer.current) clearTimeout(requestTimer.current);
       requestTimer.current = setTimeout(() => {
         pendingId.current = null;
-        setPending(false);
+        setPendingOp(null);
         setError(
           translate(
             "Votre choix n’a pas été confirmé. La salle est actualisée ; vérifiez le plateau avant de rejouer.",
@@ -435,6 +438,7 @@ export function useRoom(credentials: RoomCredentials | null) {
     error,
     randomness,
     pending,
+    pendingOp,
     clearError: () => setError(null),
     reconnect: () => setRetry((value) => value + 1),
     /** A local player's seat acts on this device's behalf when given. */

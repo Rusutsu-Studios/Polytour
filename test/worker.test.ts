@@ -1897,12 +1897,20 @@ describe("Authoritative private rooms", () => {
           .exec("SELECT kind FROM timers WHERE kind='randomness'")
           .toArray(),
       ).toHaveLength(1);
+      // The retained retry was due, so the room re-armed its alarm for the next
+      // millisecond. Keep it from firing on its own (and starting a real relay
+      // request) while the test evicts the room; the test runs it below.
+      durableState.storage.sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind='randomness'",
+        Date.now() + 60_000,
+      );
+      await durableState.storage.setAlarm(Date.now() + 60_000);
     });
-    await evictDurableObject(stub);
-    expect(await readPending()).toBe(before);
     vi.spyOn(globalThis, "fetch").mockRejectedValue(
       new Error("Relay unavailable"),
     );
+    await evictDurableObject(stub);
+    expect(await readPending()).toBe(before);
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
         "UPDATE timers SET fire_at=? WHERE kind='randomness'",

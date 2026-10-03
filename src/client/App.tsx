@@ -1299,7 +1299,7 @@ function MatchView({
               result={game.result}
               leader={leader}
               leaderName={leaderName}
-              disabled={room.pending || room.connection !== "online"}
+              disabled={room.connection !== "online"}
               onLobby={room.returnToLobby}
               onLeave={onLeave}
               onJournal={(button) => showTool("journal", button)}
@@ -1548,7 +1548,7 @@ function MatchView({
                       : []
                   }
                   leader={leader}
-                  disabled={room.pending || room.connection !== "online"}
+                  disabled={room.connection !== "online"}
                   onAdmit={room.admit}
                   onDeny={room.deny}
                   onReplaceBot={room.replaceBot}
@@ -1558,7 +1558,8 @@ function MatchView({
                     <h3>{t("Vous menez la salle", "You lead this room")}</h3>
                     <RoomLock
                       locked={room.lobby?.locked ?? false}
-                      disabled={room.pending || room.connection !== "online"}
+                      pending={room.pending}
+                      disabled={room.connection !== "online"}
                       onChange={room.lock}
                     />
                     {(room.lobby?.seats ?? []).some(
@@ -1581,9 +1582,7 @@ function MatchView({
                               <button
                                 type="button"
                                 className="seat-promote"
-                                disabled={
-                                  room.pending || room.connection !== "online"
-                                }
+                                disabled={room.connection !== "online"}
                                 aria-label={t(
                                   `Nommer ${entry.name} chef de salle`,
                                   `Make ${entry.name} the room leader`,
@@ -1599,7 +1598,7 @@ function MatchView({
                     )}
                     <ReturnToLobby
                       finished={game.status === "finished"}
-                      disabled={room.pending || room.connection !== "online"}
+                      disabled={room.connection !== "online"}
                       onConfirm={() => {
                         closeTools();
                         room.returnToLobby();
@@ -1769,7 +1768,10 @@ function App() {
   const game = viewState ?? serverState;
   const isGame = credentials && game;
   const debug = new URLSearchParams(window.location.search).has("debug");
-  const blockActions = room.pending || room.connection !== "online";
+  // Room controls stay steady while a quick change awaits its answer: the
+  // room hook already drops a second command until the first is answered.
+  const roomOffline = room.connection !== "online";
+  const starting = room.pendingOp === "start";
   const previewConfig: GameConfig = {
     ...config,
     gameId: "preview",
@@ -1988,7 +1990,7 @@ function App() {
               lobby={room.lobby}
               you={you}
               leader={leader}
-              disabled={blockActions}
+              disabled={roomOffline}
               onAddBot={room.addBot}
               onRemoveBot={room.removeBot}
               onAddLocal={room.addLocal}
@@ -1998,7 +2000,7 @@ function App() {
             <WaitingRoom
               lobby={room.lobby}
               leader={leader}
-              disabled={blockActions}
+              disabled={roomOffline}
               onAdmit={room.admit}
               onDeny={room.deny}
               onReplaceBot={room.replaceBot}
@@ -2006,7 +2008,8 @@ function App() {
             {leader && (
               <RoomLock
                 locked={room.lobby?.locked ?? false}
-                disabled={blockActions}
+                pending={room.pending}
+                disabled={roomOffline}
                 onChange={room.lock}
               />
             )}
@@ -2029,14 +2032,15 @@ function App() {
                   type="button"
                   className="button primary welcome-play"
                   disabled={
-                    blockActions ||
+                    roomOffline ||
+                    starting ||
                     settingsDirty ||
                     seated < ECONOMY.minimumPlayers
                   }
                   onClick={() => room.start(false)}
                 >
                   <Icon name="dice" />
-                  {room.pending
+                  {starting
                     ? t("Le plateau se prépare…", "Preparing board…")
                     : t("Démarrer la partie", "Start game")}
                   <Icon name="arrow" />
@@ -2057,7 +2061,7 @@ function App() {
             )}
             <RoomSettings
               config={config}
-              disabled={!leader || blockActions}
+              disabled={!leader || roomOffline}
               onChange={setConfig}
               save={
                 leader

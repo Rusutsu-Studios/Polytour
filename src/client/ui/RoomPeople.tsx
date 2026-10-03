@@ -370,21 +370,24 @@ export function WaitingRoom({
 
 export function RoomLock({
   locked,
+  pending,
   disabled,
   onChange,
 }: {
   locked: boolean;
+  /** A room command awaits its answer. */
+  pending: boolean;
   disabled: boolean;
   onChange: (locked: boolean) => void;
 }) {
   const { t } = useLocale();
   // The box follows the click at once. The room sends its new lobby before
-  // the answer that unlocks the box, so the draft gives way to that value, or
-  // to the old one if the request was refused.
+  // its answer, so once answered the draft gives way to that value, or to the
+  // old one if the request was refused.
   const [draft, setDraft] = useState<boolean | null>(null);
   useEffect(() => {
-    if (!disabled) setDraft(null);
-  }, [disabled]);
+    if (!pending) setDraft(null);
+  }, [pending]);
   return (
     <label className="checkbox-label room-lock">
       <input
