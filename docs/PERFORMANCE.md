@@ -64,10 +64,10 @@ uses those invalid samples. No animation-scheduler bug was established.
 
 ## Implemented change
 
-One compact monitor-icon button shows **High** or **Low** before joining and in
-the match toolbar. Clicking switches the quality immediately; the tooltip names
-the current quality and the next choice. **View and animation** shows the same
-saved local preference. High is the default for a browser without a saved choice.
+One compact monitor-icon button shows **High** or **Low** before joining.
+During a match, **Pause > Video** presents **High** and **Low** as two explicit
+choices side by side, with immediate effect and the same saved local preference.
+High is the default for a browser without a saved choice.
 Low fixes DPR at 1 and disables live shadows.
 It also keeps decorative town life and selection highlights still so the board
 can idle between game events. High retains the existing rendering settings,

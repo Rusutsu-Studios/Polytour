@@ -133,3 +133,15 @@ launch milestone. Select their scope from the [roadmap](ROADMAP.md), assign
 related issues and pull requests, and explicitly defer unfinished work before
 releasing. Close the milestone after its acceptance criteria and published release
 have been verified.
+
+## Browser checks
+
+GitHub CI keeps the complete Playwright suite, excluding the separate `@live`
+randomness check. It distributes individual scenarios across three isolated
+runners using `--fully-parallel --workers 1 --shard N/3`. Each runner has one
+browser worker, so graphics-heavy scenarios do not compete on that machine.
+The required `verify` check waits for all three shards; failures retain separate
+`playwright-report-N` artifacts. New feature-branch pushes cancel obsolete runs;
+main and release-tag runs always finish.
+
+Run the full suite locally with `pnpm test:e2e --grep-invert @live`.

@@ -9,6 +9,21 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-03
+
+### Changed
+
+- During a match, graphics quality lives only in Pause > Video, with separate
+  High and Low choices. Removed the toolbar magnifier and previous/next arrows
+  from clicked-space details (#80).
+- Room leaders choose a successor from compact player portraits in the room
+  panel. The shared avatar renderer also accepts future custom portraits (#80).
+
+### Fixed
+
+- Run the complete browser suite in three isolated CI shards and cancel superseded branch checks to reduce waiting.
+- Keep protocol-only browser clients independent of 3D rendering during authoritative match checks.
+
 ## [0.4.0] - 2026-10-03
 
 ### Added

@@ -51,14 +51,12 @@ export default function CityCard({
   state,
   seat,
   selected,
-  onSelect,
   onClose,
 }: {
   state: PublicState;
   /** Null for someone watching the match without a seat. */
   seat: Seat | null;
   selected: number | null;
-  onSelect: (tile: number) => void;
   onClose: () => void;
 }) {
   // Subscribing here re-renders the whole card when the language changes.
@@ -91,8 +89,6 @@ export default function CityCard({
       ? state.players.find((player) => player.seat === property.owner)
       : null;
   const ownerColor = owner ? PLAYER_COLORS[owner.seat] : "#8fa38c";
-  // The board wraps, so stepping past the last space returns to the first.
-  const step = (delta: number) => onSelect((index + delta + 32) % 32);
   const kind =
     tile.kind === "city"
       ? t("Ville", "City")
@@ -127,16 +123,7 @@ export default function CityCard({
         transition={{ duration: reducedMotion ? 0 : 0.24 }}
       >
         <div className="city-card-topline">
-          <div className="city-card-steps">
-            <button
-              type="button"
-              className="icon-button city-card-step"
-              data-back="true"
-              aria-label={t("Case précédente", "Previous space")}
-              onClick={() => step(-1)}
-            >
-              <Icon name="arrow" size={16} />
-            </button>
+          <div className="city-card-space">
             <span className="city-card-place">
               <span
                 className="city-card-kind"
@@ -147,14 +134,6 @@ export default function CityCard({
               </span>
               {t(`Case ${index + 1} / 32`, `Space ${index + 1} / 32`)}
             </span>
-            <button
-              type="button"
-              className="icon-button city-card-step"
-              aria-label={t("Case suivante", "Next space")}
-              onClick={() => step(1)}
-            >
-              <Icon name="arrow" size={16} />
-            </button>
             <span className="city-card-kind-name">{kind}</span>
           </div>
           <button
