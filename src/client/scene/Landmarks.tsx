@@ -1,7 +1,6 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { type BoardRule, getBoard } from "../../shared/board/index.js";
 import {
@@ -120,7 +119,7 @@ function landmarkPoint(
 const GOLD = "#ffc83d";
 const IVORY = "#fbf6ec";
 const CORAL = "#e2574a";
-const GLASS = "#3d9fc6";
+const GLASS = "#56b4d8";
 
 type Part = {
   geometry: THREE.BufferGeometry;
@@ -219,19 +218,55 @@ function arcSlab(
   }).rotateX(Math.PI / 2);
 }
 
-/** A soft studio reflection for gold, glass and lacquer: built once per canvas. */
-function useStudioReflections() {
-  const gl = useThree((state) => state.gl);
-  const target = useMemo(() => {
-    const generator = new THREE.PMREMGenerator(gl);
-    const room = new RoomEnvironment();
-    const result = generator.fromScene(room, 0.04);
-    room.dispose();
-    generator.dispose();
-    return result;
-  }, [gl]);
-  useEffect(() => () => target.dispose(), [target]);
-  return target.texture;
+/**
+ * A painted gold matcap for the trophy: shiny metal without an environment
+ * map, so nothing is prefiltered on the GPU when the board appears.
+ */
+function goldMatcap() {
+  return canvasTexture(256, 256, (context) => {
+    const body = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+    body.addColorStop(0, "#fff0b8");
+    body.addColorStop(0.45, "#ffc83d");
+    body.addColorStop(0.8, "#c9850f");
+    body.addColorStop(1, "#7a4506");
+    context.fillStyle = body;
+    context.fillRect(0, 0, 256, 256);
+    const glint = (x: number, y: number, radius: number, alpha: number) => {
+      const light = context.createRadialGradient(x, y, 0, x, y, radius);
+      light.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+      light.addColorStop(1, "rgba(255, 255, 255, 0)");
+      context.fillStyle = light;
+      context.fillRect(0, 0, 256, 256);
+    };
+    glint(92, 78, 64, 0.95);
+    glint(178, 196, 54, 0.45);
+  });
+}
+
+/**
+ * A neutral glossy matcap for glass: a bright sky above, a darker ground below
+ * and one diagonal glint. Vertex colours tint it, so one map serves every pane.
+ */
+function glassMatcap() {
+  return canvasTexture(256, 256, (context) => {
+    const sky = context.createLinearGradient(0, 0, 0, 256);
+    sky.addColorStop(0, "#ffffff");
+    sky.addColorStop(0.45, "#e4eef1");
+    sky.addColorStop(0.62, "#a9bcc3");
+    sky.addColorStop(1, "#6f858d");
+    context.fillStyle = sky;
+    context.fillRect(0, 0, 256, 256);
+    context.save();
+    context.translate(128, 128);
+    context.rotate(-0.6);
+    const glint = context.createLinearGradient(0, -34, 0, 34);
+    glint.addColorStop(0, "rgba(255, 255, 255, 0)");
+    glint.addColorStop(0.5, "rgba(255, 255, 255, 0.85)");
+    glint.addColorStop(1, "rgba(255, 255, 255, 0)");
+    context.fillStyle = glint;
+    context.fillRect(-160, -34, 320, 68);
+    context.restore();
+  });
 }
 
 function useDisposable<T extends { dispose: () => void }>(make: () => T) {
@@ -559,7 +594,7 @@ function stadiumGlass() {
   return bake([
     {
       geometry: new THREE.CylinderGeometry(0.585, 0.565, 0.24, 48, 1, true),
-      color: "#2f7f9c",
+      color: "#4aa6c6",
       position: [0, STADIUM.ground + 0.12, 0],
     },
   ]).scale(1, 1, STADIUM.squash);
@@ -697,13 +732,13 @@ function Stadium({
   hostSeat,
   animated,
   lowGraphics,
-  reflections,
+  glaze,
 }: {
   hosted: boolean;
   hostSeat: Seat | null;
   animated: boolean;
   lowGraphics: boolean;
-  reflections: THREE.Texture;
+  glaze: THREE.Texture;
 }) {
   const body = useDisposable(stadiumBody);
   const glass = useDisposable(stadiumGlass);
@@ -717,6 +752,7 @@ function Stadium({
   const turf = useDisposable(pitchTexture);
   const halo = useDisposable(haloTexture);
   const fade = useDisposable(beamFade);
+  const gold = useDisposable(goldMatcap);
   const heads = useMemo(floodlightHeads, []);
   const trophy = useRef<THREE.Group>(null);
   const flags = useRef<THREE.InstancedMesh>(null);
@@ -769,8 +805,6 @@ function Stadium({
           vertexColors
           roughness={0.7}
           side={THREE.DoubleSide}
-          envMap={reflections}
-          envMapIntensity={0.25}
         />
       </mesh>
       <mesh geometry={accents}>
@@ -782,14 +816,8 @@ function Stadium({
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh geometry={glass} receiveShadow>
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.18}
-          metalness={0.2}
-          envMap={reflections}
-          envMapIntensity={1.1}
-        />
+      <mesh geometry={glass}>
+        <meshMatcapMaterial vertexColors matcap={glaze} />
       </mesh>
       <mesh geometry={stands} receiveShadow>
         <meshStandardMaterial
@@ -850,16 +878,7 @@ function Stadium({
       </instancedMesh>
       <group ref={trophy} position={[0, STADIUM.trophy.y, 0]}>
         <mesh geometry={cup} castShadow>
-          <meshStandardMaterial
-            color={GOLD}
-            metalness={1}
-            roughness={0.26}
-            envMap={reflections}
-            envMapIntensity={1.25}
-            emissive="#6b4100"
-            emissiveIntensity={0.18}
-            side={THREE.DoubleSide}
-          />
+          <meshMatcapMaterial matcap={gold} side={THREE.DoubleSide} />
         </mesh>
       </group>
     </group>
@@ -1032,7 +1051,7 @@ function airportGlass() {
       )
         .rotateZ(Math.PI / 2)
         .scale(1, 0.72, 1),
-      color: "#5ec0de",
+      color: "#7ccfe8",
       position: [terminal.x, 0.02 + terminal.height, terminal.z],
     },
     {
@@ -1204,10 +1223,10 @@ const PUFFS_PER_ENGINE = 4;
 
 function Airport({
   animated,
-  reflections,
+  glaze,
 }: {
   animated: boolean;
-  reflections: THREE.Texture;
+  glaze: THREE.Texture;
 }) {
   const body = useDisposable(airportBody);
   const glass = useDisposable(airportGlass);
@@ -1261,21 +1280,10 @@ function Airport({
   return (
     <group position={AIRPORT_ANCHOR} rotation={[0, SCREEN_YAW, 0]}>
       <mesh geometry={body} castShadow receiveShadow>
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.7}
-          envMap={reflections}
-          envMapIntensity={0.25}
-        />
+        <meshStandardMaterial vertexColors roughness={0.7} />
       </mesh>
       <mesh geometry={glass} castShadow>
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.15}
-          metalness={0.2}
-          envMap={reflections}
-          envMapIntensity={1.1}
-        />
+        <meshMatcapMaterial vertexColors matcap={glaze} />
       </mesh>
       <group ref={radar} position={[tower.x, 0.688, tower.z]}>
         <mesh position={[0.012, 0, 0]}>
@@ -1307,12 +1315,7 @@ function Airport({
       </group>
       <group ref={plane} position={[pose.x, pose.y, 0]}>
         <mesh geometry={jet} castShadow>
-          <meshStandardMaterial
-            vertexColors
-            roughness={0.35}
-            envMap={reflections}
-            envMapIntensity={0.6}
-          />
+          <meshStandardMaterial vertexColors roughness={0.35} />
         </mesh>
         <instancedMesh
           ref={puffs}
@@ -1410,7 +1413,7 @@ export function Landmarks({
   animated?: boolean;
   lowGraphics?: boolean;
 }) {
-  const reflections = useStudioReflections();
+  const glaze = useDisposable(glassMatcap);
   const host = state?.championshipHost ?? null;
   const hostSeat =
     state && host ? (getProperty(state, host.tile)?.owner ?? null) : null;
@@ -1422,9 +1425,9 @@ export function Landmarks({
         hostSeat={hostSeat}
         animated={animated}
         lowGraphics={lowGraphics}
-        reflections={reflections}
+        glaze={glaze}
       />
-      <Airport animated={animated} reflections={reflections} />
+      <Airport animated={animated} glaze={glaze} />
       {getBoard(boardRule)
         .filter((tile) => tile.index % 8 === 0 && tile.kind !== "start")
         .map((tile) => (
