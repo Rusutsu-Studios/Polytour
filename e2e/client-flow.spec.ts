@@ -815,6 +815,10 @@ test("desktop room controls fit, create and join preserve the host settings", as
     viewport: { width: 1280, height: 720 },
     reducedMotion: "reduce",
   });
+  const newcomer = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    reducedMotion: "reduce",
+  });
   try {
     const second = await friend.newPage();
     await second.goto(`/?room=${code}`);
@@ -853,14 +857,13 @@ test("desktop room controls fit, create and join preserve the host settings", as
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeDisabled();
     // A new room presence must not overwrite the host's unsaved draft.
-    await second.evaluate(async (roomCode) => {
-      const response = await fetch(`/api/rooms/${roomCode}/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Cam" }),
-      });
-      if (!response.ok) throw new Error("Expected a third seat");
-    }, code);
+    const third = await newcomer.newPage();
+    await third.goto(`/?room=${code}`);
+    await third.getByLabel("Votre nom de joueur").fill("Cam");
+    await third
+      .getByRole("button", { name: "Rejoindre", exact: false })
+      .click();
+    await expect(third.locator(".lobby-seats")).toContainText("Alice");
     await expect(page.locator(".lobby-seats")).toContainText("Cam");
     await expect(
       page.getByRole("slider", { name: "Capital de départ", exact: true }),
@@ -910,8 +913,36 @@ test("desktop room controls fit, create and join preserve the host settings", as
     // Three players keep their lobby colours; the fourth corner stays empty.
     await expect(page.locator(".player-card")).toHaveCount(3);
     await expect(second.locator(".player-card")).toHaveCount(3);
+    await expect(third.locator(".player-card")).toHaveCount(3);
     await expect(page.locator('.player-card[data-seat="3"]')).toHaveCount(0);
-    await expect(page.locator(".decision-panel")).toBeVisible();
+    // The first player is randomized; only that player's tab owns the choice.
+    const activeSeat = Number(
+      await page.locator(".player-card.active").getAttribute("data-seat"),
+    );
+    expect([0, 1, 2]).toContain(activeSeat);
+    const players = [page, second, third];
+    const names = ["Alice", "Bo", "Cam"];
+    for (const [seat, participant] of players.entries()) {
+      await expect(participant.locator(".player-card.active")).toHaveAttribute(
+        "data-seat",
+        String(activeSeat),
+      );
+      const roll = participant.getByRole("button", {
+        name: "Lancer les dés",
+        exact: true,
+      });
+      if (seat === activeSeat) {
+        await expect(
+          participant.locator('.decision-panel[data-own="true"]'),
+        ).toBeVisible();
+        await expect(roll).toBeEnabled();
+      } else {
+        await expect(
+          participant.locator('.contextual-action [role="status"]'),
+        ).toHaveText(`${names[activeSeat]} joue`);
+        await expect(roll).toHaveCount(0);
+      }
+    }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBe(1280);
@@ -921,6 +952,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     });
   } finally {
     await friend.close();
+    await newcomer.close();
   }
 });
 
