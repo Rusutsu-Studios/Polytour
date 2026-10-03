@@ -266,6 +266,8 @@ export function RoomSettings({
   save,
 }: RoomSettingsProps) {
   const { t } = useLocale();
+  const giftDescriptionId = useId();
+  const winsHeadingId = useId();
   const update = (patch: Partial<RoomConfig>) => {
     if (!disabled) onChange({ ...config, ...patch });
   };
@@ -322,17 +324,39 @@ export function RoomSettings({
         <legend>{t("Règles personnalisées", "Custom rules")}</legend>
         <div className="room-settings-toggles">
           {TOGGLES.map(([key, fr, en]) => (
-            <label className="room-setting-toggle" key={key}>
-              <input
-                type="checkbox"
-                disabled={disabled}
-                checked={config[key]}
-                onChange={(event) =>
-                  update({ [key]: event.currentTarget.checked })
-                }
-              />
-              <span>{t(fr, en)}</span>
-            </label>
+            <div key={key}>
+              <label className="room-setting-toggle">
+                <input
+                  type="checkbox"
+                  aria-describedby={
+                    key === "giftCanBankrupt" ? giftDescriptionId : undefined
+                  }
+                  disabled={disabled}
+                  checked={config[key]}
+                  onChange={(event) =>
+                    update({ [key]: event.currentTarget.checked })
+                  }
+                />
+                <span>{t(fr, en)}</span>
+              </label>
+              {key === "giftCanBankrupt" && (
+                <p className="room-setting-help" id={giftDescriptionId}>
+                  {t(
+                    "Cartes Anniversaire et Charité.",
+                    "Birthday and Charity cards.",
+                  )}{" "}
+                  {config.giftCanBankrupt
+                    ? t(
+                        "Le paiement complet est dû : il peut forcer une vente ou causer une faillite.",
+                        "The full payment is owed: it can force property sales or cause bankruptcy.",
+                      )
+                    : t(
+                        "Le paiement est limité à l’argent disponible, sans vente forcée ni faillite.",
+                        "Payment is capped at available cash, with no forced sale or bankruptcy.",
+                      )}
+                </p>
+              )}
+            </div>
           ))}
         </div>
       </fieldset>
@@ -347,6 +371,66 @@ export function RoomSettings({
           </p>
         </details>
       )}
+      <section
+        className="room-settings-wins"
+        aria-labelledby={winsHeadingId}
+        aria-live="polite"
+      >
+        <h3 id={winsHeadingId}>
+          {t(
+            "Comment gagner avec ces réglages",
+            "How to win with these settings",
+          )}
+        </h3>
+        <ul>
+          <li>
+            {t(
+              "Rester le dernier joueur en jeu après la faillite de tous les autres. Zéro en espèces ne suffit pas : les propriétés peuvent couvrir une dette.",
+              "Be the last player left after everyone else goes bankrupt. Zero cash alone is not bankruptcy: properties can cover a debt.",
+            )}
+          </li>
+          <li>
+            {t(
+              "Posséder les quatre stations touristiques.",
+              "Own all four resorts.",
+            )}
+          </li>
+          {config.lineMonopoly && (
+            <li>
+              {t(
+                "Posséder toutes les villes et stations d’un même côté du plateau.",
+                "Own every city and resort on one side of the board.",
+              )}
+            </li>
+          )}
+          {config.tripleMonopoly && (
+            <li>
+              {t(
+                "Posséder trois collections de pays complètes.",
+                "Own three complete country sets.",
+              )}
+            </li>
+          )}
+          <li>
+            {t(
+              `Avoir le patrimoine le plus élevé après ${config.timeLimitMinutes} min : argent + valeur investie dans les propriétés.`,
+              `Have the highest net worth after ${config.timeLimitMinutes} min: cash + invested property value.`,
+            )}
+          </li>
+          <li>
+            {t(
+              `Si la limite de ${config.roundLimit} tours de table est atteinte avant, le patrimoine le plus élevé gagne.`,
+              `If the ${config.roundLimit}-round limit is reached first, highest net worth wins.`,
+            )}
+          </li>
+        </ul>
+        <p>
+          {t(
+            "À égalité de patrimoine : argent disponible, puis nombre de stations, puis ordre de jeu initial.",
+            "Net-worth ties: most cash, then most resorts, then original turn order.",
+          )}
+        </p>
+      </section>
       {save && (
         <button
           type="button"
