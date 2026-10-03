@@ -1,5 +1,8 @@
 # Polytour
 
+<img width="2556" height="1299" alt="image" src="https://github.com/user-attachments/assets/ac73fe25-975e-4bc9-a5bb-3046ac07e04c" />
+(Print screen might not be up to date)
+
 A multiplayer property-strategy board game for PC browsers. Two to four players travel from
 French cities to Tokyo, buy land, build, pay rent and compete for collections on an
 original Three.js toy board. Cloudflare Workers and one SQLite Durable Object per
