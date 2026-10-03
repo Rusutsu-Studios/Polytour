@@ -367,6 +367,8 @@ export type ApplyActionResult =
 export type EngineContext = {
   readonly now: number;
   readonly dice?: readonly [number, number];
+  /** Fresh server uint32 words for live Chance draws; omit for seeded simulation. */
+  readonly chanceEntropy?: readonly number[];
 };
 export type CreateGameResult = {
   readonly state: GameState;

@@ -37,10 +37,32 @@ secret. Mixing a beacon with a strong private server secret is possible, but add
 a startup dependency without a useful benefit for the current game. Fresh server
 Web Crypto already supplies the needed unpredictable bytes with no external wait.
 
-The private seeded PRNG remains for the shuffled Chance deck, initial turn order
-and repeatable simulations. Its seed is generated with server Web Crypto and is
-never sent to clients; deck order and resolution queues are also excluded from
-public snapshots. Live dice never use that deterministic simulation PRNG.
+The seeded PRNG remains for initial turn order, festivals, the initial deck
+representation and repeatable simulations. Its seed is generated with server Web
+Crypto and is never sent to clients, but the public setup must not be treated as
+a cryptographic secret. Live dice and Chance draws do not use that sequence.
+
+## Live Chance draws
+
+Every live engine invocation receives fresh server Web Crypto uint32 words in
+`EngineContext.chanceEntropy`, including human actions, bots, dice resolution and
+timeouts. For a draw pile of size `n`, the engine rejects words at or above
+`floor(2^32 / n) * n`, then selects `word % n`. Each remaining card has the same
+chance and is removed from the pile after selection: draws are without replacement.
+The initial seeded deck order and public turn order/festivals cannot predict the
+next live card.
+
+When the pile is empty, discarded cards replenish it; held keep cards remain
+unavailable. The same uniform selection applies to the replenished pile. Existing
+saved decks use this path too, preserving their remaining/discarded/held cards
+without a state schema, protocol or rules-version bump. Draw events and resulting
+state are persisted before broadcast; replay and reconnect use those saved events.
+Neither Chance entropy nor remaining cards appear in public snapshots.
+
+Seeded tests and simulations may omit `chanceEntropy` to draw deterministically
+from the seeded shuffled deck. Supplied entropy must contain valid uint32 words;
+invalid or exhausted entropy fails instead of falling back to the seeded PRNG.
+Live Chance has no public cryptographic receipt and still trusts the server.
 
 ## Saved-room compatibility: drand quicknet
 
@@ -100,7 +122,10 @@ Automated tests check new-room defaults, a real Worker roll while external fetch
 is disabled, immediate resolution, no pending commitment after success and honest
 receipt fields. The byte-to-face mapping is checked exhaustively. Compatibility
 tests retain the signed quicknet fixture, altered rounds/signatures and relay
-outage behavior. Statistical simulation is a balance tool, not a cryptographic proof.
+outage behavior. Chance tests cover uniform index selection, rejection of the
+uneven uint32 tail, drawing without replacement, saved-deck compatibility and
+deterministic simulation fallback. Statistical simulation is a balance tool,
+not a cryptographic proof.
 
 Legacy drand rooms display commitments and offer JSON proof export; replay
 restores the latest proof. Normal server dice display no public-verification claim.
