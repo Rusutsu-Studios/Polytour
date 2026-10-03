@@ -226,9 +226,9 @@ every branch, PR head, commit message, PR body, and review or issue comment.
   Components don't start game animations on their own.
 - Keep two stores: `serverState` (latest authoritative) and `viewState` (what the
   player has seen so far). The Director advances `viewState` as each event finishes.
-- Support speed multiplier (1×/1.5×/2×, applied to GSAP *and* Motion durations) and
-  "skip" (fast-forward backlog). Respect `prefers-reduced-motion`: no camera shake,
-  no slow-mo, camera cuts instead of sweeps.
+- Play game-event animations at their normal rate, with automatic catch-up and
+  snapshot recovery for delayed views. Respect `prefers-reduced-motion`: no camera
+  shake, no slow-mo, camera cuts instead of sweeps.
 - Never allocate in `useFrame`. Reuse vectors/quaternions; use instancing for
   repeated meshes (tiles, houses, coins).
 - 3D assets: glTF + Meshopt/Draco + KTX2 textures, generated components via gltfjsx.

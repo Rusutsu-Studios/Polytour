@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { BoardRule, EconomyRule } from "../board/index.js";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
+import type { RoomDiagnostics } from "./room-diagnostics.js";
 
 // Version 4 adds room leaders, waiting members and local players; stale clients reload.
 export const PROTOCOL_VERSION = 4;
@@ -114,6 +115,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("ping"), t: z.number().finite() }).strict(),
+  z.object({ type: z.literal("debug-info") }).strict(),
 ]);
 /**
  * Room operations. The room leader (`hostSeat`) owns all of them except the
@@ -147,7 +149,8 @@ export type ClientMessage =
       seat?: Seat;
     }
   | { type: "lobby"; id: string; op: LobbyOp }
-  | { type: "ping"; t: number };
+  | { type: "ping"; t: number }
+  | { type: "debug-info" };
 
 /** `seat` is null for someone who joined a waiting room instead of a place. */
 export type RoomCredentials = {
@@ -198,6 +201,7 @@ export type ServerMessage =
   | {
       type: "welcome";
       protocolVersion: number;
+      roomDebugVersion?: number;
       /** A seated device has a seat; a waiting member has an id instead. */
       you: { seat: Seat | null; member: string | null };
       seq: number;
@@ -217,4 +221,5 @@ export type ServerMessage =
   | { type: "lobby"; lobby: LobbyState }
   | { type: "presence"; seat: Seat; status: "online" | "away" | "bot" }
   | ({ type: "randomness" } & RandomnessStatus)
-  | { type: "pong"; t: number; serverNow: number };
+  | { type: "pong"; t: number; serverNow: number }
+  | { type: "room-diagnostics"; value: RoomDiagnostics };

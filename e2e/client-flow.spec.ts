@@ -78,7 +78,7 @@ async function saveSettings(page: Page) {
     .click();
 }
 
-async function minimizeOwnDecision(page: Page) {
+async function minimizeOwnDecision(page: Page, timeout = 30_000) {
   // Director completion and React's native dialog opening are separate steps.
   // Wait for the current decision to be represented before opening a board tool.
   await expect
@@ -111,7 +111,7 @@ async function minimizeOwnDecision(page: Page) {
               ?.getAttribute("data-decision") === key
           );
         }),
-      { timeout: 30_000 },
+      { timeout },
     )
     .toBe(true);
   if (await page.locator(".decision-popup[open]").count()) {
@@ -216,17 +216,20 @@ test.describe("low graphics", () => {
       "low",
     );
     await expect(toolbarGraphics).toHaveAccessibleName(lowLabel);
+    await page.getByRole("button", { name: "Menu pause", exact: true }).click();
     await page
-      .getByRole("button", { name: "Vue et animations", exact: true })
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Réglages", exact: true })
       .click();
+    await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
     const drawerGraphics = page.locator(
-      ".view-settings [data-graphics-quality]",
+      ".pause-dialog [data-graphics-quality]",
     );
     await expect(drawerGraphics).toHaveAttribute(
       "data-graphics-quality",
       "low",
     );
-    await toolbarGraphics.press("Enter");
+    await drawerGraphics.press("Enter");
     await expect(toolbarGraphics).toHaveAccessibleName(highLabel);
     await expect(drawerGraphics).toHaveAccessibleName(highLabel);
     await expect(drawerGraphics).toHaveAttribute(
@@ -264,6 +267,16 @@ test.describe("low graphics", () => {
     ).toBe(true);
     await original.dispose();
     await drawerGraphics.press("Escape");
+    await expect(
+      page
+        .locator(".pause-dialog")
+        .getByRole("button", { name: "Réglages", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".pause-dialog")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Menu pause", exact: true }),
+    ).toBeFocused();
     await roll.click();
     await expect
       .poll(
@@ -311,8 +324,8 @@ test.describe("low graphics", () => {
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {
-  // Two real turn waits each allow 60 s, in addition to the viewport checks.
-  test.setTimeout(180_000);
+  // Real bot rounds and the five desktop viewport checks share this budget.
+  test.setTimeout(240_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
@@ -751,31 +764,24 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     director.reset(snapshot);
   }, presentationBase);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page
-    .getByRole("button", { name: "Vue et animations", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Menu pause", exact: true }).click();
+  await page.getByRole("button", { name: "Réglages", exact: true }).click();
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
   await expect(page.getByLabel("Réduire les animations")).toBeChecked();
-  await page.getByLabel("Vitesse des animations").selectOption("2");
-  await expect(page.getByLabel("Vitesse des animations")).toHaveValue("2");
   await page.getByLabel("Réduire les animations").uncheck();
   await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
   await page.getByLabel("Réduire les animations").check();
+  await expect(page.getByLabel("Vitesse des animations")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Terminer l’animation en cours" }),
-  ).toBeDisabled();
-  // Keep the speed setting regression; the separate controlled queue test
-  // verifies Skip without racing the duration of a random real roll.
-  await page.getByLabel("Vitesse des animations").selectOption("1");
-  await expect(page.getByLabel("Vitesse des animations")).toHaveValue("1");
-  await page.getByLabel("Vitesse des animations").press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Vue et animations", exact: true }),
+    page.getByRole("button", { name: "Menu pause", exact: true }),
   ).toBeFocused();
   const previousTime = await page.locator(".match-clock").innerText();
   await expect
     .poll(() => page.locator(".match-clock").innerText())
     .not.toBe(previousTime);
-  const previousDeadline = await page.evaluate(async () => {
+  const previousOwnRolls = await page.evaluate(async () => {
     const modulePath =
       performance
         .getEntriesByType("resource")
@@ -783,15 +789,17 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
           entry.name.includes("/src/client/director/director.ts"),
         )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
-    return director.getSnapshot().serverState?.pending?.deadline as
-      | number
-      | undefined;
+    return director
+      .getSnapshot()
+      .history.filter(
+        (event: GameEvent) => event.type === "DiceRolled" && event.seat === 0,
+      ).length;
   });
   await roll.click();
   await expect
     .poll(
       async () =>
-        page.evaluate(async (deadline) => {
+        page.evaluate(async (ownRolls) => {
           const modulePath =
             performance
               .getEntriesByType("resource")
@@ -800,25 +808,22 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
               )?.name ?? "/src/client/director/director.ts";
           const { director } = await import(modulePath);
           const snapshot = director.getSnapshot();
-          const state = snapshot.viewState as PublicState | null;
           return (
             !snapshot.busy &&
-            state?.pending != null &&
-            state.pending.seat === 0 &&
-            state.pending.deadline !== deadline &&
-            snapshot.history.some(
+            snapshot.history.filter(
               (event: GameEvent) =>
                 event.type === "DiceRolled" && event.seat === 0,
-            )
+            ).length > ownRolls
           );
-        }, previousDeadline),
-      // A real roll can end the turn (Island, Chance), so the next own decision
-      // may wait for a full bot round, like the other 60 s waits in this file.
+        }, previousOwnRolls),
+      // Keep main's server-paced roll allowance; the next own decision is
+      // checked separately below when this roll hands the turn to the bots.
       { timeout: 60_000 },
     )
     .toBe(true);
-  // Native decisions protect focus; minimize without sending a gameplay action.
-  await minimizeOwnDecision(page);
+  // A legal roll may hand the turn to the bots. Let their server-paced turns
+  // finish before checking tools during the next stable human decision.
+  await minimizeOwnDecision(page, 120_000);
   await page
     .getByRole("button", { name: "Carnet de voyage", exact: true })
     .click();
@@ -895,9 +900,9 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   );
   await expect(page.locator(".match-connection")).toHaveText("");
   await expect(
-    page.getByRole("button", { name: "Quitter la partie", exact: true }),
+    page.getByRole("button", { name: "Menu pause", exact: true }),
   ).toBeVisible();
-  await minimizeOwnDecision(page);
+  await minimizeOwnDecision(page, 120_000);
   await page.getByRole("button", { name: "Comment jouer" }).click();
   await expectDiceHelp(page.locator(".help-dialog"));
   await expect(page.locator(".dice-explanation-link")).toHaveCount(1);
@@ -906,11 +911,11 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   expect(errors).toEqual([]);
 });
 
-test("a real pointer click skips a controlled presentation queue synchronously", async ({
+test("returning to a visible tab synchronously recovers an unfinished presentation queue", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByLabel("Votre nom de joueur").fill("Skip QA");
+  await page.getByLabel("Votre nom de joueur").fill("Recovery QA");
   await playWithBots(page);
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
@@ -919,8 +924,8 @@ test("a real pointer click skips a controlled presentation queue synchronously",
     "data-scene-ready",
     "true",
   );
-  // Only this tab's presentation changes. Six normal movement events provide a
-  // stable pointer window without changing the server or a real roll's timing.
+  // Only this tab's presentation changes. Six normal movement events leave a
+  // queue to recover without changing the server or a real roll's timing.
   const original = await page.evaluate(async () => {
     const modulePath =
       performance
@@ -931,25 +936,9 @@ test("a real pointer click skips a controlled presentation queue synchronously",
     const { director } = await import(modulePath);
     const snapshot = director.getSnapshot().serverState as PublicState | null;
     if (!snapshot) throw new Error("Expected the current match snapshot");
-    window.addEventListener(
-      "click",
-      (event) => {
-        if (
-          !(event.target instanceof Element) ||
-          !event.target.closest(".match-caption button")
-        )
-          return;
-        const current = director.getSnapshot();
-        document.documentElement.dataset.skipSynced = String(
-          !current.busy && current.viewState === current.serverState,
-        );
-      },
-      { once: true },
-    );
     const player = snapshot.players.find((candidate) => candidate.seat === 0);
     if (!player) throw new Error("Expected the human seat");
     director.setReducedMotion(false);
-    director.setSpeed(1);
     director.receive(
       Array.from(
         { length: 6 },
@@ -965,27 +954,25 @@ test("a real pointer click skips a controlled presentation queue synchronously",
     );
     return snapshot;
   });
-  const skip = page.getByRole("button", {
-    name: "Passer l’animation ↗",
-    exact: true,
+  const recovered = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .find((entry) =>
+          entry.name.includes("/src/client/director/director.ts"),
+        )?.name ?? "/src/client/director/director.ts";
+    const { director } = await import(modulePath);
+    const before = director.getSnapshot();
+    const queued = before.busy && before.viewState !== before.serverState;
+    document.dispatchEvent(new Event("visibilitychange"));
+    const after = director.getSnapshot();
+    return {
+      queued,
+      synced: !after.busy && after.viewState === after.serverState,
+    };
   });
-  await expect(skip).toBeEnabled();
-  expect(
-    await skip.evaluate((button) => {
-      const rect = button.getBoundingClientRect();
-      const hit = document.elementFromPoint(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-      );
-      return hit !== null && button.contains(hit);
-    }),
-  ).toBe(true);
-  await skip.click();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-skip-synced",
-    "true",
-  );
-  await expect(page.locator(".match-caption button")).toBeDisabled();
+  expect(recovered).toEqual({ queued: true, synced: true });
+  await expect(page.locator(".match-caption button")).toHaveCount(0);
   await page.evaluate(async (snapshot) => {
     const modulePath =
       performance
@@ -1183,7 +1170,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
   }
 });
 
-test("illustrated cards play in order and cancel safely on skip and reconnect", async ({
+test("illustrated cards play in order and cancel safely on recovery and reconnect", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -1233,7 +1220,6 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
     const state = director.getSnapshot().serverState as PublicState | null;
     if (!state) throw new Error("Expected match snapshot");
     director.setReducedMotion(false);
-    director.setSpeed(1);
     director.receive([
       { type: "CardDrawn", seat: 0, card: "Windfall", kept: false },
       {
@@ -1284,7 +1270,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeFocused();
-  // A skip resolves the waiting presenter. Its old completion cannot hide a new card.
+  // Visibility recovery resolves the presenter. Its old completion cannot hide a new card.
   await page.evaluate(async () => {
     const modulePath =
       performance
@@ -1307,7 +1293,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
           entry.name.includes("/src/client/director/director.ts"),
         )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
-    director.skip();
+    document.dispatchEvent(new Event("visibilitychange"));
     director.receive([
       { type: "CardDrawn", seat: 1, card: "Guardian Angel", kept: true },
     ]);
@@ -1658,7 +1644,7 @@ test("the room leader seats a local player, admits a friend and brings everyone 
     );
     // Ending the match asks first, then every screen returns to the lobby.
     await page
-      .getByRole("button", { name: "Inviter et voir les réglages" })
+      .getByRole("button", { name: "Inviter des joueurs", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Ramener tout le monde au salon" })

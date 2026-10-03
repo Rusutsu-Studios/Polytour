@@ -29,6 +29,13 @@ import {
   PROTOCOL_VERSION,
   RoomConfigSchema,
 } from "../shared/protocol/index.js";
+import {
+  DEBUG_PING_REQUEST,
+  DEBUG_PING_RESPONSE,
+  ROOM_DEBUG_VERSION,
+  type RoomDiagnostics,
+} from "../shared/protocol/room-diagnostics.js";
+import type { WorkerDiagnostics } from "../shared/protocol/worker-diagnostics.js";
 import type { DiceCommitment, DiceProof } from "../shared/randomness/types.js";
 import { createEngineContext } from "./chance-randomness.js";
 import { prepareDice, resolveDice } from "./randomness.js";
@@ -36,6 +43,7 @@ import {
   CURRENT_STATE_VERSION,
   migrateSavedState,
 } from "./state-migrations.js";
+import { workerDiagnostics } from "./worker-diagnostics.js";
 
 type RoomMeta = { roomCode: string; config: RoomConfig; createdAt: number };
 type StoredSeat = {
@@ -60,6 +68,7 @@ type Attachment = {
   invalid: number;
   tokens: number;
   rateAt: number;
+  workerDiagnostics?: WorkerDiagnostics;
 };
 type PendingDice = {
   commitment: DiceCommitment;
@@ -115,6 +124,9 @@ export class GameRoom extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(DEBUG_PING_REQUEST, DEBUG_PING_RESPONSE),
+    );
     ctx.blockConcurrencyWhile(async () => {
       // Looking up an unknown room must not allocate persistent tables.
       this.schemaReady =
@@ -530,7 +542,11 @@ export class GameRoom extends DurableObject<Env> {
     if (existing.length >= 2)
       return Response.json({ error: "too-many-connections" }, { status: 429 });
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1]);
+    // Tags name the socket at connection time for inspection only. A waiting
+    // member's socket can take a seat later, so the room reads attachments.
+    this.ctx.acceptWebSocket(pair[1], [
+      entry ? `seat:${entry.seat}` : `member:${member?.id}`,
+    ]);
     pair[1].serializeAttachment({
       seat: entry?.seat ?? null,
       member: member?.id ?? null,
@@ -538,6 +554,7 @@ export class GameRoom extends DurableObject<Env> {
       invalid: 0,
       tokens: 40,
       rateAt: Date.now(),
+      workerDiagnostics: workerDiagnostics(request),
     } satisfies Attachment);
     // The device is back for its own seat and every local player on it.
     if (entry) {
@@ -582,6 +599,49 @@ export class GameRoom extends DurableObject<Env> {
     this.send(socket, { type: "reject", id, reason, message });
   }
 
+  private roomDiagnostics(attachment: Attachment): RoomDiagnostics {
+    const peers = new Map<Seat, RoomDiagnostics["peers"][number]>();
+    const ownPoint = attachment.workerDiagnostics?.cloudflare;
+    // Seated devices only: someone waiting for a place has no seat to show.
+    if (attachment.seat !== null)
+      peers.set(attachment.seat, {
+        seat: attachment.seat,
+        colo: ownPoint?.colo ?? null,
+        location: ownPoint?.location ?? null,
+        region: ownPoint?.region ?? null,
+      });
+    for (const socket of this.openSockets()) {
+      const peer = socket.deserializeAttachment() as Attachment | null;
+      if (!peer?.synced || peer.seat === null || peers.has(peer.seat)) continue;
+      const point = peer.workerDiagnostics?.cloudflare;
+      peers.set(peer.seat, {
+        seat: peer.seat,
+        colo: point?.colo ?? null,
+        location: point?.location ?? null,
+        region: point?.region ?? null,
+      });
+    }
+    const jurisdiction = this.ctx.id.jurisdiction;
+    return {
+      worker: attachment.workerDiagnostics ?? {
+        worker: "polytour",
+        hostname: "Unknown",
+        runtime: "unknown",
+        cloudflare: null,
+      },
+      room: {
+        className: "GameRoom",
+        storage: "sqlite",
+        location: null,
+        jurisdiction:
+          jurisdiction === "eu" || jurisdiction === "fedramp"
+            ? jurisdiction
+            : null,
+      },
+      peers: [...peers.values()].sort((left, right) => left.seat - right.seat),
+    };
+  }
+
   async webSocketMessage(
     socket: WebSocket,
     frame: string | ArrayBuffer,
@@ -623,6 +683,15 @@ export class GameRoom extends DurableObject<Env> {
     if (message.type === "ping") {
       if (attachment.synced)
         this.send(socket, { type: "pong", t: message.t, serverNow: now });
+      return;
+    }
+    // Authenticated attachments are sufficient; diagnostics never read game SQL.
+    if (message.type === "debug-info") {
+      if (attachment.synced)
+        this.send(socket, {
+          type: "room-diagnostics",
+          value: this.roomDiagnostics(attachment),
+        });
       return;
     }
     let saved: { state: GameState; seq: number } | null;
@@ -739,6 +808,7 @@ export class GameRoom extends DurableObject<Env> {
     this.send(socket, {
       type: "welcome",
       protocolVersion: PROTOCOL_VERSION,
+      roomDebugVersion: ROOM_DEBUG_VERSION,
       you: { seat: attachment.seat, member: attachment.member ?? null },
       seq,
       snapshot: saved && !replay ? toPublic(saved.state) : null,

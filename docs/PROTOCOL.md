@@ -1,8 +1,10 @@
 # Client ↔ server protocol
 
-JSON text frames over one WebSocket per player (`/ws/room/:code`). Every message is
-a discriminated union on `type`, defined once with Zod in `src/shared/protocol/` and
-imported by both client and worker. Binary encoding (e.g. MessagePack) is a later
+JSON text frames over one WebSocket per player (`/ws/room/:code`). Gameplay and
+diagnostic metadata use a discriminated union on `type`, defined once with Zod in
+`src/shared/protocol/` and imported by both client and worker. A fixed pair of
+transport-only debug ping/pong strings is described below. Binary encoding
+(e.g. MessagePack) is a later
 optimization only if profiling says so — messages are small and infrequent.
 
 ## Implemented playable protocol
@@ -10,6 +12,14 @@ optimization only if profiling says so — messages are small and infrequent.
 `src/shared/protocol/index.ts` is the current executable contract. It supersedes
 the older illustrative launch sketches below wherever they differ. The scaffold
 debug socket has been removed; `/api/health` remains.
+
+- `GET /api/health` returns `{status: "ok"}` with `Cache-Control: no-store`.
+  Adding `?debug=1` includes `diagnostics` (the type in
+  `shared/protocol/worker-diagnostics.ts`): configured Worker name, request
+  hostname, runtime (`cloudflare`, `local` or `unknown`) and nullable Cloudflare
+  entry-point metadata (`colo`, nullable location and region). No room state,
+  visitor geography or IP address is returned. Unknown POP codes remain visible
+  without a location mapping. This endpoint does not locate the room's DO.
 
 - `POST /api/rooms {name, config?, bots?}` returns 201 and `{roomCode, seat, token}`.
   `bots` (0–3, default 0) seats server bots after the creator; Play asks for three.
@@ -40,6 +50,22 @@ debug socket has been removed; `/api/health` remains.
   fresh `welcome` with its new seat; when the leader returns to the lobby, every
   socket gets a `welcome` with `seq: 0` and no snapshot.
   Replay then sends the contiguous events and any persisted dice proof receipts.
+- New servers optionally advertise `roomDebugVersion: 1` in `welcome`. Only then,
+  while Debug is open, the client requests `debug-info` once on open/reconnect.
+  The socket-specific `room-diagnostics {value}` response is validated by
+  `shared/protocol/room-diagnostics.ts`. It contains the requesting socket's saved
+  Worker ingress metadata, connected seats' ingress POPs, the `GameRoom` class,
+  local SQLite storage and an optional enforced jurisdiction. Exact physical DO
+  location is always null: it is not exposed by the runtime. No IP, capability,
+  DO identifier or database contents are exposed. Diagnostics are neither game
+  events nor broadcasts and do not change the event sequence or game state.
+- The fixed strings `polytour-debug-ping-v1` / `polytour-debug-pong-v1` measure
+  room WebSocket round-trip time every five seconds while Debug is open, visible
+  and online. `setWebSocketAutoResponse` answers without running game JavaScript,
+  SQL or alarms. The client handles the exact pong before JSON parsing. Its
+  bounded per-socket FIFO retains expired/suspended attempts so a late fixed pong
+  cannot be attributed to a new measurement. Socket replacement resets that FIFO.
+  Old servers without the capability are never sent these new debug messages.
 - The room leader is `lobby.hostSeat`: the creator, until they hand the role on.
   Leader operations are `start {fillBots}`, `settings {config}`, `add-bot {seat}`,
   `remove-bot {seat}` (these four in the lobby only), `transfer-host {seat}`,

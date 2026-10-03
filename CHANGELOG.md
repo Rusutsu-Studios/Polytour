@@ -19,10 +19,18 @@ has been published, and it does not reconstruct earlier development history.
   a place (#33).
 - Players sharing one PC: any seated player can seat a local player, whose
   decisions appear on that screen labelled with their name (#44).
+- A pause menu with Game, Video, Audio and Debug settings; the game continues
+  while the menu is open, and audio controls are marked coming soon (#35).
+- A five-second Cloudflare ping indicator and on-demand room routing and
+  WebSocket latency diagnostics for connected players.
 
 ### Changed
 
 - Protocol version 4: open browsers reload after the deploy that ships it.
+- Personal settings live in the pause menu; the sliders tool shows fixed match
+  rules. Video settings retain the High/Low graphics control.
+- Removed manual animation finish/skip and speed controls, preserving reduced
+  motion, automatic catch-up and reconnect recovery.
 
 ### Fixed
 

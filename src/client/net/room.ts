@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { Action, Seat } from "../../shared/engine/index.js";
 import type {
   ClientMessage,
@@ -10,8 +16,10 @@ import type {
   ServerMessage,
 } from "../../shared/protocol/index.js";
 import { PROTOCOL_VERSION } from "../../shared/protocol/index.js";
+import { DEBUG_PING_RESPONSE } from "../../shared/protocol/room-diagnostics.js";
 import { director } from "../director/director.js";
 import { translate } from "../i18n.js";
+import { RoomDebugController } from "./room-debug.js";
 import { parseRoomResponse, RoomCredentialsSchema } from "./room-response.js";
 import { parseServerMessage } from "./server-message.js";
 
@@ -78,12 +86,48 @@ export function useRoom(credentials: RoomCredentials | null) {
   const requestTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const [debugController] = useState(() => new RoomDebugController());
+  const [debugActive, setDebugGate] = useState(false);
+  const roomDebug = useSyncExternalStore(
+    debugController.subscribe,
+    debugController.getSnapshot,
+  );
+  const setDebugActive = useCallback(
+    (active: boolean) => {
+      if (active)
+        debugController.setEnvironment(!document.hidden, navigator.onLine);
+      debugController.setActive(active);
+      setDebugGate(active);
+    },
+    [debugController],
+  );
 
   useEffect(() => {
+    if (!debugActive) return;
+    const updateEnvironment = () =>
+      debugController.setEnvironment(!document.hidden, navigator.onLine);
+    updateEnvironment();
+    document.addEventListener("visibilitychange", updateEnvironment);
+    window.addEventListener("online", updateEnvironment);
+    window.addEventListener("offline", updateEnvironment);
+    return () => {
+      document.removeEventListener("visibilitychange", updateEnvironment);
+      window.removeEventListener("online", updateEnvironment);
+      window.removeEventListener("offline", updateEnvironment);
+      debugController.setEnvironment(false, navigator.onLine);
+    };
+  }, [debugActive, debugController]);
+
+  useEffect(() => {
+    function updateConnection(value: Connection) {
+      setConnection(value);
+      debugController.setConnection(value);
+    }
     if (!credentials) {
       setLobby(null);
       setYou(null);
-      setConnection("offline");
+      debugController.setSocket(null);
+      updateConnection("offline");
       return;
     }
     let disposed = false;
@@ -92,20 +136,21 @@ export function useRoom(credentials: RoomCredentials | null) {
     let incompatible = false;
     function connect() {
       if (disposed || !credentials) return;
-      setConnection(attempt || retry > 0 ? "reconnecting" : "connecting");
+      updateConnection(attempt || retry > 0 ? "reconnecting" : "connecting");
       const scheme = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(
         `${scheme}://${window.location.host}/ws/room/${credentials.roomCode}`,
         ["polytour", `seat.${credentials.token}`],
       );
       socket.current = ws;
+      debugController.setSocket(ws);
       let welcomed = false;
       let syncing = false;
       let welcomeTimer: ReturnType<typeof setTimeout> | undefined;
       function sync() {
         if (syncing || ws.readyState !== WebSocket.OPEN) return;
         syncing = true;
-        if (welcomed) setConnection("reconnecting");
+        if (welcomed) updateConnection("reconnecting");
         ws.send(
           JSON.stringify({
             type: "sync",
@@ -128,6 +173,10 @@ export function useRoom(credentials: RoomCredentials | null) {
       ws.addEventListener("message", (event: MessageEvent<unknown>) => {
         if (disposed || socket.current !== ws || typeof event.data !== "string")
           return;
+        if (event.data === DEBUG_PING_RESPONSE) {
+          debugController.receivePong(ws);
+          return;
+        }
         let message: ServerMessage;
         try {
           message = parseServerMessage(event.data);
@@ -160,7 +209,8 @@ export function useRoom(credentials: RoomCredentials | null) {
             syncing = false;
             attempt = 0;
             if (welcomeTimer) clearTimeout(welcomeTimer);
-            setConnection("online");
+            debugController.welcome(ws, message.roomDebugVersion);
+            updateConnection("online");
             setError(null);
             sequence.current = message.seq;
             setLobby(message.lobby);
@@ -176,6 +226,9 @@ export function useRoom(credentials: RoomCredentials | null) {
             setPendingOp(null);
             pendingId.current = null;
             if (requestTimer.current) clearTimeout(requestTimer.current);
+            break;
+          case "room-diagnostics":
+            debugController.receiveDiagnostics(ws, message.value);
             break;
           case "events":
             if (syncing) break;
@@ -332,12 +385,13 @@ export function useRoom(credentials: RoomCredentials | null) {
       ws.addEventListener("close", (event) => {
         if (welcomeTimer) clearTimeout(welcomeTimer);
         if (disposed || socket.current !== ws) return;
+        debugController.disconnect(ws);
         requestSync.current = null;
         if (requestTimer.current) clearTimeout(requestTimer.current);
         setPendingOp(null);
         pendingId.current = null;
         if (incompatible) {
-          setConnection("offline");
+          updateConnection("offline");
           return;
         }
         if (
@@ -345,7 +399,7 @@ export function useRoom(credentials: RoomCredentials | null) {
           event.code === 4003 ||
           event.reason === "Room expired"
         ) {
-          setConnection("offline");
+          updateConnection("offline");
           setError(
             event.reason === "Room expired"
               ? translate(
@@ -365,7 +419,7 @@ export function useRoom(credentials: RoomCredentials | null) {
           return;
         }
         attempt += 1;
-        setConnection(attempt > 5 ? "offline" : "reconnecting");
+        updateConnection(attempt > 5 ? "offline" : "reconnecting");
         if (attempt <= 5)
           reconnectTimer = setTimeout(
             connect,
@@ -380,7 +434,8 @@ export function useRoom(credentials: RoomCredentials | null) {
           );
       });
       ws.addEventListener("error", () => {
-        if (!disposed && socket.current === ws) setConnection("reconnecting");
+        if (!disposed && socket.current === ws)
+          updateConnection("reconnecting");
       });
     }
     connect();
@@ -388,11 +443,12 @@ export function useRoom(credentials: RoomCredentials | null) {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (requestTimer.current) clearTimeout(requestTimer.current);
+      if (socket.current) debugController.disconnect(socket.current);
       socket.current?.close();
       socket.current = null;
       requestSync.current = null;
     };
-  }, [credentials, retry]);
+  }, [credentials, retry, debugController]);
 
   function send(message: ClientMessage) {
     if (
@@ -439,6 +495,8 @@ export function useRoom(credentials: RoomCredentials | null) {
     randomness,
     pending,
     pendingOp,
+    roomDebug,
+    setDebugActive,
     clearError: () => setError(null),
     reconnect: () => setRetry((value) => value + 1),
     /** A local player's seat acts on this device's behalf when given. */
