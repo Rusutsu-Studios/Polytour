@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
-import { BOARD } from "../../shared/board/index.js";
+import { type BoardRule, getBoard } from "../../shared/board/index.js";
 import { useLocale } from "../i18n.js";
 import { tileName } from "../ui/board-display.js";
 import {
@@ -198,11 +198,18 @@ function Airport() {
 // Screen-down offset (toward the camera) of each corner's printed name.
 const LABEL_DROP: Record<number, number> = { 8: 0.42, 16: 0, 24: 0.42 };
 
-function CornerLabel({ corner }: { corner: number }) {
+function CornerLabel({
+  corner,
+  boardRule,
+}: {
+  corner: number;
+  boardRule: BoardRule;
+}) {
   const { locale } = useLocale();
   const texture = useMemo(
-    () => labelTexture(tileName(corner).toLocaleUpperCase(locale)),
-    [corner, locale],
+    () =>
+      labelTexture(tileName(corner, { boardRule }).toLocaleUpperCase(locale)),
+    [corner, locale, boardRule],
   );
   useEffect(() => () => texture.dispose(), [texture]);
   const [x, z] = tileCenter(corner);
@@ -223,17 +230,25 @@ function CornerLabel({ corner }: { corner: number }) {
   );
 }
 
-export function Landmarks() {
+export function Landmarks({
+  boardRule = "country",
+}: {
+  boardRule?: BoardRule;
+}) {
   return (
     <group>
       <Island />
       <Arena />
       <Airport />
-      {BOARD.filter(
-        (tile) => tile.index % 8 === 0 && tile.kind !== "start",
-      ).map((tile) => (
-        <CornerLabel key={tile.index} corner={tile.index} />
-      ))}
+      {getBoard(boardRule)
+        .filter((tile) => tile.index % 8 === 0 && tile.kind !== "start")
+        .map((tile) => (
+          <CornerLabel
+            key={tile.index}
+            corner={tile.index}
+            boardRule={boardRule}
+          />
+        ))}
     </group>
   );
 }

@@ -20,11 +20,12 @@ timer, then expires normally; reconnect restores the pending work without moving
 either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
 an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
 for the write-quota incident and measured regressions.
-State version 1 is retained. New rooms freeze rules version 4 (reference
-economy, staged hotels). Existing version-3 rooms keep the prototype economy and
-version-2 rooms also keep their original hotel progression. Unknown saved
-versions are rejected before a lobby or active match can continue under
-different rules.
+State version 1 is retained, with the explicit migration ladder from PR #19.
+New rooms freeze rules version 5: country-grouped board, reference economy and
+staged hotels. Existing version-2/3 rooms retain the original board, prototype
+prices, travel and sale rules; version 2 also keeps its original hotel progression.
+The competing unshipped version-4 definitions are not silently guessed. Unknown
+or contradictory saved markers are rejected before a room can change rules.
 
 The React client lazy-loads the Three.js/R3F board and uses a Director to advance
 the rendered state separately from authoritative state. Original procedural
@@ -244,18 +245,19 @@ game:
   `incompatible-saved-match` rather than played under a shape the engine does not
   understand; that includes a save written by a newer build, which is what a
   rollback meets.
-- **Rule and balance changes never rewrite a match in progress.** Room metadata
-  records the `rulesVersion` it was created with and the engine honors the frozen
-  config until the game ends (the current maximum is 120 minutes). New rooms use
-  version 4: `hotelPurchaseRule: "staged-hotels"` and `economyRule: "reference"`.
-  Version 3 keeps staged hotels with the prototype economy; its active saves have
-  no `economyRule` marker, which the engine reads as `"prototype"`, and its lobbies
-  pass `"prototype"` when they start. Version-2 active saves without a hotel marker
-  retain the old lap-only hotel rule; version-2 lobbies pass `"legacy-lap"` and
-  `"prototype"`. Loading accepts the three rule versions and rejects a
-  contradictory marker. Room settings never accept either marker. State JSON
-  remains `stateVersion: 1`; no schema or class migration is introduced for
-  these optional config fields.
+- **Rule and balance changes never rewrite a match in progress.** Metadata records
+  `rulesVersion`; public config freezes the board and economy selectors. New rooms
+  use version 5 with country-grouped tiles, reference economy, staged hotels and
+  full nominal sale refunds. A version-2/3 save without the newer selectors uses
+  its original legacy board and prototype economy. Version-2 lobbies start with
+  lap-only hotels, while version-3 lobbies retain staged hotels; both keep their
+  original 50% refunds and unrestricted travel. Board selection reaches the engine,
+  economy helpers, client labels, textures, town plots and tile inspection, so an
+  old tile index never becomes a different property after deployment.
+- The protocol is version 3, forcing old browser clients to reload before they
+  interpret new board indices. Internal rule markers are server-owned and cannot
+  be submitted as room settings. The state migration ladder checks older shapes
+  before engine access; no Durable Object class migration is introduced.
 - A DO class lifecycle change (new, renamed, or deleted class in `migrations`) cannot
   be rolled back or deployed gradually: ship it on its own.
 

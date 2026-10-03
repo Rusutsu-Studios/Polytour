@@ -58,8 +58,19 @@ type PendingDice = {
 };
 type EventRow = { seq: number; json: string; proof: string | null };
 const BOT_NAMES = ["Iris", "Milo", "Nova", "Atlas"] as const;
-/** Frozen per room: 4 is the country-grouped board with restricted World Tours. */
-const RULES_VERSION = 4;
+/** 2–3 are original production rooms; 5 combines the board and reference rules. */
+const RULES_VERSION = 5;
+function frozenRules(version: number | null) {
+  if (version !== 2 && version !== 3 && version !== 4 && version !== 5)
+    throw new Error("Unsupported saved rules version");
+  return {
+    boardRule: version === 5 ? ("country" as const) : ("legacy" as const),
+    economyRule: version >= 4 ? ("reference" as const) : ("prototype" as const),
+    hotelPurchaseRule:
+      version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
+    sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
+  };
+}
 
 function newToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
@@ -143,15 +154,7 @@ export class GameRoom extends DurableObject<Env> {
       .toArray()[0];
     if (!row && this.readMeta("room") === null) return null;
     const rulesVersion = this.readMeta<number>("rulesVersion");
-    if (
-      (row || this.readMeta("room") !== null) &&
-      (this.readMeta<number>("stateVersion") !== 1 ||
-        (rulesVersion !== 2 && rulesVersion !== 3 && rulesVersion !== 4))
-    ) {
-      throw new Error(
-        "Unsupported saved match version; this room cannot use different rules silently",
-      );
-    }
+    const frozen = frozenRules(rulesVersion);
     // A deploy restarts every room mid-game, so this build has to read what the
     // previous one wrote: climb the saved shape to CURRENT_STATE_VERSION, and
     // refuse a shape no ladder reaches rather than hand the engine something it
@@ -176,9 +179,19 @@ export class GameRoom extends DurableObject<Env> {
     const hotelRule = state.config.hotelPurchaseRule;
     const economy = state.config.economyRule;
     const prototypeEconomy = economy === undefined || economy === "prototype";
+    const board = state.config.boardRule;
+    const sale = state.config.sellBackPercent;
     if (
-      (rulesVersion === 4 &&
-        (hotelRule !== "staged-hotels" || economy !== "reference")) ||
+      (rulesVersion !== null &&
+        rulesVersion >= 4 &&
+        (hotelRule !== frozen.hotelPurchaseRule ||
+          economy !== frozen.economyRule ||
+          board !== frozen.boardRule ||
+          sale !== frozen.sellBackPercent)) ||
+      (rulesVersion !== null &&
+        rulesVersion <= 3 &&
+        ((board !== undefined && board !== "legacy") ||
+          (sale !== undefined && sale !== 50))) ||
       (rulesVersion === 3 &&
         (hotelRule !== "staged-hotels" || !prototypeEconomy)) ||
       (rulesVersion === 2 &&
@@ -214,10 +227,8 @@ export class GameRoom extends DurableObject<Env> {
         config: RoomConfigSchema.parse(config),
         createdAt: Date.now(),
       } satisfies RoomMeta);
-      this.writeMeta("stateVersion", 1);
-      // 4: reference economy and staged hotels; 3: prototype economy, staged
-      // hotels; 2: prototype economy, lap-only hotels.
-      this.writeMeta("rulesVersion", 4);
+      this.writeMeta("stateVersion", CURRENT_STATE_VERSION);
+      this.writeMeta("rulesVersion", RULES_VERSION);
       this.ctx.storage.sql.exec(
         "INSERT INTO seats(seat,name,control,token_hash) VALUES(0,?,'human',?)",
         name,
@@ -268,6 +279,7 @@ export class GameRoom extends DurableObject<Env> {
           ? "finished"
           : "playing",
       config: room.config,
+      ...frozenRules(this.readMeta<number>("rulesVersion")),
       seats: ([0, 1, 2, 3] as const).map((seat) => {
         const entry = seats.find((candidate) => candidate.seat === seat);
         return {
@@ -635,8 +647,7 @@ export class GameRoom extends DurableObject<Env> {
       {
         ...room.config,
         gameId: room.roomCode,
-        hotelPurchaseRule: rulesVersion === 2 ? "legacy-lap" : "staged-hotels",
-        economyRule: rulesVersion === 4 ? "reference" : "prototype",
+        ...frozenRules(rulesVersion),
       },
       allSeats,
       seed,

@@ -33,5 +33,7 @@ export function boardPickActions(
 /** Changes whenever the server opens a new decision, so a stale pick resets. */
 export function boardPickKey(state: PublicState | null): string {
   const pending = state?.pending;
-  return pending ? `${pending.kind}:${pending.seat}:${pending.deadline}` : "";
+  return pending
+    ? `${state?.gameId}:${pending.kind}:${pending.seat}:${pending.deadline}`
+    : "";
 }

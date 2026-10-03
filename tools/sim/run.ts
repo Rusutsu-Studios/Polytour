@@ -20,7 +20,13 @@ const rules = (
 ) as EconomyRule;
 if (rules !== "reference" && rules !== "prototype")
   throw new RangeError("--rules must be reference or prototype");
-const config = { ...SIM_CONFIG, economyRule: rules, roundLimit };
+const config = {
+  ...SIM_CONFIG,
+  economyRule: rules,
+  boardRule: rules === "reference" ? ("country" as const) : ("legacy" as const),
+  sellBackPercent: rules === "reference" ? (100 as const) : (50 as const),
+  roundLimit,
+};
 const results = Array.from({ length: games }, (_, seed) =>
   simulateGame(seed, config, undefined, simSeats(players)),
 );
@@ -36,6 +42,7 @@ for (const result of results) {
 const report = {
   games,
   economyRule: rules,
+  boardRule: config.boardRule,
   config: `${["", "", "two", "three", "four"][players]} medium bots, ${roundLimit}-round limit, 3 seeded festivals; ${rules === "reference" ? "reference grid and fees" : "captured costs + provisional rents"}`,
   medianRounds: rounds[Math.floor((games - 1) * 0.5)],
   p90Rounds: rounds[Math.floor((games - 1) * 0.9)],

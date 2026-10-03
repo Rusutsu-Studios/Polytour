@@ -4,13 +4,38 @@ import {
   BOARD,
   BOARD_SIZE,
   COUNTRY_IDS,
+  getBoard,
   getCountryCityTiles,
   getTile,
   isCityTile,
   isResortTile,
+  LEGACY_BOARD,
 } from "./index.js";
 
 describe("board configuration", () => {
+  it("selects the original board for missing saved markers without moving any tiles", () => {
+    expect(getBoard({})).toBe(LEGACY_BOARD);
+    expect(getBoard({ boardRule: "country" })).toBe(BOARD);
+    expect(getBoard("legacy").map((tile) => tile.index)).toEqual(
+      Array.from({ length: 32 }, (_, index) => index),
+    );
+    expect(
+      getBoard({})
+        .filter((tile) => tile.kind === "chance")
+        .map((tile) => tile.index),
+    ).toEqual([3, 14, 19]);
+    expect(
+      getBoard({})
+        .filter(isResortTile)
+        .map((tile) => tile.index),
+    ).toEqual([5, 12, 21, 28]);
+    expect(getTile(4, {})?.kind).toBe("city");
+    expect(getTile(5, {})?.kind).toBe("resort");
+    expect(getTile(29, {})?.kind).toBe("tax");
+    expect(
+      COUNTRY_IDS.map((country) => getCountryCityTiles(country, {}).length),
+    ).toEqual([2, 3, 3, 2, 3, 2, 3, 2]);
+  });
   it("contains every index exactly once", () => {
     expect(BOARD).toHaveLength(BOARD_SIZE);
     expect(BOARD.map((tile) => tile.index)).toEqual(

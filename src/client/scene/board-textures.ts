@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BOARD, ECONOMY } from "../../shared/board/index.js";
+import { type BoardRule, ECONOMY, getBoard } from "../../shared/board/index.js";
 import type { Seat } from "../../shared/engine/index.js";
 import type { Locale } from "../i18n.js";
 import {
@@ -33,9 +33,9 @@ import {
   POND,
   RING_HALF_WIDTH,
   RING_RADIUS,
-  TOWN_PLOTS,
   TURNING_CIRCLE,
   TURNING_CIRCLE_PAVED,
+  townPlots,
 } from "./town-layout.js";
 
 // Printed board art, painted once per change into canvas textures. Every
@@ -191,10 +191,11 @@ function paintPlot(
   index: number,
   width: number,
   band: number,
+  boardRule: BoardRule,
 ) {
-  const tile = BOARD[index];
+  const tile = getBoard(boardRule)[index];
   if (tile.kind === "city") {
-    const color = tileColor(index);
+    const color = tileColor(index, { boardRule });
     context.fillStyle = mix(PAPER, color, 0.68);
     context.fillRect(0, 0, width, band);
     context.fillStyle = mix(PAPER, color, 0.52);
@@ -263,15 +264,16 @@ export type LotPrint = {
   readonly locale: Locale;
   /** Eligible sale lots stay white rather than taking the owner's paper tint. */
   readonly forSale?: boolean;
+  readonly boardRule?: BoardRule;
 };
 
 export function lotTexture(index: number, print: LotPrint) {
   const width = LOT_WIDTH * PIXELS_PER_UNIT;
   const height = LOT_DEPTH * PIXELS_PER_UNIT;
   const band = Math.round((BUILDING_BAND / LOT_DEPTH) * height);
-  const { amount, owner, locale, forSale } = print;
+  const { amount, owner, locale, forSale, boardRule = "country" } = print;
   return canvasTexture(width, height, (context) => {
-    const tile = BOARD[index];
+    const tile = getBoard(boardRule)[index];
     const ownerColor = owner == null ? null : PLAYER_COLORS[owner];
     context.fillStyle = forSale
       ? "#ffffff"
@@ -279,7 +281,7 @@ export function lotTexture(index: number, print: LotPrint) {
         ? mix(PAPER, ownerColor, 0.12)
         : PAPER;
     context.fillRect(0, 0, width, height);
-    const name = tileName(index).toLocaleUpperCase(locale);
+    const name = tileName(index, { boardRule }).toLocaleUpperCase(locale);
     if (tile.kind === "chance") {
       context.fillStyle = "#fff3d9";
       context.fillRect(0, 0, width, height);
@@ -297,7 +299,7 @@ export function lotTexture(index: number, print: LotPrint) {
       );
       return;
     }
-    paintPlot(context, index, width, band);
+    paintPlot(context, index, width, band, boardRule);
     context.fillStyle = INK;
     fitText(
       context,
@@ -345,13 +347,18 @@ export function lotTexture(index: number, print: LotPrint) {
 }
 
 /** Corner art; its inner quarter stays plain for the pawns standing there. */
-export function cornerTexture(index: number, locale: Locale, salary: number) {
+export function cornerTexture(
+  index: number,
+  locale: Locale,
+  salary: number,
+  boardRule: BoardRule = "country",
+) {
   const size = Math.round(LOT_DEPTH * PIXELS_PER_UNIT);
   // Front corners show their inner quarter top-left, back corners bottom-right.
   const front = screenTop(index) === 1;
   const outer = front ? size * 0.66 : size * 0.34;
   return canvasTexture(size, size, (context) => {
-    const kind = BOARD[index].kind;
+    const kind = getBoard(boardRule)[index].kind;
     if (kind === "start") {
       context.fillStyle = PAPER;
       context.fillRect(0, 0, size, size);
@@ -380,7 +387,7 @@ export function cornerTexture(index: number, locale: Locale, salary: number) {
       context.fillStyle = "#fffaf0";
       fitText(
         context,
-        tileName(index).toLocaleUpperCase(locale),
+        tileName(index, { boardRule }).toLocaleUpperCase(locale),
         size * 0.56,
         y + 2,
         size * 0.62,
@@ -514,7 +521,8 @@ export function cornerTexture(index: number, locale: Locale, salary: number) {
  * mown park, a paved plaza for the dice, the roundabout and its avenues, and
  * one street of plots per side, each edged in its city's country color.
  */
-export function lawnTexture() {
+export function lawnTexture(boardRule: BoardRule = "country") {
+  const plots = townPlots(boardRule);
   const size = 1536;
   const unit = size / (LAWN_HALF * 2);
   return canvasTexture(size, size, (context) => {
@@ -556,6 +564,8 @@ export function lawnTexture() {
     };
     // Footpaths from the board road to the roundabout, between the plots.
     for (let side = 0; side < 4; side++) {
+      // A seven-property street has a middle plot instead of a footpath gap.
+      if (plots.filter((plot) => plot.side === side).length % 2 !== 0) continue;
       const [ax, az] = lawnPoint(side, 0, 0);
       const [bx, bz] = lawnPoint(side, 0, LAWN_HALF - RING_RADIUS);
       context.strokeStyle = "#eee6d4";
@@ -648,7 +658,7 @@ export function lawnTexture() {
       context.fillStyle = "#e9e0cc";
       context.fill();
     }
-    for (const plot of TOWN_PLOTS) {
+    for (const plot of plots) {
       const alongX = plot.side % 2 === 0;
       const halfAlong = PLOT_WIDTH / 2;
       const halfDepth = PLOT_DEPTH / 2;
@@ -661,7 +671,7 @@ export function lawnTexture() {
       );
       context.fillStyle = "#f7f1e3";
       context.fill();
-      context.strokeStyle = tileColor(plot.tile);
+      context.strokeStyle = tileColor(plot.tile, { boardRule });
       context.lineWidth = 0.03;
       context.stroke();
     }

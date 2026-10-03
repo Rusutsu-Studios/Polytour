@@ -18,6 +18,7 @@ import {
   PROTOCOL_VERSION,
   RoomConfigSchema,
 } from "../src/shared/protocol/index.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -28,11 +29,14 @@ const credentials = {
 };
 type Intent = Extract<ClientMessage, { type: "intent" }>;
 
-function saleGame(allProperties = false): GameState {
+function saleGame(allProperties = false, reference = false): GameState {
   const now = Date.now();
   const base = createGame(
     {
       ...DEFAULT_GAME_CONFIG,
+      economyRule: reference ? "reference" : "prototype",
+      boardRule: reference ? "country" : "legacy",
+      sellBackPercent: 100,
       gameId: "sale-fixture-not-real",
       festivalCount: 0,
       decisionSeconds: 60,
@@ -56,7 +60,7 @@ function saleGame(allProperties = false): GameState {
           ? (1 as const)
           : null,
     level:
-      property.tile === 1 || property.tile === 25
+      property.tile === 1 || (property.tile === 25 && !reference)
         ? (3 as const)
         : property.tile === 11
           ? (4 as const)
@@ -88,8 +92,12 @@ function saleGame(allProperties = false): GameState {
   };
 }
 
-async function enterSaleRoom(page: Page, allProperties = false) {
-  let state = saleGame(allProperties);
+async function enterSaleRoom(
+  page: Page,
+  allProperties = false,
+  reference = false,
+) {
+  let state = saleGame(allProperties, reference);
   let seq = 0;
   const intents: Intent[] = [];
   const sockets: WebSocketRoute[] = [];
@@ -232,7 +240,7 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
   );
   await expect(page.locator(".decision-popup[open]")).toHaveCount(0);
   await expect(page.locator(".decision-sale select")).toHaveCount(0);
-  await expect(page.locator(".inspector")).not.toBeVisible();
+  await expect(page.locator(".city-card")).not.toBeVisible();
   expect(room.state().activeSeat).toBe(1);
   expect(room.state().pending?.seat).toBe(0);
   expect(propertyRefund(room.state(), 1)).toBe(210_000);
@@ -257,7 +265,7 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
   await expect(page.locator(".sale-ledger")).toContainText("190 k");
   await clickBoardTile(page, 9);
   await expect(quote(page, 1)).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".inspector")).not.toBeVisible();
+  await expect(page.locator(".city-card")).not.toBeVisible();
   expect(room.intents).toHaveLength(0);
 
   await quote(page, 11).focus();
@@ -476,10 +484,10 @@ test("a recovered snapshot leaving liquidation restores normal board inspection"
     "false",
   );
   await page.mouse.click(opponentCity.x, opponentCity.y);
-  await expect(page.locator(".inspector")).toBeVisible();
-  await expect(page.locator(".inspector")).toContainText("Porto");
+  await expect(page.locator(".city-card")).toBeVisible();
+  await expect(page.locator("#city-card-title")).toHaveText("Porto");
   await page.keyboard.press("Escape");
-  await expect(page.locator(".inspector")).not.toBeVisible();
+  await expect(page.locator(".city-card")).not.toBeVisible();
   for (const size of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
@@ -491,5 +499,96 @@ test("a recovered snapshot leaving liquidation restores normal board inspection"
     });
   }
   expect(room.intents).toHaveLength(0);
+  expect(room.errors).toEqual([]);
+});
+
+test("combined country and reference sale targets stay usable through 4K", async ({
+  page,
+}) => {
+  const room = await enterSaleRoom(page, true, true);
+  await expect(page.locator(".sale-tile-quote")).toHaveCount(24);
+  for (const size of DESKTOP_SIZES) {
+    await page.setViewportSize(size);
+    for (const tile of [3, 4, 19, 25, 29, 31]) {
+      const target = quote(page, tile);
+      await target.click();
+      await expect(target).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator(".sale-confirm")).toBeEnabled();
+    }
+    await page.screenshot({
+      path: `.local/verification/combined-reference-sale-${size.width}.png`,
+    });
+  }
+  expect(room.intents).toHaveLength(0);
+  expect(room.errors).toEqual([]);
+});
+
+test("roll button and informative timer remain usable through 4K and reduced motion", async ({
+  page,
+}) => {
+  const room = await enterSaleRoom(page, false, true);
+  const game = room.state();
+  room.snapshot({
+    ...game,
+    activeSeat: 0,
+    phase: "roll",
+    pending: { kind: "roll", seat: 0, deadline: Date.now() + 60_000 },
+    players: game.players.map((player) => ({ ...player, cash: 1_000_000 })),
+    resolutionQueue: [],
+  });
+  const roll = page.getByRole("button", {
+    name: "Lancer les dés",
+    exact: true,
+  });
+  await expect(roll).toBeEnabled();
+  const timer = page.locator('.player-card[data-seat="0"] .player-timer-fill');
+  await expect(timer).toHaveCount(1);
+  const duration = await timer.evaluate((el) =>
+    parseFloat(getComputedStyle(el).animationDuration),
+  );
+  expect(duration).toBeGreaterThan(0);
+  for (const size of DESKTOP_SIZES) {
+    await page.setViewportSize(size);
+    await expect(roll).toBeInViewport();
+    await expect
+      .poll(() =>
+        roll.evaluate((button) => {
+          const r = button.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            r.x + r.width / 2,
+            r.y + r.height / 2,
+          );
+          return hit !== null && (button === hit || button.contains(hit));
+        }),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: `.local/verification/combined-roll-${size.width}.png`,
+    });
+  }
+  const sample = () =>
+    timer.evaluate((el) => {
+      const animation = el.getAnimations()[0];
+      return {
+        time: Number(animation?.currentTime ?? 0),
+        delay: parseFloat(getComputedStyle(el).animationDelay) * 1000,
+        wall: performance.now(),
+      };
+    });
+  const before = await sample();
+  await page
+    .getByRole("button", { name: "Explorer le plateau", exact: true })
+    .click();
+  await expect(page.locator(".city-card")).toBeVisible();
+  await page.keyboard.press("Escape");
+  const after = await sample();
+  expect(
+    Math.abs(
+      after.time -
+        after.delay -
+        (before.time - before.delay) -
+        (after.wall - before.wall),
+    ),
+  ).toBeLessThan(500);
   expect(room.errors).toEqual([]);
 });

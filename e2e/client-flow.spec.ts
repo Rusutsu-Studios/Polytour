@@ -577,7 +577,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.locator("#city-card-title")).toHaveText("Tokyo");
   // The deed lists every building level with its cost and its rent.
   const deedRows = page.locator(".city-card-table tbody tr");
-  await expect(deedRows).toHaveCount(6);
+  await expect(deedRows).toHaveCount(5);
   await expect(deedRows.first()).toContainText("400 k");
   await expect(deedRows.nth(4)).toContainText("+500 k");
   // An explicitly inspected city stays selected when another pawn moves.
@@ -1073,8 +1073,18 @@ test("travel, rent protections and exchanges show the complete legal choice", as
           entry.name.includes("/src/client/director/director.ts"),
         )?.name ?? "/src/client/director/director.ts";
     const { director } = await import(modulePath);
-    const state = director.getSnapshot().serverState as PublicState | null;
-    if (!state) throw new Error("Expected a match");
+    const snapshot = director.getSnapshot().serverState as PublicState | null;
+    if (!snapshot) throw new Error("Expected a match");
+    // Authored legacy snapshots exercise retained prices and travel fees.
+    // Selection never sends these presentation fixtures to the server.
+    const state = {
+      ...snapshot,
+      config: {
+        ...snapshot.config,
+        boardRule: "legacy" as const,
+        economyRule: "prototype" as const,
+      },
+    };
     director.reset({
       ...state,
       activeSeat: 0,
@@ -1091,7 +1101,7 @@ test("travel, rent protections and exchanges show the complete legal choice", as
   // Board choices stay non-modal: nothing travels until a space is picked,
   // on the board or through the keyboard list of the same legal spaces.
   const pick = page.locator(".decision-pick");
-  await expect(pick).toContainText("Tour du monde");
+  await expect(pick).toContainText("Choisissez votre destination");
   await expect(page.locator("dialog[open]")).toHaveCount(0);
   await expect(pick.locator(".decision-confirm")).toHaveCount(0);
   await expect(
@@ -1145,12 +1155,10 @@ test("travel, rent protections and exchanges show the complete legal choice", as
       },
     });
   }, original);
-  await expect(page.locator(".decision-popup-ribbon")).toHaveText(
-    "Organiser le championnat",
-  );
+  await expect(page.locator(".decision-pick")).toContainText("Championnat");
   await expect(page.getByRole("button", { name: "Passer" })).toBeEnabled();
   const hostCity = page.getByLabel("Ville hôte", { exact: true });
-  await expect(hostCity.locator("option")).toHaveText([
+  await expect(hostCity.locator("option:not([disabled])")).toHaveText([
     "Roubaix · ×4 · 50 k",
     "Tokyo · ×4",
   ]);
@@ -1239,10 +1247,10 @@ test("travel, rent protections and exchanges show the complete legal choice", as
       },
     });
   });
-  await expect(page.locator("#decision-description")).toContainText("Lisbonne");
+  await expect(page.locator("#decision-description")).toContainText("Rome");
   await page.getByLabel("Ville ciblée", { exact: true }).selectOption("9");
   await expect(page.locator(".decision-confirm")).toContainText(
-    "Échanger Lisbonne contre Faro",
+    "Échanger Rome contre Porto",
   );
   await page.screenshot({
     path: ".local/verification/decision-exchange-regression.png",

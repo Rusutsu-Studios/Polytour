@@ -2,17 +2,21 @@ import { motion } from "motion/react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  BOARD,
   type BuildLevel,
+  ECONOMY,
+  getBoard,
   getTileBaseRent,
   getTileBuildCost,
   getTileLandPrice,
-  RESORT_RENTS,
+  ruleEconomy,
 } from "../../shared/board/index.js";
 import {
+  boardRule,
   buyoutPrice,
+  economyRule,
   getProperty,
   type PublicState,
+  previewPropertyRent,
   propertyRent,
   propertyRentAt,
   type RentBoost,
@@ -79,7 +83,7 @@ export default function CityCard({
     state.players.find((player) => player.seat === state.activeSeat)
       ?.position ??
     0;
-  const tile = BOARD[index];
+  const tile = getBoard(state.config)[index];
   const property = getProperty(state, index);
   const owner =
     property?.owner != null
@@ -111,7 +115,7 @@ export default function CityCard({
       }}
     >
       <div className="city-card-ribbon">
-        <h2 id="city-card-title">{tileName(index)}</h2>
+        <h2 id="city-card-title">{tileName(index, state.config)}</h2>
       </div>
       <motion.section
         className="city-card"
@@ -135,7 +139,7 @@ export default function CityCard({
             <span className="city-card-place">
               <span
                 className="city-card-kind"
-                style={{ backgroundColor: tileColor(index) }}
+                style={{ backgroundColor: tileColor(index, state.config) }}
                 aria-hidden="true"
               >
                 {TILE_ICONS[tile.kind]}
@@ -232,15 +236,15 @@ function resortTotal(count: number) {
 }
 
 function boostLabel(boost: RentBoost) {
-  return boost.source === "country"
-    ? t(
-        `Pays complet · loyer ×${boost.multiplier}`,
-        `Full country · rent ×${boost.multiplier}`,
-      )
-    : t(
-        `Festival · loyer ×${boost.multiplier}`,
-        `Festival · rent ×${boost.multiplier}`,
-      );
+  const source =
+    boost.source === "country"
+      ? t("Pays complet", "Full country")
+      : boost.source === "championship"
+        ? t("Championnat", "Championship")
+        : boost.source === "combined"
+          ? t("Bonus cumulés", "Combined bonuses")
+          : t("Festival", "Festival");
+  return `${source} · ×${boost.multiplier}`;
 }
 
 function BoostBadge({ boost }: { boost: RentBoost | null }) {
@@ -286,22 +290,25 @@ function CityDeed({
   seat: Seat;
   index: number;
 }) {
-  const tile = BOARD[index];
+  const tile = getBoard(state.config)[index];
   const property = getProperty(state, index);
   const owner = property?.owner ?? null;
   const boost = rentBoost(state, index);
   const buyout = buyoutPrice(state, index);
+  const rule = economyRule(state.config);
+  const board = boardRule(state.config);
+  const rules = ruleEconomy(rule);
   const items =
     owner === null
       ? [
           {
             label: t("Prix d’achat du terrain", "Land price"),
-            value: money(getTileLandPrice(index)),
+            value: money(getTileLandPrice(index, rule, board)),
             main: true,
           },
           {
             label: t("Loyer juste après l’achat", "Rent right after buying"),
-            value: money(propertyRentAt(state, index, 0)),
+            value: money(previewPropertyRent(state, index, seat, 0)),
           },
         ]
       : [
@@ -336,28 +343,20 @@ function CityDeed({
           <tr>
             <th scope="col">{t("Construction", "Building")}</th>
             <th scope="col">{t("Coût", "Cost")}</th>
-            <th scope="col">
-              {boost ? t("Loyer de base", "Base rent") : t("Loyer", "Rent")}
+            <th scope="col">{t("Loyer de base", "Base rent")}</th>
+            <th scope="col" className="city-card-boosted">
+              {owner === null
+                ? t("Après achat", "After buying")
+                : boost
+                  ? boostLabel(boost)
+                  : t("Loyer actuel", "Current rent")}
             </th>
-            {boost && (
-              <th scope="col" className="city-card-boosted">
-                {boost.source === "country"
-                  ? t(
-                      `Pays ×${boost.multiplier}`,
-                      `Country ×${boost.multiplier}`,
-                    )
-                  : t(
-                      `Festival ×${boost.multiplier}`,
-                      `Festival ×${boost.multiplier}`,
-                    )}
-              </th>
-            )}
           </tr>
         </thead>
         <tbody>
-          {LEVELS.map((level) => {
+          {LEVELS.filter((level) => level <= rules.topLevel).map((level) => {
             const current = owner !== null && property?.level === level;
-            const cost = getTileBuildCost(index, level);
+            const cost = getTileBuildCost(index, level, rule, board);
             return (
               <tr
                 key={level}
@@ -372,23 +371,30 @@ function CityDeed({
                 </th>
                 <td>{level === 0 ? money(cost) : `+${money(cost)}`}</td>
                 <td data-muted={boost !== null && level < 5}>
-                  {money(getTileBaseRent(index, level))}
+                  {money(getTileBaseRent(index, level, rule, board))}
                 </td>
-                {boost && (
-                  <td className="city-card-boosted">
-                    {money(propertyRentAt(state, index, level))}
-                  </td>
-                )}
+                <td className="city-card-boosted">
+                  {money(
+                    owner === null
+                      ? previewPropertyRent(state, index, seat, level)
+                      : propertyRentAt(state, index, level),
+                  )}
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
       <p className="city-card-note">
-        {t(
-          "Rachat : deux fois ce qui a été investi. Les bonus de festival et de pays complet ne se cumulent pas et ne s’appliquent pas au monument, qui ne peut pas être racheté.",
-          "Buyout: twice what was invested. Festival and full-country bonuses do not stack and never apply to a landmark, which cannot be bought out.",
-        )}
+        {rules.rentModifiers === "additive"
+          ? t(
+              `Rachat : deux fois l’investissement, sauf les hôtels protégés. Festival, pays complet et championnat additionnent leurs bonus, jusqu’à ×${rules.maxRentMultiplier}.`,
+              `Buyout: twice the investment, except protected Hotels. Festival, full-country and Championship bonuses add together, up to ×${rules.maxRentMultiplier}.`,
+            )
+          : t(
+              "Rachat : deux fois l’investissement. Seul le plus grand bonus de festival, de pays complet ou de championnat s’applique. Les monuments sont protégés et ne reçoivent aucun bonus.",
+              "Buyout: twice the investment. Only the largest Festival, full-country or Championship bonus applies. Landmarks are protected and receive no bonus.",
+            )}
       </p>
     </div>
   );
@@ -404,6 +410,8 @@ function ResortDeed({
   index: number;
 }) {
   const owner = getProperty(state, index)?.owner ?? null;
+  const rules = ruleEconomy(economyRule(state.config));
+  const boost = rentBoost(state, index);
   const count =
     owner === null ? null : Math.min(3, Math.max(1, resortCount(state, owner)));
   const items =
@@ -411,12 +419,12 @@ function ResortDeed({
       ? [
           {
             label: t("Prix d’achat", "Price"),
-            value: money(tilePrice(index) ?? 0),
+            value: money(tilePrice(index, state) ?? 0),
             main: true,
           },
           {
             label: t("Loyer juste après l’achat", "Rent right after buying"),
-            value: money(propertyRent(state, index)),
+            value: money(previewPropertyRent(state, index, seat, 0)),
           },
         ]
       : [
@@ -443,7 +451,12 @@ function ResortDeed({
         <thead>
           <tr>
             <th scope="col">{t("Plages possédées", "Resorts owned")}</th>
-            <th scope="col">{t("Loyer", "Rent")}</th>
+            <th scope="col">{t("Loyer de base", "Base rent")}</th>
+            {boost && (
+              <th scope="col" className="city-card-boosted">
+                {boostLabel(boost)}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -465,17 +478,27 @@ function ResortDeed({
                     <span className="city-card-now">{t("actuel", "now")}</span>
                   )}
                 </th>
-                <td>{money(RESORT_RENTS[resorts])}</td>
+                <td>{money(rules.resortRents[resorts])}</td>
+                {boost && (
+                  <td className="city-card-boosted">
+                    {money(rules.resortRents[resorts] * boost.multiplier)}
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
       <p className="city-card-note">
-        {t(
-          "Une plage ne se construit pas : son loyer grandit avec le nombre de plages de son propriétaire. Pas de festival ni de rachat sur une plage.",
-          "Resorts take no buildings: their rent grows with the number of resorts the owner holds. No festival and no buyout on a resort.",
-        )}
+        {rules.resortFestivals
+          ? t(
+              "Les plages n’ont ni constructions ni rachat. Leur loyer dépend du nombre de plages du propriétaire ; un festival peut le multiplier.",
+              "Resorts have no buildings or buyout. Rent depends on the owner’s resort count; a Festival can multiply it.",
+            )
+          : t(
+              "Les plages n’ont ni constructions, ni festival, ni rachat. Leur loyer dépend du nombre de plages du propriétaire.",
+              "Resorts have no buildings, Festival or buyout. Rent depends on the owner’s resort count.",
+            )}
       </p>
     </div>
   );
@@ -483,8 +506,9 @@ function ResortDeed({
 
 function SpaceRule({ state, index }: { state: PublicState; index: number }) {
   const host = state.championshipHost;
+  const rules = ruleEconomy(economyRule(state.config));
   const text = (() => {
-    switch (BOARD[index].kind) {
+    switch (getBoard(state.config)[index].kind) {
       case "start":
         return t(
           `Recevez ${money(state.config.startSalary)} en passant par le départ.`,
@@ -492,18 +516,27 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
         );
       case "island":
         return t(
-          "Un double ou le paiement de la traversée vous permet de repartir.",
-          "Roll doubles or pay the fare to leave.",
+          `Un double ou le paiement de ${money(rules.islandReleaseFee)} vous permet de repartir. Vous êtes libéré après ${rules.islandMaxFailedEscapes} lancers ratés.`,
+          `Roll doubles or pay ${money(rules.islandReleaseFee)} to leave. You are released after ${rules.islandMaxFailedEscapes} failed rolls.`,
         );
       case "championship":
-        return t(
-          "Installez un festival dans l’une de vos villes pour multiplier ses loyers.",
-          "Host a festival in one of your cities to multiply its rent.",
-        );
+        return rules.championshipFee > 0
+          ? t(
+              `Organisez le championnat dans une de vos villes : ${money(rules.championshipFee)} pour le déplacer, gratuit pour le renouveler. Chaque édition augmente son multiplicateur, jusqu’à ×${rules.maxHostMultiplier}.`,
+              `Host the Championship in one of your cities: ${money(rules.championshipFee)} to move it, free to renew. Each edition increases its multiplier, up to ×${rules.maxHostMultiplier}.`,
+            )
+          : t(
+              `Organisez gratuitement le championnat dans une de vos villes éligibles pour multiplier son loyer jusqu’à ×${rules.maxHostMultiplier}.`,
+              `Host the Championship for free in an eligible city to multiply its rent up to ×${rules.maxHostMultiplier}.`,
+            );
       case "world-tour":
         return t(
-          "Au prochain tour, choisissez une destination plutôt que de lancer les dés.",
-          "On your next turn, choose a destination instead of rolling.",
+          rules.travelToFreeProperties
+            ? `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une propriété libre, ou vers vos propriétés si aucune n’est libre. Vous pouvez aussi lancer les dés gratuitement.`
+            : `Au prochain tour, voyagez pour ${money(ECONOMY.worldTourFee)} vers une case libre, une de vos propriétés ou le départ, ou lancez les dés gratuitement.`,
+          rules.travelToFreeProperties
+            ? `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned property, or one of your properties when none is free. You may also roll for free.`
+            : `On your next turn, travel for ${money(ECONOMY.worldTourFee)} to an unowned space, one of your properties or Start, or roll for free.`,
         );
       case "chance":
         return t(
@@ -512,8 +545,8 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
         );
       default:
         return t(
-          "La taxe est calculée selon votre fortune.",
-          "Tax is based on your net worth.",
+          `La taxe représente ${ECONOMY.taxPercent} % du montant investi dans vos propriétés${rules.minimumTax > 0 ? `, avec un minimum de ${money(rules.minimumTax)}` : ""}.`,
+          `Tax is ${ECONOMY.taxPercent}% of the amount invested in your properties${rules.minimumTax > 0 ? `, with a ${money(rules.minimumTax)} minimum` : ""}.`,
         );
     }
   })();
@@ -521,18 +554,18 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
     <div className="city-card-rule">
       <span
         className="city-card-rule-icon"
-        style={{ backgroundColor: tileColor(index) }}
+        style={{ backgroundColor: tileColor(index, state.config) }}
         aria-hidden="true"
       >
-        {TILE_ICONS[BOARD[index].kind]}
+        {TILE_ICONS[getBoard(state.config)[index].kind]}
       </span>
       <p className="tile-rule">{text}</p>
-      {BOARD[index].kind === "championship" && host && (
+      {getBoard(state.config)[index].kind === "championship" && host && (
         <p className="city-card-boost" data-source="championship">
           <span aria-hidden="true">★</span>
           {t(
-            `En ce moment : ${tileName(host.tile)} · loyer ×${host.multiplier}`,
-            `Now hosting: ${tileName(host.tile)} · rent ×${host.multiplier}`,
+            `En ce moment : ${tileName(host.tile, state.config)} · loyer ×${host.multiplier}`,
+            `Now hosting: ${tileName(host.tile, state.config)} · rent ×${host.multiplier}`,
           )}
         </p>
       )}

@@ -37,7 +37,13 @@ describe("rules invariants for generated matches", () => {
         (seed, roundLimit, selections) => {
           const result = simulateGame(
             seed,
-            { ...SIM_CONFIG, economyRule: "prototype", roundLimit },
+            {
+              ...SIM_CONFIG,
+              economyRule: "prototype",
+              boardRule: "legacy",
+              sellBackPercent: 50,
+              roundLimit,
+            },
             (_state, actions, index) =>
               actions[selections[index % selections.length] % actions.length],
           );

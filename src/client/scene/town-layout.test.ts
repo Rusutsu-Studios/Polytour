@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD } from "../../shared/board/index.js";
+import { BOARD, getBoard } from "../../shared/board/index.js";
 import type { Seat } from "../../shared/engine/index.js";
 import {
   CAMERA_OFFSET,
@@ -35,12 +35,13 @@ import {
   RING_HALF_WIDTH,
   RING_RADIUS,
   TOWN_MAX_HEIGHT,
-  TOWN_PLOTS,
+  type TOWN_PLOTS,
   TOWN_TREES,
   TREE_RADIUS,
   TURNING_CIRCLE,
   TURNING_CIRCLE_PAVED,
   townCircuit,
+  townPlots,
 } from "./town-layout.js";
 
 const SEATS: readonly Seat[] = [0, 1, 2, 3];
@@ -90,22 +91,29 @@ const FEATURES = {
   helipad: HELIPAD,
 };
 
-const ENVELOPES: readonly Box[] = [
-  ...TOWN_PLOTS.map(plotBox),
-  ...TOWN_PLOTS.map((plot) => {
-    const tree = plotTree(plot);
-    return squareBox(tree.position, TREE_RADIUS, tree.height, "plot tree");
-  }),
-  ...TOWN_TREES.map((tree) =>
-    squareBox(tree.position, TREE_RADIUS, tree.height, "tree"),
-  ),
-  ...Object.entries(FEATURES).map(([name, feature]) =>
-    squareBox(feature.position, feature.radius, feature.height, name),
-  ),
-  ...FOUNTAINS.map((fountain) =>
-    squareBox(fountain.position, fountain.radius, fountain.height, "fountain"),
-  ),
-];
+function envelopes(plots: typeof TOWN_PLOTS): readonly Box[] {
+  return [
+    ...plots.map(plotBox),
+    ...plots.map((plot) => {
+      const tree = plotTree(plot);
+      return squareBox(tree.position, TREE_RADIUS, tree.height, "plot tree");
+    }),
+    ...TOWN_TREES.map((tree) =>
+      squareBox(tree.position, TREE_RADIUS, tree.height, "tree"),
+    ),
+    ...Object.entries(FEATURES).map(([name, feature]) =>
+      squareBox(feature.position, feature.radius, feature.height, name),
+    ),
+    ...FOUNTAINS.map((fountain) =>
+      squareBox(
+        fountain.position,
+        fountain.radius,
+        fountain.height,
+        "fountain",
+      ),
+    ),
+  ];
+}
 
 function corners(box: Box) {
   const points: [number, number, number][] = [];
@@ -264,34 +272,42 @@ function onAvenue(box: Box) {
   return false;
 }
 
-describe("town layout", () => {
+describe.each(["country", "legacy"] as const)("%s town layout", (rule) => {
+  const board = getBoard(rule);
+  const plots = townPlots(rule);
+  const boxes = envelopes(plots);
   it("gives every city and resort one plot facing its own side", () => {
-    const owned = BOARD.filter(
+    const owned = board.filter(
       (tile) => tile.kind === "city" || tile.kind === "resort",
     );
-    expect(TOWN_PLOTS.map((plot) => plot.tile)).toEqual(
+    expect(plots.map((plot) => plot.tile)).toEqual(
       owned.map((tile) => tile.index),
     );
     for (let side = 0; side < 4; side++) {
-      const plots = TOWN_PLOTS.filter((plot) => plot.side === side);
-      expect(plots).toHaveLength(6);
-      for (const plot of plots) expect(tileSide(plot.tile)).toBe(side);
+      const sidePlots = plots.filter((plot) => plot.side === side);
+      expect(sidePlots).toHaveLength(
+        owned.filter((tile) => tileSide(tile.index) === side).length,
+      );
+      for (const plot of sidePlots) {
+        expect(tileSide(plot.tile)).toBe(side);
+        expect(plot.position.every(Number.isFinite)).toBe(true);
+      }
       // Plots follow the lots' play order across the screen.
-      const lots = plots.map((plot) => {
+      const lots = sidePlots.map((plot) => {
         const [x, z] = tilePoint(plot.tile, 0, 0);
         return screenPoint(x, LOT_TOP, z)[0];
       });
-      const screen = plots.map(
+      const screen = sidePlots.map(
         (plot) => screenPoint(plot.position[0], LAWN_TOP, plot.position[1])[0],
       );
-      const direction = Math.sign(lots[5] - lots[0]);
-      for (let index = 1; index < 6; index++)
+      const direction = Math.sign(lots[lots.length - 1] - lots[0]);
+      for (let index = 1; index < sidePlots.length; index++)
         expect(Math.sign(screen[index] - screen[index - 1])).toBe(direction);
     }
   });
 
   it("keeps plots, trees and attractions apart, on the lawn, off the roads", () => {
-    const solids = ENVELOPES.filter((box) => box.name !== "plot tree");
+    const solids = boxes.filter((box) => box.name !== "plot tree");
     for (const [index, box] of solids.entries()) {
       for (const [x, z] of [
         [box.center[0] - box.halfX, box.center[1] - box.halfZ],
@@ -315,7 +331,7 @@ describe("town layout", () => {
 
   it("never hides a pawn, a lot, the board road or the dice", () => {
     const points = protectedPoints();
-    for (const box of ENVELOPES)
+    for (const box of boxes)
       for (const point of points)
         expect(hides(box, point.at), `${box.name} hides ${point.name}`).toBe(
           false,

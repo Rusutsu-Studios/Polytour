@@ -461,7 +461,8 @@
 .decision-popup,
 .chance-dialog,
 .settings-dialog,
-.help-dialog {
+.help-dialog,
+.city-card-dialog {
   zoom: var(--ui-zoom);
 }
 .contextual-action {
@@ -573,6 +574,7 @@
 .contextual-action:has(
   .decision-compact[data-kind="roll"][data-own="true"][data-busy="false"]
 ) {
+  zoom: 1;
   top: var(--roll-y, 50%);
   bottom: auto;
   left: var(--roll-x, 50%);
@@ -588,6 +590,7 @@
   background: none;
   box-shadow: none;
   overflow: visible;
+  zoom: var(--ui-zoom);
   animation: roll-pop 360ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 /* The button says it all; the heading stays for screen readers. */
@@ -2867,8 +2870,9 @@ button.seat-open:disabled {
     animation-duration: 0s;
   }
   .spinner,
-  .game-shell .decision-panel[data-kind="roll"],
-  .game-shell .decision-panel .roll-button::after {
+  .game-shell
+    .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"],
+  .game-shell .decision-panel .roll-button:not(:disabled)::after {
     animation: none;
   }
   .button:hover:not(:disabled),
@@ -2876,4 +2880,35 @@ button.seat-open:disabled {
   .game-tool-button:hover {
     transform: none;
   }
+}
+
+/* An essential deadline retains real time when decorative motion is reduced. */
+.game-shell[data-reduced-motion="true"] .player-card,
+.game-shell[data-reduced-motion="true"] .roll-button {
+  transition: none;
+}
+.game-shell[data-reduced-motion="true"]
+  .decision-panel[data-kind="roll"][data-own="true"][data-busy="false"],
+.game-shell[data-reduced-motion="true"]
+  .decision-panel
+  .roll-button:not(:disabled)::after {
+  animation: none;
+}
+.flat-board button[data-pick="true"] {
+  outline: 3px solid #287aa7;
+  outline-offset: -3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-timer-fill {
+    animation: timer-drain var(--timer-window) linear var(--timer-delay) both;
+  }
+}
+
+.pick-host-ledger {
+  margin: 0 0 0 auto;
+  min-width: 160px;
+  font-size: 14px;
+}
+.pick-host-ledger > div {
+  gap: 12px;
 }

@@ -123,32 +123,58 @@ describe("createGame", () => {
     );
     expect(legacy.state.config.hotelPurchaseRule).toBe("legacy-lap");
   });
-  it("freezes the restricted World Tour rule for new games and keeps an explicit legacy marker", () => {
+  it("freezes the country board and reference rules when no new-game markers are supplied", () => {
     const game = createGame(
-      { ...DEFAULT_GAME_CONFIG, worldTourRule: undefined },
+      {
+        ...DEFAULT_GAME_CONFIG,
+        boardRule: undefined,
+        economyRule: undefined,
+        sellBackPercent: undefined,
+      },
       SEATS,
       1,
       { now: 0 },
     );
-    expect(toPublic(game.state).config.worldTourRule).toBe("own-free-or-start");
+    expect(toPublic(game.state).config).toMatchObject({
+      boardRule: "country",
+      economyRule: "reference",
+      sellBackPercent: 100,
+    });
     const legacy = createGame(
-      { ...DEFAULT_GAME_CONFIG, worldTourRule: "legacy-any" },
+      {
+        ...DEFAULT_GAME_CONFIG,
+        boardRule: "legacy",
+        economyRule: "prototype",
+        sellBackPercent: 50,
+      },
       SEATS,
       1,
       { now: 0 },
     );
-    expect(legacy.state.config.worldTourRule).toBe("legacy-any");
+    expect(legacy.state.config).toMatchObject({
+      boardRule: "legacy",
+      economyRule: "prototype",
+      sellBackPercent: 50,
+    });
     expect(() =>
       createGame(
         {
           ...DEFAULT_GAME_CONFIG,
-          worldTourRule: "anywhere" as "legacy-any",
+          boardRule: "anywhere" as "legacy",
         },
         SEATS,
         1,
         { now: 0 },
       ),
-    ).toThrow("World Tour rule");
+    ).toThrow("board rule");
+    expect(() =>
+      createGame(
+        { ...DEFAULT_GAME_CONFIG, sellBackPercent: 75 as 50 },
+        SEATS,
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("50 or 100");
   });
   it("validates identities, counts, integer money, positive deadlines and supported festivals", () => {
     expect(() =>

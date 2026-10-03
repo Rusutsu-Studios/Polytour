@@ -28,14 +28,17 @@ debug socket has been removed; `/api/health` remains.
   rejected with `players-required` below two. Each player keeps its lobby seat
   number (colour and corner) in the match, so a smaller match can have gaps such
   as seats 0, 1 and 3. Settings are validated and freeze when the match starts.
-- New-room hotel and World Tour rules are frozen by the server in the public config
-  markers `hotelPurchaseRule: "staged-hotels"` and
-  `worldTourRule: "own-free-or-start"`. Neither is an accepted room-setting input;
-  clients must derive legal construction and travel choices from the engine. Action/event shapes and the protocol
-  version remain compatible.
+- Protocol version 3 reloads cached clients before interpreting the regrouped board.
+  New rooms freeze rules version 5 with `boardRule: "country"`,
+  `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"` and
+  `sellBackPercent: 100`. Existing version-2/3 rooms keep the legacy board,
+  prototype economy and their original construction, travel and sale rules.
+  Lobby snapshots expose their frozen rule markers separately from room settings.
+  The strict room-setting schema never accepts internal rule markers; clients
+  derive legal construction, travel and sale choices from the shared engine.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
-  `legalActions` supplies the choices; tile indices are0..31 and levels0..5.
+  `legalActions` supplies the choices; tile indices are 0..31; reference rooms use levels 0..4 and legacy prototype rooms retain 0..5.
 - Each intent has an id and `atSeq`; duplicates, stale state, wrong seats, malformed
   actions, and actions during pending entropy are rejected.
 - `randomness {status,commitment?,proof?,message?}` carries the persisted roll

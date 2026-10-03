@@ -1,4 +1,4 @@
-import { BOARD } from "../../shared/board/index.js";
+import { type BoardRule, getBoard } from "../../shared/board/index.js";
 import {
   LAWN_HALF,
   sideFrame,
@@ -12,7 +12,7 @@ import {
 //
 // A paved plaza stays free for the dice. A roundabout circles it and four
 // avenues run from it to the corners, each ending in a turning circle. Facing
-// every side of the board, one street holds six plots: one for each city or
+// every side of the board, one street holds a plot for each city or
 // resort of that side, in play order. A plot shows what its owner has built,
 // so the middle of the board grows with the game.
 //
@@ -36,7 +36,6 @@ export const PLOT_WIDTH = 0.36;
 export const PLOT_DEPTH = 0.4;
 /** Distance from the lawn edge to the middle of each street of plots. */
 export const PLOT_INSET = 0.94;
-const PLOT_ALONG = [-1.11, -0.69, -0.27, 0.27, 0.69, 1.11] as const;
 /** The tallest building of the town: a landmark with its spire. */
 export const TOWN_MAX_HEIGHT = 0.68;
 /** Clearance kept between a shadowed strip of ground and the board road. */
@@ -78,22 +77,42 @@ export type TownPlot = {
   readonly rotation: number;
 };
 
-export const TOWN_PLOTS: readonly TownPlot[] = [0, 1, 2, 3].flatMap((side) =>
-  BOARD.filter(
-    (tile) =>
-      (tile.kind === "city" || tile.kind === "resort") &&
-      tileSide(tile.index) === side,
-  ).map((tile, order) => ({
-    tile: tile.index,
-    side: side as TownPlot["side"],
-    position: lawnPoint(side, PLOT_ALONG[order], PLOT_INSET),
-    rotation: tileRotation(tile.index),
-  })),
-);
+const PLOT_CACHE = new Map<BoardRule, readonly TownPlot[]>();
 
-const PLOT_BY_TILE = new Map(TOWN_PLOTS.map((plot) => [plot.tile, plot]));
-export function townPlot(tile: number) {
-  return PLOT_BY_TILE.get(tile);
+/** Each board gets a finite, evenly spaced street, including seven-property sides. */
+export function townPlots(rule: BoardRule = "country"): readonly TownPlot[] {
+  const cached = PLOT_CACHE.get(rule);
+  if (cached) return cached;
+  const board = getBoard(rule);
+  const plots = [0, 1, 2, 3].flatMap((side) => {
+    const properties = board.filter(
+      (tile) =>
+        (tile.kind === "city" || tile.kind === "resort") &&
+        tileSide(tile.index) === side,
+    );
+    // A 0.41 pitch leaves room for the printed plot and its building envelope.
+    // Six-plot legacy streets keep the gap around the central footpath.
+    const along =
+      properties.length === 6
+        ? [-1.11, -0.69, -0.27, 0.27, 0.69, 1.11]
+        : properties.map(
+            (_, order) => (order - (properties.length - 1) / 2) * 0.41,
+          );
+    return properties.map((tile, order) => ({
+      tile: tile.index,
+      side: side as TownPlot["side"],
+      position: lawnPoint(side, along[order], PLOT_INSET),
+      rotation: tileRotation(tile.index),
+    }));
+  });
+  PLOT_CACHE.set(rule, plots);
+  return plots;
+}
+
+export const TOWN_PLOTS = townPlots();
+
+export function townPlot(tile: number, rule: BoardRule = "country") {
+  return townPlots(rule).find((plot) => plot.tile === tile);
 }
 
 /**

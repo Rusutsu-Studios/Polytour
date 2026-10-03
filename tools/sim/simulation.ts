@@ -9,6 +9,7 @@ import type {
 import {
   applyAction,
   applyEvent,
+  boardRule,
   botAction,
   CHANCE_CARDS,
   createGame,
@@ -162,7 +163,12 @@ export function simulateGame(
         else if (
           property?.level === 4 &&
           propertyRent(replay, event.tile) >
-            getTileBaseRent(event.tile, 4, economyRule(replay.config))
+            getTileBaseRent(
+              event.tile,
+              4,
+              economyRule(replay.config),
+              boardRule(replay.config),
+            )
         )
           modifiedHotelRent += event.amount;
       }

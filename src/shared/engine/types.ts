@@ -1,4 +1,4 @@
-import type { BuildLevel, EconomyRule } from "../board/types.js";
+import type { BoardRule, BuildLevel, EconomyRule } from "../board/types.js";
 
 export type Seat = 0 | 1 | 2 | 3;
 export type SeatInfo = {
@@ -26,6 +26,10 @@ export type GameConfig = {
   readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";
   /** Missing on existing saves: preserve the prototype economy and Landmark. */
   readonly economyRule?: EconomyRule;
+  /** Missing on saved matches: keep the original production tile indices. */
+  readonly boardRule?: BoardRule;
+  /** An explicit room rule wins; old prototype saves default to 50%. */
+  readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;

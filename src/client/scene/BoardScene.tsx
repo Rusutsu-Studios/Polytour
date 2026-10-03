@@ -3,13 +3,22 @@ import gsap from "gsap";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { BOARD, DECISION_TIMING, ECONOMY } from "../../shared/board/index.js";
+import {
+  BOARD_SIZE,
+  type BoardRule,
+  DECISION_TIMING,
+  ECONOMY,
+  getBoard,
+} from "../../shared/board/index.js";
 import type {
+  GameConfig,
   GameEvent,
   PublicState,
   Seat,
 } from "../../shared/engine/index.js";
 import {
+  boardRule,
+  economyRule,
   getProperty,
   legalActions,
   propertyRefund,
@@ -69,10 +78,15 @@ import { BeachUmbrella, Landmarks } from "./Landmarks.js";
 
 type BoardProps = {
   state: PublicState | null;
+  /** Frozen room rules for a lobby preview before the first game snapshot. */
+  config?: GameConfig;
   selected: number | null;
   onSelect: (tile: number) => void;
   /** Legal spaces while the player answers a decision by clicking the board. */
   targets?: readonly number[] | null;
+  picked?: number | null;
+  pickKey?: string;
+  pickSeat?: Seat;
   preview?: boolean;
   zoom?: number;
   /** Where the roll button sits on screen, in canvas pixels. */
@@ -86,6 +100,15 @@ function saleTargets(state: PublicState | null, seat?: Seat): number[] {
   return legalActions(state, seat).flatMap((action) =>
     action.type === "Sell" ? [action.tile] : [],
   );
+}
+
+/** Null is inspection mode; even an empty array keeps a decision in choice mode. */
+function choiceTargets(props: BoardProps): readonly number[] | null {
+  if (props.preview) return null;
+  if (props.targets != null) return props.targets;
+  if (props.saleSeat !== undefined && props.state?.pending?.kind === "sell")
+    return saleTargets(props.state, props.saleSeat);
+  return null;
 }
 
 // THESIS: a printed property board seen from its Start corner, like the classic tabletop.
@@ -123,16 +146,17 @@ function passingPosition(seat: Seat, tile: number): [number, number, number] {
   return [x, ROAD_TOP + PAWN_LIFT, z];
 }
 
-function BoardBase({ onRendered }: { onRendered: () => void }) {
-  const lawn = useMemo(lawnTexture, []);
+function BoardBase({
+  onRendered,
+  boardRule,
+}: {
+  onRendered: () => void;
+  boardRule: BoardRule;
+}) {
+  const lawn = useMemo(() => lawnTexture(boardRule), [boardRule]);
   const road = useMemo(roadTexture, []);
-  useEffect(
-    () => () => {
-      lawn.dispose();
-      road.dispose();
-    },
-    [lawn, road],
-  );
+  useEffect(() => () => lawn.dispose(), [lawn]);
+  useEffect(() => () => road.dispose(), [road]);
   // A two-tone edge: a darker base under a lighter rim that frames the lots.
   const lower = BOARD_HALF * 2 + 0.16;
   const upper = BOARD_HALF * 2 + 0.08;
@@ -189,6 +213,8 @@ function TileFace({
   preview,
   dimmed,
   pickable,
+  forSale,
+  boardRule,
 }: {
   index: number;
   amount: number | null;
@@ -198,19 +224,22 @@ function TileFace({
   preview?: boolean;
   dimmed: boolean;
   pickable: boolean;
+  forSale: boolean;
+  boardRule: BoardRule;
 }) {
   const { locale } = useLocale();
   const texture = useMemo(
     () =>
       isCorner(index)
-        ? cornerTexture(index, locale, salary)
+        ? cornerTexture(index, locale, salary, boardRule)
         : lotTexture(index, {
             amount,
             owner,
             locale,
-            forSale: saleAppearance === "available",
+            forSale,
+            boardRule,
           }),
-    [index, amount, owner, locale, salary, saleAppearance],
+    [index, amount, owner, locale, salary, forSale, boardRule],
   );
   useEffect(() => () => texture.dispose(), [texture]);
   const [x, z] = tileCenter(index);
@@ -221,7 +250,7 @@ function TileFace({
       rotation={[-Math.PI / 2, 0, faceRotation(index)]}
       receiveShadow
       onPointerDown={(event) => {
-        if (preview) return;
+        if (preview || !pickable) return;
         event.stopPropagation();
         onSelect(index);
       }}
@@ -248,19 +277,24 @@ function TileFace({
 
 function BoardTiles({
   state,
+  config,
   selected,
   onSelect,
   targets,
   preview,
+  saleSeat,
+  saleBlocked,
 }: BoardProps) {
+  const boardConfig = state?.config ?? config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const board = getBoard(rule);
   const mesh = useRef<THREE.InstancedMesh>(null);
   const transforms = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const neutral = useMemo(() => new THREE.Color("#ece6ef"), []);
-  const dim = useMemo(() => new THREE.Color("#7f7a88"), []);
   useEffect(() => {
-    if (!targets) document.body.style.cursor = "";
-  }, [targets]);
+    if (targets == null || saleBlocked) document.body.style.cursor = "";
+  }, [targets, saleBlocked]);
   useEffect(
     () => () => {
       document.body.style.cursor = "";
@@ -269,7 +303,7 @@ function BoardTiles({
   );
   useEffect(() => {
     if (!mesh.current) return;
-    for (const tile of BOARD) {
+    for (const tile of board) {
       const [x, z] = tileCenter(tile.index);
       const [along, depth] = tileSize(tile.index);
       transforms.position.set(x, (BOARD_TOP + LOT_TOP) / 2, z);
@@ -282,30 +316,35 @@ function BoardTiles({
       transforms.updateMatrix();
       mesh.current.setMatrixAt(tile.index, transforms.matrix);
       const owner = state ? getProperty(state, tile.index)?.owner : null;
-      if (targets.length)
+      if (targets != null)
         color.set(targets.includes(tile.index) ? "#ffffff" : "#747983");
       else if (tile.index === selected) color.set("#ffd45e");
       else if (owner != null)
         color.set(PLAYER_COLORS[owner]).lerp(neutral, 0.35);
       else color.copy(neutral);
-      if (targets && !targets.includes(tile.index)) color.lerp(dim, 0.55);
       mesh.current.setColorAt(tile.index, color);
     }
     mesh.current.instanceMatrix.needsUpdate = true;
     mesh.current.computeBoundingSphere();
     if (mesh.current.instanceColor)
       mesh.current.instanceColor.needsUpdate = true;
-  }, [state, selected, targets, transforms, color, neutral, dim]);
-  const salary = state?.config.startSalary ?? ECONOMY.startSalary;
+  }, [state, selected, targets, transforms, color, neutral, board]);
+  const salary = boardConfig?.startSalary ?? ECONOMY.startSalary;
   return (
     <>
       <instancedMesh
         ref={mesh}
-        args={[undefined, undefined, BOARD.length]}
+        args={[undefined, undefined, board.length]}
         receiveShadow
         castShadow
         onPointerDown={(event) => {
-          if (preview || event.instanceId === undefined) return;
+          if (
+            preview ||
+            event.instanceId === undefined ||
+            (targets != null &&
+              (saleBlocked || !targets.includes(event.instanceId)))
+          )
+            return;
           event.stopPropagation();
           onSelect(event.instanceId);
         }}
@@ -313,7 +352,7 @@ function BoardTiles({
         <boxGeometry />
         <meshStandardMaterial roughness={1} />
       </instancedMesh>
-      {BOARD.map((tile) => {
+      {board.map((tile) => {
         const property = state ? getProperty(state, tile.index) : null;
         const owner = property?.owner ?? null;
         return (
@@ -323,21 +362,22 @@ function BoardTiles({
             owner={owner}
             salary={salary}
             dimmed={Boolean(targets && !targets.includes(tile.index))}
-            pickable={Boolean(targets?.includes(tile.index))}
+            pickable={
+              !preview &&
+              (targets == null ||
+                (!saleBlocked && targets.includes(tile.index)))
+            }
+            forSale={
+              saleSeat !== undefined && Boolean(targets?.includes(tile.index))
+            }
+            boardRule={rule}
             amount={
               owner != null && state
                 ? propertyRent(state, tile.index)
-                : tilePrice(tile.index, state)
+                : tilePrice(tile.index, state ?? (config ? { config } : null))
             }
             onSelect={onSelect}
             preview={preview}
-            saleAppearance={
-              targets.length
-                ? targets.includes(tile.index)
-                  ? "available"
-                  : "dimmed"
-                : "normal"
-            }
           />
         );
       })}
@@ -362,7 +402,7 @@ function outlineGeometry(width: number, depth: number, border: number) {
   return new THREE.ShapeGeometry(shape);
 }
 
-function TileFocus({ state, selected, preview, saleSeat }: BoardProps) {
+function TileFocus({ state, selected, preview, targets }: BoardProps) {
   const outlines = useMemo(
     () => ({
       lot: outlineGeometry(LOT_WIDTH, LOT_DEPTH, 0.06),
@@ -380,16 +420,11 @@ function TileFocus({ state, selected, preview, saleSeat }: BoardProps) {
   if (preview) return null;
   const pending = state?.pending;
   const decisionTile = pending && "tile" in pending ? pending.tile : null;
-  const targets = saleTargets(state, saleSeat);
-  const focused = targets.length ? targets : [decisionTile, selected];
+  const focused = targets != null ? [] : [decisionTile, selected];
   return (
     <>
       {focused.map((tile, index) => {
-        if (
-          tile == null ||
-          (!targets.length && index === 1 && tile === decisionTile)
-        )
-          return null;
+        if (tile == null || (index === 1 && tile === decisionTile)) return null;
         const [x, z] = tileCenter(tile);
         return (
           <mesh
@@ -401,13 +436,7 @@ function TileFocus({ state, selected, preview, saleSeat }: BoardProps) {
           >
             <meshBasicMaterial
               color={
-                targets.length
-                  ? tile === selected
-                    ? "#e8a321"
-                    : "#26764c"
-                  : index === 0 && pending
-                    ? PLAYER_COLORS[pending.seat]
-                    : "#e8a321"
+                index === 0 && pending ? PLAYER_COLORS[pending.seat] : "#e8a321"
               }
               toneMapped={false}
             />
@@ -430,11 +459,17 @@ const growthEase = gsap.parseEase("back.out(2.2)");
 
 function Towns({
   state,
+  config,
   preview,
   handle,
-}: Pick<BoardProps, "state" | "preview"> & {
+}: Pick<BoardProps, "state" | "preview" | "config"> & {
   handle: { current: TownsHandle | null };
 }) {
+  const boardConfig = state?.config ?? config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const board = getBoard(rule);
+  const maxLevel =
+    boardConfig && economyRule(boardConfig) === "prototype" ? 5 : 4;
   const walls = useRef<THREE.InstancedMesh>(null);
   const roofs = useRef<THREE.InstancedMesh>(null);
   const windows = useRef<THREE.InstancedMesh>(null);
@@ -467,7 +502,7 @@ function Towns({
       let count = 0;
       let windowCount = 0;
       let detailCount = 0;
-      for (const tile of BOARD) {
+      for (const tile of board) {
         const resort = tile.kind === "resort";
         if (tile.kind !== "city" && !resort) continue;
         const growing = growth?.tile === tile.index ? growth : null;
@@ -483,11 +518,13 @@ function Towns({
           : owner != null
             ? (property?.level ?? 0)
             : preview
-              ? 1 + (tile.index % 5)
+              ? 1 + (tile.index % maxLevel)
               : 0;
         if (level === 0) continue;
         const roofColor =
-          owner != null ? PLAYER_COLORS[owner] : tileColor(tile.index);
+          owner != null
+            ? PLAYER_COLORS[owner]
+            : tileColor(tile.index, { boardRule: rule });
         const angle = tileRotation(tile.index);
         const bandZ = buildingBandZ(tile.index);
         const [faceX, faceZ] = visibleFaces(tile.index);
@@ -593,7 +630,7 @@ function Towns({
         object.computeBoundingSphere();
       }
     },
-    [preview, dummy, color],
+    [preview, dummy, color, board, rule, maxLevel],
   );
   useEffect(() => {
     handle.current = { draw };
@@ -630,23 +667,25 @@ function Towns({
 
 // The parasol keeps its coral canvas on every beach: it says "beach", and the
 // bungalow beside it says who bought it.
-function ResortProps() {
+function ResortProps({ boardRule }: { boardRule: BoardRule }) {
   return (
     <>
-      {BOARD.filter((tile) => tile.kind === "resort").map((tile) => {
-        const [x, z] = tilePoint(
-          tile.index,
-          -0.28,
-          buildingBandZ(tile.index) + screenTop(tile.index) * 0.04,
-        );
-        return (
-          <BeachUmbrella
-            key={tile.index}
-            position={[x, LOT_TOP, z]}
-            scale={0.8}
-          />
-        );
-      })}
+      {getBoard(boardRule)
+        .filter((tile) => tile.kind === "resort")
+        .map((tile) => {
+          const [x, z] = tilePoint(
+            tile.index,
+            -0.28,
+            buildingBandZ(tile.index) + screenTop(tile.index) * 0.04,
+          );
+          return (
+            <BeachUmbrella
+              key={tile.index}
+              position={[x, LOT_TOP, z]}
+              scale={0.8}
+            />
+          );
+        })}
     </>
   );
 }
@@ -743,7 +782,7 @@ function PickHighlights({
     <>
       <instancedMesh
         ref={fills}
-        args={[undefined, fillMaterial, BOARD.length]}
+        args={[undefined, fillMaterial, BOARD_SIZE]}
         frustumCulled={false}
         renderOrder={1}
       >
@@ -751,7 +790,7 @@ function PickHighlights({
       </instancedMesh>
       <instancedMesh
         ref={frames}
-        args={[frame, undefined, BOARD.length]}
+        args={[frame, undefined, BOARD_SIZE]}
         frustumCulled={false}
         renderOrder={2}
       >
@@ -1419,9 +1458,9 @@ function frameBoard(
       add(x, LOT_TOP, z);
     }
   // Landmarks and buildings rise above the far corner and the back lots.
-  for (const tile of BOARD) {
-    const [x, z] = tileCenter(tile.index);
-    add(x, LOT_TOP + (isCorner(tile.index) ? 0.95 : 0.8), z);
+  for (let tile = 0; tile < BOARD_SIZE; tile++) {
+    const [x, z] = tileCenter(tile);
+    add(x, LOT_TOP + (isCorner(tile) ? 0.95 : 0.8), z);
   }
   const availableWidth = Math.max(1, width - insets.side * 2);
   const availableHeight = Math.max(1, height - insets.top - insets.bottom);
@@ -1444,6 +1483,10 @@ function frameBoard(
 
 function SceneContent(props: BoardProps) {
   const { state, preview, zoom = 1, onRollAnchor } = props;
+  const boardConfig = state?.config ?? props.config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const chosen =
+    props.saleSeat !== undefined ? props.selected : (props.picked ?? null);
   const { camera, invalidate, size, gl } = useThree();
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
@@ -1922,10 +1965,10 @@ function SceneContent(props: BoardProps) {
           // raises its bungalow the moment it is taken; the view shows the
           // next state on this tile while it is being built.
           const builds =
-            BOARD[event.tile].kind === "resort"
+            getBoard(context.next.config)[event.tile].kind === "resort"
               ? getProperty(context.next, event.tile)?.owner != null
               : event.type !== "BoughtOut" &&
-                BOARD[event.tile].kind === "city" &&
+                getBoard(context.next.config)[event.tile].kind === "city" &&
                 (getProperty(context.next, event.tile)?.level ?? 0) >
                   (context.previous
                     ? (getProperty(context.previous, event.tile)?.level ?? 0)
@@ -2019,6 +2062,7 @@ function SceneContent(props: BoardProps) {
         shadow-radius={3}
       />
       <BoardBase
+        boardRule={rule}
         onRendered={() => {
           if (rendered.current) return;
           rendered.current = true;
@@ -2033,16 +2077,29 @@ function SceneContent(props: BoardProps) {
       <TileFocus {...props} />
       {!preview && props.targets && (
         <PickHighlights
+          key={props.pickKey}
           targets={props.targets}
-          picked={props.selected}
-          color={PLAYER_COLORS[state?.pending?.seat ?? 0]}
+          picked={
+            chosen != null && props.targets.includes(chosen) ? chosen : null
+          }
+          color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
         />
       )}
-      <Towns state={state} preview={preview} handle={towns} />
-      <Downtown state={state} preview={preview} handle={downtown} />
-      <ResortProps />
+      <Towns
+        state={state}
+        config={boardConfig}
+        preview={preview}
+        handle={towns}
+      />
+      <Downtown
+        state={state}
+        config={boardConfig}
+        preview={preview}
+        handle={downtown}
+      />
+      <ResortProps boardRule={rule} />
       <FestivalMarkers state={state} />
-      <Landmarks />
+      <Landmarks boardRule={rule} />
       {(state && !preview
         ? state.players.map((player) => player.seat)
         : ([0, 1, 2, 3] as const)
@@ -2191,8 +2248,8 @@ function SaleLabels({
             className="sale-tile-quote"
             data-tile={tile}
             aria-label={t(
-              `Choisir ${tileName(tile)} à vendre · ${amount}`,
-              `Choose ${tileName(tile)} to sell · ${amount}`,
+              `Choisir ${tileName(tile, state.config)} à vendre · ${amount}`,
+              `Choose ${tileName(tile, state.config)} to sell · ${amount}`,
             )}
             aria-pressed={chosen}
             disabled={saleBlocked}
@@ -2214,6 +2271,8 @@ function SaleLabels({
 }
 
 export default function BoardScene(props: BoardProps) {
+  const resolvedProps = { ...props, targets: choiceTargets(props) };
+  const config = props.state?.config ?? props.config;
   const layer = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -2232,6 +2291,7 @@ export default function BoardScene(props: BoardProps) {
     <div
       ref={layer}
       className="canvas-layer"
+      data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
       data-sale-active={
         !props.preview && saleTargets(props.state, props.saleSeat).length > 0
@@ -2249,7 +2309,7 @@ export default function BoardScene(props: BoardProps) {
           toneMapping: THREE.NeutralToneMapping,
         }}
       >
-        <SceneContent {...props} />
+        <SceneContent {...resolvedProps} />
       </Canvas>
       {!props.preview && <SaleLabels {...props} {...size} />}
     </div>

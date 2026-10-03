@@ -5,7 +5,13 @@ import {
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BOT_TIMING, DECISION_TIMING } from "../src/shared/board/index.js";
+import {
+  BOT_TIMING,
+  DECISION_TIMING,
+  getBoard,
+  isCityTile,
+  isResortTile,
+} from "../src/shared/board/index.js";
 import type {
   GameState,
   PublicState,
@@ -1362,11 +1368,17 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on the reference rules version 4", async () => {
+  it("freezes new rooms on the combined reference rules version 5", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
     expect(game.state.config.economyRule).toBe("reference");
+    expect(game.state.config.boardRule).toBe("country");
+    expect(game.state.config.sellBackPercent).toBe(100);
+    expect(game.state.properties.map((property) => property.tile)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23, 25,
+      26, 27, 29, 31,
+    ]);
     const rules = await runInDurableObject(
       stub,
       (_instance, durableState) =>
@@ -1374,7 +1386,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("4");
+    expect(rules).toBe("5");
   });
 
   it("rejects client-supplied internal rule markers at room creation", async () => {
@@ -1383,6 +1395,10 @@ describe("Authoritative private rooms", () => {
       { hotelPurchaseRule: "legacy-lap" },
       { economyRule: "reference" },
       { economyRule: "prototype" },
+      { boardRule: "country" },
+      { boardRule: "legacy" },
+      { sellBackPercent: 50 },
+      { sellBackPercent: 100 },
     ]) {
       const response = await exports.default.fetch(
         new Request(`${origin}/api/rooms`, {
@@ -1403,7 +1419,12 @@ describe("Authoritative private rooms", () => {
         .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
         .toArray()[0];
       const saved = JSON.parse(row.json) as GameState;
-      const { economyRule: _marker, ...oldConfig } = saved.config;
+      const {
+        economyRule: _marker,
+        boardRule: _board,
+        sellBackPercent: _sale,
+        ...oldConfig
+      } = saved.config;
       durableState.storage.sql.exec(
         "UPDATE meta SET v='3' WHERE k='rulesVersion'",
       );
@@ -1412,6 +1433,9 @@ describe("Authoritative private rooms", () => {
         JSON.stringify({
           ...saved,
           config: oldConfig,
+          properties: getBoard("legacy")
+            .filter((tile) => isCityTile(tile) || isResortTile(tile))
+            .map((tile) => ({ tile: tile.index, owner: null, level: 0 })),
           players: saved.players.map((player) =>
             player.seat === saved.activeSeat
               ? { ...player, position: 4 }
@@ -1432,6 +1456,19 @@ describe("Authoritative private rooms", () => {
     const resumed = await connect(game.credentials[game.state.activeSeat]);
     const welcome = await resumed.next("welcome");
     expect(welcome.snapshot?.config).not.toHaveProperty("economyRule");
+    expect(welcome.snapshot?.config).not.toHaveProperty("boardRule");
+    expect(welcome.snapshot?.config).not.toHaveProperty("sellBackPercent");
+    expect(
+      welcome.snapshot?.properties.map((property) => property.tile),
+    ).toEqual([
+      1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 17, 18, 20, 21, 22, 23, 25, 26,
+      27, 28, 30, 31,
+    ]);
+    expect(welcome.lobby).toMatchObject({
+      boardRule: "legacy",
+      economyRule: "prototype",
+      sellBackPercent: 50,
+    });
     resumed.send({
       type: "intent",
       id: "prototype-land-purchase",
@@ -1458,8 +1495,14 @@ describe("Authoritative private rooms", () => {
         "UPDATE meta SET v='3' WHERE k='rulesVersion'",
       ),
     );
+    await evictDurableObject(stub);
     const inbox = await connect(host);
-    await inbox.next("welcome");
+    expect((await inbox.next("welcome")).lobby).toMatchObject({
+      boardRule: "legacy",
+      economyRule: "prototype",
+      hotelPurchaseRule: "staged-hotels",
+      sellBackPercent: 50,
+    });
     inbox.send({
       type: "lobby",
       id: "prototype-lobby-start",
@@ -1472,6 +1515,8 @@ describe("Authoritative private rooms", () => {
     ).toMatchObject({
       hotelPurchaseRule: "staged-hotels",
       economyRule: "prototype",
+      boardRule: "legacy",
+      sellBackPercent: 50,
     });
   });
 
@@ -1487,19 +1532,43 @@ describe("Authoritative private rooms", () => {
       const {
         hotelPurchaseRule: _marker,
         economyRule: _economy,
+        boardRule: _board,
+        sellBackPercent: _sale,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
         "UPDATE meta SET v='2' WHERE k='rulesVersion'",
       );
-      const response = await exports.default.fetch(
-        new Request(`${origin}/api/rooms/${host.roomCode}`),
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          config: oldConfig,
+          properties: getBoard("legacy")
+            .filter((tile) => isCityTile(tile) || isResortTile(tile))
+            .map((tile) => ({ tile: tile.index, owner: null, level: 0 })),
+          players: saved.players.map((player) =>
+            player.seat === saved.activeSeat
+              ? { ...player, laps: 1, position: 6 }
+              : player,
+          ),
+          pending: {
+            kind: "buy",
+            seat: saved.activeSeat,
+            tile: 6,
+            maxLevel: 4,
+            deadline: Date.now() + 30_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
       );
     });
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[game.state.activeSeat]);
     const welcome = await resumed.next("welcome");
     expect(welcome.snapshot?.config).not.toHaveProperty("hotelPurchaseRule");
+    expect(welcome.snapshot?.config).not.toHaveProperty("boardRule");
+    expect(welcome.snapshot?.config).not.toHaveProperty("sellBackPercent");
     resumed.send({
       type: "intent",
       id: "legacy-hotel-purchase",
@@ -1515,6 +1584,14 @@ describe("Authoritative private rooms", () => {
           event.level === 4,
       ),
     ).toBe(true);
+    expect(events.events).toContainEqual(
+      expect.objectContaining({
+        type: "PropertyBought",
+        tile: 6,
+        level: 4,
+        amount: 460_000,
+      }),
+    );
     const persisted = await runInDurableObject(
       stub,
       (_instance, durableState) => {
@@ -1538,8 +1615,14 @@ describe("Authoritative private rooms", () => {
         "UPDATE meta SET v='2' WHERE k='rulesVersion'",
       ),
     );
+    await evictDurableObject(stub);
     const inbox = await connect(host);
-    await inbox.next("welcome");
+    expect((await inbox.next("welcome")).lobby).toMatchObject({
+      boardRule: "legacy",
+      economyRule: "prototype",
+      hotelPurchaseRule: "legacy-lap",
+      sellBackPercent: 50,
+    });
     inbox.send({
       type: "lobby",
       id: "legacy-lobby-start",
@@ -1552,6 +1635,8 @@ describe("Authoritative private rooms", () => {
     ).toMatchObject({
       hotelPurchaseRule: "legacy-lap",
       economyRule: "prototype",
+      boardRule: "legacy",
+      sellBackPercent: 50,
     });
     const rules = await runInDurableObject(
       stub,
@@ -1585,7 +1670,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='4' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='5' WHERE k='rulesVersion'",
       ),
     );
   });
@@ -1668,7 +1753,7 @@ describe("Authoritative private rooms", () => {
         await runInDurableObject(stub, (_instance, durableState) =>
           durableState.storage.sql.exec(
             "UPDATE meta SET v=? WHERE k=?",
-            versionKey === "stateVersion" ? "1" : "4",
+            versionKey === "stateVersion" ? "1" : "5",
             versionKey,
           ),
         );

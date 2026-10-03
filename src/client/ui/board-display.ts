@@ -1,6 +1,12 @@
-import { BOARD, ECONOMY, getTileLandPrice } from "../../shared/board/index.js";
 import {
+  ECONOMY,
+  getBoard,
+  getTileLandPrice,
+} from "../../shared/board/index.js";
+import {
+  boardRule,
   economyRule,
+  type GameConfig,
   type PublicState,
   type Seat,
 } from "../../shared/engine/index.js";
@@ -40,15 +46,12 @@ export const TILE_NAMES = [
   "Lisbonne",
   "Surprise",
   "Milan",
-  "Surprise",
+  "Chypre",
   "Berlin",
   "Championnat",
   "Prague",
-  "Vienne",
-  "Surprise",
-  "Londres",
   "Dubaï",
-  "Londres",
+  "Vienne",
   "Surprise",
   "Chicago",
   "Los Angeles",
@@ -85,15 +88,12 @@ const ENGLISH_TILE_NAMES = [
   "Lisbon",
   "Chance",
   "Milan",
-  "Chance",
+  "Cyprus",
   "Berlin",
   "Championship",
   "Prague",
-  "Vienna",
-  "Chance",
-  "London",
   "Dubai",
-  "London",
+  "Vienna",
   "Chance",
   "Chicago",
   "Los Angeles",
@@ -115,8 +115,81 @@ const ENGLISH_LEVEL_NAMES = [
   "Hotel",
   "Landmark",
 ] as const;
-export function tileName(index: number): string {
-  return translate(TILE_NAMES[index] ?? "", ENGLISH_TILE_NAMES[index] ?? "");
+const LEGACY_TILE_NAMES = [
+  "Grand départ",
+  "Roubaix",
+  "Saint-Étienne",
+  "Surprise",
+  "Grenade",
+  "Côte d’Azur",
+  "Valence",
+  "Séville",
+  "Île paisible",
+  "Porto",
+  "Lisbonne",
+  "Rome",
+  "Chypre",
+  "Milan",
+  "Surprise",
+  "Berlin",
+  "Championnat",
+  "Prague",
+  "Vienne",
+  "Surprise",
+  "Londres",
+  "Dubaï",
+  "Montréal",
+  "New York",
+  "Grand voyage",
+  "Sydney",
+  "Singapour",
+  "Séoul",
+  "Bali",
+  "Taxe locale",
+  "Osaka",
+  "Tokyo",
+] as const;
+const LEGACY_ENGLISH_TILE_NAMES = [
+  "Start",
+  "Roubaix",
+  "Saint-Étienne",
+  "Chance",
+  "Granada",
+  "French Riviera",
+  "Valencia",
+  "Seville",
+  "Island",
+  "Porto",
+  "Lisbon",
+  "Rome",
+  "Cyprus",
+  "Milan",
+  "Chance",
+  "Berlin",
+  "Championship",
+  "Prague",
+  "Vienna",
+  "Chance",
+  "London",
+  "Dubai",
+  "Montréal",
+  "New York",
+  "World tour",
+  "Sydney",
+  "Singapore",
+  "Seoul",
+  "Bali",
+  "Local tax",
+  "Osaka",
+  "Tokyo",
+] as const;
+type BoardConfig = Pick<GameConfig, "boardRule">;
+export function tileName(index: number, config?: BoardConfig): string {
+  const legacy = config !== undefined && boardRule(config) === "legacy";
+  return translate(
+    (legacy ? LEGACY_TILE_NAMES : TILE_NAMES)[index] ?? "",
+    (legacy ? LEGACY_ENGLISH_TILE_NAMES : ENGLISH_TILE_NAMES)[index] ?? "",
+  );
 }
 export function levelName(level: number): string {
   return translate(LEVEL_NAMES[level] ?? "", ENGLISH_LEVEL_NAMES[level] ?? "");
@@ -131,8 +204,8 @@ export const TILE_ICONS: Record<string, string> = {
   resort: "☂",
   city: "⌂",
 };
-export function tileColor(index: number) {
-  const tile = BOARD[index];
+export function tileColor(index: number, config?: BoardConfig) {
+  const tile = getBoard(config)[index];
   return tile.kind === "city"
     ? REGION_COLORS[tile.country]
     : tile.kind === "resort"
@@ -146,11 +219,12 @@ export function tilePrice(
   index: number,
   state: Pick<PublicState, "config"> | null = null,
 ) {
-  const tile = BOARD[index];
+  const tile = getBoard(state?.config)[index];
   return tile.kind === "city"
     ? getTileLandPrice(
         tile.index,
         state ? economyRule(state.config) : "reference",
+        state ? boardRule(state.config) : "country",
       )
     : tile.kind === "resort"
       ? ECONOMY.resortPrice

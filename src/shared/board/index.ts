@@ -1,11 +1,13 @@
 export {
   BOARD,
   BOARD_SIZE,
+  getBoard,
   getCountryCityTiles,
   getTile,
   ISLAND_TILE_INDEX,
   isCityTile,
   isResortTile,
+  LEGACY_BOARD,
 } from "./board.js";
 export {
   CITY_ECONOMY,
@@ -13,6 +15,8 @@ export {
   getTileBuildCost,
   getTileInvestedValue,
   getTileLandPrice,
+  LEGACY_CITY_ECONOMY,
+  LEGACY_REFERENCE_CITY_ECONOMY,
   REFERENCE_CITY_ECONOMY,
 } from "./city-economy.js";
 export {
@@ -26,6 +30,7 @@ export {
 } from "./economy.js";
 export { BOT_TIMING, CHANCE_AMOUNTS, DECISION_TIMING } from "./timing.js";
 export type {
+  BoardRule,
   BoardSide,
   BuildLevel,
   BuildLevelConfig,

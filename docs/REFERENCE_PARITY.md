@@ -160,10 +160,10 @@ Findings:
 - The split between land and house cost is still unknown between the two
   captured endpoints. The sale dialog suggests a 240 k bare plot for the 13th city.
 
-### Adopted in rules version 4 — 2 October 2026
+### Adopted in combined rules version 5 — 3 October 2026
 
 The user approved every proposed change, with one exception: Earthquake can still
-damage a Hotel. New rooms freeze `rulesVersion: 4` with
+damage a Hotel. New rooms freeze `rulesVersion: 5` with
 `economyRule: "reference"`; rooms saved under versions 2–3 keep the prototype
 economy. Room settings cannot choose the marker.
 
@@ -175,7 +175,7 @@ economy. Room settings cannot choose the marker.
    "2 houses in the first round"; the third needs a full lap).
 2. **Grid.** The reference values are laid side by side, so each side of the board
    keeps its price tier. The table below names the reference city each tile takes:
-   the first side drops Madrid, and tile 27 interpolates between Paris and Osaka.
+   the regrouped country board uses all twenty reference rank rows, including Madrid on the first side.
    A house costs 50/100/150/200 k on sides 1–4, which matches the three captured
    splits (first city, Sydney's bare plot at 240 k, Tokyo). Hotel costs are
    interpolated: 150/250/375/500 k by side. The Hong Kong, London, Las Vegas and
@@ -197,13 +197,14 @@ economy. Room settings cannot choose the marker.
 
 | Polytour tiles | Reference cities |
 | --- | --- |
-| 1, 2 · 4, 6, 7 | Granada, Seville · Hong Kong, Beijing, Shanghai |
+| 1, 2, 3 · 5, 6, 7 | Granada, Seville, Madrid · Hong Kong, Beijing, Shanghai |
 | 9, 10, 11 · 13, 15 | Venice, Milan, Rome · Hamburg, Berlin |
-| 17, 18, 20 · 22, 23 | London, Sydney, Chicago · Las Vegas, New York |
-| 25, 26, 27 · 30, 31 | Lyon, Paris, interpolated · Osaka, Tokyo |
+| 17, 19 · 21, 22, 23 | London, Sydney · Chicago, Las Vegas, New York |
+| 26, 27 · 29, 31 | Lyon, Paris · Osaka, Tokyo |
 
-Simulations with 1,000 four-bot matches (`tools/sim/reference.json`) keep every
-invariant. With a 60-round cap, matches last a median of 47 rounds (prototype:
+The original PR #26 simulations used its earlier board grid. Their 1,000
+four-bot matches (`tools/sim/reference.json`) kept every invariant; the following
+figures describe that earlier candidate, not the regrouped version-5 board. With a 60-round cap, matches last a median of 47 rounds (prototype:
 42); 28 % reach the cap (prototype: 21 %) because the first lap stops at two
 houses. Monopolies still decide most matches. Bankruptcies are rarer (7.7 %
 against 15 %) because sales refund the full investment. The last player in turn
@@ -216,10 +217,10 @@ order wins 19.3 % of matches instead of 15.3 %.
 | Lobby | Every available starting capital and duration value | User preset and 20m/1h/2h choices confirmed; full slider ranges partially captured |
 | Modes | Individual/teams, seat count, bot options, map choices | Four individual seats implemented; remaining modes deferred |
 | Start | Crossing vs exact landing payout, per-lap unlocks | Salary 400 k user confirmed; exact landing behavior remains Polytour |
-| Board | All 32 positions, purchase prices, country groups | France to Tokyo progression; reference grid laid side by side in rules version 4; land/house split partly interpolated |
-| Buildings | Every level's incremental price and rent | Reference rent table adopted in rules version 4; hotel costs interpolated |
-| Buyout | Cost formula, protection, payout recipient | 2× to the owner; Hotels protected in rules version 4 |
-| Specials | Island, travel, championship, resorts, tax | Reference values adopted in rules version 4 (see above) |
+| Board | All 32 positions, purchase prices, country groups | France to Tokyo progression; reference grid laid side by side in rules version 5; land/house split partly interpolated |
+| Buildings | Every level's incremental price and rent | Reference rent table adopted in rules version 5; hotel costs interpolated |
+| Buyout | Cost formula, protection, payout recipient | 2× to the owner; Hotels protected in rules version 5 |
+| Specials | Island, travel, championship, resorts, tax | Reference values adopted in rules version 5 (see above) |
 | Cards | Deck contents, targeting, held cards | Original 16-card deck; reference comparison pending |
 | End conditions | Monopolies, bankruptcy, duration tie-breaks | User monopoly switches plus last standing/resorts and real-time/round limits |
 

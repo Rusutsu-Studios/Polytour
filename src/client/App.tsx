@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { BOARD, ECONOMY, ruleEconomy } from "../shared/board/index.js";
+import { ECONOMY, getBoard } from "../shared/board/index.js";
 import type {
   GameConfig,
   GameEvent,
@@ -19,13 +19,11 @@ import type {
   WinKind,
 } from "../shared/engine/index.js";
 import {
-  economyRule,
   decisionWindow,
   getProperty,
   legalActions,
   netWorth,
   propertyRefund,
-  propertyRent,
 } from "../shared/engine/index.js";
 import type {
   LobbyState,
@@ -371,55 +369,76 @@ function BoardFallback({
   saleTargets,
   saleSelected,
   saleBlocked = false,
+  targets,
+  picked,
+  config,
 }: {
   state: PublicState | null;
   onSelect: (tile: number) => void;
   saleTargets?: readonly number[];
   saleSelected?: number | null;
   saleBlocked?: boolean;
+  targets?: readonly number[] | null;
+  picked?: number | null;
+  config?: GameConfig;
 }) {
+  const choices = targets ?? saleTargets;
+  const chosen = targets != null ? picked : saleSelected;
+  const boardConfig = state?.config ?? config;
   return (
     <section
       className="flat-board"
       data-sale-active={saleTargets !== undefined}
+      data-pick-active={targets != null}
       aria-label={t("Plateau accessible", "Accessible board")}
     >
       <p className="flat-board-note">
         {t("Vue légère du plateau", "Simple board view")}
       </p>
-      {BOARD.map((tile) => (
+      {getBoard(boardConfig).map((tile) => (
         <button
           type="button"
           key={tile.index}
-          style={{ "--tile-color": tileColor(tile.index) } as CSSProperties}
+          style={
+            {
+              "--tile-color": tileColor(tile.index, boardConfig),
+            } as CSSProperties
+          }
           data-sale={saleTargets?.includes(tile.index) || undefined}
+          data-pick={targets?.includes(tile.index) || undefined}
           aria-pressed={
-            saleTargets?.includes(tile.index)
-              ? saleSelected === tile.index
-              : undefined
+            choices?.includes(tile.index) ? chosen === tile.index : undefined
           }
           aria-label={
             state && saleTargets?.includes(tile.index)
               ? t(
-                  `Choisir ${tileName(tile.index)} à vendre · ${money(propertyRefund(state, tile.index))}`,
-                  `Select ${tileName(tile.index)} to sell · ${money(propertyRefund(state, tile.index))}`,
+                  `Choisir ${tileName(tile.index, boardConfig)} à vendre · ${money(propertyRefund(state, tile.index))}`,
+                  `Select ${tileName(tile.index, boardConfig)} to sell · ${money(propertyRefund(state, tile.index))}`,
                 )
               : undefined
           }
           disabled={
-            saleTargets !== undefined &&
-            (saleBlocked || !saleTargets.includes(tile.index))
+            choices !== undefined &&
+            (saleBlocked || !choices.includes(tile.index))
           }
           onClick={() => onSelect(tile.index)}
         >
-          <span>{tileName(tile.index)}</span>
+          <span>{tileName(tile.index, boardConfig)}</span>
           <b>
             {state && saleTargets?.includes(tile.index)
               ? `+${money(propertyRefund(state, tile.index))}`
               : state && getProperty(state, tile.index)?.owner != null
                 ? PLAYER_SYMBOLS[getProperty(state, tile.index)?.owner ?? 0]
-                : tilePrice(tile.index, state) != null
-                  ? money(tilePrice(tile.index, state) ?? 0)
+                : tilePrice(
+                      tile.index,
+                      state ?? (config ? { config } : null),
+                    ) != null
+                  ? money(
+                      tilePrice(
+                        tile.index,
+                        state ?? (config ? { config } : null),
+                      ) ?? 0,
+                    )
                   : TILE_ICONS[tile.kind]}
           </b>
         </button>
@@ -442,23 +461,23 @@ function eventText(event: GameEvent, state: PublicState): string | null {
       );
     case "PropertyBought":
       return t(
-        `${name} achète ${tileName(event.tile)} · ${money(event.amount)}`,
-        `${name} buys ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} achète ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+        `${name} buys ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
       );
     case "PropertyUpgraded":
       return t(
-        `${name} construit à ${tileName(event.tile)} · ${levelName(event.level)}`,
-        `${name} builds in ${tileName(event.tile)} · ${levelName(event.level)}`,
+        `${name} construit à ${tileName(event.tile, state?.config)} · ${levelName(event.level)}`,
+        `${name} builds in ${tileName(event.tile, state?.config)} · ${levelName(event.level)}`,
       );
     case "BoughtOut":
       return t(
-        `${name} rachète ${tileName(event.tile)} · ${money(event.amount)}`,
-        `${name} buys out ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} rachète ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+        `${name} buys out ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
       );
     case "PropertySold":
       return t(
-        `${name} vend ${tileName(event.tile)} · ${money(event.amount)}`,
-        `${name} sells ${tileName(event.tile)} · ${money(event.amount)}`,
+        `${name} vend ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+        `${name} sells ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
       );
     case "RentPaid":
       return t(
@@ -489,8 +508,8 @@ function eventText(event: GameEvent, state: PublicState): string | null {
     case "ChampionshipChanged":
       return event.host
         ? t(
-            `Championnat à ${tileName(event.host.tile)} · loyers ×${event.host.multiplier}`,
-            `Championship in ${tileName(event.host.tile)} · rent ×${event.host.multiplier}`,
+            `Championnat à ${tileName(event.host.tile, state?.config)} · loyers ×${event.host.multiplier}`,
+            `Championship in ${tileName(event.host.tile, state?.config)} · rent ×${event.host.multiplier}`,
           )
         : null;
     case "MoneyTransferred":
@@ -794,9 +813,10 @@ function TurnTimer({
   pending: PublicState["pending"];
   config: GameConfig;
 }) {
+  const startedAt = useRef(Date.now());
   if (!pending) return <div className="player-timer" aria-hidden="true" />;
   const windowMs = decisionWindow(config, pending.kind);
-  const delay = pending.deadline - windowMs - Date.now();
+  const delay = pending.deadline - windowMs - startedAt.current;
   return (
     <div className="player-timer" aria-hidden="true">
       <span
@@ -918,9 +938,17 @@ function MatchView({
     [picking, decisionState, credentials.seat],
   );
   const pickKey = boardPickKey(decisionState);
-  const [pick, setPick] = useState<{ key: string; tile: number } | null>(null);
+  const [pick, setPick] = useState<{
+    key: string;
+    tile: number;
+    pending: PublicState["pending"];
+  } | null>(null);
   const picked =
-    pickTargets && pick?.key === pickKey && pickTargets.includes(pick.tile)
+    pickTargets &&
+    room.connection === "online" &&
+    pick?.key === pickKey &&
+    pick.pending === decisionState.pending &&
+    pickTargets.includes(pick.tile)
       ? pick.tile
       : null;
   const diceToolLabel =
@@ -970,13 +998,42 @@ function MatchView({
     setTool(null);
   }
   function choosePick(tile: number) {
-    if (pickTargets?.includes(tile)) setPick({ key: pickKey, tile });
+    if (!saleBlocked && pickTargets?.includes(tile))
+      setPick({ key: pickKey, tile, pending: decisionState.pending });
   }
   function selectOnBoard(tile: number) {
     // While choosing, other spaces are inert so a misclick never opens a panel.
     if (pickTargets) choosePick(tile);
     else inspectTile(tile);
   }
+  useEffect(() => {
+    setSaleSelection((previous) =>
+      previous &&
+      (previous.gameId !== authoritative.gameId ||
+        previous.pending !== salePending ||
+        room.connection !== "online" ||
+        busy)
+        ? null
+        : previous,
+    );
+  }, [authoritative.gameId, salePending, room.connection, busy]);
+  useEffect(() => {
+    setPick((previous) =>
+      previous &&
+      (previous.key !== pickKey ||
+        previous.pending !== decisionState.pending ||
+        room.connection !== "online" ||
+        busy)
+        ? null
+        : previous,
+    );
+  }, [pickKey, decisionState.pending, room.connection, busy]);
+  useEffect(() => {
+    if (salePending || picking) {
+      setInspectorOpen(false);
+      setTool(null);
+    }
+  }, [salePending, picking]);
   useEffect(() => {
     if (!tool) return;
     const frame = requestAnimationFrame(() => {
@@ -1013,7 +1070,9 @@ function MatchView({
           fallback={
             <BoardFallback
               state={game}
-              onSelect={inspectTile}
+              onSelect={selectOnBoard}
+              targets={pickTargets}
+              picked={picked}
               saleTargets={salePending ? saleTargets : undefined}
               saleSelected={saleSelected}
               saleBlocked={saleBlocked}
@@ -1031,7 +1090,11 @@ function MatchView({
             <BoardScene
               state={game}
               selected={decisionSelected}
-              onSelect={inspectTile}
+              onSelect={selectOnBoard}
+              targets={pickTargets}
+              picked={picked}
+              pickKey={pickKey}
+              pickSeat={credentials.seat}
               zoom={zoom}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? credentials.seat : undefined}
@@ -1292,10 +1355,12 @@ function MatchView({
               state={serverState ?? game}
               seat={credentials.seat}
               act={room.act}
-              blocked={room.pending || room.connection !== "online"}
+              blocked={saleBlocked}
               randomness={room.randomness}
               selected={decisionSelected}
               onSelect={salePending ? inspectTile : onSelect}
+              picked={picked}
+              onPick={choosePick}
             />
           </motion.div>
         )}
@@ -1526,7 +1591,7 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const { serverState, viewState } = useDirector();
+  const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
   useEffect(() => {
     if (
@@ -1629,11 +1694,22 @@ function App() {
   const isGame = credentials && game;
   const debug = new URLSearchParams(window.location.search).has("debug");
   const blockActions = room.pending || room.connection !== "online";
+  const previewConfig: GameConfig = {
+    ...config,
+    gameId: "preview",
+    boardRule: room.lobby?.boardRule ?? "country",
+    economyRule: room.lobby?.economyRule ?? "reference",
+    hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
+    sellBackPercent: room.lobby?.sellBackPercent ?? 100,
+  };
   const host = credentials?.seat === room.lobby?.hostSeat;
   const seated =
     room.lobby?.seats.filter((seat) => seat.control !== null).length ?? 0;
   return (
-    <main className={isGame ? "game-shell" : "lobby-shell"}>
+    <main
+      className={isGame ? "game-shell" : "lobby-shell"}
+      data-reduced-motion={reducedMotion}
+    >
       {!isGame && (
         <header className="topbar">
           <span className="brand-button">
@@ -1754,7 +1830,13 @@ function App() {
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
-                fallback={<BoardFallback state={null} onSelect={setSelected} />}
+                fallback={
+                  <BoardFallback
+                    state={null}
+                    config={previewConfig}
+                    onSelect={setSelected}
+                  />
+                }
               >
                 <Suspense
                   fallback={
@@ -1766,6 +1848,7 @@ function App() {
                 >
                   <BoardScene
                     state={null}
+                    config={previewConfig}
                     selected={null}
                     onSelect={setSelected}
                     preview
@@ -1885,7 +1968,13 @@ function App() {
           </div>
           <div className="room-preview">
             <SceneBoundary
-              fallback={<BoardFallback state={null} onSelect={setSelected} />}
+              fallback={
+                <BoardFallback
+                  state={null}
+                  config={previewConfig}
+                  onSelect={setSelected}
+                />
+              }
             >
               <Suspense
                 fallback={
@@ -1896,6 +1985,7 @@ function App() {
               >
                 <BoardScene
                   state={null}
+                  config={previewConfig}
                   selected={null}
                   onSelect={setSelected}
                   preview

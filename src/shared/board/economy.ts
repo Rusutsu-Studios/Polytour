@@ -15,7 +15,7 @@ export const ECONOMY = {
 } as const;
 
 type RuleEconomy = {
-  readonly sellBackPercent: number;
+  readonly sellBackPercent: 50 | 100;
   readonly minimumTax: number;
   readonly islandReleaseFee: number;
   /** Failed escape rolls after which the player is released on the spot. */

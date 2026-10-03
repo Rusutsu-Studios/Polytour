@@ -1,10 +1,14 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import gsap from "gsap";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { BOARD } from "../../shared/board/index.js";
-import type { PublicState } from "../../shared/engine/index.js";
-import { getProperty } from "../../shared/engine/index.js";
+import { type BoardRule, getBoard } from "../../shared/board/index.js";
+import type { GameConfig, PublicState } from "../../shared/engine/index.js";
+import {
+  boardRule,
+  economyRule,
+  getProperty,
+} from "../../shared/engine/index.js";
 import { useDirector } from "../director/director.js";
 import { PLAYER_COLORS, tileColor } from "../ui/board-display.js";
 import { LAWN_TOP, visibleFaces } from "./board-layout.js";
@@ -18,11 +22,11 @@ import {
   PLOT_DEPTH,
   POND,
   plotTree,
-  TOWN_PLOTS,
   TOWN_TREES,
   type TownPlot,
   type TownTree,
   townCircuit,
+  townPlots,
 } from "./town-layout.js";
 
 // The living town in the middle of the board. Its plots mirror the board:
@@ -140,35 +144,52 @@ const RESORT: readonly Part[] = [
 
 const SHAPES = ["plinth", "wall", "gable", "crown", "spire", "pole"] as const;
 const CAPACITY = {
-  plinth: 24,
-  wall: 48,
-  gable: 24,
-  crown: 24,
-  spire: 24,
-  pole: 24,
+  plinth: 32,
+  wall: 64,
+  gable: 32,
+  crown: 32,
+  spire: 32,
+  pole: 32,
 };
 const WINDOWS = 640;
 const TREES = 96;
 
-function owned(view: PublicState | null, plot: TownPlot, preview: boolean) {
+function owned(
+  view: PublicState | null,
+  plot: TownPlot,
+  preview: boolean,
+  rule: BoardRule,
+  maxLevel: number,
+) {
   const property = view ? getProperty(view, plot.tile) : null;
   if (property?.owner != null)
     return { level: property.level, color: PLAYER_COLORS[property.owner] };
   // The lobby echoes the preview lots: a busy town in the board's colors.
-  if (preview && BOARD[plot.tile].kind === "city")
-    return { level: 1 + (plot.tile % 5), color: tileColor(plot.tile) };
+  if (preview && getBoard(rule)[plot.tile].kind === "city")
+    return {
+      level: 1 + (plot.tile % maxLevel),
+      color: tileColor(plot.tile, { boardRule: rule }),
+    };
   return null;
 }
 
 function TownBuildings({
   state,
+  config,
   preview,
   handle,
 }: {
   state: PublicState | null;
+  config?: GameConfig;
   preview: boolean;
   handle: { current: DowntownHandle | null };
 }) {
+  const boardConfig = state?.config ?? config;
+  const rule = boardConfig ? boardRule(boardConfig) : "country";
+  const maxLevel =
+    boardConfig && economyRule(boardConfig) === "prototype" ? 5 : 4;
+  const plots = townPlots(rule);
+  const board = getBoard(rule);
   const meshes = useRef<Record<string, THREE.InstancedMesh | null>>({});
   const windows = useRef<THREE.InstancedMesh>(null);
   const trunks = useRef<THREE.InstancedMesh>(null);
@@ -198,12 +219,12 @@ function TownBuildings({
   const facades = useMemo(
     () =>
       new Map(
-        TOWN_PLOTS.map((plot) => [
+        plots.map((plot) => [
           plot.tile,
-          mix(tileColor(plot.tile), "#fffaf0", 0.78),
+          mix(tileColor(plot.tile, { boardRule: rule }), "#fffaf0", 0.78),
         ]),
       ),
-    [],
+    [plots, rule],
   );
   const draw = useCallback(
     (view: PublicState | null, growth: TownGrowth | null) => {
@@ -236,8 +257,8 @@ function TownBuildings({
       };
       for (const [index, tree] of TOWN_TREES.entries()) plantTree(tree, index);
       let craneAt: TownPlot | null = null;
-      for (const plot of TOWN_PLOTS) {
-        const building = owned(view, plot, preview);
+      for (const plot of plots) {
+        const building = owned(view, plot, preview, rule, maxLevel);
         if (!building) {
           plantTree(plotTree(plot), plot.tile);
           continue;
@@ -251,10 +272,10 @@ function TownBuildings({
           const progress = THREE.MathUtils.clamp((growing - 0.12) / 0.7, 0, 1);
           rise = Math.max(0.02, growthEase(progress));
           spread = 0.75 + 0.25 * Math.min(1, progress * 1.6);
-          if (BOARD[plot.tile].kind === "city") craneAt = plot;
+          if (board[plot.tile].kind === "city") craneAt = plot;
         }
         const parts =
-          BOARD[plot.tile].kind === "resort"
+          board[plot.tile].kind === "resort"
             ? RESORT
             : CITY_LEVELS[building.level];
         const [faceX, faceZ] = visibleFaces(plot.tile);
@@ -369,7 +390,7 @@ function TownBuildings({
         }
       }
     },
-    [preview, dummy, color, facades],
+    [preview, dummy, color, facades, plots, board, rule, maxLevel],
   );
   useEffect(() => {
     handle.current = { draw };
@@ -604,7 +625,8 @@ function AmbientLife({ animated }: { animated: boolean }) {
     if (rotor.current) rotor.current.rotation.y = time * 18;
     const jet = jets.current;
     if (jet) {
-      for (const [index, fountain] of FOUNTAINS.entries()) {
+      for (let index = 0; index < FOUNTAINS.length; index++) {
+        const fountain = FOUNTAINS[index];
         const pulse = 0.75 + Math.sin(time * 2.6 + index * 1.7) * 0.25;
         dummy.rotation.set(0, 0, 0);
         dummy.position.set(
@@ -837,20 +859,39 @@ function AmbientLife({ animated }: { animated: boolean }) {
 
 export function Downtown({
   state,
+  config,
   preview = false,
   handle,
 }: {
   state: PublicState | null;
+  config?: GameConfig;
   preview?: boolean;
   handle: { current: DowntownHandle | null };
 }) {
   const { reducedMotion } = useDirector();
+  const [visible, setVisible] = useState(
+    () => document.visibilityState !== "hidden",
+  );
+  useEffect(() => {
+    const changed = () => setVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", changed);
+    return () => document.removeEventListener("visibilitychange", changed);
+  }, []);
   // Lobby previews stay still: they are decoration, and an idle lobby should
   // not keep rendering a 3D scene.
   return (
     <group>
-      <TownBuildings state={state} preview={preview} handle={handle} />
-      <AmbientLife animated={!reducedMotion && !preview} />
+      <TownBuildings
+        state={state}
+        config={config}
+        preview={preview}
+        handle={handle}
+      />
+      <AmbientLife
+        animated={
+          !reducedMotion && !preview && state?.status === "active" && visible
+        }
+      />
     </group>
   );
 }
