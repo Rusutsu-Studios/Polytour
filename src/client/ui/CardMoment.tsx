@@ -16,7 +16,11 @@ import "./CardMoment.css";
 type Moment = { event: CardDraw; context: AnimationContext; readingMs: number };
 
 /** One bounded reading moment in the Director queue, before the card's effects. */
-export default function CardMoment() {
+export default function CardMoment({
+  obscured = false,
+}: {
+  obscured?: boolean;
+}) {
   const { t } = useLocale();
   const [moment, setMoment] = useState<Moment | null>(null);
   const finish = useRef<() => void>(() => {});
@@ -47,7 +51,7 @@ export default function CardMoment() {
             : null;
         needsFocus.current = false;
         // The engine reserves this reading time before the next decision.
-        const readingMs = DECISION_TIMING.cardAnimation / context.speed;
+        const readingMs = DECISION_TIMING.cardAnimation / context.playbackRate;
         return new Promise<void>((done) => {
           resolve = done;
           setMoment({ event, context, readingMs });
@@ -59,13 +63,13 @@ export default function CardMoment() {
     });
   }, []);
   useEffect(() => {
-    if (!moment || !dialog.current) return;
+    if (!moment || obscured || !dialog.current) return;
     const element = dialog.current;
     element.showModal();
     return () => element.close();
-  }, [moment]);
+  }, [moment, obscured]);
   useEffect(() => {
-    if (moment || busy || !needsFocus.current) return;
+    if (moment || busy || obscured || !needsFocus.current) return;
     needsFocus.current = false;
     const previous = restoreFocus.current;
     if (
@@ -78,7 +82,7 @@ export default function CardMoment() {
       document
         .querySelector<HTMLElement>(".decision-compact .roll-button")
         ?.focus();
-  }, [moment, busy]);
+  }, [moment, busy, obscured]);
   if (!moment) return null;
   const { event, context, readingMs } = moment;
   const card = describeCard(event, context.next);

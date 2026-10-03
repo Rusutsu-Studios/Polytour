@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { BoardRule, EconomyRule, WorldTourRule } from "../board/index.js";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
+import type { RoomDiagnostics } from "./room-diagnostics.js";
 
 // Layout, prices and sale quotes depend on frozen room rules; stale clients reload.
 export const PROTOCOL_VERSION = 3;
@@ -93,6 +94,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("ping"), t: z.number().finite() }).strict(),
+  z.object({ type: z.literal("debug-info") }).strict(),
 ]);
 /**
  * Host-only lobby operations. `start` with `fillBots` seats bots in every empty
@@ -107,7 +109,8 @@ export type ClientMessage =
   | { type: "sync"; lastSeq: number | null }
   | { type: "intent"; id: string; atSeq: number; action: Action }
   | { type: "lobby"; id: string; op: LobbyOp }
-  | { type: "ping"; t: number };
+  | { type: "ping"; t: number }
+  | { type: "debug-info" };
 
 export type RoomCredentials = { roomCode: string; seat: Seat; token: string };
 export type LobbySeat = {
@@ -138,6 +141,7 @@ export type ServerMessage =
   | {
       type: "welcome";
       protocolVersion: number;
+      roomDebugVersion?: number;
       you: { seat: Seat };
       seq: number;
       snapshot: PublicState | null;
@@ -156,4 +160,5 @@ export type ServerMessage =
   | { type: "lobby"; lobby: LobbyState }
   | { type: "presence"; seat: Seat; status: "online" | "away" | "bot" }
   | ({ type: "randomness" } & RandomnessStatus)
-  | { type: "pong"; t: number; serverNow: number };
+  | { type: "pong"; t: number; serverNow: number }
+  | { type: "room-diagnostics"; value: RoomDiagnostics };

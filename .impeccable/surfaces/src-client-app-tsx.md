@@ -41,10 +41,32 @@ rule toggles and discrete duration/decision sliders. Remove promotional slogans
 and decorative captions. French/English switching is a local display preference;
 it updates board labels, cards, decisions and tools without reconnecting the room.
 
+## Match menu
+
+The toolbar's pause icon opens Continue, Settings and Leave while the match
+continues. Personal settings use Game, Video, Audio and Debug tabs. Game holds
+language; Video holds reduced motion and board size; Audio is marked coming soon.
+The match HUD measures the HTTP round trip to a static Cloudflare asset every five
+seconds while the match is connected and the browser page is visible and online,
+restarting on connectivity changes. Debug shares this stream,
+with the contacted host and Cloudflare entry point (code, location and region).
+A tiny bottom-right `AMS · 42 ms` indicator keeps refreshing outside Debug,
+without a background card or extra controls. Probes bypass Worker execution.
+The expanded Debug sheet draws connected players' ingress routes toward one
+shared GameRoom with local SQLite and plots real room WebSocket round trips.
+Room pings run every five seconds only while this view is visible. Jurisdiction
+and unknown DO DC/server rows are omitted. Diagrams do not infer the object's
+location from an ingress POP or show SQLite as a remote network hop.
+New decisions and cards keep progressing without replacing the menu's focus.
+The sliders icon separately displays the fixed room rules, and the invitation
+icon displays the room code. Playback has normal pacing and automatic recovery;
+there are no manual speed or finish-animation controls.
+
 ## Verification and unresolved work
 
 Check 1280x720, 1440x900 and 1920x1080; use both a real local match and authored
-developed-board fixtures. Remote runtime is presently blocked by a confirmed
-Cloudflare free-tier SQLite write quota. Local checks do not establish a playable
-remote Preview until the allowance resets. Record dated evidence and revision in
-PLAYABLE_CHECKPOINT.md. Balance remains provisional and target-PC FPS unmeasured.
+developed-board fixtures. A real Cloudflare branch Preview room was verified on
+3 October 2026 at implementation revision a9b3261, including ZRH socket metadata,
+room RTT, stopped Debug traffic and reconnect recovery. Record dated evidence and
+revision in PLAYABLE_CHECKPOINT.md; one connection does not establish distributed
+human gameplay or production. Balance remains provisional and target-PC FPS unmeasured.

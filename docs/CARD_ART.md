@@ -24,6 +24,6 @@ stacks are original code-native geometry.
 
 The card presenter shares the event Director with the scene. A card stays
 visible for up to 2.6 seconds (850 ms when catching up) or until Continue/Escape.
-Effects then resume in event order. Skip, reconnect and snapshot replacement
+Effects then resume in event order. Automatic recovery, reconnect and snapshot replacement
 cancel the reading moment and reconcile to the server. The server's existing
 decision clock continues; the popup does not pause a match or change a rule.

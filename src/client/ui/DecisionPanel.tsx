@@ -52,6 +52,7 @@ export type DecisionPanelProps = {
   randomness: RandomnessStatus | null;
   selected: number | null;
   onSelect: (tile: number) => void;
+  obscured?: boolean;
   picked: number | null;
   onPick: (tile: number) => void;
 };
@@ -282,11 +283,12 @@ export default function DecisionPanel({
   randomness,
   selected,
   onSelect,
+  obscured = false,
   picked,
   onPick,
 }: DecisionPanelProps) {
   const { t } = useLocale();
-  const { busy, reducedMotion, speed, viewState } = useDirector();
+  const { busy, reducedMotion, viewState } = useDirector();
   const [now, setNow] = useState(Date.now());
   const [selection, setSelection] = useState<{
     decision: string;
@@ -299,6 +301,8 @@ export default function DecisionPanel({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const resumeRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const obscuredRef = useRef(obscured);
+  obscuredRef.current = obscured;
   const pending = state.pending;
   const decisionSeat = pending?.seat ?? state.activeSeat;
   const active = state.players.find((player) => player.seat === decisionSeat);
@@ -470,6 +474,7 @@ export default function DecisionPanel({
       !boardPick &&
       !busy &&
       !rngBusy &&
+      !obscured &&
       dismissed !== decisionKey,
   );
   const countdown = pending
@@ -523,11 +528,13 @@ export default function DecisionPanel({
     headingRef.current?.focus();
     return () => {
       dialog.close();
-      if (previousFocus.current?.isConnected) previousFocus.current.focus();
+      if (!obscuredRef.current && previousFocus.current?.isConnected)
+        previousFocus.current.focus();
     };
   }, [modalOpen, decisionKey]);
   useEffect(() => {
-    if (dismissed === decisionKey && !modalOpen) resumeRef.current?.focus();
+    if (dismissed === decisionKey && !modalOpen && !obscuredRef.current)
+      resumeRef.current?.focus();
   }, [dismissed, decisionKey, modalOpen]);
   function choose(action: Action) {
     setSelection({
@@ -732,7 +739,7 @@ export default function DecisionPanel({
         aria-busy={blocked}
         initial={reducedMotion ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reducedMotion ? 0 : 0.22 / speed }}
+        transition={{ duration: reducedMotion ? 0 : 0.22 }}
       >
         <div className="pick-head">
           <span
@@ -1042,7 +1049,7 @@ export default function DecisionPanel({
         initial={reducedMotion ? false : { opacity: 0.7, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{
-          duration: reducedMotion ? 0 : 0.28 / speed,
+          duration: reducedMotion ? 0 : 0.28,
           ease: "easeOut",
         }}
       >

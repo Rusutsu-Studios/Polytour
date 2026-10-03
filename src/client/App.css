@@ -933,42 +933,11 @@
 .tool-drawer .proof-body .text-button {
   font-size: 11px;
 }
-.view-settings {
-  display: grid;
-  gap: 20px;
+.tool-drawer--rules {
+  width: min(900px, calc(100vw - 48px));
 }
-.view-settings > label {
-  font-size: 12px;
-  font-weight: 750;
-}
-.view-settings select {
-  display: block;
-  margin-top: 9px;
-  width: 100%;
-  padding: 11px;
-  background: #f0f0df;
-  border: 1px solid #bdc6b8;
-  border-radius: 7px;
-  color: var(--ink);
-  font-size: 13px;
-}
-.view-settings .checkbox-label {
-  margin-bottom: 0;
-}
-.zoom-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.zoom-control > span {
-  flex: 1;
-  font-size: 12px;
-  font-weight: 700;
-}
-.zoom-control .button {
-  padding: 8px 11px;
-  min-height: 34px;
-  font-size: 11px;
+.match-rules > .field-note {
+  margin-bottom: 18px;
 }
 .room-tool-code {
   display: flex;
@@ -986,11 +955,6 @@
   font-size: 11px;
   padding: 10px;
   min-height: 37px;
-}
-.room-tool .settings-fields input[type="number"],
-.room-tool .settings-fields select {
-  background: #f0f0df;
-  border-color: #bdc6b8;
 }
 .match-caption {
   position: absolute;
@@ -1013,11 +977,17 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.match-caption .text-button {
-  pointer-events: auto;
-  flex-shrink: 0;
+.match-network {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 2px;
   font-size: 10px;
-  padding: 0;
+  line-height: 1.2;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #173b45;
+  white-space: nowrap;
 }
 .match-end-panel {
   position: absolute;
@@ -2831,6 +2801,11 @@ button.seat-open:disabled {
   .player-card[data-seat="0"],
   .player-card[data-seat="3"] {
     bottom: 12px;
+  }
+  .match-network {
+    right: 12px;
+    bottom: 0;
+    font-size: 9px;
   }
   .player-name-row > span {
     font-size: 9px;

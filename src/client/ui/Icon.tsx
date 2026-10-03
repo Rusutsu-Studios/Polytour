@@ -13,6 +13,7 @@ type IconName =
   | "settings"
   | "search"
   | "exit"
+  | "pause"
   | "fullscreen"
   | "graphics"
   | "lock"
@@ -34,6 +35,7 @@ const paths: Record<IconName, string> = {
   settings: "M4 7h16M4 17h16M9 4v6m6 4v6",
   search: "M21 21l-5-5m-6 2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
   exit: "M9 3H3v18h6m-2-9h14m-5-5 5 5-5 5",
+  pause: "M8 5v14M16 5v14",
   fullscreen: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
   graphics:
     "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm4 18h8m-4-4v4",
