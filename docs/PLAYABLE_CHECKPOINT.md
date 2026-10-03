@@ -480,3 +480,42 @@ matchmaking, audio and advanced artwork remain future work. Current geometry and
 graphics are original; no competitor art or purchasable gameplay boosts are used.
 Mobile/touch adaptation and physical phone performance are optional later work,
 separate from completing the current PC checkpoint.
+
+
+## Combined PR integration — 3 October 2026
+
+The candidate composes PRs #19, #21–24, #26–28 and #47. New rooms use rules
+version 5 and protocol version 3. Version-2/3 saves and pre-existing lobbies keep
+their original board, prices, Hotel progression, refunds and travel choices;
+clients refresh for the protocol change. This supersedes the separate version-4
+branch checkpoints above without remapping existing saved tile indices.
+
+The country board uses all twenty reference city rows. Deeds, legal construction
+choices, travel/hosting/card picks, refunds and town plots select the same frozen
+room rules. Scene integration preserves passing pawns at corners, resort
+bungalows, festival markers, the living town and the lawn roll control. Large
+screen projection avoids double scaling; informative timers remain accurate
+across rerenders and visible with reduced motion.
+
+Local verification on the combined candidate:
+
+- TypeScript and Biome pass; 182 unit/Worker tests pass.
+- 100 reference/country and 100 prototype/legacy simulated games preserve money,
+  cards, ownership, replay and legal decisions, and all terminate.
+- All 23 standard browser scenarios pass, including the local production
+  Worker's authoritative four-seat match/reconnect and actual board picking.
+  The separate live legacy-drand scenario also passes: a future commitment,
+  verified public beacon, independent verification, reconnect and proof download.
+- Desktop controls and sale targets work at 1280×720, 1440×900, 1920×1080,
+  2560×1440 and 3840×2160. A country-board travel and championship regression
+  verifies pointer/keyboard selection and explicit confirmation.
+- Production build, bundle budgets, append-only Cloudflare configuration checks
+  and deploy dry run pass. Initial JavaScript is 178.7 kB gzip (250 kB limit).
+- Five sequential solo starts each send one start and receive the created game,
+  with no page errors. An earlier startup failure did not reproduce after the
+  code stopped changing during the browser run.
+
+These checks validate the local candidate. They do not establish GitHub merge,
+production publication, hardware frame rate or human-playtest balance. With a
+20-round simulation cap, 95% of reference and 91% of prototype matches reach the
+cap; the small sample is a correctness check, not proof of a balanced economy.

@@ -523,6 +523,76 @@ test("combined country and reference sale targets stay usable through 4K", async
   expect(room.errors).toEqual([]);
 });
 
+test("country travel and championship pick the same legal targets on the board and by keyboard", async ({
+  page,
+}) => {
+  const room = await enterSaleRoom(page, true, true);
+  const base = room.state();
+  const state = {
+    ...base,
+    activeSeat: 0 as const,
+    players: base.players.map((player) => ({ ...player, cash: 1_000_000 })),
+    resolutionQueue: [] as const,
+  };
+  for (const size of DESKTOP_SIZES) {
+    await page.setViewportSize(size);
+    // Calibrate against the sale labels before changing the decision overlay.
+    room.snapshot(base);
+    await expect(quote(page, 3)).toBeVisible();
+    const city = await boardTileClickPoint(page, 3);
+    const resort = await boardTileClickPoint(page, 4);
+    room.snapshot({
+      ...state,
+      pending: {
+        kind: "travel",
+        seat: 0,
+        fee: 0,
+        targets: [3, 4],
+        deadline: Date.now() + 60_000,
+      },
+    });
+    const destination = page.getByLabel("Destination", { exact: true });
+    await expect(destination.locator("option:not([disabled])")).toHaveCount(2);
+    await page.mouse.click(city.x, city.y);
+    await expect(destination).toHaveValue("3");
+    await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    await page.mouse.click(resort.x, resort.y);
+    await expect(destination).toHaveValue("4");
+    await expect(page.locator(".decision-confirm")).toContainText(
+      "Côte d’Azur",
+    );
+    await destination.selectOption("3");
+    await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    expect(room.intents).toHaveLength(0);
+  }
+  // The server owns the target list. Selecting a host remains reversible until
+  // confirmation, then the same action is accepted by the authoritative engine.
+  const city = await (async () => {
+    room.snapshot(base);
+    await expect(quote(page, 3)).toBeVisible();
+    return boardTileClickPoint(page, 3);
+  })();
+  room.snapshot({
+    ...state,
+    championshipHost: null,
+    pending: {
+      kind: "host",
+      seat: 0,
+      targets: [3],
+      deadline: Date.now() + 60_000,
+    },
+  });
+  await expect(page.getByLabel("Ville hôte", { exact: true })).toBeVisible();
+  await page.mouse.click(city.x, city.y);
+  await expect(page.getByLabel("Ville hôte", { exact: true })).toHaveValue("3");
+  expect(room.intents).toHaveLength(0);
+  await page.locator(".decision-confirm").click();
+  await expect.poll(() => room.intents.length).toBe(1);
+  room.commit(0);
+  expect(room.state().championshipHost?.tile).toBe(3);
+  expect(room.errors).toEqual([]);
+});
+
 test("roll button and informative timer remain usable through 4K and reduced motion", async ({
   page,
 }) => {
