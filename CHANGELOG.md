@@ -16,6 +16,8 @@ has been published, and it does not reconstruct earlier development history.
   strip showing only the price or the owner's rent. Beaches are one piece of
   sand, the tax and chance squares are smooth concrete, and unsold plots in the
   central town no longer hold trees (#57).
+- Country colors are spread further apart so no two groups look alike, and the
+  tax square is named "Impôts" in French and "Taxes" in English (#57).
 - Players are identified by color only; per-player symbols are removed from
   the board, pawns, corner HUDs, cards and menus (#57).
 

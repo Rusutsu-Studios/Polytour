@@ -232,11 +232,11 @@ type Point = readonly [number, number];
 /** A raised paving stone: lit along its top edge, shaded along its lower one. */
 function stone(context: Context, path: () => void, face: string) {
   context.save();
-  context.fillStyle = mix(face, INK, 0.2);
+  context.fillStyle = mix(face, INK, 0.07);
   context.translate(1.5, 2);
   path();
   context.fill();
-  context.fillStyle = mix(face, "#ffffff", 0.4);
+  context.fillStyle = mix(face, "#ffffff", 0.3);
   context.translate(-2.5, -3);
   path();
   context.fill();
@@ -268,13 +268,14 @@ function polygon(context: Context, points: readonly Point[]) {
   };
 }
 
-/** The joints between stones: the country's color, deeper and a touch darker. */
+/** The joints between stones: only a little deeper than the stones, so the
+ * pattern stays a texture and never competes with names and prices. */
 function joint(color: string) {
-  return mix(mix(PAPER, color, 0.82), INK, 0.22);
+  return mix(PAPER, color, 0.58);
 }
 
 /** One stone's face in the country's color, varied from stone to stone. */
-function face(color: string, next: () => number, light = 0.36, spread = 0.14) {
+function face(color: string, next: () => number, light = 0.44, spread = 0.05) {
   return mix(PAPER, color, light + next() * spread);
 }
 
@@ -287,10 +288,10 @@ type Pavement = (
 ) => void;
 
 const lawn: Pavement = (context, color, width, height, next) => {
-  const base = mix(PAPER, color, 0.68);
+  const base = mix(PAPER, color, 0.56);
   context.fillStyle = base;
   context.fillRect(0, 0, width, height);
-  context.fillStyle = mix(base, "#ffffff", 0.1);
+  context.fillStyle = mix(base, "#ffffff", 0.08);
   for (let y = 0; y < height; y += 64) context.fillRect(0, y, width, 32);
   context.lineWidth = 2;
   context.lineCap = "round";
@@ -298,7 +299,7 @@ const lawn: Pavement = (context, color, width, height, next) => {
   for (let blade = 0; blade < blades; blade++) {
     const [x, y, length] = [next() * width, next() * height, 4 + next() * 5];
     context.strokeStyle =
-      next() < 0.6 ? mix(base, INK, 0.16) : mix(base, "#ffffff", 0.32);
+      next() < 0.6 ? mix(base, INK, 0.07) : mix(base, "#ffffff", 0.2);
     context.beginPath();
     context.moveTo(x, y);
     context.lineTo(x + (next() - 0.5) * 4, y - length);
@@ -327,7 +328,7 @@ const flagstones: Pavement = (context, color, width, height, next) => {
 const mosaic: Pavement = (context, color, width, height) => {
   context.fillStyle = joint(color);
   context.fillRect(0, 0, width, height);
-  const [light, dark] = [mix(PAPER, color, 0.22), mix(PAPER, color, 0.7)];
+  const [light, dark] = [mix(PAPER, color, 0.4), mix(PAPER, color, 0.58)];
   for (let y = 0; y < height; y += 16)
     for (let x = 0; x < width; x += 16) {
       const wave = (y + 208 + Math.sin((x + 8) / 34) * 20) % 80;
@@ -414,7 +415,7 @@ const slate: Pavement = (context, color, width, height, next) => {
       stone(
         context,
         rect(context, x + 3, row * 70 + 3, 98, 64, 4),
-        face(color, next, 0.44, 0.1),
+        face(color, next, 0.46, 0.04),
       );
 };
 
@@ -428,13 +429,13 @@ const deck: Pavement = (context, color, width, height, next) => {
       [0, butt],
       [butt, width],
     ]) {
-      const plank = face(color, next, 0.38);
+      const plank = face(color, next, 0.44);
       stone(
         context,
         rect(context, from + 2, row * 40 + 2.5, to - from - 4, 35, 3),
         plank,
       );
-      context.strokeStyle = mix(plank, INK, 0.1);
+      context.strokeStyle = mix(plank, INK, 0.04);
       for (const offset of [12, 25]) {
         const y = row * 40 + offset + next() * 3;
         context.beginPath();
