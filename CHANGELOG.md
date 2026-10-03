@@ -9,7 +9,7 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-10-03
+## [0.4.0] - 2026-10-03
 
 ### Added
 
@@ -17,6 +17,29 @@ has been published, and it does not reconstruct earlier development history.
   metadata and structured game data (#41).
 - A production homepage sitemap and crawl policy that excludes private room
   pages and previews from indexing, with proper missing-page responses.
+
+## [0.3.1] - 2026-10-03
+
+### Changed
+
+- Festival cities return to the garland of pennants between two masts, now in
+  vivid colors, instead of the face-on banner; the floating multiplier stays
+  gone and the championship host keeps its searchlights (#78).
+- Milan/Berlin and Prague/Vienne stand on smooth concrete slabs, square and long
+  staggered, in muted slate-lavender and warm-taupe colors that no other region
+  uses, so they no longer resemble Tokyo and Osaka (#78).
+
+## [0.3.0] - 2026-10-03
+
+### Changed
+
+- The version in the welcome footer opens a scrollable release history sourced
+  directly from CHANGELOG.md, with localized controls and keyboard navigation.
+- The Championship corner is now a stadium with a spinning gold trophy; it
+  lights up in the host's colour while a championship runs. The World Tour
+  corner is now a jet port with a terminal, a control tower and an airliner
+  taking off. Both share the town's ambient motion and keep the draw-call
+  budget (#77).
 
 ## [0.2.0] - 2026-10-03
 

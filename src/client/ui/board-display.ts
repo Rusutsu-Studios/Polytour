@@ -19,16 +19,17 @@ export const PLAYER_COLORS = [
   "#26764c",
 ] as const;
 export const PLAYER_LABELS = ["Corail", "Océan", "Lavande", "Forêt"] as const;
-// Eight hues spread around the wheel, so groups stay apart even as the light
-// tints printed on the board. Look-alike pairs (orange and yellow, red and
-// pink, blue and teal) sit on different sides, and yellow stays away from the
-// sand of the beaches.
+// Six vivid hues spread around the wheel and two muted concrete tones, so
+// groups stay apart even as the light tints printed on the board. Look-alike
+// pairs (orange and yellow, blue and teal) sit on different sides, yellow
+// stays away from the sand of the beaches, and the two concrete regions
+// (slate lavender, warm taupe) never read as Japan's pink.
 export const REGION_COLORS = {
   A: "#5b8fd9",
   B: "#ec8a3c",
   C: "#5fb56c",
-  D: "#9a7ad8",
-  E: "#e0524f",
+  D: "#8a84ad",
+  E: "#a9876f",
   F: "#e6c033",
   G: "#3fb5ad",
   H: "#dc72bd",
