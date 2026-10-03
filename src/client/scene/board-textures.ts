@@ -172,13 +172,14 @@ function umbrella(context: Context, x: number, y: number, size: number) {
   context.restore();
 }
 
+/** Vivid pennant colors for festival garlands. */
 export const FESTIVAL_COLORS = [
-  "#e2553f",
-  "#2f8fc4",
-  "#8a5cc2",
-  "#2f9a64",
-  "#f08a2c",
-  "#fffaf0",
+  "#ff4a3d",
+  "#ffcf26",
+  "#1fa8ff",
+  "#6fd13a",
+  "#ff5fc4",
+  "#ff8f1f",
 ] as const;
 
 /** Seeded noise, so a lot repaints identically whenever its print changes. */
@@ -291,6 +292,24 @@ type Pavement = (
   next: () => number,
 ) => void;
 
+/** A smooth ground with a faint grain, like render or polished stone. */
+const smooth: Pavement = (context, color, width, height, next) => {
+  const base = mix(PAPER, color, 0.5);
+  const sheen = context.createLinearGradient(0, 0, 0, height);
+  sheen.addColorStop(0, mix(base, "#ffffff", 0.1));
+  sheen.addColorStop(1, mix(base, INK, 0.04));
+  context.fillStyle = sheen;
+  context.fillRect(0, 0, width, height);
+  speckle(
+    context,
+    Math.floor(next() * 0xffffffff),
+    width,
+    height,
+    mix(base, "#ffffff", 0.2),
+    mix(base, INK, 0.06),
+  );
+};
+
 const lawn: Pavement = (context, color, width, height, next) => {
   const base = mix(PAPER, color, 0.56);
   context.fillStyle = base;
@@ -338,45 +357,6 @@ const mosaic: Pavement = (context, color, width, height) => {
       const wave = (y + 208 + Math.sin((x + 8) / 34) * 20) % 80;
       context.fillStyle = wave < 22 ? dark : light;
       context.fillRect(x + 1.5, y + 1.5, 13, 13);
-    }
-};
-
-const herringbone: Pavement = (context, color, width, height, next) => {
-  context.fillStyle = joint(color);
-  context.fillRect(0, 0, width, height);
-  // Staircases of a horizontal and a vertical brick, repeated along (1, 1)
-  // and offset by (2, -2) bricks' widths, tile the plane without gaps.
-  const unit = 30;
-  for (let step = -4; step <= 24; step++)
-    for (let stair = -8; stair <= 8; stair++) {
-      const x = (step + 2 * stair) * unit;
-      const y = (step - 2 * stair) * unit;
-      if (x < -3 * unit || y < -3 * unit || x > width || y > height) continue;
-      stone(
-        context,
-        rect(context, x + 2, y + 2, 2 * unit - 4, unit - 4, 3),
-        face(color, next),
-      );
-      stone(
-        context,
-        rect(context, x + 2, y + unit + 2, unit - 4, 2 * unit - 4, 3),
-        face(color, next),
-      );
-    }
-};
-
-const setts: Pavement = (context, color, width, height, next) => {
-  context.fillStyle = joint(color);
-  context.fillRect(0, 0, width, height);
-  for (let row = 0; row * 50 < height; row++)
-    for (let x = row % 2 ? -28 : 0; x < width; ) {
-      const size = 52 + Math.round(next() * 14);
-      stone(
-        context,
-        rect(context, x + 2, row * 50 + 2, size - 4, 46, 13),
-        face(color, next),
-      );
-      x += size;
     }
 };
 
@@ -459,14 +439,14 @@ const deck: Pavement = (context, color, width, height, next) => {
 };
 
 // Each country paves its cities its own way, in its own color, as on the
-// reference boards: a lawn, flagstones, a wave mosaic, herringbone bricks,
-// cobbles, crazy paving, slate and a timber deck.
+// reference boards: a lawn, flagstones, a wave mosaic, smooth render for
+// Italy-Germany and Czechia-Austria, crazy paving, slate and a timber deck.
 const COUNTRY_PAVEMENTS: readonly Pavement[] = [
   lawn,
   flagstones,
   mosaic,
-  herringbone,
-  setts,
+  smooth,
+  smooth,
   crazyPaving,
   slate,
   deck,
@@ -1175,46 +1155,47 @@ export function noteTexture() {
   });
 }
 
-/** A gold rosette with the rent multiplier; a hosted festival wears its host's ring. */
-export function medallionTexture(multiplier: number, ring: string) {
-  return canvasTexture(256, 256, (context) => {
-    // Ribbon tails first, so the coin covers their tops.
-    for (const side of [-1, 1]) {
-      context.fillStyle = side < 0 ? "#e2553f" : "#2f8fc4";
+/**
+ * A festival banner: a swallowtail flag in vivid colors with a gold trim and a
+ * white star. Its right edge is the mast side; the notch is at the free end.
+ * A championship host flies the gold version.
+ */
+export function bannerTexture(hosted: boolean) {
+  return canvasTexture(512, 200, (context) => {
+    const [top, bottom] = hosted
+      ? ["#ffd84a", "#f5a000"]
+      : ["#ff8a1e", "#ff4f2e"];
+    const notch = 92;
+    const shape = () => {
       context.beginPath();
-      context.moveTo(128 + side * 22, 170);
-      context.lineTo(128 + side * 62, 250);
-      context.lineTo(128 + side * 40, 236);
-      context.lineTo(128 + side * 28, 254);
-      context.lineTo(128 + side * 2, 186);
+      context.moveTo(0, 6);
+      context.lineTo(506, 6);
+      context.lineTo(506, 194);
+      context.lineTo(0, 194);
+      context.lineTo(notch, 100);
       context.closePath();
-      context.fill();
-    }
-    context.fillStyle = ring;
-    context.beginPath();
-    for (let point = 0; point < 24; point++) {
-      const angle = (point * Math.PI) / 12;
-      const radius = point % 2 ? 98 : 110;
-      context.lineTo(
-        128 + Math.cos(angle) * radius,
-        112 + Math.sin(angle) * radius,
-      );
-    }
-    context.closePath();
+    };
+    const cloth = context.createLinearGradient(0, 0, 0, 200);
+    cloth.addColorStop(0, top);
+    cloth.addColorStop(1, bottom);
+    shape();
+    context.fillStyle = cloth;
     context.fill();
-    context.fillStyle = "#ffd24f";
-    context.beginPath();
-    context.arc(128, 112, 84, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = "#fff1b8";
-    context.lineWidth = 6;
-    context.beginPath();
-    context.arc(128, 112, 72, 0, Math.PI * 2);
-    context.stroke();
-    context.fillStyle = "#5b3b06";
-    context.font = `900 82px ${DISPLAY_FONT}`;
-    context.fillText(`×${multiplier}`, 128, 120);
-    context.font = `900 30px ${LABEL_FONT}`;
-    context.fillText("★", 128, 56);
+    // Gold trim along both long edges, clipped to the swallowtail.
+    context.save();
+    shape();
+    context.clip();
+    context.fillStyle = hosted ? "#fff3b8" : "#ffd23f";
+    context.fillRect(0, 22, 512, 12);
+    context.fillRect(0, 166, 512, 12);
+    context.fillStyle = "#ffffff59";
+    context.fillRect(0, 6, 512, 10);
+    context.restore();
+    context.fillStyle = "#ffffff";
+    context.font = `900 104px ${DISPLAY_FONT}`;
+    context.fillText("★", 318, 104);
+    // A darker hem where the flag wraps the mast.
+    context.fillStyle = hosted ? "#c98200" : "#c8361f";
+    context.fillRect(486, 6, 20, 188);
   });
 }
