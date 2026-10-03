@@ -28,11 +28,14 @@ the sources and the values that remain interpolated.
   make bots much weaker. Buyouts are the fast, public property-transfer mechanic.
 
 The server owns turn order, deck order, and all random draws. Live dice come from
-fresh server Web Crypto for each new match, without an external beacon wait.
-Saved drand matches retain their committed-round mode. The private seeded PRNG is used for deck/turn-order shuffles
-and repeatable simulations. See [RANDOMNESS.md](RANDOMNESS.md). The rules below are
-written to be deterministic: when several legal targets are otherwise equivalent,
-the lowest tile index wins the tie.
+fresh server Web Crypto for each roll in new matches, without an external beacon
+wait. Saved drand matches retain their committed-round dice mode. Live Chance draws
+use fresh server `EngineContext.chanceEntropy` to select uniformly among remaining
+cards, independently of the seeded setup. The seeded PRNG still handles setup and
+repeatable simulations; only simulations use a seeded draw sequence. See
+[RANDOMNESS.md](RANDOMNESS.md). The rules below are written to be deterministic:
+when several legal targets are otherwise equivalent, the lowest tile index wins
+the tie.
 
 ## Match setup, laps, and rounds
 
@@ -220,8 +223,9 @@ it to the bank.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
-- **Chance:** draw from a 16-card deck. When its draw pile is empty, shuffle the
-  discard pile to make the next draw pile; held keep cards remain unavailable.
+- **Chance:** draw uniformly from the remaining cards in a 16-card deck, without
+  replacement. When its draw pile is empty, discarded cards form the next draw
+  pile; held keep cards remain unavailable.
 
 ### Payment, rent, buyout, and insolvency
 
@@ -340,7 +344,9 @@ properties to *block* a monopoly, which is where the tension comes from.
 - Drawn, non-keep cards resolve immediately, then enter the discard pile. Keep cards
   leave the deck until used; a player can hold at most one Guardian Angel and one
   Coupon. When used, they enter the discard pile. When the draw pile is empty, its
-  discard pile is shuffled to replenish it; held cards remain out of that shuffle.
+  discard pile replenishes it; held cards remain out of the draw. Each live draw
+  uses fresh cryptographic rejection sampling, including from previously saved
+  seeded decks. Seeded simulations shuffle on refill and remain reproducible.
 - A movement card moves and resolves its destination as though the pawn landed there.
   It cannot grant a doubles roll. Grand Tour, Jet Set, and Stadium Call move
   **clockwise** along the board, so the lap rule applies: Grand Tour always pays
@@ -414,17 +420,22 @@ bot seat (medium difficulty) when its grace period ends, until the player reconn
 
 ```ts
 // src/shared/engine/index.ts
-// GameState = PublicState + server-only secrets (PRNG state, deck order).
-export function createGame(config: GameConfig, seats: SeatInfo[], seed: number, ctx: { now: number }): { state: GameState; events: GameEvent[] };
+// GameState = PublicState + server-only fields (PRNG state, remaining deck).
+type EngineContext = {
+  readonly now: number;
+  readonly dice?: readonly [number, number];
+  readonly chanceEntropy?: readonly number[]; // fresh server uint32 words in live play
+};
+export function createGame(config: GameConfig, seats: SeatInfo[], seed: number, ctx: EngineContext): { state: GameState; events: GameEvent[] };
 
 export function applyAction(
   state: GameState,
   seat: Seat,
   action: Action,
-  ctx: { now: number; dice?: readonly [number, number] },
+  ctx: EngineContext,
 ): { ok: true; state: GameState; events: GameEvent[] } | { ok: false; error: RuleError };
 
-export function applyTimeout(state: GameState, ctx: { now: number }): { state: GameState; events: GameEvent[] };
+export function applyTimeout(state: GameState, ctx: EngineContext): { state: GameState; events: GameEvent[] };
 
 export function applyEvent(state: PublicState, event: GameEvent): PublicState; // pure reducer, used by server and client
 

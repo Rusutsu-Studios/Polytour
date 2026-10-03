@@ -16,6 +16,15 @@
       { "name": "MATCHMAKER", "class_name": "Matchmaker" }
     ]
   },
+  // Fixed route key: aggregate shedding per Cloudflare location, not per IP.
+  // The durable Matchmaker budget below the edge gate enforces global capacity.
+  "ratelimits": [
+    {
+      "name": "ROOM_CREATION_RATE_LIMIT",
+      "namespace_id": "4610060301",
+      "simple": { "limit": 120, "period": 60 }
+    }
+  ],
   "migrations": [
     {
       "tag": "v1",
@@ -49,6 +58,14 @@
   // Durable Object namespaces and storage; D1 and R2 stay unbound until preview-only
   // resources exist. Never point a Preview at production data.
   "previews": {
+    // A preview never spends the production rate-limit budget.
+    "ratelimits": [
+      {
+        "name": "ROOM_CREATION_RATE_LIMIT",
+        "namespace_id": "4610060302",
+        "simple": { "limit": 120, "period": 60 }
+      }
+    ],
     "durable_objects": {
       "bindings": [
         { "name": "GAME_ROOM", "class_name": "GameRoom" },

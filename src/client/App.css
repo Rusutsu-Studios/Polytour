@@ -1392,6 +1392,46 @@
   outline: 3px solid #236cce;
   outline-offset: 3px;
 }
+.graphics-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.graphics-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 92px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #648b99;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.graphics-toggle:hover {
+  background: #e6f1e8;
+}
+.game-tools .graphics-toggle {
+  min-height: 33px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: #dcf3f2;
+  color: #245566;
+  font-size: 12px;
+  box-shadow: 0 2px 0 #4fa6bb;
+}
+.game-tools .graphics-toggle:hover {
+  background: var(--paper);
+}
 .prototype-tag {
   background: #b9eadd;
   color: #285d58;

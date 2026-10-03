@@ -23,7 +23,7 @@ import {
   ruleEconomy,
 } from "../board/index.js";
 import { applyEvent, toPublic } from "./reducer.js";
-import { nextRandom, shuffle } from "./rng.js";
+import { createEntropySampler, nextRandom, shuffle } from "./rng.js";
 import type {
   Action,
   ApplyActionResult,
@@ -669,8 +669,21 @@ type DecisionInput = PendingDecision extends infer T
     : never
   : never;
 
+type ResolutionContext = EngineContext & {
+  readonly chanceIndex?: (range: number) => number;
+};
+function resolutionContext(context: EngineContext): ResolutionContext {
+  return {
+    ...context,
+    chanceIndex:
+      context.chanceEntropy === undefined
+        ? undefined
+        : createEntropySampler(context.chanceEntropy),
+  };
+}
+
 /** An action-local resolver: all public writes go through emit/applyEvent. */
-function resolver(initial: GameState, context: EngineContext) {
+function resolver(initial: GameState, context: ResolutionContext) {
   let state = initial;
   const events: GameEvent[] = [];
   const emit = (event: GameEvent) => {
@@ -930,16 +943,25 @@ function resolver(initial: GameState, context: EngineContext) {
     );
   const chance = (seat: Seat) => {
     if (state.deck.length === 0) {
-      const reshuffled = shuffle(state.discard, state.rngState);
-      secrets({
-        deck: reshuffled.items,
-        discard: [],
-        rngState: reshuffled.state,
-      });
+      if (context.chanceIndex) {
+        secrets({ deck: state.discard, discard: [] });
+      } else {
+        const reshuffled = shuffle(state.discard, state.rngState);
+        secrets({
+          deck: reshuffled.items,
+          discard: [],
+          rngState: reshuffled.state,
+        });
+      }
     }
-    const card = state.deck[0];
+    if (state.deck.length === 0) return;
+    // Selecting anew makes even a saved seeded deck unpredictable in live play.
+    const index = context.chanceIndex?.(state.deck.length) ?? 0;
+    const card = state.deck[index];
     if (!card) return;
-    secrets({ deck: state.deck.slice(1) });
+    secrets({
+      deck: [...state.deck.slice(0, index), ...state.deck.slice(index + 1)],
+    });
     const keep = card === "Guardian Angel" || card === "Coupon";
     const kept =
       keep && !getPlayer(state, seat).heldCards.includes(card as KeepCard);
@@ -1391,6 +1413,19 @@ export function applyAction(
   action: Action,
   context: EngineContext,
 ): ApplyActionResult {
+  return applyActionWithContext(
+    state,
+    seat,
+    action,
+    resolutionContext(context),
+  );
+}
+function applyActionWithContext(
+  state: GameState,
+  seat: Seat,
+  action: Action,
+  context: ResolutionContext,
+): ApplyActionResult {
   if (state.status !== "active")
     return {
       ok: false,
@@ -1410,7 +1445,7 @@ export function applyAction(
       error: { code: "illegal-action", message: "Invalid action time" },
     };
   if (state.matchDeadline !== null && context.now >= state.matchDeadline)
-    return { ok: true, ...finishOnTime(state) };
+    return { ok: true, ...finishOnTime(state, context) };
   if (
     action.type === "Roll" &&
     context.dice !== undefined &&
@@ -1518,7 +1553,10 @@ function timeoutAction(state: PublicState): Action {
       };
   }
 }
-function finishOnTime(state: GameState): CreateGameResult {
+function finishOnTime(
+  state: GameState,
+  context: ResolutionContext,
+): CreateGameResult {
   // Complete the already-earned landing before ranking; never start a fresh roll.
   let settled = state;
   const events: GameEvent[] = [];
@@ -1531,11 +1569,11 @@ function finishOnTime(state: GameState): CreateGameResult {
   ) {
     if (count > 100)
       throw new Error("Deadline settlement exceeded safety bound");
-    const result = applyAction(
+    const result = applyActionWithContext(
       settled,
       settled.pending.seat,
       timeoutAction(settled),
-      { now: (state.matchDeadline ?? state.startedAt) - 1 },
+      { ...context, now: (state.matchDeadline ?? state.startedAt) - 1 },
     );
     if (!result.ok)
       throw new Error(`Deadline settlement failed: ${result.error.message}`);
@@ -1562,11 +1600,12 @@ function finishOnTime(state: GameState): CreateGameResult {
 }
 export function applyTimeout(
   state: GameState,
-  context: EngineContext,
+  input: EngineContext,
 ): CreateGameResult {
+  const context = resolutionContext(input);
   if (state.status !== "active") return { state, events: [] };
   if (state.matchDeadline !== null && context.now >= state.matchDeadline)
-    return finishOnTime(state);
+    return finishOnTime(state, context);
   if (!state.pending || context.now < state.pending.deadline)
     return { state, events: [] };
   const events: GameEvent[] = [];
@@ -1575,7 +1614,7 @@ export function applyTimeout(
   do {
     const pending = next.pending;
     if (!pending) break;
-    const applied = applyAction(
+    const applied = applyActionWithContext(
       next,
       pending.seat,
       timeoutAction(next),
@@ -1851,7 +1890,7 @@ export function createGame(
     extraRoll: false,
     turnEnded: false,
   };
-  const resolved = resolver(state, context);
+  const resolved = resolver(state, resolutionContext(context));
   resolved.startDecision();
   const result = resolved.result();
   return {

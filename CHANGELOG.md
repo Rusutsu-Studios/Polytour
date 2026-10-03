@@ -19,6 +19,10 @@ has been published, and it does not reconstruct earlier development history.
 
 - Invitation links ask only for a nickname and join the invited room, with
   retryable errors, saved-seat recovery and a return to the start screen (#54).
+- Chance draws use fresh server cryptographic randomness, including saved games,
+  so public setup and observed cards cannot reveal the next draw (#46).
+- Shared room-creation limits bound anonymous storage allocation without IP keys;
+  health probes and unknown-room requests no longer create room tables (#46).
 - World Tour and long card moves walk the pawn along the board route, past Start
   when they cross it, instead of jumping across the board. The destination picker
   counts the Start salary a flight collects (#29).

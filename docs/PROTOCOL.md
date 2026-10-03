@@ -12,7 +12,18 @@ the older illustrative launch sketches below wherever they differ. The scaffold
 debug socket has been removed; `/api/health` remains.
 
 - `POST /api/rooms {name, config?}` returns201 and `{roomCode, seat, token}`.
+  Creation attempts first pass the fixed `room-creation` edge key (120/minute per
+  Cloudflare location), then the Matchmaker named `room-admission` (burst 60,
+  refill 1/second, at most 1,000 admissions per UTC day in one persisted record).
+  No allocation key comes from an IP, cookie or request header. Denials return
+  `{error: "rate-limited"}` with HTTP 429, `Retry-After` in seconds and
+  `Cache-Control: no-store`; edge denials use 60 seconds, durable denials wait for
+  refill or UTC-day reset. Gate failures use the HTTP 503 error path below.
 - `POST /api/rooms/:code/join {name}` returns200 and another seat capability.
+  Creation limits do not apply to joining, reconnecting or moves.
+- `/api/health`, `/api/rooms/:code/health` and `/api/queues/:mode/health` report
+  service liveness directly from the Worker, without a Durable Object lookup.
+  Room health validates the code format but does not establish that a room exists.
 - The WebSocket uses `Sec-WebSocket-Protocol: polytour, seat.<token>`, selects
   `polytour` in the response, and checks the same Origin before entering the room.
   Capability tokens never appear in public state, lobby, events, or URLs.
@@ -48,7 +59,11 @@ debug socket has been removed; `/api/health` remains.
   retain their future-round commitment, waiting/error status and verified proof;
   their committed round is unchanged on retry. The wire shapes remain compatible.
 - `events {fromSeq,toSeq,events,proofs?}` drives the shared reducer and Director.
-  Snapshots expose no deck, seed, hidden resolution queue, or session token.
+  `CardDrawn` records a uniform draw without replacement using fresh server
+  `EngineContext.chanceEntropy`, independent of seeded setup. This also handles
+  saved decks without a protocol, state schema or rules-version bump. Snapshots
+  expose no remaining deck, seed, Chance entropy, hidden resolution queue or
+  session token. Replay restores saved draws rather than drawing again.
 - Presence derives from live hibernatable sockets. A disconnected human has a
   60-second grace period before server bot takeover; reconnect restores control.
 - With no open player sockets, a room sleeps instead of simulating bots. The match
@@ -66,6 +81,11 @@ debug socket has been removed; `/api/health` remains.
 The prototype client requests a fresh snapshot on reconnect rather than buffering
 offline actions. Chat, emotes, accounts, matchmaking and spectator messages in the
 launch sketches below remain unimplemented.
+
+The shared creation budget can be exhausted by abusive callers; it constrains
+room allocation rather than guaranteeing DDoS resistance or fair player admission.
+Cloudflare's edge counter is local to each location and eventually consistent;
+the durable gate enforces the shared admission budget across locations.
 
 ## Principles
 
