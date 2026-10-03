@@ -9,12 +9,21 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
 ### Added
 
 - Polytour browser and home-screen icons, a share image, French/English search
   metadata and structured game data (#41).
 - A production homepage sitemap and crawl policy that excludes private room
   pages and previews from indexing, with proper missing-page responses.
+
+## [0.2.0] - 2026-10-03
+
+### Added
+
+- Automatic version preparation for each pull request, with shared instructions
+  for Codex and Claude and a CI check that rejects an unchanged application version.
 
 - Play opens a lobby with three bots instead of starting at once; friends who
   enter the room code take a bot's place (#30).
