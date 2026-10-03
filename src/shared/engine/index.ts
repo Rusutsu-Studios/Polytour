@@ -15,6 +15,7 @@ export {
   buyoutPrice,
   buyoutPriceAt,
   championshipCost,
+  changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,
   decisionWindow,

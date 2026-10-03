@@ -1,7 +1,9 @@
 # Game design (new-room rules v0.4; v0.2–v0.3 saved rooms retained)
 
 Polytour is a fast, aggressive property game for two to four players. A room has
-four seats; the host can seat server bots in empty places. Compared to classic
+four seats; its leader can seat server bots in empty places, and two people can
+share one screen. A player who takes over a bot mid-match inherits that seat's
+cash, cities, cards and turn (`PlayerControlChanged`); nothing else changes. Compared to classic
 Monopoly: a smaller board (32 tiles), bigger rents, **buyouts** (you can take an
 opponent's city), several **instant-win monopolies**, and a round limit so a match
 has a configurable duration. The user's default is a two-hour maximum; instant

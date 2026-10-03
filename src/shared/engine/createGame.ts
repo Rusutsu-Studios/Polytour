@@ -1631,6 +1631,48 @@ export function applyTimeout(
   );
   return { state: next, events };
 }
+/**
+ * Hands a seat to another controller during a match, as when someone who
+ * joined late takes a server bot's place. The seat keeps its cash, cities,
+ * position, cards and turn; only its name and control change.
+ */
+export function changeControl(
+  state: GameState,
+  seat: Seat,
+  control: "human" | "bot",
+  name?: string,
+): ApplyActionResult {
+  if (state.status !== "active")
+    return {
+      ok: false,
+      error: { code: "game-over", message: "The game has ended" },
+    };
+  const player = state.players.find((candidate) => candidate.seat === seat);
+  if (!player || player.bankrupt)
+    return {
+      ok: false,
+      error: {
+        code: "illegal-action",
+        message: "Only a player still in the game can change control",
+      },
+    };
+  if (name !== undefined && name.trim().length === 0)
+    return {
+      ok: false,
+      error: { code: "illegal-action", message: "A player needs a name" },
+    };
+  const event: GameEvent = {
+    type: "PlayerControlChanged",
+    seat,
+    control,
+    ...(name === undefined ? {} : { name }),
+  };
+  return {
+    ok: true,
+    state: { ...state, ...applyEvent(toPublic(state), event) },
+    events: [event],
+  };
+}
 export function botAction(
   state: PublicState,
   seat: Seat,

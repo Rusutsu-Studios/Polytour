@@ -71,6 +71,10 @@ results and the distinction between live gameplay and presentation fixtures.
 - [x] GameRoom DO: hibernatable sockets, attachments, SQLite state + event log, timers table + alarm
 - [x] Reconnect with `lastSeq`; bot takeover after grace period
 - [x] Private rooms: `POST /api/rooms`, join by code, lobby (seats, bots, start)
+- [x] Play opens a lobby with three bots; friends take the bots' places
+- [x] Transferable room leader: lock and approvals, late arrivals take a bot's place
+      or wait for the next game, return to the lobby between matches
+- [x] Local players sharing one screen (hotseat), acting through their device's socket
 - [x] Accessible DOM board fallback alongside the 3D client; full four-browser game test
 - [x] DO tests: intent flow, reject (illegal and `stale`), reconnect replay (always `welcome` first),
       connect to an uninitialized room rejected, alarm-driven timeout

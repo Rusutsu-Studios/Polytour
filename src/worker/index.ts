@@ -120,6 +120,7 @@ app.post("/api/rooms", async (context) => {
       code,
       parsed.data.name,
       config,
+      parsed.data.bots,
     );
     if (created)
       return context.json(created, 201, { "Cache-Control": "no-store" });

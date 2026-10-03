@@ -3,7 +3,8 @@
 ## Implemented prototype boundary
 
 The first playable slice uses a Worker and one SQLite-backed GameRoom per private
-match of two to four seats. It stores state, events, proof receipts, commands and timers in
+room of two to four seats. A room outlives its matches: its leader can return
+everyone to the lobby and start again. It stores state, events, proof receipts, commands and timers in
 that room. Create/join issues a cryptographically random seat capability; only its
 hash is stored. The WebSocket sends the token in `Sec-WebSocket-Protocol`, never
 the URL. The client keeps it in sessionStorage, so refresh restores its seat in
@@ -24,6 +25,17 @@ The edge limit is location-local and eventually consistent; the durable budget
 constrains allocation across locations. Neither guarantees complete DDoS resistance
 or fair admission: abusive callers can exhaust the shared budget. See
 [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md#room-allocation-controls).
+
+Besides `seats`, the room stores a `members` table (people waiting for a place:
+an approval, a bot's seat or the next game, each with a capability hash) and a
+`local_seats` table (players sharing a device with a controller seat; they have no
+token of their own). `meta` holds the leader seat (`host`, default 0 for older
+rooms) and the `locked` flag. Both tables are created with the room; a room
+saved before them gains them with `IF NOT EXISTS` when it next wakes (unknown
+rooms still allocate nothing), so saved rooms need no state migration. Sockets are matched to seats and
+members through their attachments rather than tags, so a waiting member's socket
+stays open when that person takes a place. Spectating members do not count as an
+audience: with only them connected, the room sleeps like an abandoned match.
 
 Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
 expiry. New-room rolls resolve immediately through server Web Crypto, without a

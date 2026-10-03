@@ -141,6 +141,17 @@ const event = z.custom<GameEvent>((value) => {
 const lobby = z.object({
   roomCode: z.string(),
   hostSeat: seat,
+  locked: z.boolean().default(false),
+  waiting: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        approved: z.boolean(),
+        online: z.boolean(),
+      }),
+    )
+    .default([]),
   status: z.enum(["lobby", "playing", "finished"]),
   config: RoomConfigSchema,
   boardRule: z.enum(["country", "legacy"]).default("country"),
@@ -157,6 +168,7 @@ const lobby = z.object({
         name: z.string(),
         control: z.enum(["human", "bot"]).nullable(),
         online: z.boolean(),
+        controller: seat.nullable().default(null),
       }),
     )
     .length(4),
@@ -186,7 +198,10 @@ const envelope = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("welcome"),
     protocolVersion: integer,
-    you: z.object({ seat }),
+    you: z.object({
+      seat: seat.nullable(),
+      member: z.string().nullable().default(null),
+    }),
     seq: integer.nonnegative(),
     snapshot: state.nullable(),
     lobby,

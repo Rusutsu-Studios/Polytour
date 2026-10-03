@@ -275,10 +275,7 @@ test("Leave clears the invitation, failed error and join code and restores norma
     "Leaving guest",
   );
   await expect(
-    page.getByRole("button", { name: "Jouer avec 3 bots" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Créer une salle entre amis" }),
+    page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
   expect(new URL(page.url()).search).toBe("");
   await page.reload();
@@ -371,7 +368,7 @@ test("invalid invitation parameters fail upfront in both languages without joini
       page.locator(".invitation-entry button[type=submit]:enabled"),
     ).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Jouer avec 3 bots" }),
+      page.getByRole("button", { name: "Jouer", exact: true }),
     ).toHaveCount(0);
     await expect(page.locator("#room-code")).toHaveCount(0);
     expect(requests).toEqual([]);

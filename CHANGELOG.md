@@ -11,6 +11,14 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Added
 
+- Play opens a lobby with three bots instead of starting at once; friends who
+  enter the room code take a bot's place (#30).
+- A transferable room leader who can lock the room and approve newcomers, hand
+  a bot's place to someone who arrived mid-game, and bring everyone back to the
+  lobby during or after a match. People who join mid-game watch until they get
+  a place (#33).
+- Players sharing one PC: any seated player can seat a local player, whose
+  decisions appear on that screen labelled with their name (#44).
 - A pause menu with Game, Video, Audio and Debug settings; the game continues
   while the menu is open, and audio controls are marked coming soon (#35).
 - A five-second Cloudflare ping indicator and on-demand room routing and
@@ -18,6 +26,7 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Changed
 
+- Protocol version 4: open browsers reload after the deploy that ships it.
 - Personal settings live in the pause menu; the sliders tool shows fixed match
   rules. Video settings retain the High/Low graphics control.
 - Removed manual animation finish/skip and speed controls, preserving reduced

@@ -8,6 +8,7 @@ import {
 import type { Action, Seat } from "../../shared/engine/index.js";
 import type {
   ClientMessage,
+  LobbyOp,
   LobbyState,
   RandomnessStatus,
   RoomConfig,
@@ -42,13 +43,14 @@ export async function enterRoom(
   name: string,
   config?: RoomConfig,
   code?: string,
+  bots = 0,
 ): Promise<RoomCredentials> {
   let response: Response;
   try {
     response = await fetch(code ? `/api/rooms/${code}/join` : "/api/rooms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(code ? { name } : { name, config }),
+      body: JSON.stringify(code ? { name } : { name, config, bots }),
     });
   } catch {
     throw new Error(
@@ -63,12 +65,19 @@ export async function enterRoom(
   return body;
 }
 
+/** Who this browser is in the room, as the server last welcomed it. */
+export type RoomIdentity = { seat: Seat | null; member: string | null };
+
 export function useRoom(credentials: RoomCredentials | null) {
   const [lobby, setLobby] = useState<LobbyState | null>(null);
+  const [you, setYou] = useState<RoomIdentity | null>(null);
   const [connection, setConnection] = useState<Connection>("offline");
   const [error, setError] = useState<string | null>(null);
   const [randomness, setRandomness] = useState<RandomnessStatus | null>(null);
-  const [pending, setPending] = useState(false);
+  // What awaits the room's answer: a lobby operation's type, or "intent".
+  // Screens show waiting only for their own command, not for every quick one.
+  const [pendingOp, setPendingOp] = useState<string | null>(null);
+  const pending = pendingOp !== null;
   const [retry, setRetry] = useState(0);
   const socket = useRef<WebSocket | null>(null);
   const sequence = useRef(0);
@@ -116,6 +125,7 @@ export function useRoom(credentials: RoomCredentials | null) {
     }
     if (!credentials) {
       setLobby(null);
+      setYou(null);
       debugController.setSocket(null);
       updateConnection("offline");
       return;
@@ -204,13 +214,16 @@ export function useRoom(credentials: RoomCredentials | null) {
             setError(null);
             sequence.current = message.seq;
             setLobby(message.lobby);
+            // A waiting member can be welcomed again into a seat, and the
+            // leader's return to the lobby welcomes everyone without a game.
+            setYou(message.you);
             setRandomness(
               message.snapshot?.status === "finished"
                 ? null
                 : message.randomness,
             );
             director.reset(message.snapshot);
-            setPending(false);
+            setPendingOp(null);
             pendingId.current = null;
             if (requestTimer.current) clearTimeout(requestTimer.current);
             break;
@@ -244,7 +257,7 @@ export function useRoom(credentials: RoomCredentials | null) {
           case "reject":
             if (message.id === pendingId.current) {
               pendingId.current = null;
-              setPending(false);
+              setPendingOp(null);
               if (requestTimer.current) clearTimeout(requestTimer.current);
             }
             if (message.type === "reject") {
@@ -270,8 +283,28 @@ export function useRoom(credentials: RoomCredentials | null) {
                   "Only the host can start the game or change its settings.",
                 ],
                 "host-only": [
-                  "Seul l’hôte peut démarrer ou régler la partie.",
-                  "Only the host can start the game or change its settings.",
+                  "Seul le chef de salle peut faire cela.",
+                  "Only the room leader can do that.",
+                ],
+                "not-seated": [
+                  "Vous attendez encore une place dans cette salle.",
+                  "You are still waiting for a seat in this room.",
+                ],
+                "not-your-seat": [
+                  "Ce joueur n’est pas sur votre écran.",
+                  "That player is not on your screen.",
+                ],
+                "not-local": [
+                  "Ce joueur ne partage plus un écran de la salle.",
+                  "That player no longer shares a screen in this room.",
+                ],
+                "not-transferable": [
+                  "Le rôle de chef ne peut aller qu’à une autre personne connectée avec son propre appareil.",
+                  "The leader role can only go to another person on their own device.",
+                ],
+                "member-not-found": [
+                  "Cette personne n’attend plus dans la salle.",
+                  "That person is no longer waiting in this room.",
                 ],
                 "game-not-started": [
                   "La partie n’a pas encore commencé. Attendez le départ.",
@@ -355,13 +388,17 @@ export function useRoom(credentials: RoomCredentials | null) {
         debugController.disconnect(ws);
         requestSync.current = null;
         if (requestTimer.current) clearTimeout(requestTimer.current);
-        setPending(false);
+        setPendingOp(null);
         pendingId.current = null;
         if (incompatible) {
           updateConnection("offline");
           return;
         }
-        if (event.code === 1008 || event.reason === "Room expired") {
+        if (
+          event.code === 1008 ||
+          event.code === 4003 ||
+          event.reason === "Room expired"
+        ) {
           updateConnection("offline");
           setError(
             event.reason === "Room expired"
@@ -369,10 +406,15 @@ export function useRoom(credentials: RoomCredentials | null) {
                   "Cette salle a expiré. Revenez à l’accueil pour créer une partie.",
                   "This room has expired. Return to the home screen to create a game.",
                 )
-              : translate(
-                  "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
-                  "The room refused the connection. Refresh the page or return to the home screen.",
-                ),
+              : event.code === 4003
+                ? translate(
+                    "Le chef de salle n’a pas accepté votre entrée. Revenez à l’accueil pour rejoindre une autre partie.",
+                    "The room leader did not let you in. Return to the home screen to join another game.",
+                  )
+                : translate(
+                    "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
+                    "The room refused the connection. Refresh the page or return to the home screen.",
+                  ),
           );
           return;
         }
@@ -427,11 +469,11 @@ export function useRoom(credentials: RoomCredentials | null) {
     setError(null);
     if ("id" in message) {
       pendingId.current = message.id;
-      setPending(true);
+      setPendingOp(message.type === "lobby" ? message.op.type : message.type);
       if (requestTimer.current) clearTimeout(requestTimer.current);
       requestTimer.current = setTimeout(() => {
         pendingId.current = null;
-        setPending(false);
+        setPendingOp(null);
         setError(
           translate(
             "Votre choix n’a pas été confirmé. La salle est actualisée ; vérifiez le plateau avant de rejouer.",
@@ -443,46 +485,42 @@ export function useRoom(credentials: RoomCredentials | null) {
     }
     socket.current.send(JSON.stringify(message));
   }
+  const lobbyOp = (op: LobbyOp) =>
+    send({ type: "lobby", id: crypto.randomUUID(), op });
   return {
     lobby,
+    you,
     connection,
     error,
     randomness,
     pending,
+    pendingOp,
     roomDebug,
     setDebugActive,
     clearError: () => setError(null),
     reconnect: () => setRetry((value) => value + 1),
-    act: (action: Action) =>
+    /** A local player's seat acts on this device's behalf when given. */
+    act: (action: Action, seat?: Seat) =>
       send({
         type: "intent",
         id: crypto.randomUUID(),
         atSeq: sequence.current,
         action,
+        ...(seat === undefined ? {} : { seat }),
       }),
-    start: (fillBots = true) =>
-      send({
-        type: "lobby",
-        id: crypto.randomUUID(),
-        op: { type: "start", fillBots },
-      }),
-    settings: (config: RoomConfig) =>
-      send({
-        type: "lobby",
-        id: crypto.randomUUID(),
-        op: { type: "settings", config },
-      }),
-    addBot: (seat: Seat) =>
-      send({
-        type: "lobby",
-        id: crypto.randomUUID(),
-        op: { type: "add-bot", seat },
-      }),
-    removeBot: (seat: Seat) =>
-      send({
-        type: "lobby",
-        id: crypto.randomUUID(),
-        op: { type: "remove-bot", seat },
-      }),
+    start: (fillBots = true) => lobbyOp({ type: "start", fillBots }),
+    settings: (config: RoomConfig) => lobbyOp({ type: "settings", config }),
+    addBot: (seat: Seat) => lobbyOp({ type: "add-bot", seat }),
+    removeBot: (seat: Seat) => lobbyOp({ type: "remove-bot", seat }),
+    addLocal: (seat: Seat, name: string) =>
+      lobbyOp({ type: "add-local", seat, name }),
+    removeLocal: (seat: Seat) => lobbyOp({ type: "remove-local", seat }),
+    transferHost: (seat: Seat) => lobbyOp({ type: "transfer-host", seat }),
+    lock: (locked: boolean) => lobbyOp({ type: "lock", locked }),
+    admit: (member: string) => lobbyOp({ type: "admit", member }),
+    deny: (member: string) => lobbyOp({ type: "deny", member }),
+    replaceBot: (member: string, seat: Seat) =>
+      lobbyOp({ type: "replace-bot", member, seat }),
+    returnToLobby: () => lobbyOp({ type: "return-to-lobby" }),
   };
 }

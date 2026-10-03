@@ -55,7 +55,8 @@ export default function CityCard({
   onClose,
 }: {
   state: PublicState;
-  seat: Seat;
+  /** Null for someone watching the match without a seat. */
+  seat: Seat | null;
   selected: number | null;
   onSelect: (tile: number) => void;
   onClose: () => void;
@@ -273,8 +274,8 @@ function Ledger({
   );
 }
 
-function rentLabel(owner: Seat | null, seat: Seat) {
-  return owner === seat
+function rentLabel(owner: Seat | null, seat: Seat | null) {
+  return owner !== null && owner === seat
     ? t("Loyer que vous touchez", "Rent you collect")
     : t("Loyer à payer ici", "Rent due here");
 }
@@ -285,7 +286,7 @@ function CityDeed({
   index,
 }: {
   state: PublicState;
-  seat: Seat;
+  seat: Seat | null;
   index: number;
 }) {
   const tile = getBoard(state.config)[index];
@@ -306,7 +307,9 @@ function CityDeed({
           },
           {
             label: t("Loyer juste après l’achat", "Rent right after buying"),
-            value: money(previewPropertyRent(state, index, seat, 0)),
+            value: money(
+              previewPropertyRent(state, index, seat ?? state.activeSeat, 0),
+            ),
           },
         ]
       : [
@@ -374,7 +377,12 @@ function CityDeed({
                 <td className="city-card-boosted">
                   {money(
                     owner === null
-                      ? previewPropertyRent(state, index, seat, level)
+                      ? previewPropertyRent(
+                          state,
+                          index,
+                          seat ?? state.activeSeat,
+                          level,
+                        )
                       : propertyRentAt(state, index, level),
                   )}
                 </td>
@@ -404,7 +412,7 @@ function ResortDeed({
   index,
 }: {
   state: PublicState;
-  seat: Seat;
+  seat: Seat | null;
   index: number;
 }) {
   const owner = getProperty(state, index)?.owner ?? null;
@@ -422,7 +430,9 @@ function ResortDeed({
           },
           {
             label: t("Loyer juste après l’achat", "Rent right after buying"),
-            value: money(previewPropertyRent(state, index, seat, 0)),
+            value: money(
+              previewPropertyRent(state, index, seat ?? state.activeSeat, 0),
+            ),
           },
         ]
       : [

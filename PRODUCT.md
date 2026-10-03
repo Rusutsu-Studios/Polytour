@@ -20,7 +20,7 @@ The user asks for a property game without paid advantages and with honest random
 
 ## Operating Context
 
-The existing architecture specifies a Cloudflare Worker, one authoritative Durable Object per room, deterministic shared rules, and events driving animation. A room has four seats and starts with two to four players; in the lobby the host clicks an empty seat card to add a bot, or removes one. Reconnection restores the player's seat from a credential stored in the current browser session. During a match, the board occupies the desktop viewport and up to four compact player HUDs frame its corners. Contextual decisions appear when needed; journal, proof, instructions, room information and tile details are closed by default.
+The existing architecture specifies a Cloudflare Worker, one authoritative Durable Object per room, deterministic shared rules, and events driving animation. A room has four seats and starts with two to four players. Play opens the lobby with three bots; a friend entering the code takes a bot's place, and any seated player can seat someone sharing their screen. The room leader (its creator until they pass the role on) adds or removes bots, starts, locks the room so newcomers wait for approval, hands a bot's place to someone who arrived mid-game, and brings everyone back to the lobby for another game. Reconnection restores the player's seat from a credential stored in the current browser session. During a match, the board occupies the desktop viewport and up to four compact player HUDs frame its corners. Contextual decisions appear when needed; journal, proof, instructions, room information and tile details are closed by default.
 
 ## Capabilities and Constraints
 

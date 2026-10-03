@@ -12,7 +12,8 @@ support is optional. It runs entirely on Cloudflare: a Worker serves the SPA and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
 
-> **Status: first playable prototype.** Shared rules, 2–4 player private rooms,
+> **Status: first playable prototype.** Shared rules, 2–4 player private rooms
+> with a transferable leader, a waiting room and players sharing one screen,
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and

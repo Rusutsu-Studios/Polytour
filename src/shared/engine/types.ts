@@ -341,6 +341,8 @@ export type GameEvent =
       readonly type: "PlayerControlChanged";
       readonly seat: Seat;
       readonly control: "human" | "bot";
+      /** The new controller's name, when a person takes over a bot's place. */
+      readonly name?: string;
     };
 export type RollAction = { readonly type: "Roll" };
 export type Action =
