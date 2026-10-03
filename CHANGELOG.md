@@ -22,6 +22,11 @@ has been published, and it does not reconstruct earlier development history.
   rules. Video settings retain the High/Low graphics control.
 - Removed manual animation finish/skip and speed controls, preserving reduced
   motion, automatic catch-up and reconnect recovery.
+- The Championship corner is now a stadium with a spinning gold trophy; it
+  lights up in the host's colour while a championship runs. The World Tour
+  corner is now a jet port with a terminal, a control tower and an airliner
+  taking off. Both share the town's ambient motion and keep the draw-call
+  budget.
 
 ### Fixed
 
