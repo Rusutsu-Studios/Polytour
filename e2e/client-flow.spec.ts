@@ -961,6 +961,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.clock.install();
   await page.goto("/");
   await page.getByLabel("Votre nom de joueur").fill("Camille");
   await page.locator(".settings-trigger").click();
@@ -990,6 +991,8 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await page
     .getByRole("button", { name: "Lancer les dés", exact: true })
     .focus();
+  // Keep the bounded reading timer from expiring during assertions and screenshots.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 2000));
   // Authored presentation events only. This tab never sends these to the Worker.
   const original = await page.evaluate(async () => {
     const modulePath =
@@ -1015,6 +1018,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
     ]);
     return state;
   });
+  await page.clock.runFor(750);
   await expect(page.locator("#chance-title")).toHaveText("Bonne fortune");
   await expect(page.locator(".chance-impact")).toHaveText("+ 150 k");
   await expect(page.locator(".chance-art")).toHaveJSProperty(
@@ -1036,6 +1040,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   expect(balances).toEqual([2_000_000, 2_150_000]);
   await page.screenshot({ path: ".local/verification/card-fortune.png" });
   await page.getByRole("button", { name: "Continuer", exact: false }).click();
+  await page.clock.runFor(1500);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
@@ -1056,6 +1061,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
       { type: "CardDrawn", seat: 0, card: "Jet Set", kept: false },
     ]);
   });
+  await page.clock.runFor(750);
   await expect(page.locator("#chance-title")).toHaveText("Jet-set");
   await page.evaluate(async () => {
     const modulePath =
@@ -1070,6 +1076,9 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
       { type: "CardDrawn", seat: 1, card: "Guardian Angel", kept: true },
     ]);
   });
+  await page.clock.runFor(750);
+  // Cross the skipped card's old deadline while the new card is still reading.
+  await page.clock.runFor(2000);
   await expect(page.locator("#chance-title")).toHaveText("Ange gardien");
   await expect(page.locator(".chance-impact")).toHaveText("Gardez cette carte");
   await page.keyboard.press("Escape");
@@ -1099,6 +1108,7 @@ test("illustrated cards play in order and cancel safely on skip and reconnect", 
   await page.screenshot({ path: ".local/verification/card-construction.png" });
   // Reduced motion keeps the reading moment, with a stationary illustration.
   await expect(page.locator(".chance-reading")).not.toBeVisible();
+  await page.clock.resume();
   await page.reload();
   await expect(page.locator(".player-card")).toHaveCount(4);
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
