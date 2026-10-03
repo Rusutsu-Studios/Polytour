@@ -7,8 +7,19 @@
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-09-30",
   "assets": {
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/ws/*"]
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    // Apply host-aware crawl directives to documents while normal assets and
+    // /connection-probe.txt retain Cloudflare's direct static-asset path.
+    "run_worker_first": [
+      "/",
+      "/index.html",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/rooms/*",
+      "/api/*",
+      "/ws/*"
+    ]
   },
   "durable_objects": {
     "bindings": [

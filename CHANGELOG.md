@@ -11,6 +11,11 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Added
 
+- Polytour browser and home-screen icons, a share image, French/English search
+  metadata and structured game data (#41).
+- A production homepage sitemap and crawl policy that excludes private room
+  pages and previews from indexing, with proper missing-page responses.
+
 - Play opens a lobby with three bots instead of starting at once; friends who
   enter the room code take a bot's place (#30).
 - A transferable room leader who can lock the room and approve newcomers, hand
