@@ -236,3 +236,12 @@ Use the actual settings screen and tile tooltips to capture this matrix, then
 create a versioned config preset with tests. Do not rewrite the rules of a game
 already in progress. The initial functional prototype can be played while this
 comparison is being collected.
+
+### Polytour festival exception — 4 October 2026
+
+Issue #96 requests that beaches never receive a festival. New rooms use rules
+version 7 with `resortFestivals: false`: the initial draw selects cities only,
+and resorts receive no festival rent bonus. This is an explicit Polytour rule,
+separate from the reference evidence above. Existing version-4/5/6 rooms retain
+their original resort festivals, rent and settings; unmarked saved configurations
+fall back to their frozen economy.

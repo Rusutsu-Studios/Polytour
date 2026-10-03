@@ -22,6 +22,7 @@ import {
   type RentBoost,
   rentBoost,
   resortCount,
+  resortFestivals,
   type Seat,
   worldTourRule,
 } from "../../shared/engine/index.js";
@@ -477,7 +478,7 @@ function ResortDeed({
         </tbody>
       </table>
       <p className="city-card-note">
-        {rules.resortFestivals
+        {resortFestivals(state.config)
           ? t(
               "Les plages n’ont ni constructions ni rachat. Leur loyer dépend du nombre de plages du propriétaire ; un festival peut le multiplier.",
               "Resorts have no buildings or buyout. Rent depends on the owner’s resort count; a Festival can multiply it.",

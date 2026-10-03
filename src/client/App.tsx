@@ -24,6 +24,7 @@ import {
   netWorth,
   propertyRefund,
   propertyRent,
+  resortFestivals,
 } from "../shared/engine/index.js";
 import type {
   RandomnessStatus,
@@ -1776,6 +1777,7 @@ function App() {
     hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
     sellBackPercent: room.lobby?.sellBackPercent ?? 100,
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
+    resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;

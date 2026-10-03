@@ -13,6 +13,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Fixed
 
+- Restrict festivals to cities in new matches, including rent and beach details;
+  preserve existing matches with their original frozen festival rules (#96).
 - Explain unavailable actions in small ivory popups on hover or keyboard focus,
   including construction prerequisites, insufficient cash, reconnecting and
   unsaved room settings (#32).

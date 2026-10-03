@@ -111,9 +111,11 @@ debug socket has been removed; `/api/health` remains.
 - Protocol version 4 adds leaders, waiting members and local players (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 6 with `boardRule: "country"`,
+  New rooms freeze rules version 7 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
-  `sellBackPercent: 100` and `worldTourRule: "free-and-own"`; older lobbies report
+  `sellBackPercent: 100`, `worldTourRule: "free-and-own"` and `resortFestivals: false`.
+  The optional festival marker preserves version-4/5/6 rooms (cities and resorts);
+  missing markers follow the saved economy. Lobbies before version 6 report
   `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
   Lobby snapshots expose their frozen rule markers separately from room settings.

@@ -217,6 +217,14 @@ for (const size of [
     await page.keyboard.press("Escape");
     await clickBoardSpace(page, 1);
     await expect(page.locator(".city-card-dialog[open]")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await clickBoardSpace(page, 4);
+    await expect(
+      page.locator(".city-card-dialog[open] .city-card-note"),
+    ).toContainText("ni festival");
+    await expect(
+      page.locator(".city-card-dialog[open] .city-card-boost"),
+    ).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }
