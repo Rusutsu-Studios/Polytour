@@ -58,7 +58,8 @@ async function connect(
       actor.seq = message.toSeq;
     }
   });
-  await page.goto("/");
+  // Graphics initialization must not delay these protocol-only socket clients.
+  expect((await page.goto("/api/health"))?.status()).toBe(200);
   await page.evaluate((session) => {
     const surface = window as unknown as TestWindow;
     surface.polytourTestSocket = new WebSocket(
@@ -188,14 +189,22 @@ test("four isolated browser seats finish a real authoritative match and reconnec
   const actors: Actor[] = [];
   for (const credential of credentials)
     actors.push(await connect(browser, credential));
+  const startId = randomUUID();
   await send(actors[0], {
     type: "lobby",
-    id: randomUUID(),
+    id: startId,
     op: { type: "start", fillBots: false },
   });
   await expect
-    .poll(() => actors.every((actor) => actor.state?.players.length === 4))
-    .toBe(true);
+    .poll(() =>
+      actors[0].messages.find(
+        (message) => "id" in message && message.id === startId,
+      ),
+    )
+    .toMatchObject({ type: "ack" });
+  await expect
+    .poll(() => actors.map((actor) => actor.state?.players.length ?? 0))
+    .toEqual([4, 4, 4, 4]);
   expect(JSON.stringify(actors[0].state)).not.toMatch(
     /rngState|"deck"|resolutionQueue|token_hash/,
   );
