@@ -65,6 +65,7 @@ type Attachment = {
   /** The waiting member id, until that person takes a place. */
   member?: string | null;
   synced: boolean;
+  departing?: boolean;
   invalid: number;
   tokens: number;
   rateAt: number;
@@ -418,12 +419,18 @@ export class GameRoom extends DurableObject<Env> {
     const seat = this.freeSeat();
     if (seat === undefined) return { error: "room-full" };
     if (!playing && !locked) {
-      this.ctx.storage.sql.exec(
-        "INSERT OR REPLACE INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',?)",
-        seat,
-        name,
-        tokenHash,
+      const needsLeader = !this.seats().some(
+        (entry) => entry.control === "human" && entry.token_hash !== null,
       );
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          "INSERT OR REPLACE INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',?)",
+          seat,
+          name,
+          tokenHash,
+        );
+        if (needsLeader) this.writeMeta("host", seat);
+      });
       this.broadcast({ type: "lobby", lobby: this.lobby() });
       return { roomCode: room.roomCode, seat, token };
     }
@@ -438,6 +445,98 @@ export class GameRoom extends DurableObject<Env> {
     );
     this.broadcast({ type: "lobby", lobby: this.lobby() });
     return { roomCode: room.roomCode, seat: null, token };
+  }
+
+  /** An explicit departure releases lobby places; a dropped socket does not. */
+  async leave(
+    token: string,
+  ): Promise<{ ok: true } | { error: "room-not-found" | "unauthorized" }> {
+    const tokenHash = await hashToken(token);
+    if (this.deletingRoom || !this.readMeta("room"))
+      return { error: "room-not-found" };
+    const entry = this.seats().find(
+      (candidate) =>
+        candidate.control === "human" && candidate.token_hash === tokenHash,
+    );
+    const member = entry
+      ? undefined
+      : this.members().find((candidate) => candidate.token_hash === tokenHash);
+    if (!entry && !member) return { error: "unauthorized" };
+    // Promotion changes attachments but leaves connection-time tags unchanged.
+    const connections = this.ctx.getWebSockets().filter((socket) => {
+      const attachment = socket.deserializeAttachment() as Attachment | null;
+      return (
+        attachment !== null &&
+        (entry
+          ? attachment.seat === entry.seat
+          : attachment.member === member?.id)
+      );
+    });
+    const saved = this.readState();
+    const seats = entry ? this.controlledSeats(entry.seat) : [];
+    if (member) {
+      this.ctx.storage.sql.exec("DELETE FROM members WHERE id=?", member.id);
+    } else if (!saved) {
+      const humans = this.seats().filter(
+        (candidate) =>
+          !seats.includes(candidate.seat) &&
+          candidate.control === "human" &&
+          candidate.token_hash !== null,
+      );
+      const nextHost =
+        humans.find(
+          (candidate) => this.seatSockets(candidate.seat).length > 0,
+        ) ?? humans[0];
+      this.ctx.storage.transactionSync(() => {
+        for (const seat of seats) {
+          this.ctx.storage.sql.exec("DELETE FROM seats WHERE seat=?", seat);
+          this.ctx.storage.sql.exec(
+            "DELETE FROM local_seats WHERE seat=?",
+            seat,
+          );
+          this.ctx.storage.sql.exec("DELETE FROM commands WHERE seat=?", seat);
+          this.ctx.storage.sql.exec(
+            "DELETE FROM timers WHERE kind=?",
+            `grace:${seat}`,
+          );
+          this.ctx.storage.sql.exec(
+            "DELETE FROM meta WHERE k=?",
+            `takeover:${seat}`,
+          );
+        }
+        if (seats.includes(this.hostSeat()))
+          this.writeMeta("host", nextHost?.seat ?? 0);
+        // A locked room cannot wait for approval from a leader who has left.
+        if (!nextHost) {
+          this.writeMeta("locked", false);
+          this.ctx.storage.sql.exec(
+            "UPDATE members SET approved=1 WHERE approved=0",
+          );
+        }
+      });
+    } else if (saved.state.status === "active") {
+      const graceAt = Date.now() + 60_000;
+      for (const seat of seats)
+        this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO timers(kind,fire_at) VALUES(?,?)",
+          `grace:${seat}`,
+          graceAt,
+        );
+    }
+    for (const socket of connections) {
+      const attachment = socket.deserializeAttachment() as Attachment;
+      // Late callbacks must not mark a new occupant of the seat as absent.
+      socket.serializeAttachment({ ...attachment, departing: true });
+      socket.close(1008, "Left room");
+    }
+    if (!saved) this.seatWaitingMembers();
+    this.broadcast({ type: "lobby", lobby: this.lobby() });
+    if (entry && saved) {
+      for (const seat of seats)
+        this.broadcast({ type: "presence", seat, status: "away" });
+      await this.updateTimers();
+    }
+    return { ok: true };
   }
 
   private lobby(): LobbyState {
@@ -493,6 +592,9 @@ export class GameRoom extends DurableObject<Env> {
         continue;
       const seat = this.freeSeat();
       if (seat === undefined) break;
+      const needsLeader = !this.seats().some(
+        (entry) => entry.control === "human" && entry.token_hash !== null,
+      );
       this.ctx.storage.transactionSync(() => {
         this.ctx.storage.sql.exec(
           "INSERT OR REPLACE INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',?)",
@@ -501,6 +603,7 @@ export class GameRoom extends DurableObject<Env> {
           member.token_hash,
         );
         this.ctx.storage.sql.exec("DELETE FROM members WHERE id=?", member.id);
+        if (needsLeader) this.writeMeta("host", seat);
       });
       this.promote(member.id, seat);
       seated = true;
@@ -670,6 +773,7 @@ export class GameRoom extends DurableObject<Env> {
       return socket.close(1000, "Room expired");
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (!attachment) return socket.close(1008, "Session missing");
+    if (attachment.departing) return socket.close(1008, "Left room");
     const now = Date.now();
     attachment.tokens =
       Math.min(40, attachment.tokens + (now - attachment.rateAt) * 0.02) - 1;
@@ -1541,7 +1645,13 @@ export class GameRoom extends DurableObject<Env> {
     // Complete the handshake explicitly as well as on runtimes with auto-reply.
     socket.close(1000, "Connection closed");
     const attachment = socket.deserializeAttachment() as Attachment | null;
-    if (this.deletingRoom || !attachment || !this.readMeta("room")) return;
+    if (
+      this.deletingRoom ||
+      !attachment ||
+      attachment.departing ||
+      !this.readMeta("room")
+    )
+      return;
     const own = attachment.seat;
     if (own === null) {
       // A waiting member's presence lives in the lobby's waiting list.

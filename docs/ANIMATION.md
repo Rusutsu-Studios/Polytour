@@ -176,7 +176,8 @@ gives the cost and rent of every building level, with the current one marked. A
 city's festival or full-country bonus adds its own column. Resorts list their
 rent by how many resorts the owner holds. Every figure comes from the shared
 engine (`propertyRentAt`, `rentBoost`, `buyoutPrice`), never from UI arithmetic.
-Every space opens at the same size, so the step arrows stay under the pointer.
+Every space opens at the same size. The card describes only the clicked space;
+close it and select another space on the board to inspect that space.
 Escape, the close button or a backdrop click closes it.
 
 The Director now has a separate DOM presenter alongside its scene animator.
@@ -247,9 +248,9 @@ Consistency matters more than any single animation: reuse these presets from
   Low graphics, reduced motion and lobby previews skip it and render only on demand.
 - The prototype's optional **Low graphics** setting uses DPR 1 and disables live
   shadows and pauses decorative town and selection motion. Game-event animations
-  remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. The compact monitor
-  button shows High/Low and switches in one click before joining and in the match
-  toolbar; View and animation shows the same saved local preference. See
+  remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. Before joining,
+  a compact monitor button switches High/Low. During a match, Pause > Video
+  presents High and Low as two side-by-side choices for the same saved preference. See
   [PERFORMANCE.md](PERFORMANCE.md) for the software-rendering comparison and limits.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated
