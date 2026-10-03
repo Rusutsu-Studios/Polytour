@@ -9,7 +9,19 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+### Fixed
+
+- Leaving a lobby releases the player's places and room connections and passes
+  leadership to another player, including rooms with local or waiting players (#81).
+
+## [0.2.0] - 2026-10-03
+
 ### Added
+
+- Automatic version preparation for each pull request, with shared instructions
+  for Codex and Claude and a CI check that rejects an unchanged application version.
 
 - Play opens a lobby with three bots instead of starting at once; friends who
   enter the room code take a bot's place (#30).
@@ -51,8 +63,6 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Fixed
 
-- Leaving a lobby releases the player's places and room connections and passes
-  leadership to another player, including rooms with local or waiting players.
 - Invitation links ask only for a nickname and join the invited room, with
   retryable errors, saved-seat recovery and a return to the start screen (#54).
 - Chance draws use fresh server cryptographic randomness, including saved games,
