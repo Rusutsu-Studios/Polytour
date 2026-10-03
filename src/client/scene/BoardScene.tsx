@@ -60,6 +60,8 @@ type BoardProps = {
   onSelect: (tile: number) => void;
   preview?: boolean;
   zoom?: number;
+  /** Where the roll button sits on screen, in canvas pixels. */
+  onRollAnchor?: (point: { x: number; y: number }) => void;
 };
 
 // THESIS: a printed property board seen from its Start corner, like the classic tabletop.
@@ -78,6 +80,8 @@ const DIE_REST: readonly [number, number, number][] = [
   [-0.56, DIE_REST_Y, 0.56],
   [0.56, DIE_REST_Y, -0.56],
 ];
+// The roll button lies on the lawn between the resting dice and Start.
+const ROLL_SPOT: readonly [number, number, number] = [1.05, LAWN_TOP, 1.05];
 const DICE_DEFAULT_COLOR = "#d9473a";
 // The dice take the roller's color, brighter than the pawn so pips stay crisp.
 const DICE_COLORS = ["#e0533b", "#3a87e2", "#9564d3", "#2f9b5f"] as const;
@@ -1103,7 +1107,7 @@ function frameBoard(
 }
 
 function SceneContent(props: BoardProps) {
-  const { state, preview, zoom = 1 } = props;
+  const { state, preview, zoom = 1, onRollAnchor } = props;
   const { camera, invalidate, size, gl } = useThree();
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
@@ -1147,8 +1151,23 @@ function SceneContent(props: BoardProps) {
     camera.updateMatrixWorld();
     if (camera instanceof THREE.OrthographicCamera)
       frameBoard(camera, size.width, size.height, Boolean(preview), zoom);
+    if (onRollAnchor) {
+      const spot = new THREE.Vector3(...ROLL_SPOT).project(camera);
+      onRollAnchor({
+        x: ((spot.x + 1) / 2) * size.width,
+        y: ((1 - spot.y) / 2) * size.height,
+      });
+    }
     invalidate();
-  }, [camera, size.width, size.height, zoom, preview, invalidate]);
+  }, [
+    camera,
+    size.width,
+    size.height,
+    zoom,
+    preview,
+    invalidate,
+    onRollAnchor,
+  ]);
 
   useEffect(() => {
     if (preview) return;

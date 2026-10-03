@@ -3,13 +3,14 @@ import type { CSSProperties, ErrorInfo, ReactNode } from "react";
 import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { BOARD, ECONOMY } from "../shared/board/index.js";
 import type {
+  GameConfig,
   GameEvent,
   PlayerState,
   PublicState,
   Seat,
   WinKind,
 } from "../shared/engine/index.js";
-import { getProperty, netWorth } from "../shared/engine/index.js";
+import { decisionWindow, getProperty, netWorth } from "../shared/engine/index.js";
 import type {
   LobbyState,
   RandomnessStatus,
@@ -733,6 +734,35 @@ function MatchClock({
   );
 }
 
+// The deciding player's remaining time, as a bar under their name. The engine's
+// deadline also holds the animations that open the decision, so the bar waits
+// at full until the player's own window starts, then drains in real time.
+// CSS runs the drain: no per-second re-render, and it stays smooth.
+function TurnTimer({
+  pending,
+  config,
+}: {
+  pending: PublicState["pending"];
+  config: GameConfig;
+}) {
+  if (!pending) return <div className="player-timer" aria-hidden="true" />;
+  const windowMs = decisionWindow(config, pending.kind);
+  const delay = pending.deadline - windowMs - Date.now();
+  return (
+    <div className="player-timer" aria-hidden="true">
+      <span
+        className="player-timer-fill"
+        style={
+          {
+            "--timer-window": `${windowMs}ms`,
+            "--timer-delay": `${delay}ms`,
+          } as CSSProperties
+        }
+      />
+    </div>
+  );
+}
+
 type GameTool = "journal" | "proof" | "view" | "room" | null;
 
 // THESIS: The PC board fills the screen; the interface occupies its unused corners.
@@ -773,6 +803,10 @@ function MatchView({
 }) {
   const { serverState, busy, speed, history, reducedMotion } = useDirector();
   const [tool, setTool] = useState<GameTool>(null);
+  const [rollAnchor, setRollAnchor] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const overlayTrigger = useRef<HTMLButtonElement | null>(null);
@@ -864,6 +898,7 @@ function MatchView({
               selected={selected}
               onSelect={inspectTile}
               zoom={zoom}
+              onRollAnchor={setRollAnchor}
             />
           </Suspense>
         </SceneBoundary>
@@ -1047,6 +1082,12 @@ function MatchView({
                     </span>
                   )}
                 </div>
+                <TurnTimer
+                  // A new decision restarts the bar, even for the same seat.
+                  key={active ? game.pending?.deadline : "idle"}
+                  pending={active ? game.pending : null}
+                  config={game.config}
+                />
                 <div
                   className="player-cash"
                   title={t(
@@ -1098,6 +1139,14 @@ function MatchView({
           <motion.div
             key="decision"
             className="contextual-action"
+            style={
+              rollAnchor
+                ? ({
+                    "--roll-x": `${rollAnchor.x}px`,
+                    "--roll-y": `${rollAnchor.y}px`,
+                  } as CSSProperties)
+                : undefined
+            }
             initial={false}
             animate={{ opacity: 1 }}
           >
