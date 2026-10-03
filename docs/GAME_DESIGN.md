@@ -1,4 +1,4 @@
-# Game design (new-room rules v0.3; v0.2 saved rooms retained)
+# Game design (new-room rules v0.4; v0.2/v0.3 saved rooms retained)
 
 Polytour is a fast, aggressive property game for two to four players. A room has
 four seats; the host can seat server bots in empty places. Compared to classic
@@ -87,7 +87,7 @@ Corners at 0, 8, 16, 24. Each side has 7 tiles between corners. Prices rise cloc
 | Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
 | Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
 | Initial festivals | 3 (configurable); neutral city squares with ×2 rent |
-| Sell-back to bank | 50% of invested value |
+| Sell-back to bank | 100% of invested value in new rooms; 50% in saved v0.2/v0.3 rooms |
 | Buyout price | 2× invested value (paid to owner) |
 
 **Tile-specific economy:** prices increase from 60,000 on the early French cities
@@ -114,6 +114,13 @@ Earthquake no longer counts, and rent, tax, Championship effects, and buyout pri
 never count. The first city's Hotel has invested value 360,000 and Tokyo's 1,500,000.
 A resort's invested value is its price.
 
+New rooms freeze `sellBackPercent: 100`: a forced sale returns the land and all
+standing construction costs, so a city is not discounted again when covering a
+debt. Rent and festival/championship multipliers never inflate its sale value.
+This is Polytour tuning, not a verified reference-game liquidation percentage.
+Existing v0.2/v0.3 games without the marker retain their 50% refund; preexisting
+lobbies freeze `sellBackPercent: 50` when started.
+
 **Integer money and rounding.** Money is always an integer. Coefficients are stored
    in config as integer percentages (e.g. House III rent `140` = 1.4 × L) and evaluated
 with integer arithmetic, never floating-point multiplication. Whenever a rule takes
@@ -135,8 +142,8 @@ cash of at least zero.
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
 Existing version-2 rooms keep `"legacy-lap"` (or an absent marker on older active
 saves), so their hotel still unlocks after a lap, including on initial purchase.
-The server loads both versions and cannot accept an internal rule marker through
-room settings. A stale pending choice cannot bypass the new cap. See
+The server loads room rules versions 2, 3 and 4 and cannot accept an internal rule
+marker through room settings. A stale pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
 
@@ -202,7 +209,8 @@ buying it while unowned and its owner selling it to the bank.
    can upgrade the city on a later landing.
 3. Cash may become negative only after a mandatory payment. This immediately opens
    a forced-sell phase. The debtor may sell any owned cities or resorts to the bank;
-   each sale returns 50% of that property's invested value (rounded down) and resets
+   each sale returns 100% of that property's invested value in new rooms
+   (50% rounded down in preexisting rooms) and resets
    it to unowned Land. Selling a Championship host also clears that host. They may
    sell in any order until solvent, then continue the interrupted resolution.
 4. If selling every property they own could not bring cash back to zero, the engine

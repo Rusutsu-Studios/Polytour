@@ -436,6 +436,40 @@ Verification on this machine:
 - A WebGL hook counts 295 draw calls per frame with the town, against 239
   before, both including the shadow pass. Software-rendered frame rates are
   not hardware evidence; the 60 fps desktop target still needs a hardware run.
+## Property sale values and board selection — 2 October 2026
+
+New rooms freeze rules version 4 and return 100% of the nominal land and standing
+building costs when a property is sold. Existing version-2 and version-3 rooms,
+including their pre-existing lobbies, retain their 50% refund. Rent modifiers and
+buyout premiums do not increase the sale value. This is Polytour tuning; the
+reference screenshot establishes the interaction, but not its refund formula.
+
+Forced sales now select cities directly on the board. Sellable owned lots stay
+white, other lots dim, and selecting a city marks it and shows its refund. A
+compact lower-center panel shows the debt, proceeds and projected balance before
+an explicit confirmation. The normal board appearance returns after the sale
+decision. Keyboard selection works through the quoted board buttons, and the
+flat-board fallback uses the same contrast and legal targets.
+
+Selection is cleared on a new decision or recovery snapshot. Clicks on other
+properties cannot replace the selected city, and pending actions block further
+input. Protocol version 2 requires older clients to refresh before quoting the
+new rules; the server remains authoritative for ownership and money.
+
+Verification on this branch:
+
+- TypeScript, Biome and 138 unit/Worker tests pass.
+- 100 deterministic simulations terminate and preserve money, replay, card,
+  ownership and legal-decision invariants.
+- Production build, bundle budgets, Cloudflare configuration guard and deploy
+  dry run pass.
+- Four sale-specific browser scenarios pass using local HTTP/WebSocket fixtures
+  and shared-engine events. Real Chromium rendering is inspected at 1280×720,
+  1440×900 and 1920×1080 with normal and reduced motion. All 24 city/resort targets
+  are selected at each size (72 clicks), plus keyboard confirmation, off-turn debt,
+  pending-action blocking, successive sales and snapshot recovery.
+- All 21 end-to-end scenarios pass, including the local production Worker's
+  four-seat match, reconnect and legacy drand verification.
 
 ## Follow-up scope
 

@@ -123,6 +123,23 @@ describe("createGame", () => {
     );
     expect(legacy.state.config.hotelPurchaseRule).toBe("legacy-lap");
   });
+  it("freezes full-investment refunds for new games and honors the legacy server preset", () => {
+    const game = createGame(
+      { ...DEFAULT_GAME_CONFIG, sellBackPercent: undefined },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(game.state.config.sellBackPercent).toBe(100);
+    expect(toPublic(game.state).config.sellBackPercent).toBe(100);
+    const legacy = createGame(
+      { ...DEFAULT_GAME_CONFIG, sellBackPercent: 50 },
+      SEATS,
+      1,
+      { now: 0 },
+    );
+    expect(legacy.state.config.sellBackPercent).toBe(50);
+  });
   it("validates identities, counts, integer money, positive deadlines and supported festivals", () => {
     expect(() =>
       createGame(DEFAULT_GAME_CONFIG, SEATS.slice(0, 1), 1, { now: 0 }),

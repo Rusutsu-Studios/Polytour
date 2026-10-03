@@ -31,8 +31,14 @@ debug socket has been removed; `/api/health` remains.
 - New-room hotel progression is frozen by the server in the optional public config
   marker `hotelPurchaseRule: "staged-hotels"`. Older saves may omit it or use
   `"legacy-lap"`. This is not an accepted room-setting input; clients must derive
-  legal construction choices from the engine. Action/event shapes and the protocol
-  version remain compatible.
+  legal construction choices from the engine. This marker leaves action/event
+  shapes unchanged.
+- New-room sale values are frozen by the server as the optional public config
+  marker `sellBackPercent: 100`; older saves may omit it or use `50`. Room creation
+  and settings reject this internal marker. Clients quote sales through the shared
+  engine so the displayed amount matches the server's frozen rules. Action/event
+  shapes stay unchanged, but the protocol version is now 2: older clients hard-code
+  50% refunds and must refresh on welcome before presenting new-room sale quotes.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
   `legalActions` supplies the choices; tile indices are0..31 and levels0..5.

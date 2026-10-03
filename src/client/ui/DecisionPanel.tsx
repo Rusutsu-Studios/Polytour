@@ -196,6 +196,8 @@ export default function DecisionPanel({
   const [selection, setSelection] = useState<{
     decision: string;
     action: string;
+    pending: PublicState["pending"];
+    tile: number | null;
   } | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -219,7 +221,8 @@ export default function DecisionPanel({
   );
   const freeRoll = actions.find((action) => action.type === "Roll");
   const destinationChoice =
-    destinations.find((action) => action.tile === selected) ?? destinations[0];
+    destinations.find((action) => action.tile === selected) ??
+    (pending?.kind === "sell" ? undefined : destinations[0]);
   const choices = constructions.length
     ? constructions
     : destinations.length
@@ -230,10 +233,16 @@ export default function DecisionPanel({
       ? freeRoll
       : (destinationChoice ?? choices[0]);
   const selectedAction =
-    selection?.decision === decisionKey
-      ? (actions.find((action) => actionKey(action) === selection.action) ??
-        fallbackChoice)
-      : fallbackChoice;
+    pending?.kind === "sell"
+      ? selection?.pending === pending &&
+        selection.action === "Decline:" &&
+        selection.tile === selected
+        ? actions.find((action) => action.type === "Decline")
+        : destinationChoice
+      : selection?.decision === decisionKey
+        ? (actions.find((action) => actionKey(action) === selection.action) ??
+          fallbackChoice)
+        : fallbackChoice;
   const decline = actions.find((action) => action.type === "Decline");
   const decisionTile =
     pending && "tile" in pending
@@ -330,6 +339,7 @@ export default function DecisionPanel({
     ownTurn &&
       pending &&
       pending.kind !== "roll" &&
+      pending.kind !== "sell" &&
       !busy &&
       !rngBusy &&
       dismissed !== decisionKey,
@@ -384,7 +394,12 @@ export default function DecisionPanel({
     if (dismissed === decisionKey && !modalOpen) resumeRef.current?.focus();
   }, [dismissed, decisionKey, modalOpen]);
   function choose(action: Action) {
-    setSelection({ decision: decisionKey, action: actionKey(action) });
+    setSelection({
+      decision: decisionKey,
+      action: actionKey(action),
+      pending,
+      tile: selected,
+    });
     if ("tile" in action) onSelect(action.tile);
   }
   function dismiss() {
@@ -439,6 +454,119 @@ export default function DecisionPanel({
         )}
       </div>
     ) : null;
+
+  if (debt && !busy && !rngBusy)
+    return (
+      <section
+        className="decision-panel decision-sale"
+        data-kind="sell"
+        data-own="true"
+        data-busy={blocked}
+        aria-labelledby="decision-heading"
+        aria-describedby="sale-instruction"
+        aria-busy={blocked}
+      >
+        <div className="sale-topline">
+          <h2 id="decision-heading">
+            {bankruptcy
+              ? t("Déclarer faillite ?", "Declare bankruptcy?")
+              : t("Vendre une ville", "Sell a city")}
+          </h2>
+          <dl className="sale-ledger">
+            <div>
+              <dt>{t("Dette", "Debt")}</dt>
+              <dd>{money(Math.max(0, -(active?.cash ?? 0)))}</dd>
+            </div>
+            {!bankruptcy && projectedCash !== null && (
+              <div data-negative={projectedCash < 0}>
+                <dt>
+                  {projectedCash < 0
+                    ? t("Dette après vente", "Debt after sale")
+                    : t("Argent après vente", "Cash after sale")}
+                </dt>
+                <dd>{money(Math.abs(projectedCash))}</dd>
+              </div>
+            )}
+          </dl>
+          {timer && (
+            <span
+              className="decision-timer"
+              role="timer"
+              aria-label={t(
+                `${countdown} secondes restantes`,
+                `${countdown} seconds remaining`,
+              )}
+            >
+              {countdown}s
+            </span>
+          )}
+        </div>
+        <div className="sale-controls">
+          {bankruptcy ? (
+            <p id="sale-instruction" className="sale-warning">
+              {t(
+                "Définitif : vos propriétés retournent à la banque.",
+                "Final: your properties return to the bank.",
+              )}
+            </p>
+          ) : (
+            <div
+              id="sale-instruction"
+              className="sale-selection"
+              role="status"
+              aria-live="polite"
+            >
+              <div>
+                <strong>
+                  {decisionTile !== undefined
+                    ? tileName(decisionTile)
+                    : t("Choisissez une ville", "Choose a city")}
+                </strong>
+                <span>
+                  {property
+                    ? levelName(property.level)
+                    : t(
+                        "Cliquez une ville en surbrillance",
+                        "Click a highlighted city",
+                      )}
+                </span>
+              </div>
+              {refund !== null && <b>+{money(refund)}</b>}
+            </div>
+          )}
+          <div className="sale-confirmation">
+            {decline && (
+              <button
+                type="button"
+                className="button quiet"
+                disabled={blocked}
+                onClick={() => {
+                  if (bankruptcy) setSelection(null);
+                  else choose(decline);
+                }}
+              >
+                {bankruptcy
+                  ? t("Revenir aux ventes", "Back to property sales")
+                  : t("Déclarer faillite", "Declare bankruptcy")}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`button primary sale-confirm ${bankruptcy ? "decision-bankruptcy" : ""}`}
+              disabled={blocked || !selectedAction}
+              onClick={confirm}
+            >
+              {blocked
+                ? t("Veuillez patienter…", "Please wait…")
+                : selectedAction
+                  ? confirmLabel(selectedAction, state)
+                  : t("Choisissez une ville", "Choose a city")}
+              <Icon name="arrow" size={18} />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
 
   const statusTitle = rngBusy
     ? randomness?.status === "error"

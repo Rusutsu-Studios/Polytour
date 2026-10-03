@@ -176,12 +176,10 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     });
     return snapshot;
   });
-  await expect(page.locator(".decision-panel")).toContainText(
-    "Votre dette à régler",
-  );
-  await expect(
-    page.locator(".decision-panel").getByRole("button", { name: /Vendre/ }),
-  ).toBeEnabled();
+  await expect(page.locator(".decision-sale")).toContainText("Dette");
+  await expect(page.locator(".sale-confirm")).toBeDisabled();
+  await page.locator('.sale-tile-quote[data-tile="1"]').click();
+  await expect(page.locator(".sale-confirm")).toBeEnabled();
   await page.evaluate(async (snapshot) => {
     const modulePath =
       performance

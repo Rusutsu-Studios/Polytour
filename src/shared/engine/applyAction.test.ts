@@ -27,6 +27,7 @@ import {
   netWorth,
   previewPropertyRent,
   propertyOwner,
+  propertyRefund,
   propertyRent,
   propertyRentAt,
   rentBoost,
@@ -414,6 +415,69 @@ describe("dice, Island, laps and World Tour", () => {
   });
 });
 describe("forced sales and bankruptcy", () => {
+  it("quotes land and every standing building at full investment, independently of toll bonuses", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    for (const level of [0, 1, 2, 3, 4, 5] as const) {
+      state = grant(state, 1, seat, level);
+      expect(propertyRefund(state, 1)).toBe(getTileInvestedValue(1, level));
+    }
+    state = grant(grant(state, 31, seat, 4), 5, seat);
+    expect(propertyRefund(state, 31)).toBe(1_500_000);
+    expect(propertyRefund(state, 5)).toBe(200_000);
+    expect(
+      propertyRefund(
+        {
+          ...state,
+          festivalTiles: [31],
+          championshipHost: { tile: 31, multiplier: 8 },
+        },
+        31,
+      ),
+    ).toBe(1_500_000);
+  });
+  it("keeps half-investment refunds on preexisting saves without a frozen sale marker", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(state, 4, other(state), 1), 6, seat);
+    const { sellBackPercent: _marker, ...legacyConfig } = state.config;
+    state = setPlayer({ ...state, config: legacyConfig }, seat, {
+      cash: 10_000,
+    });
+    expect(propertyRefund(state, 6)).toBe(50_000);
+    const debtor = land(state, 4).state;
+    const sold = act(debtor, { type: "Sell", tile: 6 });
+    expect(getPlayer(sold.state, seat).cash).toBe(6_000);
+    expect(sold.events).toContainEqual({
+      type: "PropertySold",
+      seat,
+      tile: 6,
+      amount: 50_000,
+    });
+    expect(sold.state.config).not.toHaveProperty("sellBackPercent");
+  });
+  it("allows a sale to cover debt that the old half-price quote could not cover", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(state, 4, other(state), 2), 6, seat);
+    state = setPlayer(state, seat, { cash: 10_000 });
+    const debtor = land(state, 4).state;
+    expect(getPlayer(debtor, seat).cash).toBe(-80_000);
+    expect(debtor.pending).toMatchObject({ kind: "sell", seat, targets: [6] });
+    const sold = act(debtor, { type: "Sell", tile: 6 });
+    expect(getPlayer(sold.state, seat)).toMatchObject({
+      cash: 20_000,
+      bankrupt: false,
+      properties: [],
+    });
+    expect(sold.events).toContainEqual({
+      type: "PropertySold",
+      seat,
+      tile: 6,
+      amount: 100_000,
+    });
+    expect(getProperty(sold.state, 6)).toMatchObject({ owner: null, level: 0 });
+  });
   it("pauses after a mandatory rent, allows a refund and resumes the landing", () => {
     let state = newGame();
     const seat = state.activeSeat;
@@ -424,7 +488,7 @@ describe("forced sales and bankruptcy", () => {
     expect(getPlayer(debtor, seat).cash).toBe(-44_000);
     const sold = act(debtor, { type: "Sell", tile: 6 }).state;
     expect(getPlayer(sold, seat)).toMatchObject({
-      cash: 6_000,
+      cash: 56_000,
       bankrupt: false,
       properties: [],
     });
@@ -470,7 +534,7 @@ describe("forced sales and bankruptcy", () => {
     expect(result.activeSeat).toBe(seat);
     const settled = act(result, { type: "Sell", tile: 6 }).state;
     expect(getPlayer(settled, seat).cash).toBe(2_150_000);
-    expect(getPlayer(settled, payer).cash).toBe(20_000);
+    expect(getPlayer(settled, payer).cash).toBe(70_000);
   });
   it("timeout sells cheapest refunds repeatedly until solvent", () => {
     let state = newGame();
@@ -495,7 +559,7 @@ describe("forced sales and bankruptcy", () => {
         .filter((event) => event.type === "PropertySold")
         .map((event) => event.tile),
     ).toEqual([1, 2]);
-    expect(getPlayer(timeout.state, seat).cash).toBe(20_000);
+    expect(getPlayer(timeout.state, seat).cash).toBe(160_000);
   });
 });
 
@@ -702,7 +766,7 @@ describe("wins, rankings and timeouts", () => {
     expect(ended.state.result?.kind).toBe("time-limit");
     expect(ended.state.pending).toBeNull();
     expect(getPlayer(ended.state, seat).cash).toBe(2_150_000);
-    expect(getPlayer(ended.state, payer).cash).toBe(20_000);
+    expect(getPlayer(ended.state, payer).cash).toBe(70_000);
     expect(ended.events.some((event) => event.type === "DiceRolled")).toBe(
       false,
     );

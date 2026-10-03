@@ -1,15 +1,18 @@
 import { expect, type Page, test, type WebSocketRoute } from "@playwright/test";
-import { RoomConfigSchema } from "../src/shared/protocol/index.js";
+import {
+  PROTOCOL_VERSION,
+  RoomConfigSchema,
+} from "../src/shared/protocol/index.js";
 
 const credentials = {
   roomCode: "ABCD23",
   seat: 0,
   token: "test-capability-not-real",
 };
-const welcome = (seq = 0) =>
+const welcome = (seq = 0, protocolVersion = PROTOCOL_VERSION) =>
   JSON.stringify({
     type: "welcome",
-    protocolVersion: 1,
+    protocolVersion,
     you: { seat: 0 },
     seq,
     snapshot: null,
@@ -247,6 +250,31 @@ test("does not retry a room that rejects its socket session", async ({
   await expect(page.locator(".network-error")).toContainText(
     "La connexion à cette salle a été refusée",
   );
+  await page.clock.runFor(60_000);
+  expect(attempts).toBe(1);
+});
+
+test("requires refresh for a previous protocol and never enables stale game actions", async ({
+  page,
+}) => {
+  await pauseTimers(page);
+  let attempts = 0;
+  await page.routeWebSocket("**/ws/room/**", (ws) => {
+    attempts += 1;
+    ws.onMessage(() => ws.send(welcome(0, PROTOCOL_VERSION - 1)));
+  });
+  await enterMockRoom(page);
+  await expect(page.locator(".network-error")).toContainText(
+    "Le jeu a été mis à jour. Actualisez la page pour retrouver votre salle.",
+  );
+  await expect(page.locator(".connection-dot")).toHaveAttribute(
+    "data-state",
+    "offline",
+  );
+  await expect(
+    page.getByRole("button", { name: "Démarrer la partie" }),
+  ).toHaveCount(0);
+  await expect(page.locator(".decision-panel")).toHaveCount(0);
   await page.clock.runFor(60_000);
   expect(attempts).toBe(1);
 });

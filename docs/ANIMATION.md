@@ -72,6 +72,14 @@ flowchart LR
   the decision — so the purchase panel never appears before the pawn lands.
   Identify the actual `pending.seat`, including off-turn forced payments, and
   keep tile name, owner, price and rent beside the available actions.
+- **Forced sales** keep the board interactive. Eligible owned properties receive
+  white faces, outlines and keyboard-accessible proceeds buttons projected onto
+  their lots. Other lot faces and edges are dimmed during the choice. These
+  temporary materials restore the ordinary board as soon as the sale ends.
+  Clicking a lot or its quote selects it; the compact lower-center panel shows
+  the debt, the chosen property's proceeds and the balance after settlement.
+  No property is selected automatically, and a separate confirmation sends the
+  sale intent. A new decision or reconnect snapshot clears the selection.
 
 ## Signature moments
 
