@@ -14,6 +14,7 @@ import {
   LAWN_HALF,
   LOT_DEPTH,
   LOT_WIDTH,
+  PRICE_BAND,
   ROAD_WIDTH,
   screenTop,
 } from "./board-layout.js";
@@ -185,44 +186,97 @@ export const FESTIVAL_COLORS = [
   "#fffaf0",
 ] as const;
 
-/** The colored plot printed at the screen-top end of a lot. */
-function paintPlot(
+type Paving = (
+  stone: (x: number, y: number, width: number, height: number) => void,
+  width: number,
+  height: number,
+) => void;
+
+// One paving per country, cycled so neighbouring countries never share one:
+// cobbles, bricks, slabs and basket weave.
+const PAVINGS: readonly Paving[] = [
+  (stone, width, height) => {
+    for (let row = 0; row * 26 < height; row++)
+      for (let x = row % 2 ? -17 : 0; x < width; x += 34)
+        stone(x + 2, row * 26 + 2, 30, 22);
+  },
+  (stone, width, height) => {
+    for (let row = 0; row * 22 < height; row++)
+      for (let x = row % 2 ? -25 : 0; x < width; x += 50)
+        stone(x + 2, row * 22 + 2, 46, 18);
+  },
+  (stone, width, height) => {
+    for (let y = 0; y < height; y += 75)
+      for (let x = 0; x < width; x += 75) stone(x + 3, y + 3, 69, 69);
+  },
+  (stone, width, height) => {
+    for (let row = 0; row * 48 < height; row++)
+      for (let column = 0; column * 48 < width; column++) {
+        const [x, y] = [column * 48, row * 48];
+        if ((row + column) % 2) {
+          stone(x + 2, y + 2, 44, 20);
+          stone(x + 2, y + 26, 44, 20);
+        } else {
+          stone(x + 2, y + 2, 20, 44);
+          stone(x + 26, y + 2, 20, 44);
+        }
+      }
+  },
+];
+
+function paintPaving(
+  context: Context,
+  paving: Paving,
+  color: string,
+  width: number,
+  height: number,
+) {
+  context.fillStyle = mix(PAPER, color, 0.5);
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = mix(PAPER, color, 0.32);
+  paving(
+    (x, y, stoneWidth, stoneHeight) => {
+      context.beginPath();
+      context.roundRect(x, y, stoneWidth, stoneHeight, 5);
+      context.fill();
+    },
+    width,
+    height,
+  );
+}
+
+/**
+ * The city ground at the screen-top end of a lot: its country's paving, a beach
+ * or the tax office. Buildings stand on its top `band` and the name below them.
+ * No label repeats ownership or development: the houses already show both.
+ */
+function paintGround(
   context: Context,
   index: number,
   width: number,
+  height: number,
   band: number,
   boardRule: BoardRule,
 ) {
   const tile = getBoard(boardRule)[index];
   if (tile.kind === "city") {
-    const color = tileColor(index, { boardRule });
-    context.fillStyle = mix(PAPER, color, 0.68);
-    context.fillRect(0, 0, width, band);
-    context.fillStyle = mix(PAPER, color, 0.52);
-    for (let row = 0; row < 3; row++)
-      for (let column = 0; column < 4; column++) {
-        context.beginPath();
-        context.ellipse(
-          28 + column * 82 + (row % 2) * 40,
-          30 + row * 52,
-          12,
-          6,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        context.fill();
-      }
-    context.fillStyle = color;
-    context.fillRect(0, band - 24, width, 24);
+    const country = "ABCDEFGH".indexOf(tile.country);
+    paintPaving(
+      context,
+      PAVINGS[country % PAVINGS.length],
+      tileColor(index, { boardRule }),
+      width,
+      height,
+    );
     return;
   }
   if (tile.kind === "resort") {
-    const sea = context.createLinearGradient(0, 0, 0, band * 0.6);
+    const shore = band * 0.6;
+    const sea = context.createLinearGradient(0, 0, 0, shore);
     sea.addColorStop(0, "#41b9d6");
     sea.addColorStop(1, "#8ee0ec");
     context.fillStyle = sea;
-    context.fillRect(0, 0, width, band * 0.6);
+    context.fillRect(0, 0, width, shore);
     context.strokeStyle = "#e6fbff";
     context.lineWidth = 5;
     for (const y of [band * 0.18, band * 0.38]) {
@@ -232,15 +286,12 @@ function paintPlot(
       context.stroke();
     }
     context.fillStyle = "#f3dfaa";
-    context.fillRect(0, band * 0.6, width, band * 0.4);
+    context.fillRect(0, shore, width, height - shore);
     umbrella(context, width * 0.68, band * 0.58, band * 0.62);
-    context.fillStyle = "#2f9fbb";
-    context.fillRect(0, band - 24, width, 24);
     return;
   }
   if (tile.kind === "tax") {
-    context.fillStyle = "#e3d6ea";
-    context.fillRect(0, 0, width, band);
+    paintPaving(context, PAVINGS[2], "#b79bca", width, height);
     context.fillStyle = "#c9a43d";
     context.beginPath();
     context.arc(width / 2, band * 0.48, band * 0.32, 0, Math.PI * 2);
@@ -252,8 +303,6 @@ function paintPlot(
     context.fillStyle = "#8b6814";
     context.font = `900 ${Math.round(band * 0.34)}px ${DISPLAY_FONT}`;
     context.fillText("%", width / 2, band * 0.46);
-    context.fillStyle = "#9d7fb3";
-    context.fillRect(0, band - 24, width, 24);
   }
 }
 
@@ -262,7 +311,7 @@ export type LotPrint = {
   readonly amount: number | null;
   readonly owner: Seat | null;
   readonly locale: Locale;
-  /** Eligible sale lots stay white rather than taking the owner's paper tint. */
+  /** Eligible sale lots print their strip white, in the owner's ink. */
   readonly forSale?: boolean;
   readonly boardRule?: BoardRule;
 };
@@ -271,16 +320,11 @@ export function lotTexture(index: number, print: LotPrint) {
   const width = LOT_WIDTH * PIXELS_PER_UNIT;
   const height = LOT_DEPTH * PIXELS_PER_UNIT;
   const band = Math.round((BUILDING_BAND / LOT_DEPTH) * height);
+  const strip = Math.round((PRICE_BAND / LOT_DEPTH) * height);
+  const ground = height - strip;
   const { amount, owner, locale, forSale, boardRule = "country" } = print;
   return canvasTexture(width, height, (context) => {
     const tile = getBoard(boardRule)[index];
-    const ownerColor = owner == null ? null : PLAYER_COLORS[owner];
-    context.fillStyle = forSale
-      ? "#ffffff"
-      : ownerColor
-        ? mix(PAPER, ownerColor, 0.12)
-        : PAPER;
-    context.fillRect(0, 0, width, height);
     const name = tileName(index, { boardRule }).toLocaleUpperCase(locale);
     if (tile.kind === "chance") {
       context.fillStyle = "#fff3d9";
@@ -299,49 +343,59 @@ export function lotTexture(index: number, print: LotPrint) {
       );
       return;
     }
-    paintPlot(context, index, width, band, boardRule);
+    // City ground: buildings at the top, the name just above the price strip.
+    paintGround(context, index, width, ground, band, boardRule);
     context.fillStyle = INK;
     fitText(
       context,
       name,
       width / 2,
-      band + 50,
+      ground - 48,
       width - 30,
-      40,
+      42,
       800,
       LABEL_FONT,
     );
+    // Price strip: the purchase price in ink, or the rent in the owner's color.
+    // The strip itself stays light on every lot.
+    context.fillStyle = forSale ? "#ffffff" : PAPER;
+    context.fillRect(0, ground, width, strip);
+    // A soft shadow under the ground's edge makes the two parts read as steps.
+    const step = context.createLinearGradient(0, ground, 0, ground + 14);
+    step.addColorStop(0, "#1d3a4633");
+    step.addColorStop(1, "#1d3a4600");
+    context.fillStyle = step;
+    context.fillRect(0, ground, width, 14);
     const figure =
       tile.kind === "tax"
         ? `${ECONOMY.taxPercent} %`
         : amount === null
           ? ""
           : boardAmount(amount, locale);
+    context.fillStyle = owner == null ? INK : PLAYER_COLORS[owner];
     fitText(
       context,
       figure,
       width / 2,
-      band + 146,
+      ground + strip / 2 + 4,
       width - 26,
-      94,
+      96,
       900,
       DISPLAY_FONT,
     );
-    if (ownerColor && owner != null) {
-      const strip = 56;
-      context.fillStyle = ownerColor;
-      context.fillRect(0, height - strip, width, strip);
-      context.fillStyle = "#fffaf0";
-      fitText(
-        context,
-        `${PLAYER_SYMBOLS[owner]}  ${locale === "fr" ? "LOYER" : "RENT"}`,
-        width / 2,
-        height - strip / 2 + 1,
-        width - 30,
-        30,
-        800,
-        LABEL_FONT,
-      );
+    // The owner's seat badge is pinned where the two parts meet, so color and
+    // symbol mark the lot together without taking room from the amount.
+    if (owner != null) {
+      context.fillStyle = PLAYER_COLORS[owner];
+      context.strokeStyle = PAPER;
+      context.lineWidth = 6;
+      context.beginPath();
+      context.arc(40, ground + 2, 27, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.fillStyle = PAPER;
+      context.font = `700 30px ${LABEL_FONT}`;
+      context.fillText(PLAYER_SYMBOLS[owner], 40, ground + 3);
     }
   });
 }
