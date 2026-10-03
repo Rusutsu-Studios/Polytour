@@ -64,7 +64,6 @@ import {
   visibleFaces,
 } from "./board-layout.js";
 import {
-  bannerTexture,
   cornerTexture,
   FESTIVAL_COLORS,
   lawnTexture,
@@ -837,63 +836,28 @@ function pennantGeometry() {
   return new THREE.ShapeGeometry(shape);
 }
 
-// A festival city flies a tall mast with a swallowtail banner at one end of
-// its plot, and a garland of pennants runs down from it to a short mast at
-// the other end. Positions are tile-local x along play.
-const BANNER_MAST = { along: 0.4, height: 1.1 };
-const GARLAND_MAST = { along: -0.42, height: 0.4 };
-const BANNER_WIDTH = 0.62;
-const BANNER_HEIGHT = 0.26;
-const GARLAND_START = BANNER_MAST.height - BANNER_HEIGHT - 0.03;
-const PENNANTS = 8;
-const FESTIVAL_TILES = 24;
+const BUNTING_FLAGS = 7;
+const BUNTING_HEIGHT = 0.62;
+const BUNTING_SAG = 0.08;
+const BUNTING_HALF = 0.46;
 
-/** Tile-local z of a festival's masts: the screen-top edge of the plot. */
+/** Tile-local z of a festival garland: the screen-top edge of the plot. */
 function buntingZ(index: number) {
   return screenTop(index) * (LOT_DEPTH / 2 - 0.05);
 }
 
 /**
- * Where a festival banner flies: hinged on its mast and turned face-on to the
- * camera, its free end toward the middle of the plot.
- */
-function bannerPlacement(tile: number) {
-  const z = buntingZ(tile);
-  const [mx, mz] = tilePoint(tile, BANNER_MAST.along, z);
-  const [px, pz] = tilePoint(tile, GARLAND_MAST.along, z);
-  const [cx, , cz] = CAMERA_OFFSET;
-  const length = Math.hypot(cx, cz);
-  // Of the two horizontal directions square to the camera, take the one
-  // pointing along the plot.
-  let [rx, rz] = [cz / length, -cx / length];
-  if (rx * (px - mx) + rz * (pz - mz) < 0) [rx, rz] = [-rx, -rz];
-  return {
-    position: [
-      mx + (rx * BANNER_WIDTH) / 2,
-      LOT_TOP + BANNER_MAST.height - BANNER_HEIGHT / 2,
-      mz + (rz * BANNER_WIDTH) / 2,
-    ] as const,
-    // The plane's +x, the banner's mast side, points back at the mast.
-    rotation: Math.atan2(rz, -rx),
-  };
-}
-
-/**
- * Festival cities keep their country colour; a tall banner and a garland of
- * vivid pennants mark the fête. The rent multiplier lives in the inspector.
+ * Festival cities keep their country colour; a garland of vivid pennants between
+ * two masts marks the fête, and the championship host adds its searchlights.
+ * The rent multiplier lives in the inspector.
  */
 function FestivalMarkers({ state }: { state: PublicState | null }) {
   const masts = useRef<THREE.InstancedMesh>(null);
-  const finials = useRef<THREE.InstancedMesh>(null);
   const cords = useRef<THREE.InstancedMesh>(null);
   const flags = useRef<THREE.InstancedMesh>(null);
   const transform = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const pennant = useMemo(pennantGeometry, []);
-  const banners = useMemo(
-    () => ({ festival: bannerTexture(false), host: bannerTexture(true) }),
-    [],
-  );
   const festivalKey = state
     ? [
         ...new Set([
@@ -907,65 +871,54 @@ function FestivalMarkers({ state }: { state: PublicState | null }) {
     [festivalKey],
   );
   const hostTile = state?.championshipHost?.tile ?? null;
-  useEffect(
-    () => () => {
-      pennant.dispose();
-      banners.festival.dispose();
-      banners.host.dispose();
-    },
-    [pennant, banners],
-  );
+  const hostSpot =
+    hostTile === null ? null : tilePoint(hostTile, 0, buntingZ(hostTile));
+  useEffect(() => () => pennant.dispose(), [pennant]);
   useEffect(() => {
     const mastMesh = masts.current;
-    const finialMesh = finials.current;
     const cordMesh = cords.current;
     const flagMesh = flags.current;
-    if (!mastMesh || !finialMesh || !cordMesh || !flagMesh) return;
+    if (!mastMesh || !cordMesh || !flagMesh) return;
     let mastCount = 0;
     let cordCount = 0;
     let flagCount = 0;
     for (const tile of festivals) {
       const angle = tileRotation(tile);
       const z = buntingZ(tile);
-      for (const mast of [BANNER_MAST, GARLAND_MAST]) {
-        const [x, worldZ] = tilePoint(tile, mast.along, z);
+      for (const side of [-1, 1]) {
+        const [x, worldZ] = tilePoint(tile, side * BUNTING_HALF, z);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT / 2, worldZ);
         transform.rotation.set(0, 0, 0);
-        transform.position.set(x, LOT_TOP + mast.height / 2, worldZ);
-        transform.scale.set(1, mast.height, 1);
+        transform.scale.set(1, BUNTING_HEIGHT, 1);
         transform.updateMatrix();
-        mastMesh.setMatrixAt(mastCount, transform.matrix);
-        transform.position.set(x, LOT_TOP + mast.height + 0.02, worldZ);
-        transform.scale.set(1, 1, 1);
-        transform.updateMatrix();
-        finialMesh.setMatrixAt(mastCount++, transform.matrix);
+        mastMesh.setMatrixAt(mastCount++, transform.matrix);
       }
-      // One straight cord slopes from under the banner to the short mast.
-      const run = BANNER_MAST.along - GARLAND_MAST.along;
-      const drop = GARLAND_START - GARLAND_MAST.height;
-      const [cx, cz] = tilePoint(
-        tile,
-        (BANNER_MAST.along + GARLAND_MAST.along) / 2,
-        z,
-      );
-      transform.position.set(
-        cx,
-        LOT_TOP + (GARLAND_START + GARLAND_MAST.height) / 2,
-        cz,
-      );
-      transform.rotation.set(0, angle, Math.atan2(drop, run));
-      transform.scale.set(Math.hypot(run, drop), 1, 1);
-      transform.updateMatrix();
-      cordMesh.setMatrixAt(cordCount++, transform.matrix);
-      for (let flag = 0; flag < PENNANTS; flag++) {
-        const share = (flag + 0.5) / PENNANTS;
-        const [x, worldZ] = tilePoint(tile, BANNER_MAST.along - share * run, z);
+      // Two straight cord halves meet at the sagging middle of the garland.
+      for (const side of [-1, 1]) {
+        const [x, worldZ] = tilePoint(tile, (side * BUNTING_HALF) / 2, z);
         transform.position.set(
           x,
-          LOT_TOP + GARLAND_START - share * drop,
+          LOT_TOP + BUNTING_HEIGHT - BUNTING_SAG / 2,
           worldZ,
         );
+        transform.rotation.set(
+          0,
+          angle,
+          side * Math.atan2(BUNTING_SAG, BUNTING_HALF),
+        );
+        transform.scale.set(Math.hypot(BUNTING_HALF, BUNTING_SAG), 1, 1);
+        transform.updateMatrix();
+        cordMesh.setMatrixAt(cordCount++, transform.matrix);
+      }
+      for (let flag = 0; flag < BUNTING_FLAGS; flag++) {
+        const along =
+          -BUNTING_HALF * 0.86 +
+          (flag * BUNTING_HALF * 1.72) / (BUNTING_FLAGS - 1);
+        const [x, worldZ] = tilePoint(tile, along, z);
+        const drop = BUNTING_SAG * (1 - Math.abs(along) / BUNTING_HALF);
+        transform.position.set(x, LOT_TOP + BUNTING_HEIGHT - drop, worldZ);
         transform.rotation.set(0, angle, 0);
-        transform.scale.set(0.1, 0.13, 1);
+        transform.scale.set(0.085, 0.11, 1);
         transform.updateMatrix();
         flagMesh.setMatrixAt(flagCount, transform.matrix);
         flagMesh.setColorAt(
@@ -974,10 +927,10 @@ function FestivalMarkers({ state }: { state: PublicState | null }) {
         );
       }
     }
-    mastMesh.count = finialMesh.count = mastCount;
+    mastMesh.count = mastCount;
     cordMesh.count = cordCount;
     flagMesh.count = flagCount;
-    for (const mesh of [mastMesh, finialMesh, cordMesh, flagMesh]) {
+    for (const mesh of [mastMesh, cordMesh, flagMesh]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingSphere();
@@ -985,59 +938,26 @@ function FestivalMarkers({ state }: { state: PublicState | null }) {
   }, [festivals, transform, color]);
   return (
     <>
-      <instancedMesh
-        ref={masts}
-        args={[undefined, undefined, FESTIVAL_TILES * 2]}
-        castShadow
-      >
-        <cylinderGeometry args={[0.016, 0.02, 1, 8]} />
-        <meshStandardMaterial color="#f7f4ee" roughness={0.6} />
+      <instancedMesh ref={masts} args={[undefined, undefined, 48]} castShadow>
+        <cylinderGeometry args={[0.012, 0.014, 1, 6]} />
+        <meshStandardMaterial color="#b98a3e" roughness={0.8} />
       </instancedMesh>
-      <instancedMesh
-        ref={finials}
-        args={[undefined, undefined, FESTIVAL_TILES * 2]}
-      >
-        <sphereGeometry args={[0.034, 10, 8]} />
-        <meshBasicMaterial color="#ffc21a" toneMapped={false} />
-      </instancedMesh>
-      <instancedMesh ref={cords} args={[undefined, undefined, FESTIVAL_TILES]}>
-        <boxGeometry args={[1, 0.007, 0.007]} />
-        <meshBasicMaterial color="#5b4a33" />
+      <instancedMesh ref={cords} args={[undefined, undefined, 48]}>
+        <boxGeometry args={[1, 0.006, 0.006]} />
+        <meshBasicMaterial color="#6d5a3c" />
       </instancedMesh>
       <instancedMesh
         ref={flags}
-        args={[pennant, undefined, FESTIVAL_TILES * PENNANTS]}
+        args={[pennant, undefined, 24 * BUNTING_FLAGS]}
         castShadow
       >
         <meshBasicMaterial side={THREE.DoubleSide} toneMapped={false} />
       </instancedMesh>
-      {festivals.map((tile) => {
-        const hosted = hostTile === tile;
-        const banner = bannerPlacement(tile);
-        const [hx, hz] = tilePoint(tile, 0, buntingZ(tile));
-        return (
-          <group key={tile}>
-            <mesh
-              position={banner.position}
-              rotation={[0, banner.rotation, 0]}
-              castShadow
-            >
-              <planeGeometry args={[BANNER_WIDTH, BANNER_HEIGHT]} />
-              <meshBasicMaterial
-                map={hosted ? banners.host : banners.festival}
-                side={THREE.DoubleSide}
-                alphaTest={0.5}
-                toneMapped={false}
-              />
-            </mesh>
-            {hosted && (
-              <group position={[hx, LOT_TOP, hz]}>
-                <FestivalBeams />
-              </group>
-            )}
-          </group>
-        );
-      })}
+      {hostSpot && (
+        <group position={[hostSpot[0], LOT_TOP, hostSpot[1]]}>
+          <FestivalBeams />
+        </group>
+      )}
     </>
   );
 }

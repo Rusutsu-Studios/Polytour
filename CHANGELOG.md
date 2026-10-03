@@ -9,6 +9,17 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-03
+
+### Changed
+
+- Festival cities return to the garland of pennants between two masts, now in
+  vivid colors, instead of the face-on banner; the floating multiplier stays
+  gone and the championship host keeps its searchlights (#78).
+- Milan/Berlin and Prague/Vienne stand on smooth concrete slabs, square and long
+  staggered, in muted slate-lavender and warm-taupe colors that no other region
+  uses, so they no longer resemble Tokyo and Osaka (#78).
+
 ## [0.3.0] - 2026-10-03
 
 ### Changed
