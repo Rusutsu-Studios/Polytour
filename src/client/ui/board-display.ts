@@ -18,7 +18,6 @@ export const PLAYER_COLORS = [
   "#8151b5",
   "#26764c",
 ] as const;
-export const PLAYER_SYMBOLS = ["●", "◆", "▲", "■"] as const;
 export const PLAYER_LABELS = ["Corail", "Océan", "Lavande", "Forêt"] as const;
 export const REGION_COLORS = {
   A: "#74b987",

@@ -21,7 +21,6 @@ import {
   HELIPAD,
   PLOT_DEPTH,
   POND,
-  plotTree,
   TOWN_TREES,
   type TownPlot,
   type TownTree,
@@ -258,11 +257,9 @@ function TownBuildings({
       for (const [index, tree] of TOWN_TREES.entries()) plantTree(tree, index);
       let craneAt: TownPlot | null = null;
       for (const plot of plots) {
+        // An unsold plot stays an empty outline; only purchases build here.
         const building = owned(view, plot, preview, rule, maxLevel);
-        if (!building) {
-          plantTree(plotTree(plot), plot.tile);
-          continue;
-        }
+        if (!building) continue;
         const growing = growth?.tile === plot.tile ? growth.progress : null;
         let rise = 1;
         let spread = 1;

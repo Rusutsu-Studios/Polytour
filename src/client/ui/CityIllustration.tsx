@@ -89,12 +89,13 @@ export default function CityIllustration({
   level,
   color,
   resort = false,
-  symbol,
+  flag = false,
 }: {
   level: BuildLevel;
   color: string;
   resort?: boolean;
-  symbol?: string;
+  /** An owned or chosen lot flies a flag in the player's color. */
+  flag?: boolean;
 }) {
   return (
     <svg
@@ -180,20 +181,10 @@ export default function CityIllustration({
       <ellipse cx="260" cy="157" rx="13" ry="5" fill="#708c50" />
       <path d="M260 155v-30" stroke="#9a7745" strokeWidth="3" />
       <path d="m260 126-22-8 16-4 5-20 9 19 19 4-26 9" fill="#679b4e" />
-      {symbol && (
+      {flag && (
         <g transform="translate(246 179)">
           <path d="M0 0v-38" stroke="#526b50" strokeWidth="2" />
           <path d="M1-38h27l-5 9 5 9H1Z" fill={color} />
-          <text
-            x="12"
-            y="-25"
-            textAnchor="middle"
-            fontSize="11"
-            fill="#fffaf0"
-            fontWeight="700"
-          >
-            {symbol}
-          </text>
         </g>
       )}
     </svg>

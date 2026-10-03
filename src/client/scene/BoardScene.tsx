@@ -71,7 +71,6 @@ import {
   noteTexture,
   roadTexture,
   scoreTexture,
-  seatBadgeTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
 import { BeachUmbrella, Landmarks } from "./Landmarks.js";
@@ -1205,19 +1204,6 @@ function Pawn({
             <meshStandardMaterial color="#fffaf0" />
           </mesh>
         )}
-        <mesh
-          position={[0, 0.3, 0.137]}
-          rotation={[0, 0, seat === 1 ? Math.PI / 4 : 0]}
-        >
-          {seat === 0 ? (
-            <circleGeometry args={[0.036, 10]} />
-          ) : seat === 2 ? (
-            <circleGeometry args={[0.049, 3]} />
-          ) : (
-            <planeGeometry args={[0.057, 0.057]} />
-          )}
-          <meshBasicMaterial color="#fffaf0" />
-        </mesh>
       </group>
     </group>
   );
@@ -1245,25 +1231,6 @@ function cashBundleCount(cash: number) {
   return Math.min(
     CASH_BUNDLES_PER_SEAT,
     Math.ceil(Math.max(0, cash) / 400_000),
-  );
-}
-
-function CashReserveBadge({ seat, cash }: { seat: Seat; cash: number }) {
-  const texture = useMemo(() => seatBadgeTexture(seat), [seat]);
-  useEffect(() => () => texture.dispose(), [texture]);
-  const bundle = cashBundleCount(cash) - 1;
-  if (bundle < 0) return null;
-  const across = ((bundle % 2) - 0.5) * 0.56;
-  const top = BOARD_BOTTOM + 0.144 + Math.floor(bundle / 2) * 0.15;
-  return (
-    <mesh
-      position={reserveSpot(seat, 0, across, top)}
-      // Laid flat and turned so the symbol stands upright on screen.
-      rotation={[-Math.PI / 2, 0, Math.PI / 4]}
-    >
-      <planeGeometry args={[0.155, 0.155]} />
-      <meshBasicMaterial map={texture} transparent depthWrite={false} />
-    </mesh>
   );
 }
 
@@ -1344,15 +1311,6 @@ function CashReserves({ state }: { state: PublicState }) {
   }, [state, transform, color, invalidate]);
   return (
     <group>
-      {state.players
-        .filter((player) => !player.bankrupt)
-        .map((player) => (
-          <CashReserveBadge
-            key={player.seat}
-            seat={player.seat}
-            cash={player.cash}
-          />
-        ))}
       <instancedMesh
         ref={notes}
         args={[undefined, undefined, CASH_BUNDLES_PER_SEAT * 4]}

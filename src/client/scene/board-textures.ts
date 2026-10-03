@@ -2,12 +2,7 @@ import * as THREE from "three";
 import { type BoardRule, ECONOMY, getBoard } from "../../shared/board/index.js";
 import type { Seat } from "../../shared/engine/index.js";
 import type { Locale } from "../i18n.js";
-import {
-  PLAYER_COLORS,
-  PLAYER_SYMBOLS,
-  tileColor,
-  tileName,
-} from "../ui/board-display.js";
+import { PLAYER_COLORS, tileColor, tileName } from "../ui/board-display.js";
 import {
   BUILDING_BAND,
   INNER_HALF,
@@ -186,69 +181,128 @@ export const FESTIVAL_COLORS = [
   "#fffaf0",
 ] as const;
 
-type Paving = (
-  stone: (x: number, y: number, width: number, height: number) => void,
-  width: number,
-  height: number,
-) => void;
+/** Seeded noise, so a lot repaints identically whenever its print changes. */
+function noise(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = Math.imul(state ^ (state >>> 15), state | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-// One paving per country, cycled so neighbouring countries never share one:
-// cobbles, bricks, slabs and basket weave.
-const PAVINGS: readonly Paving[] = [
-  (stone, width, height) => {
-    for (let row = 0; row * 26 < height; row++)
-      for (let x = row % 2 ? -17 : 0; x < width; x += 34)
-        stone(x + 2, row * 26 + 2, 30, 22);
-  },
-  (stone, width, height) => {
-    for (let row = 0; row * 22 < height; row++)
-      for (let x = row % 2 ? -25 : 0; x < width; x += 50)
-        stone(x + 2, row * 22 + 2, 46, 18);
-  },
-  (stone, width, height) => {
-    for (let y = 0; y < height; y += 75)
-      for (let x = 0; x < width; x += 75) stone(x + 3, y + 3, 69, 69);
-  },
-  (stone, width, height) => {
-    for (let row = 0; row * 48 < height; row++)
-      for (let column = 0; column * 48 < width; column++) {
-        const [x, y] = [column * 48, row * 48];
-        if ((row + column) % 2) {
-          stone(x + 2, y + 2, 44, 20);
-          stone(x + 2, y + 26, 44, 20);
-        } else {
-          stone(x + 2, y + 2, 20, 44);
-          stone(x + 26, y + 2, 20, 44);
-        }
-      }
-  },
-];
-
-function paintPaving(
+/** Fine grain over a smooth surface: concrete, stucco, sand or plaster. */
+function speckle(
   context: Context,
-  paving: Paving,
-  color: string,
+  seed: number,
   width: number,
   height: number,
+  light: string,
+  dark: string,
+  y = 0,
 ) {
-  context.fillStyle = mix(PAPER, color, 0.5);
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = mix(PAPER, color, 0.32);
-  paving(
-    (x, y, stoneWidth, stoneHeight) => {
-      context.beginPath();
-      context.roundRect(x, y, stoneWidth, stoneHeight, 5);
-      context.fill();
-    },
-    width,
-    height,
-  );
+  const next = noise(seed);
+  const count = Math.round(width * height * 0.005);
+  for (let grain = 0; grain < count; grain++) {
+    context.fillStyle = next() < 0.5 ? light : dark;
+    const size = 1 + next() * 2.4;
+    context.fillRect(next() * width, y + next() * height, size, size);
+  }
+}
+
+/** Light smooth concrete: the price strips and the special squares. */
+const CONCRETE = "#eeecf0";
+
+function paintConcrete(
+  context: Context,
+  seed: number,
+  width: number,
+  height: number,
+  y = 0,
+  base = CONCRETE,
+) {
+  context.fillStyle = base;
+  context.fillRect(0, y, width, height);
+  speckle(context, seed, width, height, "#fbfafc", "#dedae3", y);
 }
 
 /**
- * The city ground at the screen-top end of a lot: its country's paving, a beach
- * or the tax office. Buildings stand on its top `band` and the name below them.
- * No label repeats ownership or development: the houses already show both.
+ * A city's ground: one plain surface in its country's color, like grass or
+ * slate, so the eight countries read apart by color and nothing competes with
+ * the houses. Only beaches mix two materials.
+ */
+function paintCityGround(
+  context: Context,
+  color: string,
+  width: number,
+  height: number,
+  seed: number,
+) {
+  const base = mix(PAPER, color, 0.66);
+  const sheen = context.createLinearGradient(0, 0, 0, height);
+  sheen.addColorStop(0, mix(base, "#ffffff", 0.1));
+  sheen.addColorStop(1, mix(base, INK, 0.05));
+  context.fillStyle = sheen;
+  context.fillRect(0, 0, width, height);
+  speckle(
+    context,
+    seed,
+    width,
+    height,
+    mix(base, "#ffffff", 0.22),
+    mix(base, INK, 0.08),
+  );
+}
+
+/** A tax form with a red stamp, lying on the concrete of the tax office. */
+function taxForm(context: Context, x: number, y: number, size: number) {
+  const [width, height, fold] = [size * 0.72, size * 0.92, size * 0.17];
+  context.save();
+  context.translate(x, y);
+  context.rotate(-0.14);
+  context.fillStyle = "#1d3a4624";
+  context.fillRect(-width / 2 + 7, -height / 2 + 9, width, height);
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.moveTo(-width / 2, -height / 2);
+  context.lineTo(width / 2 - fold, -height / 2);
+  context.lineTo(width / 2, -height / 2 + fold);
+  context.lineTo(width / 2, height / 2);
+  context.lineTo(-width / 2, height / 2);
+  context.closePath();
+  context.fill();
+  context.fillStyle = "#d9d4de";
+  context.beginPath();
+  context.moveTo(width / 2 - fold, -height / 2);
+  context.lineTo(width / 2 - fold, -height / 2 + fold);
+  context.lineTo(width / 2, -height / 2 + fold);
+  context.closePath();
+  context.fill();
+  context.fillStyle = "#c4ccd2";
+  for (let line = 0; line < 4; line++)
+    context.fillRect(
+      -width / 2 + size * 0.08,
+      -height / 2 + size * (0.22 + line * 0.13),
+      width * (line === 3 ? 0.42 : 0.7),
+      size * 0.045,
+    );
+  context.strokeStyle = "#d8473a";
+  context.fillStyle = "#d8473a";
+  context.lineWidth = size * 0.045;
+  context.beginPath();
+  context.arc(width * 0.14, height * 0.24, size * 0.16, 0, Math.PI * 2);
+  context.stroke();
+  context.font = `900 ${Math.round(size * 0.19)}px ${DISPLAY_FONT}`;
+  context.fillText("%", width * 0.14, height * 0.24 + 1);
+  context.restore();
+}
+
+/**
+ * The city ground at the screen-top end of a lot: its country's plain ground,
+ * a beach or the tax office's concrete. Buildings stand on its top `band` and
+ * the name below them. No label repeats ownership or development: the houses
+ * already show both, in the owner's color.
  */
 function paintGround(
   context: Context,
@@ -260,13 +314,12 @@ function paintGround(
 ) {
   const tile = getBoard(boardRule)[index];
   if (tile.kind === "city") {
-    const country = "ABCDEFGH".indexOf(tile.country);
-    paintPaving(
+    paintCityGround(
       context,
-      PAVINGS[country % PAVINGS.length],
       tileColor(index, { boardRule }),
       width,
       height,
+      index + 1,
     );
     return;
   }
@@ -287,22 +340,13 @@ function paintGround(
     }
     context.fillStyle = "#f3dfaa";
     context.fillRect(0, shore, width, height - shore);
+    speckle(context, index, width, height - shore, "#fbeecb", "#e2c98d", shore);
     umbrella(context, width * 0.68, band * 0.58, band * 0.62);
     return;
   }
   if (tile.kind === "tax") {
-    paintPaving(context, PAVINGS[2], "#b79bca", width, height);
-    context.fillStyle = "#c9a43d";
-    context.beginPath();
-    context.arc(width / 2, band * 0.48, band * 0.32, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#ffd768";
-    context.beginPath();
-    context.arc(width / 2, band * 0.45, band * 0.3, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#8b6814";
-    context.font = `900 ${Math.round(band * 0.34)}px ${DISPLAY_FONT}`;
-    context.fillText("%", width / 2, band * 0.46);
+    paintConcrete(context, index, width, height);
+    taxForm(context, width / 2, band * 0.52, band * 0.92);
   }
 }
 
@@ -327,8 +371,7 @@ export function lotTexture(index: number, print: LotPrint) {
     const tile = getBoard(boardRule)[index];
     const name = tileName(index, { boardRule }).toLocaleUpperCase(locale);
     if (tile.kind === "chance") {
-      context.fillStyle = "#fff3d9";
-      context.fillRect(0, 0, width, height);
+      paintConcrete(context, index, width, height);
       wheel(context, width / 2, height * 0.38, width * 0.36);
       context.fillStyle = INK;
       fitText(
@@ -350,22 +393,29 @@ export function lotTexture(index: number, print: LotPrint) {
       context,
       name,
       width / 2,
-      ground - 48,
+      ground - 46,
       width - 30,
       42,
       800,
       LABEL_FONT,
     );
-    // Price strip: the purchase price in ink, or the rent in the owner's color.
-    // The strip itself stays light on every lot.
-    context.fillStyle = forSale ? "#ffffff" : PAPER;
-    context.fillRect(0, ground, width, strip);
-    // A soft shadow under the ground's edge makes the two parts read as steps.
-    const step = context.createLinearGradient(0, ground, 0, ground + 14);
-    step.addColorStop(0, "#1d3a4633");
-    step.addColorStop(1, "#1d3a4600");
-    context.fillStyle = step;
-    context.fillRect(0, ground, width, 14);
+    // Price strip: concrete with the purchase price in ink, or the rent in the
+    // owner's color. A dark seam and the strip's lit edge part it from the
+    // ground; a shade along its far edge finishes the slab.
+    paintConcrete(
+      context,
+      index + 101,
+      width,
+      strip,
+      ground,
+      forSale ? "#ffffff" : CONCRETE,
+    );
+    context.fillStyle = "#1d3a4666";
+    context.fillRect(0, ground - 2, width, 4);
+    context.fillStyle = "#ffffffd9";
+    context.fillRect(0, ground + 2, width, 4);
+    context.fillStyle = "#1d3a461a";
+    context.fillRect(0, height - 6, width, 6);
     const figure =
       tile.kind === "tax"
         ? `${ECONOMY.taxPercent} %`
@@ -377,26 +427,12 @@ export function lotTexture(index: number, print: LotPrint) {
       context,
       figure,
       width / 2,
-      ground + strip / 2 + 4,
+      ground + strip / 2 + 3,
       width - 26,
       96,
       900,
       DISPLAY_FONT,
     );
-    // The owner's seat badge is pinned where the two parts meet, so color and
-    // symbol mark the lot together without taking room from the amount.
-    if (owner != null) {
-      context.fillStyle = PLAYER_COLORS[owner];
-      context.strokeStyle = PAPER;
-      context.lineWidth = 6;
-      context.beginPath();
-      context.arc(40, ground + 2, 27, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
-      context.fillStyle = PAPER;
-      context.font = `700 30px ${LABEL_FONT}`;
-      context.fillText(PLAYER_SYMBOLS[owner], 40, ground + 3);
-    }
   });
 }
 
@@ -872,23 +908,6 @@ export function noteTexture() {
     context.beginPath();
     context.ellipse(128, 64, 39, 34, 0, 0, Math.PI * 2);
     context.fill();
-  });
-}
-
-export function seatBadgeTexture(seat: Seat) {
-  return canvasTexture(128, 128, (context) => {
-    context.fillStyle = PLAYER_COLORS[seat];
-    context.beginPath();
-    context.arc(64, 64, 59, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = "#fffaf0";
-    context.lineWidth = 7;
-    context.beginPath();
-    context.arc(64, 64, 51, 0, Math.PI * 2);
-    context.stroke();
-    context.fillStyle = "#fffaf0";
-    context.font = `700 70px ${LABEL_FONT}`;
-    context.fillText(PLAYER_SYMBOLS[seat], 64, 64);
   });
 }
 
