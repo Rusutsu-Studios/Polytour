@@ -157,6 +157,265 @@ test("an invitation joins the existing production room and refresh resumes the s
   await host.page.context().close();
 });
 
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`leaving the real lobby frees the seat and transfers host controls at ${viewport.width}×${viewport.height}`, async ({
+    browser,
+    request,
+  }) => {
+    const created = await request.post("/api/rooms", {
+      data: { name: "Departing host", config: { decisionSeconds: 60 } },
+    });
+    expect(created.status()).toBe(201);
+    const host: RoomCredentials = await created.json();
+    const joined = await request.post(`/api/rooms/${host.roomCode}/join`, {
+      data: { name: "Next host" },
+    });
+    expect(joined.status()).toBe(200);
+    const guest: RoomCredentials = await joined.json();
+    const hostContext = await browser.newContext({
+      viewport,
+      reducedMotion: viewport.width === 1440 ? "reduce" : "no-preference",
+    });
+    const guestContext = await browser.newContext({
+      viewport,
+      reducedMotion: viewport.width === 1440 ? "reduce" : "no-preference",
+    });
+    const errors: string[] = [];
+    try {
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+      const hostSockets: { closed: boolean }[] = [];
+      hostPage.on("websocket", (socket) => {
+        if (!socket.url().includes(`/ws/room/${host.roomCode}`)) return;
+        const connection = { closed: false };
+        hostSockets.push(connection);
+        socket.on("close", () => {
+          connection.closed = true;
+        });
+      });
+      for (const [page, credentials] of [
+        [hostPage, host],
+        [guestPage, guest],
+      ] as const) {
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.goto("/");
+        await page.evaluate((session) => {
+          localStorage.setItem("polytour.locale", "en");
+          sessionStorage.setItem("polytour-room-v1", JSON.stringify(session));
+        }, credentials);
+        await page.reload();
+        await expect(page.locator(".lobby-connection")).toHaveText(
+          "Room connected",
+        );
+        await expect(page.locator(".lobby-seat.filled.human")).toHaveCount(2);
+      }
+      await expect(
+        hostPage.getByRole("button", { name: "Start game", exact: true }),
+      ).toBeEnabled();
+      await expect(guestPage.locator(".waiting-host")).toBeVisible();
+
+      // A normal socket interruption keeps the guest's reconnectable seat.
+      await guestPage.reload();
+      await expect(guestPage.locator(".lobby-connection")).toHaveText(
+        "Room connected",
+      );
+      await expect(guestPage.locator(".lobby-seat.filled.human")).toHaveCount(
+        2,
+      );
+      await expect(guestPage.locator(".waiting-host")).toBeVisible();
+      await hostPage.screenshot({
+        path: `.local/verification/lobby-before-leave-${viewport.width}.png`,
+      });
+
+      const leaveResponse = hostPage.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname ===
+            `/api/rooms/${host.roomCode}/leave` &&
+          response.request().method() === "POST",
+      );
+      const leaveButton = hostPage.getByRole("button", {
+        name: "Leave",
+        exact: true,
+      });
+      if (viewport.width === 1280) {
+        await leaveButton.focus();
+        await expect(leaveButton).toBeFocused();
+        await hostPage.keyboard.press("Enter");
+      } else {
+        await leaveButton.click();
+      }
+      expect((await leaveResponse).status()).toBe(200);
+      await expect(
+        hostPage.getByRole("heading", { name: "New game", exact: true }),
+      ).toBeVisible();
+      expect(
+        await hostPage.evaluate(() =>
+          sessionStorage.getItem("polytour-room-v1"),
+        ),
+      ).toBeNull();
+      expect(hostSockets.length).toBeGreaterThan(0);
+      await expect
+        .poll(() => hostSockets.every((connection) => connection.closed))
+        .toBe(true);
+
+      await expect(guestPage.locator(".lobby-seat.filled.human")).toHaveCount(
+        1,
+      );
+      await expect(guestPage.locator(".lobby-seat.filled.human")).toContainText(
+        "Next host",
+      );
+      await expect(guestPage.locator(".host-label")).toHaveCount(1);
+      await expect(guestPage.locator(".waiting-host")).toHaveCount(0);
+      await expect(
+        guestPage.getByRole("button", { name: "Add a bot to seat 1" }),
+      ).toBeEnabled();
+      // The promoted host and freed seat must survive snapshot recovery too.
+      await guestPage.reload();
+      await expect(guestPage.locator(".lobby-connection")).toHaveText(
+        "Room connected",
+      );
+      await expect(
+        guestPage.getByRole("button", { name: "Add a bot to seat 1" }),
+      ).toBeEnabled();
+
+      const replacementResponse = await request.post(
+        `/api/rooms/${host.roomCode}/join`,
+        { data: { name: "New occupant" } },
+      );
+      expect(replacementResponse.status()).toBe(200);
+      const replacement: RoomCredentials = await replacementResponse.json();
+      expect(replacement.seat).toBe(host.seat);
+      expect(replacement.token).not.toBe(host.token);
+      const staleLeave = await request.post(
+        `/api/rooms/${host.roomCode}/leave`,
+        { headers: { Authorization: `Bearer ${host.token}` } },
+      );
+      expect(staleLeave.status()).toBe(401);
+      expect(await staleLeave.json()).toEqual({ error: "unauthorized" });
+      await expect(guestPage.locator(".lobby-seat.filled.human")).toHaveCount(
+        2,
+      );
+      await expect(
+        guestPage.locator(".lobby-seat").filter({ hasText: "New occupant" }),
+      ).not.toContainText("Leader");
+      await expect(
+        guestPage.locator(".lobby-seat").filter({ hasText: "Next host" }),
+      ).toContainText("Leader");
+
+      await guestPage.locator(".settings-trigger").click();
+      const settings = guestPage.locator(".settings-dialog");
+      const salary = settings.getByRole("spinbutton", {
+        name: "Salary per lap: exact value",
+        exact: true,
+      });
+      await expect(salary).toBeEnabled();
+      await salary.fill("450000");
+      await settings
+        .getByRole("button", { name: "Save settings", exact: true })
+        .click();
+      await expect(
+        settings.getByRole("button", { name: "Settings saved", exact: true }),
+      ).toBeDisabled();
+      await guestPage.keyboard.press("Escape");
+      await expect(guestPage.locator(".settings-trigger")).toBeFocused();
+      await guestPage
+        .getByRole("button", { name: "Add a bot to seat 3" })
+        .click();
+      await expect(guestPage.locator(".lobby-seat.filled.bot")).toHaveCount(1);
+      const start = guestPage.getByRole("button", {
+        name: "Start game",
+        exact: true,
+      });
+      await expect(start).toBeEnabled();
+      await guestPage.screenshot({
+        path: `.local/verification/lobby-promoted-host-${viewport.width}.png`,
+      });
+      await start.click();
+      await expect(guestPage.locator(".game-shell")).toBeVisible();
+      await expect(guestPage.locator(".player-card")).toHaveCount(3);
+      await expect(guestPage.locator("canvas")).toBeVisible();
+      await expect(guestPage.locator(".canvas-layer")).toHaveAttribute(
+        "data-scene-ready",
+        "true",
+      );
+      await guestPage.screenshot({
+        path: `.local/verification/lobby-promoted-host-game-${viewport.width}.png`,
+      });
+      if (viewport.width === 1440) {
+        const saved = await guestPage.evaluate(() =>
+          sessionStorage.getItem("polytour-room-v1"),
+        );
+        await guestPage.route(
+          `**/api/rooms/${host.roomCode}/leave`,
+          (route) =>
+            route.fulfill({
+              status: 503,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "room-service-unavailable" }),
+            }),
+          { times: 1 },
+        );
+        await guestPage
+          .getByRole("button", { name: "Pause menu", exact: true })
+          .click();
+        await guestPage
+          .locator(".pause-dialog")
+          .getByRole("button", { name: "Leave", exact: true })
+          .click();
+        await guestPage
+          .locator(".pause-dialog")
+          .getByRole("button", { name: "Leave the game", exact: true })
+          .click();
+        await expect(guestPage.locator(".pause-dialog")).toHaveCount(0);
+        await expect(guestPage.locator(".network-error")).toContainText(
+          "Your departure was not confirmed. Check your connection and try again.",
+        );
+        await expect(guestPage.locator(".network-error")).toBeVisible();
+        await expect(guestPage.locator(".game-shell")).toBeVisible();
+        expect(
+          await guestPage.evaluate(() =>
+            sessionStorage.getItem("polytour-room-v1"),
+          ),
+        ).toBe(saved);
+        const retry = guestPage.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname ===
+              `/api/rooms/${host.roomCode}/leave` &&
+            response.request().method() === "POST",
+        );
+        await guestPage
+          .getByRole("button", { name: "Pause menu", exact: true })
+          .click();
+        await guestPage
+          .locator(".pause-dialog")
+          .getByRole("button", { name: "Leave", exact: true })
+          .click();
+        await guestPage
+          .locator(".pause-dialog")
+          .getByRole("button", { name: "Leave the game", exact: true })
+          .click();
+        expect((await retry).status()).toBe(200);
+        await expect(
+          guestPage.getByRole("heading", { name: "New game", exact: true }),
+        ).toBeVisible();
+        expect(
+          await guestPage.evaluate(() =>
+            sessionStorage.getItem("polytour-room-v1"),
+          ),
+        ).toBeNull();
+      }
+      expect(errors).toEqual([]);
+    } finally {
+      await hostContext.close();
+      await guestContext.close();
+    }
+  });
+}
+
 test("four isolated browser seats finish a real authoritative match and reconnect", async ({
   browser,
   request,

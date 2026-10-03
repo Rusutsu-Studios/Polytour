@@ -187,6 +187,7 @@ function MatchResults({
   onLobby,
   onLeave,
   onJournal,
+  leaving,
 }: {
   players: readonly PlayerState[];
   result: NonNullable<PublicState["result"]>;
@@ -197,6 +198,7 @@ function MatchResults({
   onLobby: () => void;
   onLeave: () => void;
   onJournal: (button: HTMLButtonElement) => void;
+  leaving: boolean;
 }) {
   const winner = players.find((player) => player.seat === result.winner);
   const winnerWealth =
@@ -250,7 +252,11 @@ function MatchResults({
         ))}
       </ol>
       {leader ? (
-        <ReturnToLobby finished disabled={disabled} onConfirm={onLobby} />
+        <ReturnToLobby
+          finished
+          disabled={disabled || leaving}
+          onConfirm={onLobby}
+        />
       ) : (
         <p className="results-leader-note">
           {t(
@@ -259,7 +265,12 @@ function MatchResults({
           )}
         </p>
       )}
-      <button type="button" className="button secondary" onClick={onLeave}>
+      <button
+        type="button"
+        className="button secondary"
+        onClick={onLeave}
+        disabled={leaving}
+      >
         {t("Quitter la salle", "Leave the room")}
       </button>
       <button
@@ -889,6 +900,7 @@ function MatchView({
   const saleBlocked =
     busy ||
     room.pending ||
+    room.leaving ||
     room.connection !== "online" ||
     (room.randomness !== null && room.randomness.status !== "resolved");
   // A new decision or recovered snapshot requires a fresh, deliberate choice.
@@ -1325,6 +1337,7 @@ function MatchView({
               onLobby={room.returnToLobby}
               onLeave={onLeave}
               onJournal={(button) => showTool("journal", button)}
+              leaving={room.leaving}
             />
           </motion.section>
         ) : (
@@ -1541,7 +1554,11 @@ function MatchView({
                   <RoomLeaderPicker
                     lobby={room.lobby}
                     leader={leader}
-                    disabled={room.pending || room.connection !== "online"}
+                    disabled={
+                      room.pending ||
+                      room.leaving ||
+                      room.connection !== "online"
+                    }
                     onTransferHost={room.transferHost}
                   />
                 )}
@@ -1578,7 +1595,10 @@ function MatchView({
             setPauseOpen(false);
             pauseTrigger.current?.focus();
           }}
-          onLeave={onLeave}
+          onLeave={() => {
+            setPauseOpen(false);
+            onLeave();
+          }}
           zoom={zoom}
           onZoom={onZoom}
           lowGraphics={lowGraphics}
@@ -1716,7 +1736,8 @@ function App() {
       setLoading(false);
     }
   }
-  function leave() {
+  async function leave(): Promise<boolean> {
+    if (!(await room.leave())) return false;
     forgetCredentials();
     setCredentials(null);
     setInvitationCode(null);
@@ -1726,6 +1747,7 @@ function App() {
     director.reset(null);
     setSelected(null);
     window.history.replaceState(null, "", window.location.pathname);
+    return true;
   }
   async function copyRoom() {
     if (!credentials) return;
@@ -1744,7 +1766,7 @@ function App() {
   const debug = new URLSearchParams(window.location.search).has("debug");
   // Room controls stay steady while a quick change awaits its answer: the
   // room hook already drops a second command until the first is answered.
-  const roomOffline = room.connection !== "online";
+  const roomOffline = room.leaving || room.connection !== "online";
   const starting = room.pendingOp === "start";
   const previewConfig: GameConfig = {
     ...config,
@@ -1792,10 +1814,12 @@ function App() {
               <button
                 type="button"
                 className="text-button"
-                disabled={loading}
-                onClick={leave}
+                disabled={loading || room.leaving}
+                onClick={() => void leave()}
               >
-                {t("Quitter", "Leave")}
+                {room.leaving
+                  ? t("Départ en cours…", "Leaving…")
+                  : t("Quitter", "Leave")}
               </button>
             )}
           </div>
@@ -2105,7 +2129,7 @@ function App() {
           onGraphicsChange={changeGraphics}
           copied={copied}
           copyRoom={copyRoom}
-          onLeave={leave}
+          onLeave={() => void leave()}
           onHelp={() => setHelpOpen(true)}
           debug={debug}
         />
@@ -2126,6 +2150,7 @@ function App() {
               type="button"
               className="text-button"
               onClick={room.reconnect}
+              disabled={room.leaving}
             >
               {t("Reconnecter", "Reconnect")}
             </button>

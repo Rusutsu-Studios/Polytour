@@ -37,6 +37,15 @@ members through their attachments rather than tags, so a waiting member's socket
 stays open when that person takes a place. Spectating members do not count as an
 audience: with only them connected, the room sleeps like an abandoned match.
 
+Explicit departure uses a capability-authenticated HTTP request, even while the
+socket reconnects. In a lobby it releases the device's own and local places,
+revokes its capability, closes all its sockets and transfers the persisted leader
+to another person with their own device. Waiting members may leave too. Released
+places admit connected, approved members; with no devices left, the room unlocks
+and its next seated person becomes leader. Ordinary socket disconnection keeps
+places and leadership for recovery. During a match, departure closes the device's
+sockets but preserves its places, match state and usual reconnect grace.
+
 Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
 expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment

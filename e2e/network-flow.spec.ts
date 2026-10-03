@@ -248,6 +248,181 @@ test("does not retry a room that rejects its socket session", async ({
   expect(attempts).toBe(1);
 });
 
+test("confirms leaving before clearing the lobby, even with a pending socket command", async ({
+  page,
+}) => {
+  await pauseTimers(page);
+  const sockets: WebSocketRoute[] = [];
+  const messages: string[] = [];
+  await page.routeWebSocket("**/ws/room/**", (ws) => {
+    sockets.push(ws);
+    ws.onMessage((message) => {
+      messages.push(String(message));
+      if (messages.length === 1) ws.send(welcome());
+    });
+  });
+  const requests: { method: string; authorization: string | undefined }[] = [];
+  let releaseDeparture: () => void = () => {};
+  const departureResponse = new Promise<void>((resolve) => {
+    releaseDeparture = resolve;
+  });
+  await page.route("**/api/rooms/ABCD23/leave", async (route) => {
+    requests.push({
+      method: route.request().method(),
+      authorization: route.request().headers().authorization,
+    });
+    await departureResponse;
+    await route.fulfill({ status: 200, json: { ok: true } });
+  });
+  await enterMockRoom(page);
+  await page.getByRole("button", { name: "Démarrer la partie" }).click();
+  await expect.poll(() => messages.length).toBe(2);
+  try {
+    await page
+      .getByRole("button", { name: "Quitter", exact: true })
+      .evaluate((button) => {
+        (button as HTMLButtonElement).click();
+        (button as HTMLButtonElement).click();
+      });
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toEqual({
+      method: "POST",
+      authorization: `Bearer ${credentials.token}`,
+    });
+    await expect(
+      page.getByRole("button", { name: "Départ en cours…" }),
+    ).toBeDisabled();
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+    ).toBe(JSON.stringify(credentials));
+    await expect(page).toHaveURL(/\?room=ABCD23$/);
+    // The server closes departed sockets before the HTTP response can arrive.
+    await sockets[0].close({ code: 1008, reason: "Left room" });
+    await expect(page.locator(".connection-dot")).toHaveAttribute(
+      "data-state",
+      "offline",
+    );
+    await expect(page.locator(".network-error")).toHaveCount(0);
+  } finally {
+    releaseDeparture();
+  }
+  await expect(
+    page.getByRole("button", { name: "Jouer", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+  ).toBeNull();
+  await expect(page).not.toHaveURL(/\?room=/);
+  await page.clock.runFor(60_000);
+  expect(sockets).toHaveLength(1);
+  expect(requests).toHaveLength(1);
+  await expect(page.locator(".network-error")).toHaveCount(0);
+});
+
+for (const failure of ["http", "network", "invalid-response"] as const) {
+  test(`preserves the lobby after a ${failure} departure failure and allows retry`, async ({
+    page,
+  }) => {
+    await pauseTimers(page);
+    let sockets = 0;
+    await page.routeWebSocket("**/ws/room/**", (ws) => {
+      sockets += 1;
+      ws.onMessage(() => ws.send(welcome()));
+    });
+    let requests = 0;
+    await page.route("**/api/rooms/ABCD23/leave", async (route) => {
+      requests += 1;
+      if (requests > 1)
+        return route.fulfill({ status: 200, json: { ok: true } });
+      if (failure === "network") return route.abort("failed");
+      if (failure === "invalid-response")
+        return route.fulfill({ status: 200, json: { ok: false } });
+      return route.fulfill({ status: 503, json: { error: "unavailable" } });
+    });
+    await enterMockRoom(page);
+    const leave = page.getByRole("button", { name: "Quitter", exact: true });
+    await leave.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Votre départ n’a pas été confirmé",
+    );
+    await expect(leave).toBeEnabled();
+    await expect(page).toHaveURL(/\?room=ABCD23$/);
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+    ).toBe(JSON.stringify(credentials));
+    await expect(page.locator(".connection-dot")).toHaveAttribute(
+      "data-state",
+      "online",
+    );
+    await leave.click();
+    await expect(
+      page.getByRole("button", { name: "Jouer", exact: true }),
+    ).toBeVisible();
+    expect(requests).toBe(2);
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+    ).toBeNull();
+    await page.clock.runFor(60_000);
+    expect(sockets).toBe(1);
+    await expect(page.locator(".network-error")).toHaveCount(0);
+  });
+}
+
+for (const status of [401, 404]) {
+  test(`can leave an offline room when the departure endpoint returns ${status}`, async ({
+    page,
+  }) => {
+    const sockets: WebSocketRoute[] = [];
+    await page.routeWebSocket("**/ws/room/**", (ws) => {
+      sockets.push(ws);
+      ws.onMessage(() => ws.send(welcome()));
+    });
+    await page.route("**/api/rooms/ABCD23/leave", (route) =>
+      route.fulfill({ status, json: { error: "gone" } }),
+    );
+    await enterMockRoom(page);
+    await expect(page.locator(".connection-dot")).toHaveAttribute(
+      "data-state",
+      "online",
+    );
+    await sockets[0].close({ code: 1008, reason: "Session missing" });
+    await expect(page.locator(".connection-dot")).toHaveAttribute(
+      "data-state",
+      "offline",
+    );
+    await page.getByRole("button", { name: "Quitter", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Jouer", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+    ).toBeNull();
+    await expect(page.locator(".network-error")).toHaveCount(0);
+  });
+}
+
+test("explains a departure from another tab and does not reconnect it", async ({
+  page,
+}) => {
+  await pauseTimers(page);
+  const sockets: WebSocketRoute[] = [];
+  await page.routeWebSocket("**/ws/room/**", (ws) => {
+    sockets.push(ws);
+    ws.onMessage(() => ws.send(welcome()));
+  });
+  await enterMockRoom(page);
+  await expect(page.locator(".connection-dot")).toHaveAttribute(
+    "data-state",
+    "online",
+  );
+  await sockets[0].close({ code: 1008, reason: "Left room" });
+  await expect(page.getByRole("alert")).toContainText(
+    "Vous avez quitté cette salle depuis un autre onglet",
+  );
+  await page.clock.runFor(60_000);
+  expect(sockets).toHaveLength(1);
+});
+
 test("requires refresh for a previous protocol and never enables stale game actions", async ({
   page,
 }) => {

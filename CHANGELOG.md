@@ -9,6 +9,13 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-03
+
+### Fixed
+
+- Leaving a lobby releases the player's places and room connections and passes
+  leadership to another player, including rooms with local or waiting players (#81).
+
 ## [0.4.1] - 2026-10-03
 
 ### Changed

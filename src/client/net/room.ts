@@ -78,7 +78,10 @@ export function useRoom(credentials: RoomCredentials | null) {
   // Screens show waiting only for their own command, not for every quick one.
   const [pendingOp, setPendingOp] = useState<string | null>(null);
   const pending = pendingOp !== null;
+  const [leaving, setLeaving] = useState(false);
   const [retry, setRetry] = useState(0);
+  const leavingRequest = useRef(false);
+  const disconnect = useRef<(() => void) | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const sequence = useRef(0);
   const pendingId = useRef<string | null>(null);
@@ -128,6 +131,10 @@ export function useRoom(credentials: RoomCredentials | null) {
       setYou(null);
       debugController.setSocket(null);
       updateConnection("offline");
+      setError(null);
+      setRandomness(null);
+      setPendingOp(null);
+      pendingId.current = null;
       return;
     }
     let disposed = false;
@@ -400,21 +407,28 @@ export function useRoom(credentials: RoomCredentials | null) {
           event.reason === "Room expired"
         ) {
           updateConnection("offline");
+          // The leave response may arrive after the server closes our socket.
+          if (event.reason === "Left room" && leavingRequest.current) return;
           setError(
-            event.reason === "Room expired"
+            event.reason === "Left room"
               ? translate(
-                  "Cette salle a expiré. Revenez à l’accueil pour créer une partie.",
-                  "This room has expired. Return to the home screen to create a game.",
+                  "Vous avez quitté cette salle depuis un autre onglet. Revenez à l’accueil pour rejoindre une salle.",
+                  "You left this room from another tab. Return to the home screen to join a room.",
                 )
-              : event.code === 4003
+              : event.reason === "Room expired"
                 ? translate(
-                    "Le chef de salle n’a pas accepté votre entrée. Revenez à l’accueil pour rejoindre une autre partie.",
-                    "The room leader did not let you in. Return to the home screen to join another game.",
+                    "Cette salle a expiré. Revenez à l’accueil pour créer une partie.",
+                    "This room has expired. Return to the home screen to create a game.",
                   )
-                : translate(
-                    "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
-                    "The room refused the connection. Refresh the page or return to the home screen.",
-                  ),
+                : event.code === 4003
+                  ? translate(
+                      "Le chef de salle n’a pas accepté votre entrée. Revenez à l’accueil pour rejoindre une autre partie.",
+                      "The room leader did not let you in. Return to the home screen to join another game.",
+                    )
+                  : translate(
+                      "La connexion à cette salle a été refusée. Actualisez la page ou revenez à l’accueil.",
+                      "The room refused the connection. Refresh the page or return to the home screen.",
+                    ),
           );
           return;
         }
@@ -439,18 +453,73 @@ export function useRoom(credentials: RoomCredentials | null) {
       });
     }
     connect();
-    return () => {
+    function dispose() {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (requestTimer.current) clearTimeout(requestTimer.current);
-      if (socket.current) debugController.disconnect(socket.current);
-      socket.current?.close();
+      const ws = socket.current;
+      if (ws) debugController.disconnect(ws);
       socket.current = null;
       requestSync.current = null;
+      ws?.close();
+    }
+    disconnect.current = dispose;
+    return () => {
+      dispose();
+      if (disconnect.current === dispose) disconnect.current = null;
     };
   }, [credentials, retry, debugController]);
 
+  async function leave(): Promise<boolean> {
+    if (leavingRequest.current) return false;
+    if (!credentials) return true;
+    leavingRequest.current = true;
+    setLeaving(true);
+    setError(null);
+    const controller = new AbortController();
+    const departureTimer = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(`/api/rooms/${credentials.roomCode}/leave`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${credentials.token}` },
+        signal: controller.signal,
+      });
+      // An expired room or revoked capability already releases this local seat.
+      if (response.status !== 401 && response.status !== 404) {
+        if (response.status !== 200) throw new Error("Room departure failed");
+        const body: unknown = await response.json();
+        if (
+          !body ||
+          typeof body !== "object" ||
+          !("ok" in body) ||
+          body.ok !== true
+        )
+          throw new Error("Invalid room departure response");
+      }
+      disconnect.current?.();
+      setConnection("offline");
+      debugController.setConnection("offline");
+      setPendingOp(null);
+      pendingId.current = null;
+      setError(null);
+      return true;
+    } catch {
+      setError(
+        translate(
+          "Votre départ n’a pas été confirmé. Vérifiez votre connexion puis réessayez.",
+          "Your departure was not confirmed. Check your connection and try again.",
+        ),
+      );
+      return false;
+    } finally {
+      clearTimeout(departureTimer);
+      leavingRequest.current = false;
+      setLeaving(false);
+    }
+  }
+
   function send(message: ClientMessage) {
+    if (leavingRequest.current) return;
     if (
       connection !== "online" ||
       socket.current?.readyState !== WebSocket.OPEN
@@ -495,10 +564,14 @@ export function useRoom(credentials: RoomCredentials | null) {
     randomness,
     pending,
     pendingOp,
+    leaving,
+    leave,
     roomDebug,
     setDebugActive,
     clearError: () => setError(null),
-    reconnect: () => setRetry((value) => value + 1),
+    reconnect: () => {
+      if (!leavingRequest.current) setRetry((value) => value + 1);
+    },
     /** A local player's seat acts on this device's behalf when given. */
     act: (action: Action, seat?: Seat) =>
       send({
