@@ -12,10 +12,22 @@ test.use({ reducedMotion: "reduce" });
 async function inspectSpace(page: Page, index: number) {
   const card = page.locator(".city-card");
   await expect(card).toBeVisible();
-  const next = page.getByRole("button", { name: "Case suivante", exact: true });
   for (let step = 0; step <= 32; step++) {
-    if ((await card.getAttribute("data-space")) === String(index)) return;
-    await next.click();
+    const current = Number(
+      await card.getAttribute("data-space", { timeout: 5000 }),
+    );
+    if (current === index) return;
+    const direction = (index - current + 32) % 32 <= 16 ? 1 : -1;
+    await page
+      .getByRole("button", {
+        name: direction === 1 ? "Case suivante" : "Case précédente",
+        exact: true,
+      })
+      .click();
+    await expect(card).toHaveAttribute(
+      "data-space",
+      String((current + direction + 32) % 32),
+    );
   }
   throw new Error(`The inspection card never reached space ${index}`);
 }
@@ -89,6 +101,8 @@ async function minimizeOwnDecision(page: Page) {
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {
+  // Two real turn waits each allow 60 s, in addition to the viewport checks.
+  test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
