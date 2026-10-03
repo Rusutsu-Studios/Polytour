@@ -387,6 +387,23 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
   await expect(
     page.getByRole("tab", { name: "Vidéo", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  const graphics = page.locator(".pause-dialog [data-graphics-quality]");
+  await expect(graphics).toHaveAttribute("data-graphics-quality", "high");
+  await expect(graphics).toHaveAccessibleName(
+    "Graphismes : Élevés. Passer aux graphismes faibles.",
+  );
+  await graphics.press("Space");
+  await expect(graphics).toHaveAttribute("data-graphics-quality", "low");
+  await expect(graphics).toHaveAccessibleName(
+    "Graphismes : Faibles. Passer aux graphismes élevés.",
+  );
+  await expect(page.locator(".canvas-layer")).toHaveAttribute(
+    "data-low-graphics",
+    "true",
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("polytour.lowGraphics")),
+  ).toBe("true");
   await expect(page.getByLabel("Réduire les animations")).toBeChecked();
   await page.getByLabel("Réduire les animations").uncheck();
   await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
@@ -443,6 +460,8 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
   await expect(
     page.getByRole("tab", { name: "Debug", exact: true }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: "Video", exact: true }).click();
+  await expect(graphics).toHaveAccessibleName("Graphics: Low. Switch to High.");
   await page.keyboard.press("Escape");
   await expect(
     page

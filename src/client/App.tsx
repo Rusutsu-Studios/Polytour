@@ -31,7 +31,8 @@ import type {
   RoomConfig,
   RoomCredentials,
 } from "../shared/protocol/index.js";
-import { RoomConfigSchema } from "../shared/protocol/index.js";
+import { RoomCodeSchema, RoomConfigSchema } from "../shared/protocol/index.js";
+import { APP_VERSION } from "../shared/version.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
 import {
@@ -62,7 +63,10 @@ import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
+import GraphicsToggle from "./ui/GraphicsToggle.js";
 import Icon from "./ui/Icon.js";
+import InvitationEntry from "./ui/InvitationEntry.js";
+import LuckCardHelp from "./ui/LuckCardHelp.js";
 import PauseMenu from "./ui/PauseMenu.js";
 import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
@@ -697,10 +701,12 @@ function Help({
   open,
   onClose,
   mode,
+  config,
 }: {
   open: boolean;
   onClose: () => void;
   mode: RoomConfig["randomnessMode"];
+  config: GameConfig;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -732,6 +738,16 @@ function Help({
           "Two to four players, with friends or bots.",
         )}
       </p>
+      <button
+        type="button"
+        className="text-button help-card-shortcut"
+        onClick={() =>
+          dialog.current?.querySelector<HTMLElement>(".help-cards h3")?.focus()
+        }
+      >
+        {t("Voir les 16 cartes Surprise", "View all 16 luck cards")}
+        <Icon name="arrow" size={15} />
+      </button>
       <ol className="rules-list">
         <li>
           <b>{t("Lancez et voyagez", "Roll and move")}</b>
@@ -770,6 +786,7 @@ function Help({
           </span>
         </li>
       </ol>
+      {open && <LuckCardHelp config={config} />}
       <section className="help-dice" aria-labelledby="help-dice-heading">
         <h3 id="help-dice-heading">
           {t("Le tirage des dés", "How dice are rolled")}
@@ -870,6 +887,8 @@ function MatchView({
   onSelect,
   zoom,
   onZoom,
+  lowGraphics,
+  onGraphicsChange,
   copied,
   copyRoom,
   onLeave,
@@ -885,6 +904,8 @@ function MatchView({
   onSelect: (tile: number) => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  lowGraphics: boolean;
+  onGraphicsChange: (low: boolean) => void;
   copied: boolean;
   copyRoom: () => Promise<void>;
   onLeave: () => void;
@@ -1133,6 +1154,7 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={credentials.seat}
               zoom={zoom}
+              lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? credentials.seat : undefined}
               saleBlocked={saleBlocked}
@@ -1227,6 +1249,11 @@ function MatchView({
         >
           <Icon name="settings" size={18} />
         </button>
+        <GraphicsToggle
+          lowGraphics={lowGraphics}
+          onChange={onGraphicsChange}
+          compact
+        />
         <button
           type="button"
           className="game-tool-button"
@@ -1556,6 +1583,8 @@ function MatchView({
           onLeave={onLeave}
           zoom={zoom}
           onZoom={onZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={onGraphicsChange}
           connection={room.connection}
           ping={cloudflarePing}
           roomDebug={room.roomDebug}
@@ -1577,17 +1606,26 @@ function MatchView({
 
 function App() {
   useLocale();
-  const initialCode =
-    new URLSearchParams(window.location.search).get("room")?.toUpperCase() ??
-    "";
+  const [invitationCode, setInvitationCode] = useState<string | null>(
+    () =>
+      new URLSearchParams(window.location.search)
+        .get("room")
+        ?.trim()
+        .toUpperCase() ?? null,
+  );
+  const invalidInvitation =
+    invitationCode !== null &&
+    !RoomCodeSchema.safeParse(invitationCode).success;
   const [credentials, setCredentials] = useState<RoomCredentials | null>(() => {
     const saved = readCredentials();
-    return initialCode && saved?.roomCode !== initialCode ? null : saved;
+    return invitationCode !== null && saved?.roomCode !== invitationCode
+      ? null
+      : saved;
   });
   const [name, setName] = useState(
     () => localStorage.getItem("polytour-name") ?? "",
   );
-  const [joinCode, setJoinCode] = useState(initialCode);
+  const [joinCode, setJoinCode] = useState("");
   const [config, setConfig] = useState<RoomConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const entering = useRef(false);
@@ -1598,6 +1636,21 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [lowGraphics, setLowGraphics] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.lowGraphics") === "true";
+    } catch {
+      return false;
+    }
+  });
+  function changeGraphics(low: boolean) {
+    setLowGraphics(low);
+    try {
+      localStorage.setItem("polytour.lowGraphics", String(low));
+    } catch {
+      // The local choice still works when browser storage is unavailable.
+    }
+  }
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
   useEffect(() => {
@@ -1624,7 +1677,7 @@ function App() {
   async function enter(solo: boolean, join = false) {
     if (entering.current) return;
     const cleanName = name.trim();
-    const code = joinCode.trim().toUpperCase();
+    const code = (invitationCode ?? joinCode).trim().toUpperCase();
     if (!cleanName) {
       setFormError(
         t(
@@ -1635,7 +1688,7 @@ function App() {
       document.getElementById("player-name")?.focus();
       return;
     }
-    if (join && !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(code)) {
+    if (join && !RoomCodeSchema.safeParse(code).success) {
       setFormError(
         t(
           "Le code de salle contient six lettres ou chiffres.",
@@ -1679,6 +1732,9 @@ function App() {
   function leave() {
     forgetCredentials();
     setCredentials(null);
+    setInvitationCode(null);
+    setJoinCode("");
+    setFormError(null);
     setAutoStart(false);
     setConfig((current) => ({ ...current, randomnessMode: "secure" }));
     director.reset(null);
@@ -1725,6 +1781,11 @@ function App() {
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
             <LanguagePicker />
+            <GraphicsToggle
+              lowGraphics={lowGraphics}
+              onChange={changeGraphics}
+              compact
+            />
             <button
               type="button"
               className="text-button help-button"
@@ -1733,8 +1794,13 @@ function App() {
               <Icon name="help" size={18} />
               <span>{t("Comment jouer", "How to play")}</span>
             </button>
-            {credentials && (
-              <button type="button" className="text-button" onClick={leave}>
+            {(credentials || invitationCode !== null) && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={loading}
+                onClick={leave}
+              >
                 {t("Quitter", "Leave")}
               </button>
             )}
@@ -1742,98 +1808,114 @@ function App() {
         </header>
       )}
       {!credentials ? (
-        <section className="welcome-grid">
-          <div className="welcome-copy">
-            <span className="travel-stamp">
-              <Icon name="people" size={17} />
-              {t("4 places · amis ou bots", "4 seats · friends or bots")}
-            </span>
-            <h1>{t("Nouvelle partie", "New game")}</h1>
-            <p className="welcome-intro">
-              {t(
-                "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
-                "Buy the cities you land on, build and collect rent.",
-              )}
-            </p>
-            <div className="welcome-form">
-              <label htmlFor="player-name">
-                {t("Votre nom de joueur", "Player name")}
-              </label>
-              <input
-                id="player-name"
-                value={name}
-                maxLength={24}
-                autoComplete="nickname"
-                placeholder={t("Votre pseudo", "Your nickname")}
-                onChange={(event) => setName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void enter(true);
-                }}
-              />
-              <button
-                type="button"
-                className="button primary welcome-play"
-                disabled={loading}
-                onClick={() => void enter(true)}
-              >
-                {loading ? (
-                  <span className="spinner" />
-                ) : (
-                  <Icon name="dice" size={24} />
+        <section
+          className={`welcome-grid${invitationCode !== null ? " invitation-entry" : ""}`}
+        >
+          {invitationCode !== null ? (
+            <InvitationEntry
+              name={name}
+              onName={setName}
+              onJoin={() => void enter(false, true)}
+              loading={loading}
+              error={formError}
+              invalid={invalidInvitation}
+            />
+          ) : (
+            <div className="welcome-copy">
+              <span className="travel-stamp">
+                <Icon name="people" size={17} />
+                {t("4 places · amis ou bots", "4 seats · friends or bots")}
+              </span>
+              <h1>{t("Nouvelle partie", "New game")}</h1>
+              <p className="welcome-intro">
+                {t(
+                  "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
+                  "Buy the cities you land on, build and collect rent.",
                 )}
-                {loading
-                  ? t("Préparation du plateau…", "Preparing board…")
-                  : t("Jouer avec 3 bots", "Play with 3 bots")}
-                <Icon name="arrow" />
-              </button>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={loading}
-                onClick={() => void enter(false)}
-              >
-                <Icon name="people" />
-                {t("Créer une salle entre amis", "Create a room with friends")}
-              </button>
-              <div className="join-form">
-                <label htmlFor="room-code">
-                  {t("Vous avez un code ?", "Have a room code?")}
+              </p>
+              <div className="welcome-form">
+                <label htmlFor="player-name">
+                  {t("Votre nom de joueur", "Player name")}
                 </label>
-                <div>
-                  <input
-                    id="room-code"
-                    className="code-input"
-                    value={joinCode}
-                    maxLength={6}
-                    placeholder="ABCD23"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    onChange={(event) =>
-                      setJoinCode(event.target.value.toUpperCase())
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void enter(false, true);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="button ink"
-                    disabled={loading}
-                    onClick={() => void enter(false, true)}
-                  >
-                    {t("Rejoindre", "Join")}
-                    <Icon name="arrow" size={18} />
-                  </button>
+                <input
+                  id="player-name"
+                  value={name}
+                  maxLength={24}
+                  autoComplete="nickname"
+                  placeholder={t("Votre pseudo", "Your nickname")}
+                  onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void enter(true);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="button primary welcome-play"
+                  disabled={loading}
+                  onClick={() => void enter(true)}
+                >
+                  {loading ? (
+                    <span className="spinner" />
+                  ) : (
+                    <Icon name="dice" size={24} />
+                  )}
+                  {loading
+                    ? t("Préparation du plateau…", "Preparing board…")
+                    : t("Jouer avec 3 bots", "Play with 3 bots")}
+                  <Icon name="arrow" />
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={loading}
+                  onClick={() => void enter(false)}
+                >
+                  <Icon name="people" />
+                  {t(
+                    "Créer une salle entre amis",
+                    "Create a room with friends",
+                  )}
+                </button>
+                <div className="join-form">
+                  <label htmlFor="room-code">
+                    {t("Vous avez un code ?", "Have a room code?")}
+                  </label>
+                  <div>
+                    <input
+                      id="room-code"
+                      className="code-input"
+                      value={joinCode}
+                      maxLength={6}
+                      placeholder="ABCD23"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      onChange={(event) =>
+                        setJoinCode(event.target.value.toUpperCase())
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void enter(false, true);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="button ink"
+                      disabled={loading}
+                      onClick={() => void enter(false, true)}
+                    >
+                      {t("Rejoindre", "Join")}
+                      <Icon name="arrow" size={18} />
+                    </button>
+                  </div>
                 </div>
+                {formError && (
+                  <p className="error-message" role="alert">
+                    {formError}
+                  </p>
+                )}
+                <RoomSettings config={config} onChange={setConfig} />
               </div>
-              {formError && (
-                <p className="error-message" role="alert">
-                  {formError}
-                </p>
-              )}
-              <RoomSettings config={config} onChange={setConfig} />
             </div>
-          </div>
+          )}
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
@@ -1859,16 +1941,19 @@ function App() {
                     selected={null}
                     onSelect={setSelected}
                     preview
+                    lowGraphics={lowGraphics}
                   />
                 </Suspense>
               </SceneBoundary>
             </div>
-            <div className="welcome-quick-settings">
-              <span className="welcome-setup-title">
-                {t("Réglages rapides", "Quick settings")}
-              </span>
-              <QuickSettings config={config} onChange={setConfig} />
-            </div>
+            {invitationCode === null && (
+              <div className="welcome-quick-settings">
+                <span className="welcome-setup-title">
+                  {t("Réglages rapides", "Quick settings")}
+                </span>
+                <QuickSettings config={config} onChange={setConfig} />
+              </div>
+            )}
           </div>
         </section>
       ) : !game ? (
@@ -1996,6 +2081,7 @@ function App() {
                   selected={null}
                   onSelect={setSelected}
                   preview
+                  lowGraphics={lowGraphics}
                 />
               </Suspense>
             </SceneBoundary>
@@ -2011,6 +2097,8 @@ function App() {
           onSelect={setSelected}
           zoom={zoom}
           onZoom={setZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={changeGraphics}
           copied={copied}
           copyRoom={copyRoom}
           onLeave={leave}
@@ -2056,6 +2144,7 @@ function App() {
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         mode={config.randomnessMode}
+        config={game?.config ?? previewConfig}
       />
       {!isGame && (
         <footer className="lobby-footer">
@@ -2063,6 +2152,7 @@ function App() {
             {t("2 à 4 joueurs · 32 cases", "2 to 4 players · 32 spaces")}
           </span>
           <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
+          <span>v{APP_VERSION}</span>
         </footer>
       )}
     </main>

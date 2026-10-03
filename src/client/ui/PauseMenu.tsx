@@ -13,6 +13,7 @@ import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
+import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
 import RoomDebug, { translatedRegion } from "./RoomDebug.js";
 import "./PauseMenu.css";
@@ -26,6 +27,8 @@ export type PauseMenuProps = {
   onLeave: () => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  lowGraphics: boolean;
+  onGraphicsChange: (low: boolean) => void;
   connection: string;
   ping: PingState;
   roomDebug: RoomDebugState;
@@ -43,6 +46,8 @@ export default function PauseMenu({
   onLeave,
   zoom,
   onZoom,
+  lowGraphics,
+  onGraphicsChange,
   connection,
   ping,
   roomDebug,
@@ -324,6 +329,10 @@ export default function PauseMenu({
                   )}
                   {value === "video" && (
                     <div className="pause-video-settings">
+                      <GraphicsToggle
+                        lowGraphics={lowGraphics}
+                        onChange={onGraphicsChange}
+                      />
                       <label className="pause-reduced-motion">
                         <input
                           type="checkbox"

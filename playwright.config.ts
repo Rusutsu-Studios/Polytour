@@ -28,6 +28,7 @@ export default defineConfig({
         "network-flow.spec.ts",
         "language-flow.spec.ts",
         "pause-menu.spec.ts",
+        "invitation-flow.spec.ts",
         "sale-flow.spec.ts",
       ],
       use: { baseURL: remoteBaseURL ?? devURL },

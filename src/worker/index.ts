@@ -6,6 +6,7 @@ import {
   RoomCodeSchema,
   RoomConfigSchema,
 } from "../shared/protocol/index.js";
+import { APP_VERSION } from "../shared/version.js";
 import { GameRoom } from "./GameRoom.js";
 import { Matchmaker } from "./Matchmaker.js";
 import { workerDiagnostics } from "./worker-diagnostics.js";
@@ -83,6 +84,9 @@ app.get("/api/health", (context) =>
     200,
     { "Cache-Control": "no-store" },
   ),
+);
+app.get("/api/version", (context) =>
+  context.json({ version: APP_VERSION }, 200, { "Cache-Control": "no-store" }),
 );
 app.post("/api/rooms", async (context) => {
   if (!sameOrigin(context.req.raw))
