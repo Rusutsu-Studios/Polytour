@@ -18,40 +18,54 @@ import {
   RoomConfigSchema,
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
-import type { WorkerDiagnostics } from "../src/shared/protocol/worker-diagnostics.js";
 
 test.use({ reducedMotion: "reduce" });
 
-const CLOUDFLARE_HEALTH = {
-  status: "ok",
-  diagnostics: {
-    worker: "polytour",
-    hostname: "test.polytour.example",
-    runtime: "cloudflare",
-    cloudflare: {
-      colo: "FRA",
-      location: "Frankfurt, Germany",
-      region: "Europe",
-    },
-  },
-} satisfies { status: "ok"; diagnostics: WorkerDiagnostics };
+type ProbeResponse = NonNullable<Parameters<Route["fulfill"]>[0]>;
+const PROBE_BODY = "polytour-connection-probe-v1";
+const FRANKFURT_PROBE = {
+  status: 200,
+  contentType: "text/plain",
+  body: PROBE_BODY,
+  headers: { "cf-ray": "0123456789abcdef-FRA" },
+} satisfies ProbeResponse;
+const ZURICH_PROBE = {
+  ...FRANKFURT_PROBE,
+  headers: { "cf-ray": "fedcba9876543210-ZRH" },
+} satisfies ProbeResponse;
 
-const ZURICH_HEALTH = {
-  status: "ok",
-  diagnostics: {
-    worker: "polytour-reconnected",
-    hostname: "reconnected.polytour.example",
-    runtime: "cloudflare",
-    cloudflare: {
-      colo: "ZRH",
-      location: "Zurich, Switzerland",
-      region: "Europe",
-    },
-  },
-} satisfies { status: "ok"; diagnostics: WorkerDiagnostics };
+const workerHealthRequests = new WeakMap<Page, string[]>();
+test.beforeEach(async ({ page }) => {
+  const requests: string[] = [];
+  workerHealthRequests.set(page, requests);
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/health")
+      requests.push(request.url());
+  });
+  await page.route("**/api/health**", (route) => route.abort());
+});
+test.afterEach(async ({ page }) => {
+  expect(workerHealthRequests.get(page)).toEqual([]);
+});
 
 function diagnosticValue(panel: Locator, label: string) {
   return panel.getByText(label, { exact: true }).locator("..").locator("dd");
+}
+
+async function expectSharedPing(panel: Locator, point: string) {
+  // Both views can refresh between independent DOM reads. Compare one render.
+  await expect
+    .poll(() =>
+      panel.evaluate((element, entry) => {
+        const latency = element.querySelector('[role="status"]')?.textContent;
+        return (
+          /^\d+ ms$/.test(latency ?? "") &&
+          document.querySelector(".match-network")?.textContent ===
+            `${entry} · ${latency}`
+        );
+      }, point),
+    )
+    .toBe(true);
 }
 
 /** Deterministic authoritative frames; no room or gameplay action is sent to the Worker. */
@@ -253,10 +267,10 @@ test("pause keeps the clock and authoritative updates running without losing mod
 test("settings tabs stay local, keyboard navigation and desktop layouts remain usable", async ({
   page,
 }) => {
-  let healthRequests = 0;
-  await page.route("**/api/health**", (route) => {
-    healthRequests += 1;
-    return route.fulfill({ json: { status: "ok" } });
+  let probeRequests = 0;
+  await page.route("**/connection-probe.txt**", (route) => {
+    probeRequests += 1;
+    return route.fulfill(FRANKFURT_PROBE);
   });
   const match = await enterMatch(page);
   const roomCredentials = await page.evaluate(() =>
@@ -343,7 +357,7 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     page.getByRole("button", { name: "Pause menu", exact: true }),
   ).toBeFocused();
   expect(match.connections()).toBe(1);
-  expect(healthRequests).toBe(0);
+  expect(probeRequests).toBe(0);
   expect(
     await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
   ).toBe(roomCredentials);
@@ -357,7 +371,7 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
     let aborts = 0;
     window.fetch = (input, init) => {
       const url = input instanceof Request ? input.url : String(input);
-      if (url.includes("/api/health")) {
+      if (url.includes("/connection-probe.txt")) {
         init?.signal?.addEventListener(
           "abort",
           () => {
@@ -371,15 +385,15 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
     };
   });
   let requests = 0;
-  const healthURLs: string[] = [];
-  await page.route("**/api/health**", (route) => {
+  const probeURLs: string[] = [];
+  await page.route("**/connection-probe.txt**", (route) => {
     requests += 1;
-    healthURLs.push(route.request().url());
-    if (requests === 1) return route.fulfill({ json: CLOUDFLARE_HEALTH });
+    probeURLs.push(route.request().url());
+    if (requests === 1) return route.fulfill(FRANKFURT_PROBE);
     if (requests === 2)
       return route.fulfill({
         status: 503,
-        json: { error: "fixture-unavailable" },
+        body: "fixture-unavailable",
       });
     // Later measurements wait for the browser's timeout or tab cleanup to abort.
   });
@@ -392,9 +406,10 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
   const debugPanel = page.locator(".pause-debug");
   const status = debugPanel.getByRole("status");
   await expect(status).toHaveText(/^\d+ ms$/);
-  expect(new URL(healthURLs[0]).searchParams.get("debug")).toBe("1");
+  await expectSharedPing(debugPanel, "FRA");
+  expect(new URL(probeURLs[0]).pathname).toBe("/connection-probe.txt");
   await expect(debugPanel).toHaveAttribute("data-runtime", "cloudflare");
-  await expect(debugPanel).toContainText("Ping Worker (HTTP)");
+  await expect(debugPanel).toContainText("Ping Cloudflare");
   await expect(
     diagnosticValue(debugPanel, "Point d’entrée Cloudflare"),
   ).toContainText("FRA");
@@ -402,16 +417,17 @@ test("Cloudflare HTTP ping refreshes each second only in Debug and aborts when l
     diagnosticValue(debugPanel, "Point d’entrée Cloudflare"),
   ).toContainText("Frankfurt, Germany");
   await expect(diagnosticValue(debugPanel, "Région")).toHaveText("Europe");
-  await expect(diagnosticValue(debugPanel, "Worker")).toHaveText("polytour");
-  await expect(diagnosticValue(debugPanel, "Hôte")).toHaveText(
-    "test.polytour.example",
+  await expect(diagnosticValue(debugPanel, "Service de jeu")).toHaveText(
+    "polytour",
   );
+  await expect(diagnosticValue(debugPanel, "Hôte")).toHaveText("127.0.0.1");
   await expect(
     diagnosticValue(debugPanel, "Connexion de la partie"),
   ).toHaveText("Connectée");
   await page.screenshot({ path: ".local/verification/pause-debug.png" });
   for (const viewport of [
     { width: 1280, height: 720 },
+    { width: 1920, height: 1080 },
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
@@ -482,11 +498,11 @@ test("Debug immediately refreshes the Cloudflare entry after online or network c
       value: new EventTarget(),
     });
   });
-  let response: unknown = CLOUDFLARE_HEALTH;
+  let response: ProbeResponse = FRANKFURT_PROBE;
   let requests = 0;
-  await page.route("**/api/health**", (route) => {
+  await page.route("**/connection-probe.txt**", (route) => {
     requests += 1;
-    return route.fulfill({ json: response });
+    return route.fulfill(response);
   });
   const match = await enterMatch(page);
   await freezeClock(page);
@@ -495,22 +511,20 @@ test("Debug immediately refreshes the Cloudflare entry after online or network c
   const panel = page.locator(".pause-debug");
   const entry = diagnosticValue(panel, "Point d’entrée Cloudflare");
   await expect(entry).toContainText("FRA");
+  await expectSharedPing(panel, "FRA");
   expect(requests).toBe(1);
   await page.clock.runFor(999);
   expect(requests).toBe(1);
   await page.clock.runFor(1);
   await expect.poll(() => requests).toBe(2);
-  response = ZURICH_HEALTH;
+  response = ZURICH_PROBE;
   await setBrowserOnline(page, true);
   await expect(entry).toContainText("ZRH");
-  await expect(diagnosticValue(panel, "Worker")).toHaveText(
-    "polytour-reconnected",
-  );
-  await expect(diagnosticValue(panel, "Hôte")).toHaveText(
-    "reconnected.polytour.example",
-  );
+  await expectSharedPing(panel, "ZRH");
+  await expect(diagnosticValue(panel, "Service de jeu")).toHaveText("polytour");
+  await expect(diagnosticValue(panel, "Hôte")).toHaveText("127.0.0.1");
   expect(requests).toBe(3);
-  response = CLOUDFLARE_HEALTH;
+  response = FRANKFURT_PROBE;
   await page.evaluate(() => {
     const connection = (navigator as Navigator & { connection: EventTarget })
       .connection;
@@ -521,18 +535,18 @@ test("Debug immediately refreshes the Cloudflare entry after online or network c
   await setBrowserOnline(page, false);
   await page.clock.runFor(5000);
   expect(requests).toBe(4);
-  response = ZURICH_HEALTH;
+  response = ZURICH_PROBE;
   await setBrowserOnline(page, true);
   await expect(entry).toContainText("ZRH");
   expect(requests).toBe(5);
   await setDocumentVisibility(page, false);
   await page.clock.runFor(5000);
   expect(requests).toBe(5);
-  response = CLOUDFLARE_HEALTH;
+  response = FRANKFURT_PROBE;
   await setDocumentVisibility(page, true);
   await expect(entry).toContainText("FRA");
   expect(requests).toBe(6);
-  response = ZURICH_HEALTH;
+  response = ZURICH_PROBE;
   await match.disconnect();
   await expect(entry).toContainText("ZRH");
   expect(requests).toBe(7);
@@ -569,14 +583,15 @@ test("an abort-ignoring request cannot latch Debug polling or replace a newer en
     window.fetch = async (input, init) => {
       const url = input instanceof Request ? input.url : String(input);
       // Deliberately uncooperative transport: a stale response can arrive after cancellation.
-      if (!url.includes("/api/health")) return originalFetch(input, init);
+      if (!url.includes("/connection-probe.txt"))
+        return originalFetch(input, init);
       const response = await originalFetch(input, {
         ...init,
         signal: undefined,
       });
-      const readJSON = response.json.bind(response);
-      response.json = async () => {
-        const body: unknown = await readJSON();
+      const readText = response.text.bind(response);
+      response.text = async () => {
+        const body = await readText();
         bodiesRead += 1;
         document.documentElement.dataset.debugBodiesRead = String(bodiesRead);
         return body;
@@ -585,7 +600,7 @@ test("an abort-ignoring request cannot latch Debug polling or replace a newer en
     };
   });
   const pending: Route[] = [];
-  await page.route("**/api/health**", (route) => {
+  await page.route("**/connection-probe.txt**", (route) => {
     pending.push(route);
   });
   await enterMatch(page);
@@ -600,25 +615,24 @@ test("an abort-ignoring request cannot latch Debug polling or replace a newer en
   // Timeout must free the slot independently of the first fetch settling.
   await page.clock.runFor(1001);
   await expect.poll(() => pending.length).toBe(2);
-  await pending[1].fulfill({ json: ZURICH_HEALTH });
+  await pending[1].fulfill(ZURICH_PROBE);
   await expect(entry).toContainText("ZRH");
-  await pending[0].fulfill({ json: CLOUDFLARE_HEALTH });
+  await pending[0].fulfill(FRANKFURT_PROBE);
   // The obsolete request's body has been parsed before asserting the current UI.
   await expect(page.locator("html")).toHaveAttribute(
     "data-debug-bodies-read",
     "2",
   );
   await expect(entry).toContainText("ZRH");
-  await expect(diagnosticValue(panel, "Worker")).toHaveText(
-    "polytour-reconnected",
-  );
+  await expect(diagnosticValue(panel, "Service de jeu")).toHaveText("polytour");
+  await expectSharedPing(panel, "ZRH");
   await page.clock.runFor(1000);
   await expect.poll(() => pending.length).toBe(3);
   await setBrowserOnline(page, true);
   await expect.poll(() => pending.length).toBe(4);
-  await pending[3].fulfill({ json: ZURICH_HEALTH });
+  await pending[3].fulfill(ZURICH_PROBE);
   await expect(entry).toContainText("ZRH");
-  await pending[2].fulfill({ json: CLOUDFLARE_HEALTH });
+  await pending[2].fulfill(FRANKFURT_PROBE);
   await expect(page.locator("html")).toHaveAttribute(
     "data-debug-bodies-read",
     "4",
@@ -629,20 +643,21 @@ test("an abort-ignoring request cannot latch Debug polling or replace a newer en
   expect(pending).toHaveLength(4);
 });
 
-test("Cloudflare diagnostics translate and distinguish local or older health responses", async ({
+test("Cloudflare probe details translate and distinguish local or unmapped entry points", async ({
   page,
 }) => {
-  let healthResponse: unknown = CLOUDFLARE_HEALTH;
+  let probeResponse: ProbeResponse = FRANKFURT_PROBE;
   const requests: string[] = [];
-  await page.route("**/api/health**", (route) => {
+  await page.route("**/connection-probe.txt**", (route) => {
     requests.push(route.request().url());
-    return route.fulfill({ json: healthResponse });
+    return route.fulfill(probeResponse);
   });
   const match = await enterMatch(page);
   await openSettings(page);
   await page.getByRole("tab", { name: "Débogage", exact: true }).click();
   const panel = page.locator(".pause-debug");
   await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  await expectSharedPing(panel, "FRA");
   await expect(
     diagnosticValue(panel, "Point d’entrée Cloudflare"),
   ).toContainText("FRA");
@@ -655,6 +670,7 @@ test("Cloudflare diagnostics translate and distinguish local or older health res
   await page.getByRole("tab", { name: "Debug", exact: true }).click();
   await expect(panel).toHaveAttribute("data-runtime", "cloudflare");
   await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  await expectSharedPing(panel, "FRA");
   await expect(diagnosticValue(panel, "Cloudflare entry point")).toContainText(
     "FRA",
   );
@@ -662,18 +678,12 @@ test("Cloudflare diagnostics translate and distinguish local or older health res
     "Frankfurt, Germany",
   );
   await expect(diagnosticValue(panel, "Region")).toHaveText("Europe");
-  await expect(diagnosticValue(panel, "Worker")).toHaveText("polytour");
-  await expect(diagnosticValue(panel, "Host")).toHaveText(
-    "test.polytour.example",
-  );
-  healthResponse = {
-    status: "ok",
-    diagnostics: {
-      worker: "polytour",
-      hostname: "127.0.0.1",
-      runtime: "local",
-      cloudflare: null,
-    },
+  await expect(diagnosticValue(panel, "Game service")).toHaveText("polytour");
+  await expect(diagnosticValue(panel, "Host")).toHaveText("127.0.0.1");
+  probeResponse = {
+    status: 200,
+    contentType: "text/plain",
+    body: PROBE_BODY,
   };
   await page.getByRole("tab", { name: "Video", exact: true }).click();
   await page.getByRole("tab", { name: "Debug", exact: true }).click();
@@ -684,21 +694,107 @@ test("Cloudflare diagnostics translate and distinguish local or older health res
   );
   await expect(diagnosticValue(panel, "Region")).toHaveText("Unavailable");
   await expect(diagnosticValue(panel, "Host")).toHaveText("127.0.0.1");
+  await expectSharedPing(panel, "Local");
   await expect(panel).not.toContainText("FRA");
   await expect(panel).not.toContainText("Frankfurt");
-  healthResponse = { status: "ok" };
+  probeResponse = {
+    ...FRANKFURT_PROBE,
+    headers: { "cf-ray": "0123456789abcdef-ZZZ" },
+  };
   await page.getByRole("tab", { name: "Video", exact: true }).click();
   await page.getByRole("tab", { name: "Debug", exact: true }).click();
-  await expect(panel).toHaveAttribute("data-runtime", "unknown");
+  await expect(panel).toHaveAttribute("data-runtime", "cloudflare");
   await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
-  for (const label of ["Cloudflare entry point", "Region", "Worker", "Host"])
-    await expect(diagnosticValue(panel, label)).toHaveText("Unavailable");
+  await expect(diagnosticValue(panel, "Cloudflare entry point")).toHaveText(
+    "ZZZ",
+  );
+  await expect(diagnosticValue(panel, "Region")).toHaveText("Unavailable");
+  await expect(diagnosticValue(panel, "Game service")).toHaveText("polytour");
+  await expect(diagnosticValue(panel, "Host")).toHaveText("127.0.0.1");
+  await expectSharedPing(panel, "ZZZ");
   await expect(panel).not.toContainText("FRA");
-  await expect(panel).not.toContainText("127.0.0.1");
   expect(requests.length).toBeGreaterThanOrEqual(4);
   for (const url of requests)
-    expect(new URL(url).searchParams.get("debug")).toBe("1");
+    expect(new URL(url).pathname).toBe("/connection-probe.txt");
   expect(match.connections()).toBe(1);
+});
+
+test("the tiny match badge retains its shared sample outside Debug without more static requests", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.route("**/connection-probe.txt**", (route) => {
+    requests += 1;
+    return route.fulfill(FRANKFURT_PROBE);
+  });
+  await enterMatch(page);
+  await freezeClock(page);
+  const badge = page.locator(".match-network");
+  await expect(badge).toHaveText("— · — ms");
+  expect(requests).toBe(0);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Débogage", exact: true }).click();
+  const panel = page.locator(".pause-debug");
+  await expect(panel.getByRole("status")).toHaveText(/^\d+ ms$/);
+  await expectSharedPing(panel, "FRA");
+  const measured = await badge.textContent();
+  expect(requests).toBe(1);
+  await page
+    .getByRole("button", { name: "Revenir au plateau", exact: true })
+    .click();
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await page.clock.runFor(3000);
+  await expect(badge).toHaveText(measured ?? "");
+  expect(requests).toBe(1);
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.clock.runFor(250);
+    const rect = await badge.boundingBox();
+    const rightPlayer = await page
+      .locator('.player-card[data-seat="3"]')
+      .boundingBox();
+    const overlap =
+      rect && rightPlayer
+        ? Math.max(
+            0,
+            Math.min(rect.x + rect.width, rightPlayer.x + rightPlayer.width) -
+              Math.max(rect.x, rightPlayer.x),
+          ) *
+          Math.max(
+            0,
+            Math.min(rect.y + rect.height, rightPlayer.y + rightPlayer.height) -
+              Math.max(rect.y, rightPlayer.y),
+          )
+        : 0;
+    await test.info().attach(`badge-layout-${viewport.width}`, {
+      body: JSON.stringify({ viewport, badge: rect, rightPlayer, overlap }),
+      contentType: "application/json",
+    });
+    expect(overlap).toBe(0);
+    if (rect && rightPlayer)
+      expect(rightPlayer.y + rightPlayer.height).toBeLessThanOrEqual(rect.y);
+    expect(rect).not.toBeNull();
+    expect(rect?.x).toBeGreaterThanOrEqual(0);
+    expect(rect?.y).toBeGreaterThanOrEqual(0);
+    expect((rect?.x ?? 0) + (rect?.width ?? 0)).toBeLessThanOrEqual(
+      viewport.width,
+    );
+    expect((rect?.y ?? 0) + (rect?.height ?? 0)).toBeLessThanOrEqual(
+      viewport.height,
+    );
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBe(viewport.width);
+    await page.screenshot({
+      path: `.local/verification/match-network-${viewport.width}.png`,
+    });
+    expect(requests).toBe(1);
+  }
 });
 
 test("the rules icon is read only, invitations stay separate, and leaving needs confirmation", async ({

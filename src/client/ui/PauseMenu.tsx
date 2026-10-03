@@ -1,104 +1,22 @@
 import { motion } from "motion/react";
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
-import { measureWorkerPing, type WorkerPing } from "../net/worker-ping.js";
+import type { PingState } from "../net/use-cloudflare-ping.js";
 import Icon from "./Icon.js";
 import "./PauseMenu.css";
 
 type Page = "menu" | "settings" | "confirm-leave";
 type SettingsTab = "game" | "video" | "audio" | "debug";
 const TABS: readonly SettingsTab[] = ["game", "video", "audio", "debug"];
-const PING_INTERVAL_MS = 1_000;
-const PING_TIMEOUT_MS = 5_000;
-
-type PingState = (
-  | { status: "loading" }
-  | { status: "success"; value: WorkerPing }
-  | { status: "error" }
-) & { connection: string };
-
-function useWorkerPing(active: boolean, connection: string) {
-  const [ping, setPing] = useState<PingState>({
-    status: "loading",
-    connection,
-  });
-  useEffect(() => {
-    if (!active) return;
-    let disposed = false;
-    type Attempt = {
-      controller: AbortController;
-      timeout: ReturnType<typeof setTimeout> | undefined;
-    };
-    let pending: Attempt | null = null;
-    const cancelPending = () => {
-      const attempt = pending;
-      pending = null;
-      if (!attempt) return;
-      clearTimeout(attempt.timeout);
-      attempt.controller.abort();
-    };
-    const measure = async () => {
-      if (disposed || pending || document.hidden || !navigator.onLine) return;
-      const attempt: Attempt = {
-        controller: new AbortController(),
-        timeout: undefined,
-      };
-      pending = attempt;
-      attempt.timeout = setTimeout(() => {
-        if (pending !== attempt) return;
-        // Release the slot without waiting for an interrupted transport to settle.
-        pending = null;
-        attempt.controller.abort();
-        if (!disposed) setPing({ status: "error", connection });
-      }, PING_TIMEOUT_MS);
-      try {
-        const value = await measureWorkerPing(attempt.controller.signal);
-        if (!disposed && pending === attempt) {
-          setPing({ status: "success", value, connection });
-        }
-      } catch {
-        if (!disposed && pending === attempt)
-          setPing({ status: "error", connection });
-      } finally {
-        clearTimeout(attempt.timeout);
-        // A superseded request must not unlock or overwrite a newer measurement.
-        if (pending === attempt) pending = null;
-      }
-    };
-    const restart = () => {
-      cancelPending();
-      if (!navigator.onLine) {
-        setPing({ status: "error", connection });
-      } else {
-        setPing({ status: "loading", connection });
-        void measure();
-      }
-    };
-    const network = (navigator as Navigator & { connection?: EventTarget })
-      .connection;
-    window.addEventListener("online", restart);
-    window.addEventListener("offline", restart);
-    document.addEventListener("visibilitychange", restart);
-    network?.addEventListener("change", restart);
-    restart();
-    const interval = setInterval(() => void measure(), PING_INTERVAL_MS);
-    return () => {
-      disposed = true;
-      clearInterval(interval);
-      window.removeEventListener("online", restart);
-      window.removeEventListener("offline", restart);
-      document.removeEventListener("visibilitychange", restart);
-      network?.removeEventListener("change", restart);
-      cancelPending();
-    };
-  }, [active, connection]);
-  // Hide a previous connection's data before its replacement effect starts.
-  return ping.connection === connection
-    ? ping
-    : { status: "loading" as const, connection };
-}
 
 export type PauseMenuProps = {
   onClose: () => void;
@@ -106,6 +24,8 @@ export type PauseMenuProps = {
   zoom: number;
   onZoom: (zoom: number) => void;
   connection: string;
+  ping: PingState;
+  onDebugActiveChange: (active: boolean) => void;
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -119,6 +39,8 @@ export default function PauseMenu({
   zoom,
   onZoom,
   connection,
+  ping,
+  onDebugActiveChange,
 }: PauseMenuProps) {
   const { locale, setLocale, t } = useLocale();
   const { reducedMotion } = useDirector();
@@ -135,11 +57,8 @@ export default function PauseMenu({
     Partial<Record<SettingsTab, HTMLButtonElement | null>>
   >({});
   const returnTo = useRef<"continue" | "settings" | "leave">("continue");
-  const ping = useWorkerPing(
-    page === "settings" && tab === "debug",
-    connection,
-  );
-  const diagnostics = ping.status === "success" ? ping.value.diagnostics : null;
+  const debugActive = page === "settings" && tab === "debug";
+  const sample = ping.status === "success" ? ping.value : null;
   const unavailable = t("Indisponible", "Unavailable");
   const regions: Record<string, string> = {
     Europe: t("Europe", "Europe"),
@@ -154,18 +73,22 @@ export default function PauseMenu({
     Oceania: t("Océanie", "Oceania"),
   };
   const entryPoint =
-    diagnostics?.runtime === "local"
+    sample?.runtime === "local"
       ? t("Local", "Local")
-      : diagnostics?.cloudflare
-        ? [diagnostics.cloudflare.colo, diagnostics.cloudflare.location]
-            .filter(Boolean)
-            .join(" · ")
+      : sample?.colo
+        ? [sample.colo, sample.location].filter(Boolean).join(" · ")
         : unavailable;
-  const region = diagnostics?.cloudflare?.region;
+  const region = sample?.region;
   const regionLabel =
     region && Object.hasOwn(regions, region)
       ? (regions[region] ?? unavailable)
       : unavailable;
+
+  // Commit the probe gate before browser timers or network events can see a closed tab.
+  useLayoutEffect(() => {
+    onDebugActiveChange(debugActive);
+    return () => onDebugActiveChange(false);
+  }, [debugActive, onDebugActiveChange]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -479,13 +402,11 @@ export default function PauseMenu({
                   {value === "debug" && (
                     <div
                       className="pause-debug"
-                      data-runtime={diagnostics?.runtime ?? "unknown"}
+                      data-runtime={sample?.runtime ?? "unknown"}
                     >
                       <dl>
                         <div>
-                          <dt>
-                            {t("Ping Worker (HTTP)", "Worker ping (HTTP)")}
-                          </dt>
+                          <dt>{t("Ping Cloudflare", "Cloudflare ping")}</dt>
                           <dd role="status">
                             {ping.status === "success"
                               ? `${ping.value.latencyMs} ms`
@@ -508,12 +429,12 @@ export default function PauseMenu({
                           <dd>{regionLabel}</dd>
                         </div>
                         <div>
-                          <dt>Worker</dt>
-                          <dd>{diagnostics?.worker ?? unavailable}</dd>
+                          <dt>{t("Service de jeu", "Game service")}</dt>
+                          <dd>polytour</dd>
                         </div>
                         <div>
                           <dt>{t("Hôte", "Host")}</dt>
-                          <dd>{diagnostics?.hostname ?? unavailable}</dd>
+                          <dd>{sample?.hostname ?? unavailable}</dd>
                         </div>
                         <div>
                           <dt>
@@ -553,8 +474,8 @@ export default function PauseMenu({
                       </p>
                       <p className="pause-debug-note">
                         {t(
-                          "Ping HTTP du Worker, distinct de la latence de la partie.",
-                          "Worker HTTP ping, separate from the game’s latency.",
+                          "Ping HTTP vers Cloudflare, distinct de la latence de la partie.",
+                          "HTTP ping to Cloudflare, separate from the game’s latency.",
                         )}
                       </p>
                     </div>

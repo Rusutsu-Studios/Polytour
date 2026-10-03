@@ -407,11 +407,15 @@ Verification on this machine:
 Branch: `codex/pause-menu-settings`, based on `f74b053`. The pause icon opens
 Continue, Settings and Leave while the match, deadlines and Director keep
 running. Settings use Game, Video, Audio and Debug tabs. Audio is marked coming
-soon for issue #35; Debug measures the same-origin Worker's HTTP round trip
+soon for issue #35; Debug measures the same-origin static Cloudflare asset's HTTP round trip
 each second while its panel and browser page are visible and online, and
-displays the Worker, host and actual Cloudflare
+displays the game service, host and actual Cloudflare
 entry point with its code, location and broad region. The location mapping is
-bundled from Cloudflare's official Status API (341 geographic POPs). The
+bundled from Cloudflare's official Status API (341 geographic POPs). A tiny
+bottom-right `AMS · 42 ms` indicator keeps the last sample outside Debug. The
+probe validates a static text sentinel and reads the current response's `Cf-Ray`
+suffix. Existing asset-first routing serves it without invoking a Worker or DO;
+the browser ping does not call `/api/health`. The
 sliders icon displays fixed room rules, while
 the invitation tool displays the room code.
 
@@ -422,16 +426,19 @@ the speed/skip controls described in the historical checks above.
 Local verification: TypeScript, Biome, 143 unit/Worker tests, production build,
 bundle budgets and Wrangler configuration checks pass. All 20 browser scenarios
 passed for the initial pause-menu commit, including the complete four-seat
-authoritative match, reconnect and live legacy drand verification. The seven
-focused menu scenarios pass after adding location metadata and reconnect recovery.
+authoritative match, reconnect and live legacy drand verification. For the static
+probe revision, all 16 existing browser scenarios and eight focused menu scenarios
+pass. The focused rerun follows a commit-phase teardown fix: closing Debug stops
+its timer and network listeners before any further browser event can start a probe.
 They use authored protocol fixtures to
 test modal priority, local settings, ping success/failure/timeout/cleanup and
-leave confirmation, and distinguish Cloudflare, local and legacy responses.
+leave confirmation, and distinguish Cloudflare, local and unknown POP responses.
 Network and game reconnects immediately restart the measurement. Tests also cover
 one-second scheduling, offline/hidden suspension, a transport ignoring cancellation,
 five-second timeout recovery and rejecting responses from superseded measurements.
-Browser captures cover 1280x720, 1440x900 and 1920x1080; Debug additionally covers
-390x844 without horizontal overflow. Metadata shown in these captures is a fixture.
+Browser captures cover 1280x720, 1440x900 and 1920x1080; Debug and the tiny badge
+additionally cover 390x844 without horizontal overflow or player-card overlap.
+Metadata shown in these captures is a fixture.
 No remote runtime or production deployment is asserted by these local checks.
 
 ## Follow-up scope

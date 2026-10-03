@@ -25,6 +25,7 @@ import {
   readCredentials,
   useRoom,
 } from "./net/room.js";
+import { useCloudflarePing } from "./net/use-cloudflare-ping.js";
 import {
   levelName,
   money,
@@ -899,6 +900,20 @@ function MatchView({
 }) {
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [debugProbeActive, setDebugProbeActive] = useState(false);
+  const cloudflarePing = useCloudflarePing(
+    pauseOpen && debugProbeActive,
+    room.connection,
+  );
+  const networkPoint =
+    cloudflarePing.status === "success"
+      ? (cloudflarePing.value.colo ??
+        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "—"))
+      : "—";
+  const networkLatency =
+    cloudflarePing.status === "success"
+      ? `${cloudflarePing.value.latencyMs} ms`
+      : "— ms";
   const pauseTrigger = useRef<HTMLButtonElement | null>(null);
   const [tool, setTool] = useState<GameTool>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -1383,6 +1398,24 @@ function MatchView({
       <div className="match-caption">
         <span>{latestAction}</span>
       </div>
+      <span
+        className="match-network"
+        role="status"
+        aria-live="off"
+        title={
+          cloudflarePing.status === "success"
+            ? t(
+                "Dernière mesure du ping Cloudflare. Détails dans Débogage.",
+                "Last Cloudflare ping measurement. Details in Debug.",
+              )
+            : t(
+                "Ping Cloudflare indisponible. Détails dans Débogage.",
+                "Cloudflare ping unavailable. Details in Debug.",
+              )
+        }
+      >
+        {networkPoint} · {networkLatency}
+      </span>
       {pauseOpen && (
         <PauseMenu
           onClose={() => {
@@ -1393,6 +1426,8 @@ function MatchView({
           zoom={zoom}
           onZoom={onZoom}
           connection={room.connection}
+          ping={cloudflarePing}
+          onDebugActiveChange={setDebugProbeActive}
         />
       )}
       {debug && (

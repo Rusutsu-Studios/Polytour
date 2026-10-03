@@ -1,5 +1,5 @@
+import { CLOUDFLARE_LOCATIONS } from "../shared/protocol/cloudflare-locations.js";
 import type { WorkerDiagnostics } from "../shared/protocol/worker-diagnostics.js";
-import { CLOUDFLARE_LOCATIONS } from "./cloudflare-locations.js";
 
 /** Request metadata identifies ingress; visitor geography must never fill gaps. */
 export function workerDiagnostics(request: Request): WorkerDiagnostics {

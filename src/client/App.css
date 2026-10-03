@@ -732,6 +732,18 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.match-network {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 2px;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #173b45;
+  white-space: nowrap;
+}
 .match-end-panel {
   position: absolute;
   z-index: 7;
@@ -2538,6 +2550,11 @@ button.seat-open:disabled {
   .player-card[data-seat="0"],
   .player-card[data-seat="3"] {
     bottom: 12px;
+  }
+  .match-network {
+    right: 12px;
+    bottom: 0;
+    font-size: 9px;
   }
   .player-name-row > span {
     font-size: 9px;

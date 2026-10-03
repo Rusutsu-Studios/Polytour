@@ -37,28 +37,37 @@ turn timers. Everything that outlives a match (accounts, results, ratings) goes 
 ## Browser diagnostics
 
 The pause menu's Debug tab measures the full HTTP round trip to the same-origin
-Worker using `GET /api/health?debug=1`, without caching, every second while
+static asset `GET /connection-probe.txt`, without browser caching, every second while
 the Debug panel and browser page are visible and the browser is online. Only
 one request can be pending; a five-second timeout releases it even if the
 transport never settles after cancellation. Browser connectivity changes,
 game reconnects and returning to a visible page immediately restart measurement,
-discarding superseded responses. Closing the panel removes timers and listeners
-and aborts pending work. The same response identifies the configured `polytour` service
-and the contacted hostname, including a branch Preview. `request.cf.colo`
-identifies the Cloudflare entry point. Its readable location and broad region
+discarding superseded responses. Commit-phase teardown removes timers and listeners
+and aborts pending work. A small bottom-right `AMS · 42 ms` indicator retains the
+last successful sample outside Debug. The probe validates its complete sentinel
+body before accepting a sample, so an SPA fallback cannot look like a successful
+measurement. The response's `Cf-Ray` suffix identifies the current Cloudflare
+entry point, and its URL identifies the contacted hostname, including a branch
+Preview. Its readable location and broad region
 come from a bundled snapshot of the [official Cloudflare Status components
 API](https://www.cloudflarestatus.com/api/v2/components.json), retrieved on
-3 October 2026 (`worker/cloudflare-locations.ts`). Updating that snapshot means
+3 October 2026 (`shared/protocol/cloudflare-locations.ts`). Updating that snapshot means
 joining POP components' `group_id` to the seven geographic region groups and
 extracting the final three-letter code from each POP name. Product components
 are excluded. The snapshot contains 341 POPs; new codes still display when unmapped.
 
-Loopback hosts show local execution even when a development runtime supplies
-synthetic Cloudflare metadata. Missing POP metadata stays unknown. Visitor
+Without `Cf-Ray`, loopback hosts show local execution. Missing POP metadata stays
+unknown. Visitor
 `cf.city`, `cf.country` and `cf.region` are never used as a server location.
 The HTTP ping is separate from the WebSocket game latency, and this entry point
-does not identify the room's Durable Object location. See Cloudflare's
-[request metadata](https://developers.cloudflare.com/workers/runtime-apis/request/#incomingrequestcfproperties)
+does not identify the game socket's entry point or the room's Durable Object location.
+With `assets.run_worker_first` limited to `/api/*` and `/ws/*`, the probe is served
+directly by Workers Static Assets without invoking Worker JavaScript or a Durable
+Object. It remains a network request; static asset requests are free and unlimited
+under this configuration. The existing `/api/health?debug=1` endpoint remains
+available for on-demand operational checks and is not called by the browser ping.
+See Cloudflare's [response headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-ray),
+[static asset billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
 and [DO location](https://developers.cloudflare.com/durable-objects/reference/data-location/).
 
 ## System overview

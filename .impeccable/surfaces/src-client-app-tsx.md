@@ -46,9 +46,11 @@ it updates board labels, cards, decisions and tools without reconnecting the roo
 The toolbar's pause icon opens Continue, Settings and Leave while the match
 continues. Personal settings use Game, Video, Audio and Debug tabs. Game holds
 language; Video holds reduced motion and board size; Audio is marked coming soon.
-Debug measures the HTTP round trip to the Worker each second only while its
+Debug measures the HTTP round trip to a static Cloudflare asset each second only while its
 panel and browser page are visible and online, restarting on connectivity changes,
 with the contacted host and Cloudflare entry point (code, location and region).
+A tiny bottom-right `AMS · 42 ms` indicator retains the last sample outside Debug,
+without a background card or extra controls. Probes bypass Worker execution.
 New decisions and cards keep progressing without replacing the menu's focus.
 The sliders icon separately displays the fixed room rules, and the invitation
 icon displays the room code. Playback has normal pacing and automatic recovery;
