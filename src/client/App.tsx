@@ -88,6 +88,41 @@ function LanguagePicker() {
     </label>
   );
 }
+function GraphicsToggle({
+  lowGraphics,
+  onChange,
+  compact = false,
+}: {
+  lowGraphics: boolean;
+  onChange: (low: boolean) => void;
+  compact?: boolean;
+}) {
+  const label = lowGraphics
+    ? t(
+        "Graphismes : Faibles. Passer aux graphismes élevés.",
+        "Graphics: Low. Switch to High.",
+      )
+    : t(
+        "Graphismes : Élevés. Passer aux graphismes faibles.",
+        "Graphics: High. Switch to Low.",
+      );
+  return (
+    <div className="graphics-setting">
+      {!compact && <span>{t("Graphismes", "Graphics")}</span>}
+      <button
+        type="button"
+        className="graphics-toggle"
+        data-graphics-quality={lowGraphics ? "low" : "high"}
+        aria-label={label}
+        title={label}
+        onClick={() => onChange(!lowGraphics)}
+      >
+        <Icon name="graphics" size={18} />
+        {lowGraphics ? t("Faibles", "Low") : t("Élevés", "High")}
+      </button>
+    </div>
+  );
+}
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -884,6 +919,8 @@ function MatchView({
   onSelect,
   zoom,
   onZoom,
+  lowGraphics,
+  onGraphicsChange,
   copied,
   copyRoom,
   onLeave,
@@ -899,6 +936,8 @@ function MatchView({
   onSelect: (tile: number) => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  lowGraphics: boolean;
+  onGraphicsChange: (low: boolean) => void;
   copied: boolean;
   copyRoom: () => Promise<void>;
   onLeave: () => void;
@@ -1132,6 +1171,7 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={credentials.seat}
               zoom={zoom}
+              lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? credentials.seat : undefined}
               saleBlocked={saleBlocked}
@@ -1226,6 +1266,11 @@ function MatchView({
         >
           <Icon name="settings" size={18} />
         </button>
+        <GraphicsToggle
+          lowGraphics={lowGraphics}
+          onChange={onGraphicsChange}
+          compact
+        />
         <button
           type="button"
           className="game-tool-button"
@@ -1484,6 +1529,10 @@ function MatchView({
             {tool === "view" && (
               <div className="view-settings">
                 <LanguagePicker />
+                <GraphicsToggle
+                  lowGraphics={lowGraphics}
+                  onChange={onGraphicsChange}
+                />
                 <label htmlFor="animation-speed">
                   {t("Vitesse des animations", "Animation speed")}
                   <select
@@ -1640,6 +1689,21 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [lowGraphics, setLowGraphics] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.lowGraphics") === "true";
+    } catch {
+      return false;
+    }
+  });
+  function changeGraphics(low: boolean) {
+    setLowGraphics(low);
+    try {
+      localStorage.setItem("polytour.lowGraphics", String(low));
+    } catch {
+      // The local choice still works when browser storage is unavailable.
+    }
+  }
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
   useEffect(() => {
@@ -1770,6 +1834,11 @@ function App() {
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
             <LanguagePicker />
+            <GraphicsToggle
+              lowGraphics={lowGraphics}
+              onChange={changeGraphics}
+              compact
+            />
             <button
               type="button"
               className="text-button help-button"
@@ -1925,6 +1994,7 @@ function App() {
                     selected={null}
                     onSelect={setSelected}
                     preview
+                    lowGraphics={lowGraphics}
                   />
                 </Suspense>
               </SceneBoundary>
@@ -2064,6 +2134,7 @@ function App() {
                   selected={null}
                   onSelect={setSelected}
                   preview
+                  lowGraphics={lowGraphics}
                 />
               </Suspense>
             </SceneBoundary>
@@ -2079,6 +2150,8 @@ function App() {
           onSelect={setSelected}
           zoom={zoom}
           onZoom={setZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={changeGraphics}
           copied={copied}
           copyRoom={copyRoom}
           onLeave={leave}
