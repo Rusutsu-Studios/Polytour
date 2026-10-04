@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-04
+
 ### Added
 
 - Shared Codex marketplace and project configuration to install and enable the
