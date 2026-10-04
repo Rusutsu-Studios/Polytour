@@ -241,9 +241,15 @@ async function closeInbox(inbox: Inbox): Promise<void> {
   inbox.socket.close(1000);
   await closed;
 }
-afterEach(() => {
+afterEach(async () => {
   for (const socket of activeSockets.splice(0)) socket.close(1000);
   vi.restoreAllMocks();
+  // This file creates more rooms than one admission burst allows; each test
+  // starts with a full budget. room-admission.test.ts covers the limiter.
+  await runInDurableObject(
+    env.MATCHMAKER.getByName("room-admission"),
+    (_instance, state) => state.storage.deleteAll(),
+  );
 });
 
 describe("Authoritative private rooms", () => {
