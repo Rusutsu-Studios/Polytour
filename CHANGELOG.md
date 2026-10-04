@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-04
+
 ### Added
 
 - The player who buys out another player's city can build on it at once: up to
@@ -26,6 +28,13 @@ has been published, and it does not reconstruct earlier development history.
 
 - Once the dice show their total, the space the pawn is about to reach is
   outlined in the roller's colour, through the walk and the decision there (#97).
+
+## [0.4.4] - 2026-10-03
+
+### Changed
+
+- Refresh French/English welcome copy, show creator credits and a GitHub link,
+  and use simple hyphens in titles and unavailable-value labels (#90).
 
 ## [0.4.3] - 2026-10-03
 

@@ -1,4 +1,4 @@
-# Desktop rendering review — 3 October 2026
+# Desktop rendering review - 3 October 2026
 
 ## Scope and baseline
 

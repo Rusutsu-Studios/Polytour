@@ -66,7 +66,7 @@ export default function RoomDebug({
       )
     : null;
   const formatMs = (latency: number | null) =>
-    latency === null ? "—" : `${Math.round(latency)} ms`;
+    latency === null ? "-" : `${Math.round(latency)} ms`;
   const chartSummary = samples.length
     ? t(
         `${samples.length} mesures. Minimum ${minimum} ms, moyenne ${average} ms, maximum ${maximum} ms.`,
