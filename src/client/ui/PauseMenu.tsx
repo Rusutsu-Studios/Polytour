@@ -522,8 +522,8 @@ export default function PauseMenu({
                           </dl>
                           <p className="pause-debug-note">
                             {t(
-                              "Le compte de la banque démarre à 0. Salaires, primes et ventes le font baisser ; achats, constructions et taxes le font monter.",
-                              "The bank account starts at 0. Salaries, bonuses and sales lower it; purchases, building and taxes raise it.",
+                              "Le compte de la banque démarre à 0. Salaires et primes le font baisser ; taxes et amendes le font monter. Les achats, constructions et ventes de propriétés n’y passent pas.",
+                              "The bank account starts at 0. Salaries and bonuses lower it; taxes and fines raise it. Property purchases, building and sales don’t go through it.",
                             )}
                           </p>
                         </section>

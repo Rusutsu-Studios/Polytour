@@ -32,20 +32,15 @@ describe("Saved state migrations", () => {
     );
   });
 
-  it("splits a version-1 bank ledger into bank totals that agree with it", () => {
-    const climb = (bankLedger: number) =>
-      migrateSavedState({ bankLedger, round: 3 }, 1, 2).state;
-    expect(climb(250_000)).toEqual({
+  it("opens an empty bank account for a version-1 save and keeps its ledger", () => {
+    expect(
+      migrateSavedState({ bankLedger: 250_000, round: 3 }, 1, 2).state,
+    ).toEqual({
       bankLedger: 250_000,
       round: 3,
-      bankReceived: 250_000,
+      bankReceived: 0,
       bankPaidOut: 0,
     });
-    expect(climb(-400_000)).toMatchObject({
-      bankReceived: 0,
-      bankPaidOut: 400_000,
-    });
-    expect(climb(0)).toMatchObject({ bankReceived: 0, bankPaidOut: 0 });
   });
 
   it("leaves a save already at the current version untouched and unwritten", () => {

@@ -144,7 +144,11 @@ export type PublicState = {
   } | null;
   readonly lastCard: { readonly seat: Seat; readonly card: ChanceCard } | null;
   readonly bankLedger: number;
-  /** Totals the bank ever received from and paid to players; their difference is `bankLedger`. */
+  /**
+   * The bank's own account: salaries and money that cards, taxes and fines move
+   * between players and the bank. Property purchases, building, sales and
+   * written-off debts stay in `bankLedger` only.
+   */
   readonly bankReceived: number;
   readonly bankPaidOut: number;
   readonly championshipHost: {

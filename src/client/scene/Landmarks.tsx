@@ -14,9 +14,8 @@ import { LOT_TOP, tileCenter, tilePoint, type Vec3 } from "./board-layout.js";
 import { canvasTexture, labelTexture, mix } from "./board-textures.js";
 
 // Small original landmarks on the island, championship and world-tour corners;
-// Start is mostly printed flat so nothing tall stands in front of the board,
-// apart from a squat bank on its right-hand side. Each keeps clear of its
-// square's inner quarter, which belongs to pawns.
+// Start is printed flat so nothing tall stands in front of the board. Each
+// keeps to the outer half of its square: the inner quarter belongs to pawns.
 //
 // The stadium and the airport are built for the fixed camera: their own +x
 // runs to the right of the screen and +z toward the viewer. Static parts are
@@ -86,69 +85,6 @@ function at(
 ): [number, number, number] {
   const [worldX, worldZ] = tilePoint(corner, x, z);
   return [worldX, y, worldZ];
-}
-
-/** The bank on Start's right-hand side: money paid to or by the bank flies here. */
-export const BANK_SPOT = at(0, -0.37, 0.37);
-/** Top of the bank's pediment, where cash flights land and leave. */
-export const BANK_TOP = LOT_TOP + 0.34;
-const BANK_SCALE = 1.2;
-
-const BANK_STONE = "#fff4dd";
-const BANK_TRIM = "#e3d3b2";
-const BANK_ROOF = "#2f8a4c";
-
-/** A small toy bank facing the camera, so players see where system money goes. */
-function StartBank() {
-  const [x, y, z] = BANK_SPOT;
-  return (
-    <group
-      position={[x, y, z]}
-      rotation={[0, Math.PI / 4, 0]}
-      scale={BANK_SCALE}
-    >
-      <mesh position={[0, 0.02, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.42, 0.04, 0.34]} />
-        <meshStandardMaterial color={BANK_TRIM} roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 0.115, -0.03]} castShadow receiveShadow>
-        <boxGeometry args={[0.34, 0.15, 0.2]} />
-        <meshStandardMaterial color={BANK_STONE} roughness={0.85} />
-      </mesh>
-      <mesh position={[0, 0.095, 0.072]}>
-        <boxGeometry args={[0.07, 0.11, 0.006]} />
-        <meshStandardMaterial color="#5b4636" roughness={0.9} />
-      </mesh>
-      {[-0.135, -0.075, 0.075, 0.135].map((column) => (
-        <mesh key={column} position={[column, 0.115, 0.115]} castShadow>
-          <cylinderGeometry args={[0.018, 0.02, 0.15, 8]} />
-          <meshStandardMaterial color="#fffaf0" roughness={0.7} />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.205, 0.01]} castShadow>
-        <boxGeometry args={[0.38, 0.03, 0.27]} />
-        <meshStandardMaterial color={BANK_TRIM} roughness={0.85} />
-      </mesh>
-      {/* A three-sided cylinder lies along z as the pediment's triangular prism. */}
-      <mesh
-        position={[0, 0.245, 0.01]}
-        rotation={[Math.PI / 2, 0, 0]}
-        scale={[1.9, 1, 0.55]}
-        castShadow
-      >
-        <cylinderGeometry args={[0.1, 0.1, 0.25, 3]} />
-        <meshStandardMaterial color={BANK_ROOF} roughness={0.75} />
-      </mesh>
-      <mesh position={[0, 0.25, 0.14]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.012, 16]} />
-        <meshStandardMaterial
-          color="#ffcf59"
-          metalness={0.4}
-          roughness={0.35}
-        />
-      </mesh>
-    </group>
-  );
 }
 
 function Island() {
@@ -1484,7 +1420,6 @@ export function Landmarks({
   return (
     <group>
       <Island />
-      <StartBank />
       <Stadium
         hosted={host !== null}
         hostSeat={hostSeat}

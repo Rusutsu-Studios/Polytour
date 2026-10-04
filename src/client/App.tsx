@@ -1611,7 +1611,7 @@ function MatchView({
           bank={{
             received: authoritative.bankReceived,
             paidOut: authoritative.bankPaidOut,
-            balance: authoritative.bankLedger,
+            balance: authoritative.bankReceived - authoritative.bankPaidOut,
           }}
         />
       )}

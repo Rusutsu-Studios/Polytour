@@ -13,17 +13,18 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Added
 
-- A small toy bank stands on Start, and money paid to or by the bank flies to and
-  from it instead of the bare tile; the Start salary is printed just in front of
+- A small bank is printed on Start. Salaries, taxes, fees and card payments fly
+  to and from it instead of the bare tile, while purchase, building and sale
+  money flies between the player and the lot; the Start salary is printed just
+  below the bank (#60).
+- Pause > Settings > Debug shows the bank's account: paid to players, received
+  from players and its balance, which starts at 0. Property money is not part of
   it (#60).
-- Pause > Settings > Debug shows the bank's totals: paid to players, received
-  from players and its account balance, which starts at 0 (#60).
 
 ### Changed
 
-- Match state version 2 records the bank's gross received and paid-out totals.
-  Saved version-1 matches load with their net ledger booked as received or paid
-  out, so their totals start from the balance (#60).
+- Match state version 2 records the bank's account. Saved version-1 matches
+  load with an empty account (#60).
 
 ## [0.4.4] - 2026-10-03
 

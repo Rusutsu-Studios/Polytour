@@ -199,7 +199,7 @@ describe("salary event reducer", () => {
     expect(replay.bankLedger).toBe(state.bankLedger - 600_000);
   });
 
-  it("counts what the bank receives and pays out alongside its net ledger", () => {
+  it("keeps the bank's account to salaries and bank transfers, not property money", () => {
     const state = toPublic(newGame());
     const [first, second] = state.turnOrder;
     const events: GameEvent[] = [
@@ -225,13 +225,21 @@ describe("salary event reducer", () => {
         amount: 70_000,
         reason: "card",
       },
+      {
+        type: "PropertyBought",
+        seat: second,
+        tile: state.properties[0].tile,
+        level: 1,
+        amount: 90_000,
+      },
     ];
     const replay = events.reduce(applyEvent, state);
 
     expect(replay.bankReceived).toBe(150_000);
     expect(replay.bankPaidOut).toBe(450_000);
+    // The purchase reaches the ledger, which conserves money, not the account.
     expect(replay.bankLedger).toBe(
-      state.bankLedger + replay.bankReceived - replay.bankPaidOut,
+      state.bankLedger + replay.bankReceived - replay.bankPaidOut + 90_000,
     );
     expect(money(replay)).toBe(money(state));
   });

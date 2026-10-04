@@ -27,19 +27,13 @@ export type StateMigration = {
  */
 export const STATE_MIGRATIONS: readonly StateMigration[] = [
   {
-    // Version 2 adds the bank's gross totals. Older saves only kept the net
-    // ledger, so the past flows collapse into whichever side the net is on.
+    // Version 2 adds the bank's own account. Older saves only kept a ledger
+    // that mixes in property money, so their account starts over at zero.
     to: 2,
-    migrate: (saved) => {
-      if (saved === null || typeof saved !== "object") return saved;
-      const ledger = (saved as { bankLedger?: unknown }).bankLedger;
-      const net = typeof ledger === "number" ? ledger : 0;
-      return {
-        ...saved,
-        bankReceived: Math.max(0, net),
-        bankPaidOut: Math.max(0, -net),
-      };
-    },
+    migrate: (saved) =>
+      saved === null || typeof saved !== "object"
+        ? saved
+        : { ...saved, bankReceived: 0, bankPaidOut: 0 },
   },
 ];
 

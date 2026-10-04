@@ -485,9 +485,11 @@ choice; neither the UI nor a bot may infer it from board state.
 - Seat advantage (first player win rate should be within ±3% of fair share).
 - Termination: no game ever exceeds the round limit or loops.
 - Money conservation: player cash + bank ledger (including bankruptcy `writtenOff`)
-  is unchanged by every event. The bank also keeps gross `bankReceived` and
-  `bankPaidOut` totals (a written-off debt counts as paid out); their difference
-  is always the ledger. The Debug settings tab shows all three.
+  is unchanged by every event. Separately, the bank's own account
+  (`bankReceived`, `bankPaidOut`) counts only salaries and money that taxes,
+  fees, fines and cards move between players and the bank; property purchases,
+  building, sales and written-off debts stay out of it. The Debug settings tab
+  shows the account.
 - Per-condition instant-win rates. Resorts can't be bought out, so one resort can
   block Resort Monopoly and its side's Line Monopoly for good; if either rate is
   near zero, revisit that rule.

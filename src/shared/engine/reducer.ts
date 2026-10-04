@@ -149,7 +149,7 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
       );
       return {
         ...next,
-        ...bankReceives(state, event.amount),
+        bankLedger: state.bankLedger + event.amount,
         properties: next.properties.map((property) =>
           property.tile === event.tile
             ? { ...property, level: event.level }
@@ -160,7 +160,7 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
     case "PropertyUpgraded":
       return {
         ...cashChange(state, event.seat, -event.amount),
-        ...bankReceives(state, event.amount),
+        bankLedger: state.bankLedger + event.amount,
         properties: state.properties.map((property) =>
           property.tile === event.tile
             ? { ...property, level: event.level }
@@ -174,7 +174,7 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
           event.tile,
           null,
         ),
-        ...bankPays(state, event.amount),
+        bankLedger: state.bankLedger - event.amount,
       };
     case "BoughtOut":
       return changeOwner(
@@ -254,8 +254,7 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
       }));
       return {
         ...next,
-        // The bank absorbs a bankrupt player's debt, as if it paid it.
-        ...bankPays(state, event.writtenOff),
+        bankLedger: state.bankLedger - event.writtenOff,
         turnOrder: event.turnOrder,
         roundSeatsRemaining: event.roundSeatsRemaining,
         eliminated: [...state.eliminated, event.seat],
