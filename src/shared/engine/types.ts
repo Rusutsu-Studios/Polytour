@@ -43,6 +43,8 @@ export type GameConfig = {
   readonly fourResortRent?: boolean;
   /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
+  /** Missing on older saves: Audit taxes cash without moving. */
+  readonly taxCardMovement?: boolean;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;

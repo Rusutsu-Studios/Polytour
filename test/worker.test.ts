@@ -4,7 +4,7 @@ import {
   runInDurableObject,
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOT_TIMING,
   DECISION_TIMING,
@@ -241,6 +241,13 @@ async function closeInbox(inbox: Inbox): Promise<void> {
   inbox.socket.close(1000);
   await closed;
 }
+beforeEach(async () => {
+  await runInDurableObject(
+    env.MATCHMAKER.getByName("room-admission"),
+    (_instance, state) => state.storage.delete("room-creation-budget"),
+  );
+});
+
 afterEach(() => {
   for (const socket of activeSockets.splice(0)) socket.close(1000);
   vi.restoreAllMocks();
@@ -2024,7 +2031,7 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on rules version 8 with city-only festivals, four-resort rent and building after a buyout", async () => {
+  it("freezes new rooms on rules version 9 with tax-card movement", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -2034,6 +2041,7 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.worldTourRule).toBe("free-and-own");
     expect(game.state.config.fourResortRent).toBe(true);
     expect(game.state.config.buildAfterBuyout).toBe(true);
+    expect(game.state.config.taxCardMovement).toBe(true);
     expect(game.state.config.resortFestivals).toBe(false);
     const cities = getBoard(game.state.config)
       .filter(isCityTile)
@@ -2053,7 +2061,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("8");
+    expect(rules).toBe("9");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
@@ -2061,6 +2069,135 @@ describe("Authoritative private rooms", () => {
     expect(welcome.snapshot?.config.resortFestivals).toBe(false);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
   });
+
+  it.each([8, 9])(
+    "loads a version-%s saved Audit and replays its frozen behavior",
+    async (version) => {
+      const game = await startFour();
+      const active = game.state.activeSeat;
+      await closeInbox(game.inboxes[active]);
+      const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        const saved = JSON.parse(row.json) as GameState;
+        const { taxCardMovement: _tax, ...legacyConfig } = saved.config;
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(version),
+        );
+        durableState.storage.sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            config: version === 8 ? legacyConfig : saved.config,
+            deck: ["Audit"],
+            discard: [],
+            properties: saved.properties.map((property) =>
+              property.tile === 1 ? { ...property, owner: active } : property,
+            ),
+            players: saved.players.map((player) =>
+              player.seat === active
+                ? {
+                    ...player,
+                    position: 24,
+                    travelPending: true,
+                    properties: [1],
+                  }
+                : player,
+            ),
+            pending: {
+              kind: "travel",
+              seat: active,
+              fee: 0,
+              targets: [12],
+              deadline: Date.now() + 60_000,
+            },
+            resolutionQueue: [{ kind: "finish" }],
+          }),
+        );
+      });
+      await evictDurableObject(stub);
+      const inbox = await connect(game.credentials[active]);
+      const welcome = await inbox.next("welcome");
+      if (!welcome.snapshot) throw new Error("Expected saved snapshot");
+      expect(welcome.snapshot.config.taxCardMovement).toBe(
+        version === 9 ? true : undefined,
+      );
+      inbox.send({
+        type: "intent",
+        id: `audit-v${version}`,
+        atSeq: welcome.seq,
+        action: { type: "Travel", tile: 12 },
+      });
+      const events = await inbox.next("events");
+      expect(events.events).toContainEqual({
+        type: "CardDrawn",
+        seat: active,
+        card: "Audit",
+        kept: false,
+      });
+      const next = events.events.reduce(applyEvent, welcome.snapshot);
+      expect(
+        next.players.find((player) => player.seat === active)?.position,
+      ).toBe(version === 9 ? 30 : 12);
+      expect(events.events).toContainEqual(
+        expect.objectContaining({
+          type: "MoneyTransferred",
+          reason: version === 9 ? "Tax" : "Audit",
+        }),
+      );
+      expect(JSON.stringify(events)).not.toMatch(
+        /chanceEntropy|rngState|"deck"/,
+      );
+      await closeInbox(inbox);
+      await evictDurableObject(stub);
+      const recovered = await connect(game.credentials[active]);
+      expect((await recovered.next("welcome")).snapshot).toEqual(next);
+    },
+  );
+
+  it.each([undefined, false, "true"])(
+    "rejects version-9 saves with tax selector %s",
+    async (marker) => {
+      const game = await startFour();
+      const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        const saved = JSON.parse(row.json) as GameState;
+        durableState.storage.sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            config: { ...saved.config, taxCardMovement: marker },
+          }),
+        );
+      });
+      const response = await exports.default.fetch(
+        new Request(`${origin}/api/rooms/${game.credentials[0].roomCode}`),
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: "incompatible-saved-match",
+      });
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        const saved = JSON.parse(row.json) as GameState;
+        durableState.storage.sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            config: { ...saved.config, taxCardMovement: true },
+          }),
+        );
+      });
+    },
+  );
 
   it.each([
     // A version-5 save predates the marker: own properties only when none is free.
@@ -2082,6 +2219,7 @@ describe("Authoritative private rooms", () => {
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
         const {
+          taxCardMovement: _tax,
           resortFestivals: _festival,
           worldTourRule: _tour,
           fourResortRent: _four,
@@ -2092,7 +2230,7 @@ describe("Authoritative private rooms", () => {
         // festival marker, and before 6 the World Tour marker.
         const config =
           version === "8"
-            ? saved.config
+            ? { ...saved.config, taxCardMovement: undefined }
             : version === "7"
               ? {
                   ...bare,
@@ -2182,6 +2320,8 @@ describe("Authoritative private rooms", () => {
       { fourResortRent: false },
       { buildAfterBuyout: true },
       { buildAfterBuyout: false },
+      { taxCardMovement: true },
+      { taxCardMovement: false },
       { resortFestivals: true },
       { resortFestivals: false },
     ]) {
@@ -2209,6 +2349,7 @@ describe("Authoritative private rooms", () => {
         boardRule: _board,
         sellBackPercent: _sale,
         worldTourRule: _tour,
+        taxCardMovement: _tax,
         fourResortRent: _four,
         buildAfterBuyout: _build,
         ...oldConfig
@@ -2275,7 +2416,7 @@ describe("Authoritative private rooms", () => {
     );
   });
 
-  it.each([5, 6])(
+  it.each([5, 6, 7, 8])(
     "starts preexisting version-%s lobbies with their original rules",
     async (version) => {
       const host = await create();
@@ -2292,7 +2433,8 @@ describe("Authoritative private rooms", () => {
         boardRule: "country",
         economyRule: "reference",
         worldTourRule: version >= 6 ? "free-and-own" : "free-first",
-        resortFestivals: true,
+        resortFestivals: version < 7,
+        taxCardMovement: false,
       });
       inbox.send({
         type: "lobby",
@@ -2309,7 +2451,8 @@ describe("Authoritative private rooms", () => {
         boardRule: "country",
         economyRule: "reference",
         worldTourRule: version >= 6 ? "free-and-own" : "free-first",
-        resortFestivals: true,
+        resortFestivals: version < 7,
+        taxCardMovement: false,
       });
     },
   );
@@ -2324,6 +2467,7 @@ describe("Authoritative private rooms", () => {
         .toArray()[0];
       const saved = JSON.parse(row.json) as GameState;
       const {
+        taxCardMovement: _tax,
         resortFestivals: _marker,
         fourResortRent: _four,
         buildAfterBuyout: _build,
@@ -2453,6 +2597,7 @@ describe("Authoritative private rooms", () => {
         boardRule: _board,
         sellBackPercent: _sale,
         worldTourRule: _tour,
+        taxCardMovement: _tax,
         fourResortRent: _four,
         buildAfterBuyout: _build,
         ...oldConfig
@@ -2572,7 +2717,7 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 7, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
       // cannot carry its World Tour marker, version 6 cannot exclude resort
       // festivals, version 7 the version-8 markers, and 999 is unknown.
@@ -2590,10 +2735,10 @@ describe("Authoritative private rooms", () => {
         error: "incompatible-saved-match",
       });
     }
-    // Restore to let normal socket close callbacks finish under the supported rules.
+    // Restore the supported rules before socket cleanup.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='7' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='9' WHERE k='rulesVersion'",
       ),
     );
   });

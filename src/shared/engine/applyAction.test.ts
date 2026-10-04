@@ -46,7 +46,7 @@ import {
 const SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
   (name, index) => ({ playerId: `player-${index}`, name, control: "human" }),
 );
-/** Saved prototype rooms (rules versions 2–3) keep these rules; see the reference block below. */
+/** Saved prototype rooms (rules versions 2â€“3) keep these rules; see the reference block below. */
 const CONFIG: GameConfig = {
   ...DEFAULT_GAME_CONFIG,
   economyRule: "prototype",
@@ -54,6 +54,7 @@ const CONFIG: GameConfig = {
   sellBackPercent: 100,
   fourResortRent: false,
   buildAfterBuyout: false,
+  taxCardMovement: false,
   roundLimit: 20,
   timeLimitMinutes: undefined,
   festivalCount: 0,
@@ -1666,7 +1667,7 @@ describe("reference economy on the original board", () => {
       festivalTiles: [31],
       championshipHost: { tile: 31, multiplier: 2 },
     };
-    // Country, festival and a ×2 championship each add one: ×4.
+    // Country, festival and a Ã—2 championship each add one: Ã—4.
     expect(propertyRent(state, 31)).toBe(2_400_000);
     state = { ...state, championshipHost: { tile: 31, multiplier: 10 } };
     expect(propertyRent(state, 31)).toBe(6_000_000);
@@ -1985,7 +1986,7 @@ describe("reference economy on the original board", () => {
   it.each([
     // Rules version 6: free properties and the traveller's own.
     ["free-and-own", (tile: number) => tile !== 1],
-    // Rules versions 4–5: the traveller's own only when none is free.
+    // Rules versions 4â€“5: the traveller's own only when none is free.
     ["free-first", (tile: number) => tile !== 1 && tile !== 2],
   ] as const)(
     "flies a %s World Tour only to the properties that rule allows",
@@ -2042,4 +2043,99 @@ describe("reference economy on the original board", () => {
     const owned = land(grant(grant(state, 1, seat, 3), 31, seat, 4), 29);
     expect(getPlayer(owned.state, seat).cash).toBe(2_000_000 - 171_000);
   });
+});
+
+describe("version-9 Audit movement", () => {
+  it.each([12, 20, 28])(
+    "moves from Chance %s to Tax and pays property tax once",
+    (tile) => {
+      let state = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+      const seat = state.activeSeat;
+      state = grant(state, 1, seat);
+      const result = draw(state, "Audit", tile);
+      expect(getPlayer(result.state, seat)).toMatchObject({
+        position: 30,
+        laps: 0,
+        cash: 1_994_000,
+      });
+      expect(
+        result.events.filter((event) => event.type === "PlayerMoved"),
+      ).toEqual([
+        expect.objectContaining({ position: tile }),
+        expect.objectContaining({ from: tile, position: 30, steps: 30 - tile }),
+      ]);
+      expect(
+        result.events.filter((event) => event.type === "MoneyTransferred"),
+      ).toEqual([
+        {
+          type: "MoneyTransferred",
+          from: seat,
+          to: null,
+          amount: 6_000,
+          reason: "Tax",
+        },
+      ]);
+      expect(result.state.discard).toEqual(["Audit"]);
+    },
+  );
+
+  it("pays salary when the journey crosses Start before drawing Audit", () => {
+    const state = newGame(4, { ...CONFIG, taxCardMovement: true });
+    const seat = state.activeSeat;
+    const result = land(
+      { ...grant(state, 1, seat), deck: ["Audit"], discard: [] },
+      3,
+      [1, 3],
+    );
+    expect(getPlayer(result.state, seat)).toMatchObject({
+      position: 29,
+      laps: 1,
+      cash: 2_350_000,
+    });
+    expect(
+      result.events.filter((event) => event.type === "SalaryPaid"),
+    ).toHaveLength(1);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "PlayerMoved",
+        from: 3,
+        position: 29,
+        steps: 26,
+      }),
+    );
+  });
+
+  it("uses the normal Tax debt decision and cancels a double's extra roll", () => {
+    let state = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = state.activeSeat;
+    state = setPlayer(grant(state, 1, seat), seat, { cash: 1 });
+    const result = land({ ...state, deck: ["Audit"], discard: [] }, 12, [1, 1]);
+    expect(result.state.pending).toMatchObject({ kind: "sell", seat });
+    expect(result.state.extraRoll).toBe(false);
+    expect(getPlayer(result.state, seat).position).toBe(30);
+  });
+
+  it.each([undefined, false])(
+    "keeps the legacy cash charge with selector %s",
+    (taxCardMovement) => {
+      const state = newGame();
+      const saved = { ...state, config: { ...state.config, taxCardMovement } };
+      const seat = state.activeSeat;
+      const result = draw(saved, "Audit");
+      expect(getPlayer(result.state, seat)).toMatchObject({
+        position: 3,
+        cash: 1_800_000,
+      });
+      expect(
+        result.events.filter((event) => event.type === "PlayerMoved"),
+      ).toHaveLength(1);
+      expect(result.events).toContainEqual({
+        type: "MoneyTransferred",
+        from: seat,
+        to: null,
+        amount: 200_000,
+        reason: "Audit",
+      });
+    },
+  );
 });

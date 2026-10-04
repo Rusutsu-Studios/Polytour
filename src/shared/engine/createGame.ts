@@ -65,6 +65,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  taxCardMovement: true,
   sellBackPercent: 100,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
@@ -154,7 +155,7 @@ function ownsCountry(
 }
 /**
  * Prototype rooms apply the single largest modifier. Reference rooms add each
- * modifier's bonus: a full country (×2) and a ×2 championship make ×3.
+ * modifier's bonus: a full country (Ã—2) and a Ã—2 championship make Ã—3.
  */
 function rentMultiplier(
   state: PublicState,
@@ -376,7 +377,7 @@ export function championshipCost(state: PublicState, tile: number): number {
     ? 0
     : rules(state).championshipFee;
 }
-/** The championship after hosting it on a tile: a prototype move restarts at ×2. */
+/** The championship after hosting it on a tile: a prototype move restarts at Ã—2. */
 export function nextChampionship(
   state: PublicState,
   tile: number,
@@ -677,7 +678,7 @@ export function decisionWindow(
 }
 /**
  * When a server bot should act on the pending decision: once the events that
- * opened it have played at 1× speed, plus a short pause, so players can follow
+ * opened it have played at 1Ã— speed, plus a short pause, so players can follow
  * a bot's turn. The deadline already holds that animation budget.
  */
 export function botDecisionAt(state: PublicState): number | null {
@@ -1046,6 +1047,14 @@ function resolver(initial: GameState, context: ResolutionContext) {
         );
         break;
       case "Audit":
+        if (state.config.taxCardMovement === true) {
+          const tax = getBoard(state.config).find(
+            (tile) => tile.kind === "tax",
+          );
+          if (!tax) throw new Error("The board has no tax tile");
+          relocate(tax.index);
+          break;
+        }
         prepend({
           kind: "payment",
           from: seat,
@@ -1878,6 +1887,11 @@ export function createGame(
     if (marker !== undefined && typeof marker !== "boolean")
       throw new RangeError("Unsupported rules version 8 marker");
   if (
+    config.taxCardMovement !== undefined &&
+    typeof config.taxCardMovement !== "boolean"
+  )
+    throw new RangeError("Unsupported tax card movement rule");
+  if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
     config.sellBackPercent !== 100
@@ -1952,6 +1966,7 @@ export function createGame(
       worldTourRule: config.worldTourRule ?? "free-and-own",
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
+      taxCardMovement: config.taxCardMovement ?? false,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,
