@@ -5,6 +5,7 @@ import {
   RoomConfigSchema,
   type RoomCredentials,
 } from "../src/shared/protocol/index.js";
+import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -374,7 +375,7 @@ test("invalid invitation parameters fail upfront in both languages without joini
     expect(requests).toEqual([]);
     expect(room.connections).toEqual([]);
   }
-  await page.getByLabel("Langue / Language").selectOption("en");
+  await chooseLanguage(page, "en");
   await expect(page.getByRole("alert")).toHaveText(
     "Invalid invitation link. Ask the host for a new link.",
   );

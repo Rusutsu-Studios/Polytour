@@ -88,15 +88,17 @@ const LOBBY_LIFETIME = 7_200_000;
 /**
  * 2–3 are original production rooms; 5 combines the board and reference rules;
  * 6 lets World Tour reach the traveller's own properties as well as free ones.
+ * 7 restricts initial festivals to cities.
  */
-const RULES_VERSION = 6;
+const RULES_VERSION = 7;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
     version !== 3 &&
     version !== 4 &&
     version !== 5 &&
-    version !== 6
+    version !== 6 &&
+    version !== 7
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -107,6 +109,7 @@ function frozenRules(version: number | null) {
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
     worldTourRule:
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
+    resortFestivals: version >= 4 && version < 7,
   };
 }
 
@@ -278,7 +281,12 @@ export class GameRoom extends DurableObject<Env> {
     const board = state.config.boardRule;
     const sale = state.config.sellBackPercent;
     const tour = state.config.worldTourRule;
+    const festivals = state.config.resortFestivals;
     if (
+      // Version-7 matches require the marker; older unmarked saves keep their rules.
+      (rulesVersion !== null &&
+        festivals !== frozen.resortFestivals &&
+        (rulesVersion >= 7 || festivals !== undefined)) ||
       // Saves made before rules version 6 carry no World Tour marker.
       (rulesVersion !== null &&
         tour !== frozen.worldTourRule &&

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getBoard, isCityTile } from "../board/index.js";
 import type { SeatInfo } from "./index.js";
 import {
   applyEvent,
@@ -77,6 +78,35 @@ describe("createGame", () => {
     expect(toPublic(first.state)).not.toHaveProperty("rngState");
     expect(first.events[0]).not.toHaveProperty("state.deck");
   });
+  it.each(["country", "legacy"] as const)(
+    "draws initial festivals only on cities on the %s board",
+    (boardRule) => {
+      const cities = getBoard(boardRule)
+        .filter(isCityTile)
+        .map((tile) => tile.index);
+      for (const economyRule of ["reference", "prototype"] as const) {
+        for (const festivalCount of [0, 3, 20]) {
+          for (let seed = 0; seed < 100; seed += 1) {
+            const game = createGame(
+              { ...DEFAULT_GAME_CONFIG, boardRule, economyRule, festivalCount },
+              SEATS,
+              seed,
+              { now: 0 },
+            );
+            expect(game.state.config.resortFestivals).toBe(false);
+            expect(game.state.festivalTiles).toHaveLength(festivalCount);
+            expect(new Set(game.state.festivalTiles).size).toBe(festivalCount);
+            expect(
+              game.state.festivalTiles.every((tile) => cities.includes(tile)),
+            ).toBe(true);
+            expect(
+              game.events.reduce(applyEvent, toPublic(game.state)),
+            ).toEqual(toPublic(game.state));
+          }
+        }
+      }
+    },
+  );
   it("keeps the table seats of a smaller room, including an empty seat between players", () => {
     const { state, events } = createGame(
       DEFAULT_GAME_CONFIG,
@@ -132,6 +162,7 @@ describe("createGame", () => {
         boardRule: undefined,
         economyRule: undefined,
         sellBackPercent: undefined,
+        resortFestivals: undefined,
       },
       SEATS,
       1,
@@ -141,6 +172,7 @@ describe("createGame", () => {
       boardRule: "country",
       economyRule: "reference",
       sellBackPercent: 100,
+      resortFestivals: false,
     });
     const legacy = createGame(
       {
@@ -179,6 +211,17 @@ describe("createGame", () => {
     ).toThrow("50 or 100");
   });
   it("validates identities, counts, integer money, positive deadlines and supported festivals", () => {
+    expect(() =>
+      createGame(
+        {
+          ...DEFAULT_GAME_CONFIG,
+          resortFestivals: "yes" as unknown as boolean,
+        },
+        SEATS,
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("festival rule");
     expect(() =>
       createGame(DEFAULT_GAME_CONFIG, SEATS.slice(0, 1), 1, { now: 0 }),
     ).toThrow("2 to 4 seats");

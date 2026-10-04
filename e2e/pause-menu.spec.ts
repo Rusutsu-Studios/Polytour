@@ -6,6 +6,7 @@ import {
   test,
   type WebSocketRoute,
 } from "@playwright/test";
+import { DECISION_TIMING } from "../src/shared/board/index.js";
 import {
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -351,7 +352,10 @@ test("pause keeps the clock and authoritative updates running without losing mod
   await expect(continueButton).toBeFocused();
   await expect(
     page.locator('.player-card[data-seat="0"] .player-cash'),
-  ).toContainText(/2\s150\s000/);
+  ).toContainText(/2\s150\s000/, {
+    timeout:
+      DECISION_TIMING.cardAnimation + DECISION_TIMING.moneyAnimation + 2_000,
+  });
   await expect(continueButton).toBeFocused();
   await continueButton.click();
   await expect(modal).toHaveCount(0);

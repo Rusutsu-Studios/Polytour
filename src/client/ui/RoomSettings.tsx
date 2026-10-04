@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
+import ActionButton from "./ActionButton.js";
 import { money } from "./board-display.js";
 import "./RoomSettings.css";
 
@@ -21,6 +22,11 @@ const TOGGLES = [
   ],
   ["hotelsDirectly", "Hôtels directement achetables", "Buy hotels directly"],
   ["extraRollOnDouble", "Rejouer après un double", "Roll again on doubles"],
+  [
+    "tripleDoubleToIsland",
+    "Troisième double : direction l'île",
+    "Third double goes to the island",
+  ],
   ["botCanBuild", "Les bots peuvent construire", "Bots can build"],
   [
     "giftCanBankrupt",
@@ -272,7 +278,18 @@ export function RoomSettings({
     if (!disabled) onChange({ ...config, ...patch });
   };
   return (
-    <div className="room-settings" data-readonly={disabled}>
+    <div
+      className="room-settings"
+      data-readonly={disabled}
+      data-disabled-reason={
+        disabled
+          ? t(
+              "Seul le chef de salle peut modifier les réglages avant la partie, une fois connecté.",
+              "Only the room leader can change settings before the game, while connected.",
+            )
+          : undefined
+      }
+    >
       <div className="room-settings-main">
         <NumberSetting
           label={t("Capital de départ", "Starting cash")}
@@ -432,10 +449,21 @@ export function RoomSettings({
         </p>
       </section>
       {save && (
-        <button
+        <ActionButton
           type="button"
           className="room-settings-save"
           disabled={disabled || !save.dirty}
+          disabledReason={
+            disabled
+              ? t(
+                  "Les réglages ne peuvent pas être modifiés pour le moment.",
+                  "Settings cannot be changed right now.",
+                )
+              : t(
+                  "Tous les réglages sont déjà enregistrés.",
+                  "All settings are already saved.",
+                )
+          }
           onClick={() => {
             if (!disabled && save.dirty) save.onSave();
           }}
@@ -443,7 +471,7 @@ export function RoomSettings({
           {save.dirty
             ? t("Enregistrer les réglages", "Save settings")
             : t("Réglages enregistrés", "Settings saved")}
-        </button>
+        </ActionButton>
       )}
     </div>
   );

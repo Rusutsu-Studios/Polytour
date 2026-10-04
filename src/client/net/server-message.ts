@@ -15,6 +15,7 @@ const publicState = z.object({
       startingCash: integer,
       startSalary: integer,
       roundLimit: integer,
+      resortFestivals: z.boolean().optional(),
     })
     .passthrough(),
   players: z.array(
@@ -163,6 +164,7 @@ const lobby = z.object({
     .enum(["staged-hotels", "legacy-lap"])
     .default("staged-hotels"),
   worldTourRule: z.enum(["free-and-own", "free-first"]).default("free-and-own"),
+  resortFestivals: z.boolean().optional(),
   seats: z
     .array(
       z.object({

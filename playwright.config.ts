@@ -25,6 +25,7 @@ export default defineConfig({
       name: "desktop-ui",
       testMatch: [
         "client-flow.spec.ts",
+        "ui-clarity.spec.ts",
         "network-flow.spec.ts",
         "language-flow.spec.ts",
         "pause-menu.spec.ts",

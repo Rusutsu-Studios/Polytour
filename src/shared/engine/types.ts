@@ -24,6 +24,8 @@ export type GameConfig = {
   readonly decisionSeconds?: number;
   readonly timeLimitMinutes?: number;
   readonly festivalCount?: number;
+  /** Missing on older saves: retain the economy's original resort festivals. */
+  readonly resortFestivals?: boolean;
   readonly lineMonopoly?: boolean;
   readonly tripleMonopoly?: boolean;
   readonly hotelsDirectly?: boolean;
@@ -38,6 +40,8 @@ export type GameConfig = {
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
+  /** Missing on existing saves: the third consecutive double sends you to the island. */
+  readonly tripleDoubleToIsland?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;
 };
