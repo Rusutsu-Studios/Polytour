@@ -391,16 +391,22 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
   await expect(
     page.getByRole("tab", { name: "Vidéo", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
-  const graphics = page.locator(".pause-dialog [data-graphics-quality]");
-  await expect(graphics).toHaveAttribute("data-graphics-quality", "high");
-  await expect(graphics).toHaveAccessibleName(
-    "Graphismes : Élevés. Passer aux graphismes faibles.",
-  );
-  await graphics.press("Space");
-  await expect(graphics).toHaveAttribute("data-graphics-quality", "low");
-  await expect(graphics).toHaveAccessibleName(
-    "Graphismes : Faibles. Passer aux graphismes élevés.",
-  );
+  const graphics = page.locator(".pause-dialog .graphics-quality");
+  await expect(graphics).toHaveAccessibleName("Graphismes");
+  const highGraphics = graphics.getByRole("radio", {
+    name: "Élevé",
+    exact: true,
+  });
+  const lowGraphics = graphics.getByRole("radio", {
+    name: "Faible",
+    exact: true,
+  });
+  await expect(graphics.getByRole("radio")).toHaveCount(2);
+  await expect(highGraphics).toBeChecked();
+  await expect(lowGraphics).not.toBeChecked();
+  await lowGraphics.press("Space");
+  await expect(lowGraphics).toBeChecked();
+  await expect(highGraphics).not.toBeChecked();
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
     "data-low-graphics",
     "true",
@@ -465,7 +471,13 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     page.getByRole("tab", { name: "Debug", exact: true }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Video", exact: true }).click();
-  await expect(graphics).toHaveAccessibleName("Graphics: Low. Switch to High.");
+  await expect(graphics).toHaveAccessibleName("Graphics");
+  await expect(
+    graphics.getByRole("radio", { name: "Low", exact: true }),
+  ).toBeChecked();
+  await expect(
+    graphics.getByRole("radio", { name: "High", exact: true }),
+  ).not.toBeChecked();
   await page.keyboard.press("Escape");
   await expect(
     page
@@ -1287,7 +1299,7 @@ test("late room pongs from timed out or closed Debug cannot become a fresh laten
     "data-room-pongs-received",
     "1",
   );
-  await expect(measuredLatency).toHaveText("—");
+  await expect(measuredLatency).toHaveText("-");
   await expect(page.locator(".room-debug-chart")).toHaveCount(0);
   await page.clock.runFor(100);
   match.pong(1);
@@ -1295,7 +1307,7 @@ test("late room pongs from timed out or closed Debug cannot become a fresh laten
     "data-room-pongs-received",
     "2",
   );
-  await expect(measuredLatency).toHaveText("—");
+  await expect(measuredLatency).toHaveText("-");
   await expect(page.locator(".room-debug-chart")).toHaveCount(0);
   await page.clock.runFor(100);
   match.pong(2);

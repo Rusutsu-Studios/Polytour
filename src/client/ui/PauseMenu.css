@@ -238,6 +238,72 @@
   gap: 28px;
 }
 
+.graphics-quality {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.graphics-quality legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.graphics-quality-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.graphics-quality-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px;
+  border: 2px solid #759ca4;
+  border-radius: 8px;
+  color: #173b45;
+  background: #fffaf0;
+  font-size: 16px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.graphics-quality-option:hover {
+  background: #e4f2e8;
+}
+
+.graphics-quality-option[data-selected="true"] {
+  border-color: #1856a7;
+  color: #fffaf0;
+  background: #236cce;
+}
+
+.graphics-quality-option[data-selected="true"]:hover {
+  background: #185dbb;
+}
+
+.graphics-quality-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #1856a7;
+}
+
+.graphics-quality-option:has(input:focus-visible) {
+  outline: 3px solid #173b45;
+  outline-offset: 4px;
+}
+
+.pause-dialog .graphics-quality-option input:focus-visible {
+  outline: none;
+}
+
 .pause-reduced-motion {
   display: flex;
   align-items: center;

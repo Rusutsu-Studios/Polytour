@@ -14,11 +14,11 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request supersedes its running checks; runs on main
-# always finish so every commit there gets a verdict.
+# New pull-request and feature-branch pushes supersede obsolete checks.
+# Runs on main and release tags always finish so each gets a verdict.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/codex/') }}
 
 env:
   WRANGLER_SEND_METRICS: "false"
@@ -154,9 +154,13 @@ jobs:
           fi
 
   e2e:
-    name: E2E (Playwright)
+    name: E2E (Playwright ${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -165,13 +169,14 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm exec playwright install --with-deps --only-shell chromium
-      # Production Worker/socket flows plus desktop client presentation tests.
+      # Split every scenario across isolated runners, one browser worker each.
+      # fully-parallel enables test-level sharding, not extra workers per runner.
       # Live drand verification runs separately because it needs a public relay.
-      - run: pnpm test:e2e --grep-invert @live
+      - run: pnpm test:e2e --grep-invert @live --fully-parallel --workers 1 --shard ${{ matrix.shard }}/3
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

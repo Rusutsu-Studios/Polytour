@@ -18,7 +18,7 @@ The board starts with Roubaix and Saint-Étienne and ends with Osaka and Tokyo.
 Resorts cost 200 k and have no buildings. Captured endpoint building costs are
 implemented; intermediate costs and rents remain provisional.
 
-## Historical verification — 1 October 2026, before the PC layout replacement
+## Historical verification - 1 October 2026, before the PC layout replacement
 
 - TypeScript, Biome, 68 unit/Worker tests and production build pass.
 - A complete game runs through four isolated Chromium contexts against the real
@@ -42,7 +42,7 @@ They do not establish the replacement PC interface's remote Preview behavior,
 public load capacity, or a main-branch production deployment. The phone rendering
 result is historical only: mobile and physical phone FPS are not current gates.
 
-## Replacement PC interface — verification, 1 October 2026
+## Replacement PC interface - verification, 1 October 2026
 
 The user now prioritizes a PC browser game with a full-screen central isometric
 board, compact player HUDs at four corners and contextual decisions. Journal,
@@ -106,7 +106,7 @@ on target PC hardware.
 No new main-branch production deployment is established by these checks. Mobile
 remains best effort; a dedicated touch adaptation is optional future work.
 
-## Immediate server dice — 1 October 2026
+## Immediate server dice - 1 October 2026
 
 The subsequent 1 October dice change makes new-room rolls immediate with fresh
 Worker Web Crypto. Drand is absent from normal new-room settings; its resolver
@@ -126,7 +126,7 @@ verifies and exports its proof, then checks that leaving it and creating a new
 room uses `secure` rather than inheriting the hidden legacy mode. Creation also
 forces the new default when “Rejouer” uses the previous render's settings.
 
-## Focused adoption from PR #12 — 1 October 2026
+## Focused adoption from PR #12 - 1 October 2026
 
 PR #15 adopts only PR #12's amount-based salary calculation. `SalaryPaid.amount`
 credits the player's current cash and debits the bank by the same value. The
@@ -149,7 +149,7 @@ real roll, verifies the button is the pointer target and clicks it normally.
 Three consecutive full executions of that UI scenario pass in **43.6 seconds**.
 No presentation or CSS change was needed.
 
-## Staged hotels and presentation refinement — 1 October 2026
+## Staged hotels and presentation refinement - 1 October 2026
 
 New rooms freeze rules version 3: an initial purchase or an upgrade from fewer
 than three houses stops at House III. Hotel purchase requires a later landing on
@@ -208,7 +208,7 @@ resort collection, 12 by triple collection, four by last standing and one by lin
 First/last turn win rates are 34.8%/14.9%. This strengthens the need for a separate
 balance pass; the construction correction does not claim to resolve that issue.
 
-## Illustrated decisions and slider settings — 1 October 2026
+## Illustrated decisions and slider settings - 1 October 2026
 
 Settings now open in a central dialog with money and festival sliders, exact
 numeric inputs, duration choices and custom rule switches. The host's explicit
@@ -267,7 +267,7 @@ seat. Empty and out-of-range inputs still normalize safely.
 The existing balance reports still apply. Target-hardware FPS has not been
 measured; this presentation change does not establish the balance targets.
 
-## Durable Object incident and clearer board — 1 October 2026
+## Durable Object incident and clearer board - 1 October 2026
 
 The user's reported Preview failure is confirmed in Cloudflare's GameRoom logs:
 `Exceeded allowed rows written in Durable Objects free tier.` The write allowance
@@ -332,7 +332,7 @@ advantages, but fair dice alone do not establish balanced strategy. Landmarks ca
 also earn less than some modified hotels. Further playtests should tune these
 values after the remaining reference prices and rents are captured.
 
-## Welcome, sliders and two languages — 1 October 2026
+## Welcome, sliders and two languages - 1 October 2026
 
 French and English now cover the interface, board labels, decisions, all 16 card
 titles/effects, tools, standings and known connection errors. Language is stored
@@ -362,7 +362,7 @@ No rules, protocol, storage schema, billing or Durable Object behavior changes i
 this follow-up. These checks use local rooms or intercepted failures, never remote
 Durable Objects. Static Preview publication does not restore the exhausted quota.
 
-## Tabletop orientation and board look — 2 October 2026
+## Tabletop orientation and board look - 2 October 2026
 
 The user asked for the board to start on the right and play to go left, like the
 classic printed board and the reference screenshots. The camera now looks at the
@@ -402,7 +402,7 @@ Verification on this machine:
 - On the two back sides, a pawn standing on the road can hide part of the price
   of its own lot; the inspector and decision dialogs still show it.
 
-## Living town in the center — 2 October 2026
+## Living town in the center - 2 October 2026
 
 The user found the middle of the board empty and asked for a livelier center
 that builds up during the match, as in familiar mobile and console property
@@ -436,7 +436,7 @@ Verification on this machine:
 - A WebGL hook counts 295 draw calls per frame with the town, against 239
   before, both including the shadow pass. Software-rendered frame rates are
   not hardware evidence; the 60 fps desktop target still needs a hardware run.
-## Property sale values and board selection — 2 October 2026
+## Property sale values and board selection - 2 October 2026
 
 New rooms freeze rules version 4 and return 100% of the nominal land and standing
 building costs when a property is sold. Existing version-2 and version-3 rooms,
@@ -471,7 +471,7 @@ Verification on this branch:
 - All 21 end-to-end scenarios pass, including the local production Worker's
   four-seat match, reconnect and legacy drand verification.
 
-## Pause menu preparation — 3 October 2026
+## Pause menu preparation - 3 October 2026
 
 Branch: `codex/pause-menu-settings`, based on `f74b053`. The pause icon opens
 Continue, Settings and Leave while the match, deadlines and Director keep
@@ -510,7 +510,7 @@ additionally cover 390x844 without horizontal overflow or player-card overlap.
 Metadata shown in these captures is a fixture.
 No remote runtime or production deployment is asserted by these local checks.
 
-## Room routing and latency diagnostics — 3 October 2026
+## Room routing and latency diagnostics - 3 October 2026
 
 Debug now joins the connected seats' Cloudflare ingress POPs and regions to their
 shared GameRoom and its local SQLite storage. The current socket's public Worker
@@ -563,7 +563,7 @@ zero health calls and zero page errors. This verifies one connection to a branch
 Preview, not a geographically distributed group or production deployment. The
 previously recorded remote SQLite quota blockage is no longer present in this check.
 
-## Five-second match HUD and concise room details — 3 October 2026
+## Five-second match HUD and concise room details - 3 October 2026
 
 The user's follow-up makes the static HTTP badge a live match indicator: it
 refreshes every five seconds even with Debug closed, while the game connection is
@@ -586,7 +586,7 @@ removed labels are absent in FR/EN; captures at 1280x720, 1440x900, 1920x1080 an
 390x844 retain usable layout without horizontal overflow. Some clock-controlled
 fixtures leave the 3D backdrop unrendered; their diagnostic values are illustrative.
 
-## Integration with current main — 3 October 2026
+## Integration with current main - 3 October 2026
 
 Merge `8d8530f` into the pause/settings branch. The new country board, central town,
 title-deed inspection, board destination/sale selection, player turn timers and
@@ -614,7 +614,7 @@ Mobile/touch adaptation and physical phone performance are optional later work,
 separate from completing the current PC checkpoint.
 
 
-## Combined PR integration — 3 October 2026
+## Combined PR integration - 3 October 2026
 
 The candidate composes PRs #19, #21–24, #26–28 and #47. New rooms use rules
 version 5 and protocol version 3. Version-2/3 saves and pre-existing lobbies keep
@@ -652,7 +652,7 @@ production publication, hardware frame rate or human-playtest balance. With a
 20-round simulation cap, 95% of reference and 91% of prototype matches reach the
 cap; the small sample is a correctness check, not proof of a balanced economy.
 
-## Nickname-only invitation entry — 3 October 2026
+## Nickname-only invitation entry - 3 October 2026
 
 Invitation links open a focused nickname form and the board preview. Enter joins
 the invited room; bot play, room creation and room settings are absent from this
@@ -678,7 +678,7 @@ Local verification:
 These results use the local Worker. They do not establish a production deployment.
 
 
-## Pause settings integration with graphics and room protection — 3 October 2026
+## Pause settings integration with graphics and room protection - 3 October 2026
 
 The integration retains main through `3f74335`: nickname-only invitations,
 card catalogue and saved-economy explanations, application version, town
@@ -713,3 +713,36 @@ Local verification:
 
 These are local integration checks. GitHub CI and remote deployment verification
 are recorded in the pull request separately.
+
+## Match controls and room portraits — 3 October 2026
+
+During a match, Pause > Settings > Video is the only graphics-quality control,
+with High and Low choices side by side. The toolbar magnifier is removed.
+Clicked-space details retain the deed and close controls, without previous/next
+navigation. Board clicks, keyboard access and forced-sale selection remain usable.
+The room panel shows every occupied seat's avatar and name, marks the current
+leader and allows that leader to choose another eligible human. The shared avatar
+renderer accepts an optional custom portrait and falls back to the pawn on failure.
+
+Local verification on the branch based on `2d27b37`:
+
+- TypeScript, Biome and all 285 unit/Worker tests pass.
+- All 49 standard browser scenarios pass across local dev and production-build
+  runs. Existing lobby tests now wait for each command's server acknowledgment,
+  rather than issuing another command as soon as the preceding lobby update arrives.
+- A real Alice/Bea/Cora/bot room transfers leadership Alice → Cora → Alice during
+  play. Both browser clients receive the new role and permissions; local players
+  and bots remain ineligible, and pending transfers disable the portrait choices.
+- Graphics switching, keyboard radio selection, persisted quality, a real roll
+  and reconnection pass. French and English labels remain usable.
+- Room and Video captures fit 1280×720, 1440×900 and 1920×1080. Existing sale,
+  decision and menu layout scenarios also cover 2560×1440 and 3840×2160.
+- The production build, bundle budgets, Wrangler configuration, version check
+  and deployment dry run pass. The initial lobby JavaScript is 197.7 kB gzip.
+- After integrating the `d9e1c82` release-workflow update from main, version 0.2.1
+  is prepared and validated against that base; all 28 release-tooling tests pass.
+
+The mechanical design detector retains advisories about the established toy-game
+palette, compact typography and physical-control styling. Browser captures provide
+the visual acceptance evidence. These results establish local behavior; production
+publication has not been performed for this change.

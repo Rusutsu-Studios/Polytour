@@ -5,7 +5,7 @@ diagnostic metadata use a discriminated union on `type`, defined once with Zod i
 `src/shared/protocol/` and imported by both client and worker. A fixed pair of
 transport-only debug ping/pong strings is described below. Binary encoding
 (e.g. MessagePack) is a later
-optimization only if profiling says so — messages are small and infrequent.
+optimization only if profiling says so - messages are small and infrequent.
 
 ## Implemented playable protocol
 
@@ -36,6 +36,18 @@ debug socket has been removed; `/api/health` remains.
   list instead and returns `seat: null`. `room-full` (409) means four people already
   hold the places, or six people already wait. Creation limits do not apply to
   joining, reconnecting or moves.
+- `POST /api/rooms/:code/leave`, authenticated with `Authorization: Bearer <token>`,
+  returns 200 and `{ok:true}` after departure. In a lobby it releases the device's
+  seat and local players, revokes its capability and closes all its sockets with
+  1008 (`Left room`). The leader passes to the first remaining online person with
+  their own device, or the first remaining device if all are offline. Approved,
+  connected waiting members take released places. With no devices left the room
+  unlocks and admits waiting members; the next person seated becomes leader.
+  Waiting members can leave and revoke their membership during any room phase.
+  During a match, seated devices retain their places and capability, close all
+  their sockets and receive the usual grace for every local player too. Temporary
+  socket disconnection keeps lobby seats and leadership for reconnect. The client
+  clears credentials only after confirmation (or 401/404 when already unavailable).
 - `/api/health`, `/api/rooms/:code/health` and `/api/queues/:mode/health` report
   service liveness directly from the Worker, without a Durable Object lookup.
   Room health validates the code format but does not establish that a room exists.
@@ -321,7 +333,7 @@ type QueueServerMessage =
 
 `welcome` includes `protocolVersion`. On mismatch the client shows "Update
 available" and reloads (the service worker fetches the new build). Never deploy a
-protocol change that old clients can misread silently — bump the version.
+protocol change that old clients can misread silently - bump the version.
 
 Every deploy restarts the Durable Objects and drops their WebSockets, so every open
 client reconnects to the new code within seconds. That reconnect's `welcome` is

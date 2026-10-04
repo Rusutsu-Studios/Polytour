@@ -69,7 +69,7 @@ flowchart LR
   hidden, it snaps straight to `serverState`.
 - **Tab hidden:** `document.visibilitychange` → snap on return, don't queue minutes of animation.
 - **Decision UI** appears only when the Director has drained the events that led to
-  the decision — so the purchase panel never appears before the pawn lands.
+  the decision - so the purchase panel never appears before the pawn lands.
   Identify the actual `pending.seat`, including off-turn forced payments, and
   keep tile name, owner, price and rent beside the available actions.
 - **Forced sales** keep the board interactive. Eligible owned properties receive
@@ -90,7 +90,7 @@ flowchart LR
 | `SalaryPaid` | Start tile flares; coins arc into the player's corner HUD; counter rolls up. | 0.8 s |
 | `PropertyBought` | Ownership flag/tile border sweeps in the player's color; land plot "unfolds". | 0.7 s |
 | `PropertyUpgraded` | Building rises out of the tile with overshoot (elastic ease), dust puff particles, a thunk + sparkle sound. | 0.9 s |
-| Landmark | Slow-mo: camera pushes in, landmark rises, beam of light, confetti in owner color, choir hit. The most expensive moment — earn it. | 2.0 s |
+| Landmark | Slow-mo: camera pushes in, landmark rises, beam of light, confetti in owner color, choir hit. The most expensive moment - earn it. | 2.0 s |
 | `RentPaid` | Coins burst from the payer's pawn, stream along a bezier to the owner's corner HUD. Coin count scales (log) with amount. Big rents: screen-edge red flash, heavier coin sound, both counters tick. | 1.0–1.6 s |
 | `BoughtOut` | Owner's flag tears away, buyer's color sweeps into the tile; "SOLD!" stamp; the old owner's corner HUD reacts. | 1.2 s |
 | `ChampionshipHosted` | Stadium lights sweep the board, spotlight locks on the host city, multiplier badge (×2, ×3…) slams onto it and stays floating. | 1.5 s |
@@ -176,7 +176,8 @@ gives the cost and rent of every building level, with the current one marked. A
 city's festival or full-country bonus adds its own column. Resorts list their
 rent by how many resorts the owner holds. Every figure comes from the shared
 engine (`propertyRentAt`, `rentBoost`, `buyoutPrice`), never from UI arithmetic.
-Every space opens at the same size, so the step arrows stay under the pointer.
+Every space opens at the same size. The card describes only the clicked space;
+close it and select another space on the board to inspect that space.
 Escape, the close button or a backdrop click closes it.
 
 The Director now has a separate DOM presenter alongside its scene animator.
@@ -220,7 +221,7 @@ The server decides the dice. The client must *show* those exact values.
 | Camera moves | GSAP | `power3.inOut` (or `expo.inOut` for big pushes) | 0.6–1.2 s |
 | Pawn hops | GSAP | custom hop ease; squash 0.85/1.15 on land | 0.28 s |
 | HUD money counters | Motion (`animate()`) | `easeOut`, duration scales with log(amount) | 0.4–1.0 s |
-| UI panels | Motion | spring, `stiffness 400, damping 30` | — |
+| UI panels | Motion | spring, `stiffness 400, damping 30` | - |
 
 Game-event budgets are at 1× and divide by the Director's per-event `playbackRate`
 only during automatic catch-up. UI transitions keep their normal durations.
@@ -247,9 +248,9 @@ Consistency matters more than any single animation: reuse these presets from
   Low graphics, reduced motion and lobby previews skip it and render only on demand.
 - The prototype's optional **Low graphics** setting uses DPR 1 and disables live
   shadows and pauses decorative town and selection motion. Game-event animations
-  remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. The compact monitor
-  button shows High/Low and switches in one click before joining and in the match
-  toolbar; View and animation shows the same saved local preference. See
+  remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. Before joining,
+  a compact monitor button switches High/Low. During a match, Pause > Video
+  presents High and Low as two side-by-side choices for the same saved preference. See
   [PERFORMANCE.md](PERFORMANCE.md) for the software-rendering comparison and limits.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated

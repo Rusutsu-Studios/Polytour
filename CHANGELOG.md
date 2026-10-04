@@ -23,6 +23,41 @@ has been published, and it does not reconstruct earlier development history.
 - Keep the settings footer within short desktop viewports while longer settings
   content scrolls.
 
+## [0.4.4] - 2026-10-03
+
+### Changed
+
+- Refresh French/English welcome copy, show creator credits and a GitHub link,
+  and use simple hyphens in titles and unavailable-value labels (#90).
+
+## [0.4.3] - 2026-10-03
+
+### Fixed
+
+- The room lobby board fills its preview instead of shrinking into a short canvas (#82).
+
+## [0.4.2] - 2026-10-03
+
+### Fixed
+
+- Leaving a lobby releases the player's places and room connections and passes
+  leadership to another player, including rooms with local or waiting players (#81).
+
+## [0.4.1] - 2026-10-03
+
+### Changed
+
+- During a match, graphics quality lives only in Pause > Video, with separate
+  High and Low choices. Removed the toolbar magnifier and previous/next arrows
+  from clicked-space details (#80).
+- Room leaders choose a successor from compact player portraits in the room
+  panel. The shared avatar renderer also accepts future custom portraits (#80).
+
+### Fixed
+
+- Run the complete browser suite in three isolated CI shards and cancel superseded branch checks to reduce waiting.
+- Keep protocol-only browser clients independent of 3D rendering during authoritative match checks.
+
 ## [0.4.0] - 2026-10-03
 
 ### Added

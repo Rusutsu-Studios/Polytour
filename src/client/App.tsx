@@ -71,6 +71,7 @@ import {
   LobbySeats,
   PlayerAvatar,
   ReturnToLobby,
+  RoomLeaderPicker,
   RoomLock,
   WaitingNotice,
   WaitingRoom,
@@ -186,6 +187,7 @@ function MatchResults({
   onLobby,
   onLeave,
   onJournal,
+  leaving,
 }: {
   players: readonly PlayerState[];
   result: NonNullable<PublicState["result"]>;
@@ -196,6 +198,7 @@ function MatchResults({
   onLobby: () => void;
   onLeave: () => void;
   onJournal: (button: HTMLButtonElement) => void;
+  leaving: boolean;
 }) {
   const winner = players.find((player) => player.seat === result.winner);
   const winnerWealth =
@@ -249,7 +252,11 @@ function MatchResults({
         ))}
       </ol>
       {leader ? (
-        <ReturnToLobby finished disabled={disabled} onConfirm={onLobby} />
+        <ReturnToLobby
+          finished
+          disabled={disabled || leaving}
+          onConfirm={onLobby}
+        />
       ) : (
         <p className="results-leader-note">
           {t(
@@ -258,7 +265,12 @@ function MatchResults({
           )}
         </p>
       )}
-      <button type="button" className="button secondary" onClick={onLeave}>
+      <button
+        type="button"
+        className="button secondary"
+        onClick={onLeave}
+        disabled={leaving}
+      >
         {t("Quitter la salle", "Leave the room")}
       </button>
       <button
@@ -830,12 +842,12 @@ function MatchView({
   const networkPoint =
     cloudflarePing.status === "success"
       ? (cloudflarePing.value.colo ??
-        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "—"))
-      : "—";
+        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "-"))
+      : "-";
   const networkLatency =
     cloudflarePing.status === "success"
       ? `${cloudflarePing.value.latencyMs} ms`
-      : "— ms";
+      : "- ms";
   const pauseTrigger = useRef<HTMLButtonElement | null>(null);
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
@@ -888,6 +900,7 @@ function MatchView({
   const saleBlocked =
     busy ||
     room.pending ||
+    room.leaving ||
     room.connection !== "online" ||
     (room.randomness !== null && room.randomness.status !== "resolved");
   // A new decision or recovered snapshot requires a fresh, deliberate choice.
@@ -1153,20 +1166,6 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t("Explorer le plateau", "Inspect the board")}
-          title={t("Explorer le plateau", "Inspect the board")}
-          aria-expanded={inspectorOpen}
-          onClick={(event) => {
-            overlayTrigger.current = event.currentTarget;
-            setInspectorOpen((value) => !value);
-            setTool(null);
-          }}
-        >
-          <Icon name="search" size={18} />
-        </button>
-        <button
-          type="button"
-          className="game-tool-button"
           aria-label={t("Réglages de la partie", "Game settings")}
           title={t("Réglages de la partie", "Game settings")}
           aria-expanded={tool === "rules"}
@@ -1174,11 +1173,6 @@ function MatchView({
         >
           <Icon name="settings" size={18} />
         </button>
-        <GraphicsToggle
-          lowGraphics={lowGraphics}
-          onChange={onGraphicsChange}
-          compact
-        />
         <button
           type="button"
           className="game-tool-button"
@@ -1343,6 +1337,7 @@ function MatchView({
               onLobby={room.returnToLobby}
               onLeave={onLeave}
               onJournal={(button) => showTool("journal", button)}
+              leaving={room.leaving}
             />
           </motion.section>
         ) : (
@@ -1404,7 +1399,6 @@ function MatchView({
           state={game}
           seat={controlSeat}
           selected={selected}
-          onSelect={onSelect}
           onClose={closeTools}
         />
       )}
@@ -1538,40 +1532,6 @@ function MatchView({
                       disabled={room.connection !== "online"}
                       onChange={room.lock}
                     />
-                    {(room.lobby?.seats ?? []).some(
-                      (entry) =>
-                        entry.control === "human" &&
-                        entry.controller === null &&
-                        entry.seat !== own,
-                    ) && (
-                      <ul className="leader-transfer">
-                        {(room.lobby?.seats ?? [])
-                          .filter(
-                            (entry) =>
-                              entry.control === "human" &&
-                              entry.controller === null &&
-                              entry.seat !== own,
-                          )
-                          .map((entry) => (
-                            <li key={entry.seat}>
-                              <span>{entry.name}</span>
-                              <button
-                                type="button"
-                                className="seat-promote"
-                                disabled={room.connection !== "online"}
-                                aria-label={t(
-                                  `Nommer ${entry.name} chef de salle`,
-                                  `Make ${entry.name} the room leader`,
-                                )}
-                                onClick={() => room.transferHost(entry.seat)}
-                              >
-                                <Icon name="crown" size={13} />
-                                {t("Nommer chef", "Make leader")}
-                              </button>
-                            </li>
-                          ))}
-                      </ul>
-                    )}
                     <ReturnToLobby
                       finished={game.status === "finished"}
                       disabled={room.connection !== "online"}
@@ -1585,10 +1545,22 @@ function MatchView({
                   <p className="leader-note">
                     <Icon name="crown" size={14} />
                     {t(
-                      `Chef de salle : ${leaderName ?? "—"}`,
-                      `Room leader: ${leaderName ?? "—"}`,
+                      `Chef de salle : ${leaderName ?? "-"}`,
+                      `Room leader: ${leaderName ?? "-"}`,
                     )}
                   </p>
+                )}
+                {room.lobby && (
+                  <RoomLeaderPicker
+                    lobby={room.lobby}
+                    leader={leader}
+                    disabled={
+                      room.pending ||
+                      room.leaving ||
+                      room.connection !== "online"
+                    }
+                    onTransferHost={room.transferHost}
+                  />
                 )}
               </div>
             )}
@@ -1623,7 +1595,10 @@ function MatchView({
             setPauseOpen(false);
             pauseTrigger.current?.focus();
           }}
-          onLeave={onLeave}
+          onLeave={() => {
+            setPauseOpen(false);
+            onLeave();
+          }}
           zoom={zoom}
           onZoom={onZoom}
           lowGraphics={lowGraphics}
@@ -1761,7 +1736,8 @@ function App() {
       setLoading(false);
     }
   }
-  function leave() {
+  async function leave(): Promise<boolean> {
+    if (!(await room.leave())) return false;
     forgetCredentials();
     setCredentials(null);
     setInvitationCode(null);
@@ -1771,6 +1747,7 @@ function App() {
     director.reset(null);
     setSelected(null);
     window.history.replaceState(null, "", window.location.pathname);
+    return true;
   }
   async function copyRoom() {
     if (!credentials) return;
@@ -1789,7 +1766,7 @@ function App() {
   const debug = new URLSearchParams(window.location.search).has("debug");
   // Room controls stay steady while a quick change awaits its answer: the
   // room hook already drops a second command until the first is answered.
-  const roomOffline = room.connection !== "online";
+  const roomOffline = room.leaving || room.connection !== "online";
   const starting = room.pendingOp === "start";
   const previewConfig: GameConfig = {
     ...config,
@@ -1837,10 +1814,12 @@ function App() {
               <button
                 type="button"
                 className="text-button"
-                disabled={loading}
-                onClick={leave}
+                disabled={loading || room.leaving}
+                onClick={() => void leave()}
               >
-                {t("Quitter", "Leave")}
+                {room.leaving
+                  ? t("Départ en cours…", "Leaving…")
+                  : t("Quitter", "Leave")}
               </button>
             )}
           </div>
@@ -1868,8 +1847,8 @@ function App() {
               <h1>{t("Nouvelle partie", "New game")}</h1>
               <p className="welcome-intro">
                 {t(
-                  "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
-                  "Buy the cities you land on, build and collect rent.",
+                  "Achetez. Construisez. Améliorez. Encaissez.",
+                  "Buy. Build. Upgrade. Collect.",
                 )}
               </p>
               <div className="welcome-form">
@@ -2150,7 +2129,7 @@ function App() {
           onGraphicsChange={changeGraphics}
           copied={copied}
           copyRoom={copyRoom}
-          onLeave={leave}
+          onLeave={() => void leave()}
           onHelp={() => setHelpOpen(true)}
           debug={debug}
         />
@@ -2171,6 +2150,7 @@ function App() {
               type="button"
               className="text-button"
               onClick={room.reconnect}
+              disabled={room.leaving}
             >
               {t("Reconnecter", "Reconnect")}
             </button>
@@ -2193,10 +2173,14 @@ function App() {
       />
       {!isGame && (
         <footer className="lobby-footer">
-          <span>
-            {t("2 à 4 joueurs · 32 cases", "2 to 4 players · 32 spaces")}
-          </span>
-          <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
+          <span>{t("Crée par Poli & GJJS", "Made by Poli & GJJS")}</span>
+          <a
+            href="https://github.com/Rusutsu-Studios/Polytour/"
+            target="_blank"
+            rel="noopener"
+          >
+            {t("Voir sur GitHub", "View on GitHub")}
+          </a>
           <Changelog />
         </footer>
       )}
