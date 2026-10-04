@@ -44,28 +44,26 @@ jobs:
       - name: Check release version and changelog
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-          REQUIRE_BUMP: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         run: |
-          # A feature branch's previous prepared release is still a draft.
-          # Check shipped history against main, especially after resolving a
-          # version collision with another merged PR.
+          # Feature branches add a changelog.d/ fragment and never touch the
+          # version or CHANGELOG.md, so merged PRs cannot collide. Only a
+          # release (pnpm release:prepare) bumps the version.
+          pnpm check:fragments
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
             git fetch --no-tags --depth=1 origin main
             BASE_SHA=origin/main
-            REQUIRE_BUMP=true
           fi
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
             if [ "$BASE_SHA" != "origin/main" ]; then
               git fetch --no-tags --depth=1 origin "$BASE_SHA"
             fi
-            if [ "$REQUIRE_BUMP" = "true" ]; then
-              pnpm check:version --base "$BASE_SHA" --require-bump
-            else
-              pnpm check:version --base "$BASE_SHA"
+            pnpm check:version --base "$BASE_SHA"
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ] || [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
+              pnpm check:fragments --base "$BASE_SHA"
             fi
           else
-            if [ "$REQUIRE_BUMP" = "true" ]; then
-              echo "::error::PR and merge-queue version checks require a base commit."
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ] || [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
+              echo "::error::PR and merge-queue release-note checks require a base commit."
               exit 1
             fi
             pnpm check:version
