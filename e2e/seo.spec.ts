@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const CANONICAL_URL = "https://polytour.fun/";
 const SOCIAL_IMAGE_URL = `${CANONICAL_URL}social-card.png`;
-const FR_TITLE = "Polytour — Jeu de plateau multijoueur en ligne";
-const EN_TITLE = "Polytour — Online Multiplayer Board Game";
+const FR_TITLE = "Polytour - Jeu de plateau multijoueur en ligne";
+const EN_TITLE = "Polytour - Online Multiplayer Board Game";
 const FR_DESCRIPTION =
   "Jouez à Polytour, un jeu de plateau immobilier pour 2 à 4 joueurs. Achetez des villes, construisez et jouez entre amis ou contre des bots dans votre navigateur.";
 const EN_DESCRIPTION =

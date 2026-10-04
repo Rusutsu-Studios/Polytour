@@ -842,12 +842,12 @@ function MatchView({
   const networkPoint =
     cloudflarePing.status === "success"
       ? (cloudflarePing.value.colo ??
-        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "—"))
-      : "—";
+        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "-"))
+      : "-";
   const networkLatency =
     cloudflarePing.status === "success"
       ? `${cloudflarePing.value.latencyMs} ms`
-      : "— ms";
+      : "- ms";
   const pauseTrigger = useRef<HTMLButtonElement | null>(null);
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
@@ -1545,8 +1545,8 @@ function MatchView({
                   <p className="leader-note">
                     <Icon name="crown" size={14} />
                     {t(
-                      `Chef de salle : ${leaderName ?? "—"}`,
-                      `Room leader: ${leaderName ?? "—"}`,
+                      `Chef de salle : ${leaderName ?? "-"}`,
+                      `Room leader: ${leaderName ?? "-"}`,
                     )}
                   </p>
                 )}
@@ -1852,8 +1852,8 @@ function App() {
               <h1>{t("Nouvelle partie", "New game")}</h1>
               <p className="welcome-intro">
                 {t(
-                  "Achetez les villes où vous vous arrêtez, construisez et encaissez les loyers.",
-                  "Buy the cities you land on, build and collect rent.",
+                  "Achetez. Construisez. Améliorez. Encaissez.",
+                  "Buy. Build. Upgrade. Collect.",
                 )}
               </p>
               <div className="welcome-form">
@@ -2178,10 +2178,14 @@ function App() {
       />
       {!isGame && (
         <footer className="lobby-footer">
-          <span>
-            {t("2 à 4 joueurs · 32 cases", "2 to 4 players · 32 spaces")}
-          </span>
-          <span>{t("Aucun bonus payant", "No paid bonuses")}</span>
+          <span>{t("Crée par Poli & GJJS", "Made by Poli & GJJS")}</span>
+          <a
+            href="https://github.com/Rusutsu-Studios/Polytour/"
+            target="_blank"
+            rel="noopener"
+          >
+            {t("Voir sur GitHub", "View on GitHub")}
+          </a>
           <Changelog />
         </footer>
       )}

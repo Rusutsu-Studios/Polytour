@@ -13,7 +13,7 @@ New rooms (rules version 6, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
-in `src/shared/board/` as config and get checked with the simulator (`pnpm sim`) —
+in `src/shared/board/` as config and get checked with the simulator (`pnpm sim`) -
 never hard-code them in logic. See [REFERENCE_PARITY.md](REFERENCE_PARITY.md) for
 the sources and the values that remain interpolated.
 
@@ -196,7 +196,7 @@ it to the bank.
   - **Pay 200,000** (prototype: 100,000; legal only with enough cash): released,
     then a normal roll. A double on that roll grants the usual extra roll.
   - **Escape roll** (free; also the timeout default): a double releases the pawn and
-    those same dice move it — there is no second roll, and an escape roll never
+    those same dice move it - there is no second roll, and an escape roll never
     grants an extra roll. A non-double increments `islandTurns` and ends the turn
     without moving.
 
@@ -295,11 +295,11 @@ lands it on World Tour, even in the middle of a doubles streak.
 
 ## Win conditions and standings
 
-1. **Last standing** — every other player is bankrupt.
-2. **Triple Monopoly** — own every city of any 3 countries; enabled by default, configurable.
-3. **Line Monopoly** — own every city and resort on one side; enabled by default, configurable.
-4. **Resort Monopoly** — own all 4 resorts.
-5. **Time limit / round cap** — highest net worth (cash + invested value) wins.
+1. **Last standing** - every other player is bankrupt.
+2. **Triple Monopoly** - own every city of any 3 countries; enabled by default, configurable.
+3. **Line Monopoly** - own every city and resort on one side; enabled by default, configurable.
+4. **Resort Monopoly** - own all 4 resorts.
+5. **Time limit / round cap** - highest net worth (cash + invested value) wins.
 
 Check instant wins after any change of ownership (purchase, buyout, Land Swap, sale)
 and after any forced-sell or bankruptcy phase has completed, never while a
@@ -501,7 +501,7 @@ cap. The reference rules were adopted together at the user's request; their
 
 ## Modes (roadmap)
 
-- **Private room** (friends, room code, bots optional) — implemented in this prototype.
-- **Quick match** (2p / 4p, matchmaking) — Phase 4.
-- **Ranked** (rating per mode) — Phase 7.
-- **2v2 teams** (shared win conditions, can't pay rent to teammates) — Phase 7.
+- **Private room** (friends, room code, bots optional) - implemented in this prototype.
+- **Quick match** (2p / 4p, matchmaking) - Phase 4.
+- **Ranked** (rating per mode) - Phase 7.
+- **2v2 teams** (shared win conditions, can't pay rent to teammates) - Phase 7.

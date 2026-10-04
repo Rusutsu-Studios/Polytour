@@ -23,6 +23,13 @@ has been published, and it does not reconstruct earlier development history.
   Saved version-1 matches load with their net ledger booked as received or paid
   out, so their totals start from the balance (#60).
 
+## [0.4.4] - 2026-10-03
+
+### Changed
+
+- Refresh French/English welcome copy, show creator credits and a GitHub link,
+  and use simple hyphens in titles and unavailable-value labels (#90).
+
 ## [0.4.3] - 2026-10-03
 
 ### Fixed

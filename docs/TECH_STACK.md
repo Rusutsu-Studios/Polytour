@@ -14,7 +14,7 @@ versions at scaffold time and record them in `package.json`; this doc records th
 | Game server | **Durable Objects** (SQLite, Hibernation API, alarms) | One actor per match = no locking, no race conditions, sockets + state co-located. | Colyseus/Node servers (you run and scale them), Firebase/Supabase realtime (no authoritative logic next to the state). |
 | HTTP routing | **Hono** | Tiny, typed, built for Workers. | itty-router (fewer batteries), raw `fetch` switch (fine but grows messy). |
 | Validation | **Zod 4** | Single schema → runtime check + TS type, shared by client and server. | Valibot (smaller; switch if client bundle budget gets tight). |
-| DB access | **Drizzle ORM** on D1 | Typed SQL, thin, good D1 support and migrations. | Prisma (heavier on Workers), raw SQL (OK for the DO's own tables — use raw SQL there). |
+| DB access | **Drizzle ORM** on D1 | Typed SQL, thin, good D1 support and migrations. | Prisma (heavier on Workers), raw SQL (OK for the DO's own tables - use raw SQL there). |
 | Build | **Vite + `@cloudflare/vite-plugin`** | Worker + DOs run in real `workerd` during `pnpm dev`, with HMR for the client. | Separate Wrangler + Vite processes. |
 | UI framework | **React 19** | Largest ecosystem for 3D (R3F) and UI motion; team familiarity. | Svelte/Solid (great, but R3F/drei ecosystem is the deciding factor). |
 | 3D rendering | **React Three Fiber + drei** (Three.js) | Declarative scene graph, huge helper library (cameras, shadows, text, performance monitor, instancing, glTF loaders). | PixiJS 2D (see below), Babylon.js (heavier, less React-native), PlayCanvas (editor-centric). |
@@ -51,7 +51,7 @@ games comes from things that are cheap in 3D and expensive in 2D:
   readable pawn hops; optional action shots return to that frame.
 - Buildings that physically rise out of tiles with real lighting and soft shadows.
 - Dice that tumble and land with contact shadows.
-- One set of models works at any resolution and camera angle — no redrawing sprites
+- One set of models works at any resolution and camera angle - no redrawing sprites
   for every building level and rotation.
 
 Three.js remains the chosen renderer for the PC prototype. Reconsider **PixiJS v8**
@@ -100,4 +100,4 @@ criterion is required for this prototype.
   design a desktop acceptance criterion. A dedicated mobile/PWA adaptation can
   later add touch controls, audio unlocking and optional haptics.
 - If app-store presence is needed later, wrap the same build with **Capacitor**.
-  Nothing in the stack blocks this — keep native-only features behind feature checks.
+  Nothing in the stack blocks this - keep native-only features behind feature checks.
