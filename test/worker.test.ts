@@ -1620,6 +1620,82 @@ describe("Authoritative private rooms", () => {
     ).toBe(true);
   });
 
+  it.each(["easy", "medium", "hard"] as const)(
+    "persists %s bot difficulty through settings, start, reconnect and alarm",
+    async (level) => {
+      const host = await create("secure", 1);
+      const socket = await connect(host);
+      const welcome = await socket.next("welcome");
+      socket.send({
+        type: "lobby",
+        id: "difficulty",
+        op: {
+          type: "settings",
+          config: { ...welcome.lobby.config, botDifficulty: level },
+        },
+      });
+      expect(await answer(socket, "difficulty")).toBe("ack");
+      socket.send({
+        type: "lobby",
+        id: "start-level",
+        op: { type: "start", fillBots: false },
+      });
+      expect(await answer(socket, "start-level")).toBe("ack");
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        const state = JSON.parse(row.json) as GameState;
+        expect(state.config.botDifficulty).toBe(level);
+        durableState.storage.sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...state,
+            activeSeat: 1,
+            players: state.players.map((player) =>
+              player.seat === 1 ? { ...player, position: 1 } : player,
+            ),
+            pending: {
+              kind: "buy",
+              seat: 1,
+              tile: 1,
+              maxLevel: 2,
+              deadline: Date.now() + 30_000,
+            },
+          }),
+        );
+        durableState.storage.sql.exec(
+          "DELETE FROM timers WHERE kind IN ('bot','decision')",
+        );
+        durableState.storage.sql.exec(
+          "INSERT INTO timers(kind,fire_at) VALUES('bot',?)",
+          Date.now() - 1,
+        );
+      });
+      const resumed = await connect(host);
+      const recovered = await resumed.next("welcome");
+      expect(recovered.snapshot?.config.botDifficulty).toBe(level);
+      await runInDurableObject(stub, async (_instance, durableState) => {
+        durableState.storage.sql.exec(
+          "UPDATE timers SET fire_at=? WHERE kind='bot'",
+          Date.now() - 1,
+        );
+        await durableState.storage.setAlarm(Date.now() - 1);
+      });
+      expect(await runDurableObjectAlarm(stub)).toBe(true);
+      const batch = await resumed.next("events");
+      expect(batch.events).toContainEqual(
+        expect.objectContaining({
+          type: "PropertyBought",
+          seat: 1,
+          tile: 1,
+          level: level === "easy" ? 0 : 2,
+        }),
+      );
+    },
+  );
+
   it("rejects wrong-seat, malformed and stale intents without changing money or sequence", async () => {
     const { inboxes, state, seq } = await startFour();
     const wrongSeat = ((state.activeSeat + 1) % 4) as Seat;
