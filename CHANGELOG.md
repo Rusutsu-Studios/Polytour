@@ -9,6 +9,18 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-10-04
+
+### Fixed
+
+- Money flies to and from the tile it belongs to instead of the Start tile: a
+  purchase or upgrade is paid into its city, a sale refunds from it, and taxes,
+  the island fee, the World Tour fare and the championship fee are paid on their
+  own tile (#89).
+- The Start salary is paid the moment the pawn passes Start, with a "+400K"
+  floating up from the tile and fading, instead of after the whole move or
+  World Tour flight has finished (#88, #89).
+
 ## [0.4.4] - 2026-10-03
 
 ### Changed
