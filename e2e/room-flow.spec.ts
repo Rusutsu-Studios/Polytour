@@ -271,7 +271,7 @@ for (const viewport of [
       await expect(guestPage.locator(".host-label")).toHaveCount(1);
       await expect(guestPage.locator(".waiting-host")).toHaveCount(0);
       await expect(
-        guestPage.getByRole("button", { name: "Add a bot to seat 1" }),
+        guestPage.getByRole("button", { name: "Add a bot to seat 2" }),
       ).toBeEnabled();
       // The promoted host and freed seat must survive snapshot recovery too.
       await guestPage.reload();
@@ -279,7 +279,7 @@ for (const viewport of [
         "Room connected",
       );
       await expect(
-        guestPage.getByRole("button", { name: "Add a bot to seat 1" }),
+        guestPage.getByRole("button", { name: "Add a bot to seat 2" }),
       ).toBeEnabled();
 
       const replacementResponse = await request.post(
@@ -288,7 +288,10 @@ for (const viewport of [
       );
       expect(replacementResponse.status()).toBe(200);
       const replacement: RoomCredentials = await replacementResponse.json();
-      expect(replacement.seat).toBe(host.seat);
+      expect(replacement.seat).toBe(1);
+      await expect(guestPage.locator(".lobby-seat").first()).toContainText(
+        "Next host",
+      );
       expect(replacement.token).not.toBe(host.token);
       const staleLeave = await request.post(
         `/api/rooms/${host.roomCode}/leave`,
