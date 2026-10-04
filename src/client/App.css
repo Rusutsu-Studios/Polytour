@@ -2181,10 +2181,20 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   font-size: 11px;
   color: #335b55;
 }
-.journal li::before {
-  content: "·";
-  margin-right: 8px;
-  color: #4e786a;
+.journal li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+.journal li > svg {
+  margin-top: 1px;
+}
+.journal-event-text {
+  font-variant-numeric: tabular-nums;
+}
+.journal-player {
+  font-weight: 700;
 }
 .journal > p {
   font-size: 12px;

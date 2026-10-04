@@ -4,6 +4,7 @@ import {
   DEFAULT_GAME_CONFIG,
   type GameEvent,
   type PublicState,
+  type SeatInfo,
   toPublic,
 } from "../src/shared/engine/index.js";
 import {
@@ -60,15 +61,22 @@ for (const entry of ["play", "join", "invitation"] as const) {
   });
 }
 
-async function decisionRoom(page: Page, cash = 2_000_000) {
+async function decisionRoom(
+  page: Page,
+  cash = 2_000_000,
+  names = ["Camille", "Atlas"],
+) {
   const now = Date.now();
   const base = toPublic(
     createGame(
       { ...DEFAULT_GAME_CONFIG, decisionSeconds: 60, festivalCount: 0 },
-      [
-        { playerId: "ui-test-0", name: "Camille", control: "human" },
-        { playerId: "ui-test-1", name: "Atlas", control: "bot" },
-      ],
+      names.map(
+        (name, seat): SeatInfo => ({
+          playerId: `ui-test-${seat}`,
+          name,
+          control: seat === 0 ? "human" : "bot",
+        }),
+      ),
       35,
       { now },
     ).state,
@@ -147,7 +155,7 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
     });
   });
   await page.goto("/");
-  await page.getByLabel("Votre nom de joueur").fill("Camille");
+  await page.getByLabel("Votre nom de joueur").fill(names[0]);
   await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".decision-popup[open]")).toBeVisible();
   return {
@@ -354,6 +362,131 @@ for (const size of [
     await expect(
       page.getByRole("button", { name: "Game log", exact: true }),
     ).toBeFocused();
+  });
+}
+
+for (const locale of ["fr", "en"] as const) {
+  test(`game log uses action icons, dice totals and seat colors in ${locale}`, async ({
+    page,
+  }) => {
+    const names = ["Test", "Nova", "Nova", "<b>Nova</b> & Test"];
+    const room = await decisionRoom(page, 2_000_000, names);
+    await page.keyboard.press("Escape");
+    if (locale === "en") {
+      await page
+        .getByRole("button", { name: "Menu pause", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Réglages", exact: true }).click();
+      await page
+        .locator(".pause-dialog")
+        .getByLabel("Langue", { exact: true })
+        .selectOption("en");
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+    }
+    await page
+      .getByRole("button", {
+        name: locale === "fr" ? "Carnet de voyage" : "Game log",
+        exact: true,
+      })
+      .click();
+    room.send([
+      {
+        type: "DiceRolled",
+        seat: 0,
+        dice: [4, 5],
+        isDouble: false,
+        purpose: "move",
+      },
+      {
+        type: "DiceRolled",
+        seat: 2,
+        dice: [5, 5],
+        isDouble: true,
+        purpose: "move",
+      },
+      { type: "PropertyBought", seat: 1, tile: 1, level: 0, amount: 60_000 },
+      { type: "SalaryPaid", seat: 3, amount: 400_000, cash: 2_400_000 },
+      {
+        type: "MoneyTransferred",
+        from: null,
+        to: 1,
+        amount: 30_000,
+        reason: "Fixture",
+      },
+      {
+        type: "MoneyTransferred",
+        from: 2,
+        to: 0,
+        amount: 10_000,
+        reason: "Fixture",
+      },
+      { type: "RentPaid", seat: 2, owner: 0, tile: 1, amount: 20_000 },
+    ]);
+    const rows = page.locator(".tool-drawer--journal li");
+    await expect(rows).toHaveCount(7);
+    const ordinary = rows.filter({ hasText: "4 + 5 = 9" });
+    const double = rows.filter({ hasText: "5 + 5 = 10" });
+    await expect(ordinary).toHaveCount(1);
+    await expect(double).toHaveCount(1);
+    await expect(double).toContainText(
+      locale === "fr" ? "· Double !" : "· Doubles!",
+    );
+    await expect(ordinary.locator('svg[data-icon="dice"]')).toHaveCount(1);
+    await expect(double.locator('svg[data-icon="dice"]')).toHaveCount(1);
+    await expect(
+      rows.filter({ hasText: "60 k" }).locator('svg[data-icon="buy"]'),
+    ).toHaveCount(1);
+    await expect(
+      rows.filter({ hasText: "400 k" }).locator('svg[data-icon="bank"]'),
+    ).toHaveCount(1);
+    const bankPayment = rows.filter({ hasText: "30 k" });
+    await expect(bankPayment.locator('svg[data-icon="bank"]')).toHaveCount(1);
+    await expect(bankPayment.locator(".journal-player")).toHaveCount(1);
+    await expect(bankPayment.locator(".journal-player")).toHaveAttribute(
+      "data-seat",
+      "1",
+    );
+    for (const amount of ["10 k", "20 k"]) {
+      const payment = rows.filter({ hasText: amount });
+      await expect(payment.locator('svg[data-icon="people"]')).toHaveCount(1);
+      await expect(payment.locator(".journal-player")).toHaveText([
+        "Nova",
+        "Test",
+      ]);
+      expect(
+        await payment
+          .locator(".journal-player")
+          .evaluateAll((players) =>
+            players.map((player) => player.getAttribute("data-seat")),
+          ),
+      ).toEqual(["2", "0"]);
+    }
+    await expect(rows.locator("svg")).toHaveCount(7);
+    for (const icon of await rows.locator("svg").all())
+      await expect(icon).toHaveAttribute("aria-hidden", "true");
+    for (const [seat, color] of [
+      [0, "rgb(190, 61, 36)"],
+      [1, "rgb(35, 108, 206)"],
+      [2, "rgb(129, 81, 181)"],
+      [3, "rgb(38, 118, 76)"],
+    ] as const) {
+      const players = rows.locator(`.journal-player[data-seat="${seat}"]`);
+      await expect(players.first()).toHaveText(names[seat]);
+      for (const player of await players.all())
+        await expect(player).toHaveCSS("color", color);
+    }
+    // Duplicate and embedded names keep their seat identity; markup stays text.
+    await expect(
+      rows.filter({ hasText: "60 k" }).locator(".journal-player"),
+    ).toHaveAttribute("data-seat", "1");
+    await expect(
+      rows.filter({ hasText: "400 k" }).locator(".journal-player"),
+    ).toHaveCount(1);
+    await expect(rows.locator(".journal-player b")).toHaveCount(0);
+    await page.screenshot({
+      path: `.local/verification/game-log-actions-${locale}.png`,
+    });
   });
 }
 
