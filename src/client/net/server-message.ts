@@ -73,6 +73,8 @@ const publicState = z.object({
     .nullable(),
   lastCard: z.object({ seat, card: z.string() }).nullable(),
   bankLedger: integer,
+  bankReceived: integer.min(0),
+  bankPaidOut: integer.min(0),
   championshipHost: z.object({ tile, multiplier: integer }).nullable(),
   festivalTiles: z.array(tile),
   matchDeadline: z.number().nullable(),

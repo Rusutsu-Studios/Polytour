@@ -150,6 +150,13 @@ export type PublicState = {
   } | null;
   readonly lastCard: { readonly seat: Seat; readonly card: ChanceCard } | null;
   readonly bankLedger: number;
+  /**
+   * The bank's own account: salaries and money that cards, taxes and fines move
+   * between players and the bank. Property purchases, building, sales and
+   * written-off debts stay in `bankLedger` only.
+   */
+  readonly bankReceived: number;
+  readonly bankPaidOut: number;
   readonly championshipHost: {
     readonly tile: number;
     readonly multiplier: number;

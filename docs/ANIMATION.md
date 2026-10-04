@@ -201,7 +201,10 @@ note faces, straps and coin details are instanced. Salary, rent, transfers,
 purchases, building, buyouts and sales animate a pooled bundle along the actual
 payer/recipient path, using the existing 200 ms money or 450 ms property budget.
 Cancelled timelines cannot hide a later effect. Static reserves follow view
-state; the DOM HUD remains the exact cash display.
+state; the DOM HUD remains the exact cash display. Salaries, taxes, fees and card
+payments fly to and from a small bank printed on Start's right-hand side, clear
+of the pawns' inner quarter, so system money has a visible home. Purchase,
+building and sale money flies between the player and that lot instead.
 
 ## Dice: deterministic result, physical feel
 

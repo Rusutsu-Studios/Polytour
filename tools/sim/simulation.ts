@@ -44,6 +44,8 @@ export function cashTotal(state: PublicState): number {
 export function assertInvariants(state: GameState, expectedCash: number): void {
   if (cashTotal(state) !== expectedCash)
     throw new Error("Money conservation failed");
+  if (state.bankReceived < 0 || state.bankPaidOut < 0)
+    throw new Error("Bank account totals went negative");
   if (state.round > state.config.roundLimit)
     throw new Error("Round limit exceeded");
   if (

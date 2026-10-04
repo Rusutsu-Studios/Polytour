@@ -94,6 +94,22 @@ export function tileCenter(index: number): Vec2 {
   );
 }
 
+/**
+ * Center of the bank printed on Start, as fractions of its texture (x to the
+ * right, y down). Start's printed face is unrotated, so texture right is world
+ * +x and texture down is world +z there.
+ */
+export const START_BANK_PRINT: Vec2 = [0.74, 0.27];
+
+/** World x/z of the bank printed on Start, where bank money flies. */
+export function startBankPoint(): Vec2 {
+  const [x, z] = tileCenter(0);
+  return [
+    x + (START_BANK_PRINT[0] - 0.5) * LOT_DEPTH,
+    z + (START_BANK_PRINT[1] - 0.5) * LOT_DEPTH,
+  ];
+}
+
 /** Tile-local coordinates (x along play, z toward the center) to world x/z. */
 export function tilePoint(index: number, localX: number, localZ: number): Vec2 {
   const [x, z] = tileCenter(index);

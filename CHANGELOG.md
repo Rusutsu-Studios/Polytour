@@ -9,8 +9,6 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.5.3] - 2026-10-04
-
 ### Changed
 
 - The four-resort win is now an optional room setting, off by default, and is
@@ -18,6 +16,23 @@ has been published, and it does not reconstruct earlier development history.
   before the option keep the win enabled.
 - The room settings dialog saves the leader's changes when it closes; the Save
   settings button is gone.
+
+## [0.6.0] - 2026-10-04
+
+### Added
+
+- A small bank is printed on Start. Salaries, taxes, fees and card payments fly
+  to and from it instead of the bare tile, while purchase, building and sale
+  money flies between the player and the lot; the Start salary is printed just
+  below the bank (#60).
+- Pause > Settings > Debug shows the bank's account: paid to players, received
+  from players and its balance, which starts at 0. Property money is not part of
+  it (#60).
+
+### Changed
+
+- Match state version 2 records the bank's account. Saved version-1 matches
+  load with an empty account (#60).
 
 ## [0.5.2] - 2026-10-04
 
