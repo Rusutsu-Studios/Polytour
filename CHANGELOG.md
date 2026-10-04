@@ -9,8 +9,6 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-04
-
 ### Added
 
 - A small bank is printed on Start. Salaries, taxes, fees and card payments fly
@@ -25,6 +23,20 @@ has been published, and it does not reconstruct earlier development history.
 
 - Match state version 2 records the bank's account. Saved version-1 matches
   load with an empty account (#60).
+
+## [0.5.0] - 2026-10-03
+
+### Added
+
+- A French/English win-condition summary above Save settings, updated from the
+  current room settings and available in the fixed rules during a match.
+- An explanation of Birthday/Charity payments and how gift bankruptcy changes
+  forced sales and payment limits.
+
+### Fixed
+
+- Keep the settings footer within short desktop viewports while longer settings
+  content scrolls.
 
 ## [0.4.4] - 2026-10-03
 
