@@ -19,6 +19,11 @@ const TOGGLES = [
     "Victoire par trois collections",
     "Win with three complete sets",
   ],
+  [
+    "resortMonopoly",
+    "Victoire par les quatre stations",
+    "Win with all four resorts",
+  ],
   ["hotelsDirectly", "Hôtels directement achetables", "Buy hotels directly"],
   ["extraRollOnDouble", "Rejouer après un double", "Roll again on doubles"],
   ["botCanBuild", "Les bots peuvent construire", "Bots can build"],

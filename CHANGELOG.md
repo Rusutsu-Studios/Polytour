@@ -9,6 +9,11 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Changed
+
+- The four-resort win is now an optional room setting, off by default. Saved
+  matches made before the option keep the win enabled.
+
 ## [0.4.4] - 2026-10-03
 
 ### Changed

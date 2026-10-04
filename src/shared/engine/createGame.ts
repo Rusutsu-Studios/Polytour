@@ -56,6 +56,7 @@ export const DEFAULT_GAME_CONFIG = {
   festivalCount: 3,
   lineMonopoly: true,
   tripleMonopoly: true,
+  resortMonopoly: false,
   hotelsDirectly: false,
   hotelPurchaseRule: "staged-hotels",
   economyRule: "reference",
@@ -588,7 +589,8 @@ function instantWin(state: PublicState, seat: Seat): WinKind | null {
     if (tiles.every((tile) => propertyOwner(state, tile.index) === seat))
       return "line-monopoly";
   }
-  if (resortCount(state, seat) === 4) return "resort-monopoly";
+  if (state.config.resortMonopoly !== false && resortCount(state, seat) === 4)
+    return "resort-monopoly";
   return null;
 }
 function animationBudget(events: readonly GameEvent[]): number {

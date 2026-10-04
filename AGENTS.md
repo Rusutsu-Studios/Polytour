@@ -16,7 +16,7 @@ a stylized 3D board with juicy, choreographed animations.
 > with a transferable leader, a waiting room and players sharing one screen,
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
-> The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
+> The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins (four-resort win optional, off) and
 > 120 minutes. New rooms (rules version 6) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
 > championship, Hotels that cannot be bought out and no Landmark. World Tour
