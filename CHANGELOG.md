@@ -9,6 +9,24 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Added
+
+- The player who buys out another player's city can build on it at once: up to
+  three houses (two before a first completed lap), or the Hotel on a three-house
+  city once the first lap is complete (#101).
+
+### Changed
+
+- Owning all four resorts pays 200 k rent instead of the third resort's 100 k,
+  and the resort card lists the fourth row (#99).
+- New rooms freeze rules version 7 for these two rules; rooms already created
+  keep the rules they started with.
+
+### Fixed
+
+- Once the dice show their total, the space the pawn is about to reach is
+  outlined in the roller's colour, through the walk and the decision there (#97).
+
 ## [0.4.3] - 2026-10-03
 
 ### Fixed

@@ -87,16 +87,18 @@ const MAX_WAITING = 6;
 const LOBBY_LIFETIME = 7_200_000;
 /**
  * 2–3 are original production rooms; 5 combines the board and reference rules;
- * 6 lets World Tour reach the traveller's own properties as well as free ones.
+ * 6 lets World Tour reach the traveller's own properties as well as free ones;
+ * 7 pays four resorts double the third's rent and lets a buyout be built on.
  */
-const RULES_VERSION = 6;
+const RULES_VERSION = 7;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
     version !== 3 &&
     version !== 4 &&
     version !== 5 &&
-    version !== 6
+    version !== 6 &&
+    version !== 7
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -107,6 +109,8 @@ function frozenRules(version: number | null) {
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
     worldTourRule:
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
+    fourResortRent: version >= 7,
+    buildAfterBuyout: version >= 7,
   };
 }
 
@@ -278,11 +282,19 @@ export class GameRoom extends DurableObject<Env> {
     const board = state.config.boardRule;
     const sale = state.config.sellBackPercent;
     const tour = state.config.worldTourRule;
+    const fourResorts = state.config.fourResortRent;
+    const buyoutBuild = state.config.buildAfterBuyout;
     if (
       // Saves made before rules version 6 carry no World Tour marker.
       (rulesVersion !== null &&
         tour !== frozen.worldTourRule &&
         (rulesVersion >= 6 || tour !== undefined)) ||
+      // Saves made before rules version 7 carry neither marker.
+      (rulesVersion !== null &&
+        ((fourResorts !== frozen.fourResortRent &&
+          (rulesVersion >= 7 || fourResorts !== undefined)) ||
+          (buyoutBuild !== frozen.buildAfterBuyout &&
+            (rulesVersion >= 7 || buyoutBuild !== undefined)))) ||
       (rulesVersion !== null &&
         rulesVersion >= 4 &&
         (hotelRule !== frozen.hotelPurchaseRule ||

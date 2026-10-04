@@ -61,6 +61,8 @@ export const DEFAULT_GAME_CONFIG = {
   economyRule: "reference",
   boardRule: "country",
   worldTourRule: "free-and-own",
+  fourResortRent: true,
+  buildAfterBuyout: true,
   sellBackPercent: 100,
   extraRollOnDouble: true,
   botCanBuild: true,
@@ -166,8 +168,10 @@ export function propertyRent(state: PublicState, tileIndex: number): number {
       property?.owner !== null && property?.owner !== undefined
         ? resortCount(state, property.owner)
         : 1;
+    // Saves before rules version 7 pay a fourth resort like the third.
+    const top = state.config.fourResortRent === true ? 4 : 3;
     const rent = getResortRent(
-      Math.min(3, Math.max(1, count)) as 1 | 2 | 3,
+      Math.min(top, Math.max(1, count)) as 1 | 2 | 3 | 4,
       rule,
     );
     return rules(state).resortFestivals
@@ -1120,6 +1124,19 @@ function resolver(initial: GameState, context: ResolutionContext) {
         break;
     }
   };
+  /** Opens a build decision on an own city that can still rise. */
+  const offerBuild = (seat: Seat, tileIndex: number) => {
+    const property = getProperty(state, tileIndex);
+    if (
+      getTile(tileIndex, state.config)?.kind !== "city" ||
+      property?.owner !== seat ||
+      property.level >= 5
+    )
+      return;
+    const maxLevel = maxBuildLevel(state, seat, tileIndex, false);
+    if (property.level < maxLevel)
+      open({ kind: "build", seat, tile: tileIndex, maxLevel });
+  };
   const landing = (seat: Seat) => {
     const player = getPlayer(state, seat);
     if (player.bankrupt) return;
@@ -1134,11 +1151,7 @@ function resolver(initial: GameState, context: ResolutionContext) {
           const maxLevel = maxBuildLevel(state, seat, tile.index, true);
           open({ kind: "buy", seat, tile: tile.index, maxLevel });
         } else if (property.owner === seat) {
-          if (tile.kind === "city" && property.level < 5) {
-            const maxLevel = maxBuildLevel(state, seat, tile.index, false);
-            if (property.level < maxLevel)
-              open({ kind: "build", seat, tile: tile.index, maxLevel });
-          }
+          offerBuild(seat, tile.index);
         } else {
           const amount = propertyRent(state, tile.index);
           prepend({ kind: "buyout", seat, tile: tile.index });
@@ -1240,6 +1253,10 @@ function resolver(initial: GameState, context: ResolutionContext) {
           }
           break;
         }
+        case "improve":
+          if (!getPlayer(state, task.seat).bankrupt)
+            offerBuild(task.seat, task.tile);
+          break;
         case "wins":
           checkWins();
           break;
@@ -1314,7 +1331,12 @@ function resolver(initial: GameState, context: ResolutionContext) {
             tile: pending.tile,
             amount: pending.price,
           });
-          prepend({ kind: "wins" });
+          prepend(
+            { kind: "wins" },
+            ...(state.config.buildAfterBuyout === true
+              ? [{ kind: "improve" as const, seat, tile: pending.tile }]
+              : []),
+          );
         }
         break;
       case "Sell":
@@ -1824,6 +1846,9 @@ export function createGame(
     !["free-and-own", "free-first"].includes(config.worldTourRule)
   )
     throw new RangeError("Unsupported World Tour rule");
+  for (const marker of [config.fourResortRent, config.buildAfterBuyout])
+    if (marker !== undefined && typeof marker !== "boolean")
+      throw new RangeError("Unsupported rules version 7 marker");
   if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
@@ -1895,6 +1920,8 @@ export function createGame(
       economyRule: config.economyRule ?? "reference",
       boardRule: config.boardRule ?? "country",
       worldTourRule: config.worldTourRule ?? "free-and-own",
+      fourResortRent: config.fourResortRent ?? true,
+      buildAfterBuyout: config.buildAfterBuyout ?? true,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,

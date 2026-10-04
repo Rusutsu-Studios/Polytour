@@ -35,6 +35,10 @@ export type GameConfig = {
   readonly boardRule?: BoardRule;
   /** Missing on saves before rules version 6: own properties only when none is free. */
   readonly worldTourRule?: WorldTourRule;
+  /** Missing on saves before rules version 7: four resorts pay what three do. */
+  readonly fourResortRent?: boolean;
+  /** Missing on saves before rules version 7: a bought-out city is not built on. */
+  readonly buildAfterBuyout?: boolean;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
@@ -185,6 +189,8 @@ export type ResolutionTask =
       readonly tile: number;
     }
   | { readonly kind: "buyout"; readonly seat: Seat; readonly tile: number }
+  /** Offers the new owner of a bought-out city the chance to build on it. */
+  | { readonly kind: "improve"; readonly seat: Seat; readonly tile: number }
   | { readonly kind: "wins" };
 export type GameState = PublicState & {
   readonly rngState: number;

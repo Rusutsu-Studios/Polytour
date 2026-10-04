@@ -61,9 +61,11 @@ either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
 an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
 for the write-quota incident and measured regressions.
 State version 1 is retained, with the explicit migration ladder from PR #19.
-New rooms freeze rules version 6: country-grouped board, reference economy,
-staged hotels and World Tour flights to free or own properties. Version-5 rooms
-keep flights to own properties only when none is free.
+New rooms freeze rules version 7: country-grouped board, reference economy,
+staged hotels, World Tour flights to free or own properties, a 200 k rent for
+four resorts and a build offer after a buyout. Version-6 rooms pay four resorts
+like three and offer no build after a buyout; version-5 rooms also keep flights
+to own properties only when none is free.
 Existing version-2/3 rooms retain the original board, prototype
 prices, travel and sale rules; version 2 also keeps its original hotel progression.
 The competing unshipped version-4 definitions are not silently guessed. Unknown
@@ -374,9 +376,11 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 6 with country-grouped tiles, reference economy, staged hotels, full
-  nominal sale refunds and `worldTourRule: "free-and-own"`. A version-4/5 save
-  without that selector keeps World Tour on free properties first. A version-2/3
+  use version 7 with country-grouped tiles, reference economy, staged hotels, full
+  nominal sale refunds, `worldTourRule: "free-and-own"`, `fourResortRent: true`
+  and `buildAfterBuyout: true`. A version-4/5 save without the World Tour selector
+  keeps World Tour on free properties first, and a save without the other two
+  markers pays four resorts like three and offers no build after a buyout. A version-2/3
   save without the newer selectors uses
   its original legacy board and prototype economy. Version-2 lobbies start with
   lap-only hotels, while version-3 lobbies retain staged hotels; both keep their

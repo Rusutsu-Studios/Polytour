@@ -42,7 +42,7 @@ import Icon from "./Icon.js";
 import "./CityCard.css";
 
 const LEVELS: readonly BuildLevel[] = [0, 1, 2, 3, 4, 5];
-const RESORT_COUNTS = [1, 2, 3] as const;
+const RESORT_COUNTS = [1, 2, 3, 4] as const;
 
 // Inspecting a space answers what it costs to land there. A property opens as
 // a large title deed: who owns it, the rent due now, and every rent and price
@@ -397,8 +397,12 @@ function ResortDeed({
   const owner = getProperty(state, index)?.owner ?? null;
   const rules = ruleEconomy(economyRule(state.config));
   const boost = rentBoost(state, index);
+  // Rooms from rules version 7 pay a fourth resort more; older ones stop at three.
+  const top = state.config.fourResortRent === true ? 4 : 3;
   const count =
-    owner === null ? null : Math.min(3, Math.max(1, resortCount(state, owner)));
+    owner === null
+      ? null
+      : Math.min(top, Math.max(1, resortCount(state, owner)));
   const items =
     owner === null
       ? [
@@ -447,7 +451,7 @@ function ResortDeed({
           </tr>
         </thead>
         <tbody>
-          {RESORT_COUNTS.map((resorts) => {
+          {RESORT_COUNTS.filter((resorts) => resorts <= top).map((resorts) => {
             const current = count === resorts;
             return (
               <tr
@@ -460,7 +464,11 @@ function ResortDeed({
                     ? t("1 plage", "1 resort")
                     : resorts === 2
                       ? t("2 plages", "2 resorts")
-                      : t("3 plages ou plus", "3 resorts or more")}
+                      : resorts === 3 && top === 3
+                        ? t("3 plages ou plus", "3 resorts or more")
+                        : resorts === 3
+                          ? t("3 plages", "3 resorts")
+                          : t("4 plages", "4 resorts")}
                   {current && (
                     <span className="city-card-now">{t("actuel", "now")}</span>
                   )}

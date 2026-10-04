@@ -5,6 +5,8 @@ import { applyEvent } from "../../shared/engine/index.js";
 export type AnimationContext = {
   previous: PublicState | null;
   next: PublicState;
+  /** Events already received that will play after this one. */
+  upcoming: readonly GameEvent[];
   playbackRate: number;
   reducedMotion: boolean;
 };
@@ -121,6 +123,7 @@ class Director {
         const context = {
           previous,
           next,
+          upcoming: this.queue.map((queued) => queued.event),
           playbackRate: behind >= CATCH_UP_BATCHES ? CATCH_UP_PLAYBACK_RATE : 1,
           reducedMotion: this.value.reducedMotion,
         };

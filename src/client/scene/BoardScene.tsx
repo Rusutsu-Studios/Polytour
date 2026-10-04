@@ -1436,6 +1436,21 @@ function SceneContent(props: BoardProps) {
   const downtown = useRef<DowntownHandle | null>(null);
   const growth = useMemo(() => ({ tile: 0, progress: 0 }), []);
   const pulse = useRef<THREE.Mesh>(null);
+  const destination = useRef<THREE.Mesh>(null);
+  const destinationOutlines = useMemo(
+    () => ({
+      lot: outlineGeometry(LOT_WIDTH, LOT_DEPTH, 0.06),
+      corner: outlineGeometry(LOT_DEPTH, LOT_DEPTH, 0.07),
+    }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      destinationOutlines.lot.dispose();
+      destinationOutlines.corner.dispose();
+    },
+    [destinationOutlines],
+  );
   const sparks = useRef<THREE.InstancedMesh>(null);
   const sparkTransform = useMemo(() => new THREE.Object3D(), []);
   const sparkProgress = useMemo(() => ({ value: 0 }), []);
@@ -1516,7 +1531,25 @@ function SceneContent(props: BoardProps) {
       const color = seat == null ? DICE_DEFAULT_COLOR : DICE_COLORS[seat];
       for (const material of diceMaterials.current) material?.color.set(color);
     }
+    /** Outlines the space a thrown pawn is about to reach, in the roller's colour. */
+    function markDestination(tile: number | null, seat: Seat) {
+      const mark = destination.current;
+      if (!mark) return;
+      mark.visible = tile !== null;
+      if (tile !== null) {
+        const [x, z] = tileCenter(tile);
+        mark.geometry = isCorner(tile)
+          ? destinationOutlines.corner
+          : destinationOutlines.lot;
+        mark.position.set(x, LOT_TOP + 0.004, z);
+        mark.rotation.set(-Math.PI / 2, 0, tileRotation(tile));
+        if (mark.material instanceof THREE.MeshBasicMaterial)
+          mark.material.color.set(PLAYER_COLORS[seat]);
+      }
+      invalidate();
+    }
     function snap(next: PublicState | null) {
+      if (destination.current) destination.current.visible = false;
       if (cashFlight.current) cashFlight.current.visible = false;
       for (const player of next?.players ?? []) {
         const pawn = pawns.current[player.seat];
@@ -1547,6 +1580,7 @@ function SceneContent(props: BoardProps) {
       }
       timelines.current.clear();
       if (pulse.current) pulse.current.visible = false;
+      if (destination.current) destination.current.visible = false;
       if (sparks.current) sparks.current.visible = false;
       if (cashFlight.current) cashFlight.current.visible = false;
       invalidate();
@@ -1662,7 +1696,22 @@ function SceneContent(props: BoardProps) {
           !(await animateCash(event, context))
         )
           return;
+        // The outline of the space ahead stays through the walk and the
+        // decision that opens there; any later event clears it.
+        if (
+          event.type !== "DiceRolled" &&
+          event.type !== "PlayerMoved" &&
+          event.type !== "SalaryPaid" &&
+          event.type !== "TurnPhaseChanged" &&
+          event.type !== "DecisionOpened"
+        )
+          markDestination(null, 0);
         if (event.type === "DiceRolled") {
+          markDestination(null, event.seat);
+          const arrival = context.upcoming.find(
+            (upcoming) =>
+              upcoming.type === "PlayerMoved" && upcoming.seat === event.seat,
+          );
           // The roller shakes the dice on their side of the board, throws
           // them high across the lawn, lets them settle, then shows the total.
           const { inward } = sideFrame(event.seat);
@@ -1740,6 +1789,12 @@ function SceneContent(props: BoardProps) {
                 start,
               );
             }
+            if (arrival?.type === "PlayerMoved")
+              timeline.call(
+                () => markDestination(arrival.position, event.seat),
+                [],
+                reveal,
+              );
             if (sprite) {
               timeline.call(
                 () => showScore({ seat: event.seat, dice: event.dice }),
@@ -1984,6 +2039,7 @@ function SceneContent(props: BoardProps) {
     cashProgress,
     cashTransform,
     cashColor,
+    destinationOutlines,
   ]);
 
   useEffect(() => {
@@ -2094,6 +2150,14 @@ function SceneContent(props: BoardProps) {
       >
         <spriteMaterial depthTest={false} transparent toneMapped={false} />
       </sprite>
+      <mesh
+        ref={destination}
+        visible={false}
+        geometry={destinationOutlines.lot}
+        renderOrder={2}
+      >
+        <meshBasicMaterial color="#e8a321" toneMapped={false} />
+      </mesh>
       <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, 0.5, 28]} />
         <meshBasicMaterial
