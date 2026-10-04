@@ -4,7 +4,7 @@ import {
   runInDurableObject,
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOT_TIMING,
   DECISION_TIMING,
@@ -30,6 +30,7 @@ import type {
   RoomCredentials,
   ServerMessage,
 } from "../src/shared/protocol/index.js";
+import { ROOM_ADMISSION_KEY } from "../src/worker/room-admission.js";
 
 const origin = "https://example.test";
 const activeSockets: WebSocket[] = [];
@@ -241,6 +242,13 @@ async function closeInbox(inbox: Inbox): Promise<void> {
   inbox.socket.close(1000);
   await closed;
 }
+beforeEach(async () => {
+  // Each test shares the real creation gate only among its own room fixtures.
+  await runInDurableObject(
+    env.MATCHMAKER.getByName("room-admission"),
+    (_instance, state) => state.storage.delete(ROOM_ADMISSION_KEY),
+  );
+});
 afterEach(() => {
   for (const socket of activeSockets.splice(0)) socket.close(1000);
   vi.restoreAllMocks();
