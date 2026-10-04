@@ -92,6 +92,23 @@ test("home sliders, language persistence and readable HTTP failure", async ({
     }));
     expect(bounds.scrollWidth).toBe(bounds.width);
     expect(bounds.scrollHeight).toBeLessThanOrEqual(bounds.height);
+    const alignment = await page.evaluate(() => {
+      const content = document.querySelector(".welcome-grid");
+      if (!content) throw new Error("Welcome grid missing");
+      const rect = content.getBoundingClientRect();
+      const gutter = Number.parseFloat(getComputedStyle(content).paddingLeft);
+      return [".topbar .brand", ".lobby-footer"].map((selector) => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`${selector} missing`);
+        const box = element.getBoundingClientRect();
+        const padding = Number.parseFloat(
+          getComputedStyle(element).paddingLeft,
+        );
+        const zoom = Number.parseFloat(getComputedStyle(element).zoom) || 1;
+        return Math.abs(box.x + padding * zoom - (rect.x + gutter));
+      });
+    });
+    for (const offset of alignment) expect(offset).toBeLessThan(2);
     await page.screenshot({
       path: `.local/verification/home-en-${size.width}.png`,
     });
@@ -143,6 +160,9 @@ test("English local match switches language without rejoining or changing game s
   const url = page.url();
   const socketCount = sockets;
   await page.getByRole("button", { name: "Pause menu", exact: true }).click();
+  await expect(page.locator(".pause-dialog")).not.toContainText(
+    "The game keeps running while this menu is open.",
+  );
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
     .locator(".pause-dialog")
