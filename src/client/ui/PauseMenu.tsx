@@ -13,6 +13,7 @@ import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
+import ActionButton from "./ActionButton.js";
 import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
 import RoomDebug, { translatedRegion } from "./RoomDebug.js";
@@ -352,10 +353,14 @@ export default function PauseMenu({
                           className="pause-zoom"
                           aria-labelledby={`${id}-zoom-label`}
                         >
-                          <button
+                          <ActionButton
                             type="button"
                             aria-label={t("Dézoomer le plateau", "Zoom out")}
                             disabled={zoom <= 0.8}
+                            disabledReason={t(
+                              "Le plateau est déjà dézoomé au maximum.",
+                              "The board is already zoomed out as far as possible.",
+                            )}
                             onClick={() =>
                               onZoom(
                                 Math.max(
@@ -366,7 +371,7 @@ export default function PauseMenu({
                             }
                           >
                             −
-                          </button>
+                          </ActionButton>
                           <button
                             type="button"
                             className="pause-zoom-reset"
@@ -374,10 +379,14 @@ export default function PauseMenu({
                           >
                             {t("Recentrer", "Reset view")}
                           </button>
-                          <button
+                          <ActionButton
                             type="button"
                             aria-label={t("Zoomer le plateau", "Zoom in")}
                             disabled={zoom >= 1.3}
+                            disabledReason={t(
+                              "Le plateau est déjà zoomé au maximum.",
+                              "The board is already zoomed in as far as possible.",
+                            )}
                             onClick={() =>
                               onZoom(
                                 Math.min(
@@ -388,7 +397,7 @@ export default function PauseMenu({
                             }
                           >
                             +
-                          </button>
+                          </ActionButton>
                           <output aria-labelledby={`${id}-zoom-label`}>
                             {Math.round(zoom * 100)} %
                           </output>

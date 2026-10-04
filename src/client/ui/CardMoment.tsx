@@ -3,17 +3,24 @@ import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DECISION_TIMING } from "../../shared/board/index.js";
+import type { GameEvent } from "../../shared/engine/index.js";
 import {
   type AnimationContext,
   director,
   useDirector,
 } from "../director/director.js";
 import { useLocale } from "../i18n.js";
-import { PLAYER_COLORS } from "./board-display.js";
+import { money, PLAYER_COLORS } from "./board-display.js";
 import { type CardDraw, describeCard } from "./chance-display.js";
+import Icon from "./Icon.js";
 import "./CardMoment.css";
 
-type Moment = { event: CardDraw; context: AnimationContext; readingMs: number };
+type TaxPayment = Extract<GameEvent, { type: "MoneyTransferred" }>;
+type Moment = {
+  event: CardDraw | TaxPayment;
+  context: AnimationContext;
+  readingMs: number;
+};
 
 /** One bounded reading moment in the Director queue, before the card's effects. */
 export default function CardMoment({
@@ -43,7 +50,15 @@ export default function CardMoment({
     finish.current = complete;
     return director.registerPresenter({
       animate(event, context) {
-        if (event.type !== "CardDrawn") return Promise.resolve();
+        if (
+          event.type !== "CardDrawn" &&
+          !(
+            event.type === "MoneyTransferred" &&
+            event.reason === "Tax" &&
+            event.from !== null
+          )
+        )
+          return Promise.resolve();
         complete();
         restoreFocus.current =
           document.activeElement instanceof HTMLElement
@@ -51,7 +66,14 @@ export default function CardMoment({
             : null;
         needsFocus.current = false;
         // The engine reserves this reading time before the next decision.
-        const readingMs = DECISION_TIMING.cardAnimation / context.playbackRate;
+        // Catch-up never compresses a reading moment below six seconds.
+        const readingMs =
+          event.type === "CardDrawn"
+            ? Math.max(
+                DECISION_TIMING.taxAnimation,
+                DECISION_TIMING.cardAnimation / context.playbackRate,
+              )
+            : DECISION_TIMING.taxAnimation;
         return new Promise<void>((done) => {
           resolve = done;
           setMoment({ event, context, readingMs });
@@ -85,14 +107,27 @@ export default function CardMoment({
   }, [moment, busy, obscured]);
   if (!moment) return null;
   const { event, context, readingMs } = moment;
-  const card = describeCard(event, context.next);
-  const player = context.next.players.find(
-    (entry) => entry.seat === event.seat,
-  );
+  const tax = event.type === "MoneyTransferred";
+  const seat = event.type === "CardDrawn" ? event.seat : (event.from ?? 0);
+  const card =
+    event.type === "CardDrawn"
+      ? describeCard(event, context.next)
+      : {
+          title: t("Paiement des impôts", "Tax payment"),
+          badge: `− ${money(event.amount)}`,
+          text: t(
+            "Les impôts ont été versés à la banque.",
+            "Tax has been paid to the bank.",
+          ),
+          art: "fortune",
+          tone: "cost",
+        };
+  const player = context.next.players.find((entry) => entry.seat === seat);
   return createPortal(
     <dialog
       ref={dialog}
       className="chance-dialog"
+      data-moment={tax ? "tax" : "card"}
       aria-labelledby="chance-title"
       aria-describedby="chance-description"
       onKeyDown={(event) => {
@@ -106,9 +141,7 @@ export default function CardMoment({
       <motion.article
         className="chance-card"
         data-tone={card.tone}
-        style={
-          { "--chance-player": PLAYER_COLORS[event.seat] } as CSSProperties
-        }
+        style={{ "--chance-player": PLAYER_COLORS[seat] } as CSSProperties}
         initial={
           reducedMotion ? false : { opacity: 0, scale: 0.9, rotate: -3, y: 24 }
         }
@@ -117,21 +150,27 @@ export default function CardMoment({
       >
         <header>
           <span className="chance-seal" aria-hidden="true">
-            ?
+            {tax ? <Icon name="bank" size={24} /> : "?"}
           </span>
           <span>
-            {t("Carte Surprise", "Chance card")} ·{" "}
+            {tax ? t("Impôts", "Taxes") : t("Carte Surprise", "Chance card")} ·{" "}
             <strong>{player?.name ?? t("Joueur", "Player")}</strong>
           </span>
         </header>
-        <img
-          className="chance-art"
-          src={`/cards/${card.art}.webp`}
-          alt=""
-          width="600"
-          height="400"
-          decoding="async"
-        />
+        {tax ? (
+          <div className="tax-illustration" aria-hidden="true">
+            <Icon name="bank" size={96} />
+          </div>
+        ) : (
+          <img
+            className="chance-art"
+            src={`/cards/${card.art}.webp`}
+            alt=""
+            width="600"
+            height="400"
+            decoding="async"
+          />
+        )}
         <div className="chance-copy">
           <h2 id="chance-title">{card.title}</h2>
           <strong className="chance-impact">{card.badge}</strong>
@@ -146,7 +185,11 @@ export default function CardMoment({
         </div>
         <div className="chance-reading" aria-hidden="true">
           <motion.i
-            key={`${event.seat}-${event.card}`}
+            key={
+              event.type === "CardDrawn"
+                ? `${event.seat}-${event.card}`
+                : `tax-${seat}-${event.amount}`
+            }
             initial={{ scaleX: 1 }}
             animate={{ scaleX: 0 }}
             transition={{ duration: readingMs / 1000, ease: "linear" }}

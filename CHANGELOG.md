@@ -9,12 +9,30 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.5.1] - 2026-10-04
+## [0.5.2] - 2026-10-04
 
 ### Added
 
 - Room option, enabled by default, to send a player to the Island after a third
   consecutive double; switching it off lets the third double move normally (#102).
+
+## [0.5.1] - 2026-10-04
+
+### Fixed
+
+- Restrict festivals to cities in new matches, including rent and beach details;
+  preserve existing matches with their original frozen festival rules (#96).
+- Explain unavailable actions in small ivory popups on hover or keyboard focus,
+  including construction prerequisites, insufficient cash, reconnecting and
+  unsaved room settings (#32).
+- Keep room preparation and joining feedback inline, without loading popups.
+- Keep Surprise cards visible for eight seconds and show tax payments to every
+  player in a matching six-second popup; reserve reading time before the next
+  decision and bot action (#31).
+- Show the current language as a simple globe-and-text FR/EN button beside How
+  to play; click or keyboard activation switches directly to the other language (#43).
+- Use a minimize icon on decision windows and a compact bottom tab that keeps
+  the countdown and reopens the same selection (#50).
 
 ## [0.5.0] - 2026-10-03
 
