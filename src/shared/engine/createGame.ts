@@ -65,6 +65,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   sellBackPercent: 100,
   extraRollOnDouble: true,
+  tripleDoubleToIsland: true,
   botCanBuild: true,
   giftCanBankrupt: true,
 } as const satisfies GameConfig;
@@ -938,6 +939,7 @@ function resolver(initial: GameState, context: ResolutionContext) {
     } else if (
       !isEscapeRoll &&
       isDouble &&
+      state.config.tripleDoubleToIsland !== false &&
       state.doublesInTurn >= ECONOMY.doublesToIsland
     ) {
       emit({ type: "SentToIsland", seat, reason: "triple-double" });

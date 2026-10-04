@@ -24,6 +24,7 @@ export const RoomConfigSchema = z
     resortMonopoly: z.boolean().default(false),
     hotelsDirectly: z.boolean().default(false),
     extraRollOnDouble: z.boolean().default(true),
+    tripleDoubleToIsland: z.boolean().default(true),
     botCanBuild: z.boolean().default(true),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),

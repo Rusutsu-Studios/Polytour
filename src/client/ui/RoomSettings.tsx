@@ -26,6 +26,11 @@ const TOGGLES = [
   ],
   ["hotelsDirectly", "Hôtels directement achetables", "Buy hotels directly"],
   ["extraRollOnDouble", "Rejouer après un double", "Roll again on doubles"],
+  [
+    "tripleDoubleToIsland",
+    "Troisième double : direction l'île",
+    "Third double goes to the island",
+  ],
   ["botCanBuild", "Les bots peuvent construire", "Bots can build"],
   [
     "giftCanBankrupt",
