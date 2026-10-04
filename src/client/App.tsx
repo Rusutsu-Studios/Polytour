@@ -1944,7 +1944,6 @@ function App() {
             <Logo small={Boolean(isGame)} />
           </span>
           <div className="topbar-right">
-            <span className="prototype-tag">Prototype</span>
             <StreamerToggle enabled={streamer} onChange={changeStreamer} />
             <GraphicsToggle
               lowGraphics={lowGraphics}

@@ -48,18 +48,16 @@ export default function GraphicsToggle({
         "Graphics: High. Switch to Low.",
       );
   return (
-    <div className="graphics-setting">
-      <button
-        type="button"
-        className="graphics-toggle"
-        data-graphics-quality={lowGraphics ? "low" : "high"}
-        aria-label={label}
-        title={label}
-        onClick={() => onChange(!lowGraphics)}
-      >
-        <Icon name="graphics" size={18} />
-        {lowGraphics ? t("Faibles", "Low") : t("Élevés", "High")}
-      </button>
-    </div>
+    <button
+      type="button"
+      className="graphics-toggle text-button"
+      data-graphics-quality={lowGraphics ? "low" : "high"}
+      aria-label={label}
+      title={label}
+      onClick={() => onChange(!lowGraphics)}
+    >
+      <Icon name="graphics" size={18} />
+      <span>{lowGraphics ? t("Faibles", "Low") : t("Élevés", "High")}</span>
+    </button>
   );
 }

@@ -539,7 +539,7 @@ export default function PauseMenu({
                               )
                             }
                           >
-                            −
+                            -
                           </ActionButton>
                           <button
                             type="button"

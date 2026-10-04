@@ -11,6 +11,10 @@
 
 ### Fixed
 
+- The welcome toolbar removes the Prototype badge and gives graphics and streamer
+  mode the same text-control styling as language; active streamer mode uses red
+  text (#37).
+- Interface minus signs use the standard ASCII hyphen-minus (-).
 - Lobby departures and player removals shift occupied seats left, preserving
   leadership, reconnect credentials and local player controls. New players and
   bots fill the first open seat (#94).

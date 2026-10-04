@@ -355,7 +355,7 @@ export function describeChanceCard(
       return {
         ...base,
         tone: "cost",
-        badge: `− ${money(CHANCE_AMOUNTS.fine)}`,
+        badge: `- ${money(CHANCE_AMOUNTS.fine)}`,
         text: t(
           "Réglez cette amende de stationnement à la banque.",
           "Pay this parking fine to the bank.",
@@ -488,7 +488,7 @@ export function describeChanceCard(
       return {
         ...base,
         tone: "cost",
-        badge: `− ${money(CHANCE_AMOUNTS.charity)}`,
+        badge: `- ${money(CHANCE_AMOUNTS.charity)}`,
         text: t(
           "Vous offrez cette somme à l’adversaire encore en jeu qui possède le moins de cash, selon les règles de cadeaux de la salle.",
           "Give this amount to the opponent still in the game with the least cash, subject to the room’s gift rules.",

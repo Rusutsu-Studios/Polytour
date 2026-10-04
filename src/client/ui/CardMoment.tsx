@@ -114,7 +114,7 @@ export default function CardMoment({
       ? describeCard(event, context.next)
       : {
           title: t("Paiement des impôts", "Tax payment"),
-          badge: `− ${money(event.amount)}`,
+          badge: `- ${money(event.amount)}`,
           text: t(
             "Les impôts ont été versés à la banque.",
             "Tax has been paid to the bank.",
