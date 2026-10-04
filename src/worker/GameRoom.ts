@@ -85,6 +85,10 @@ const SEATS = [0, 1, 2, 3] as const;
 const MAX_WAITING = 6;
 /** A lobby, or a lobby the leader brought back, expires after two hours. */
 const LOBBY_LIFETIME = 7_200_000;
+/** Shared across devices and persisted through reconnects and hibernation. */
+const LOBBY_BURST = 20;
+const LOBBY_REFILL_MS = 1_000;
+type LobbyBudget = { tokens: number; at: number };
 /**
  * 2–3 are original production rooms; 5 combines the board and reference rules;
  * 6 lets World Tour reach the traveller's own properties as well as free ones;
@@ -1025,8 +1029,25 @@ export class GameRoom extends DurableObject<Env> {
     const op = message.op;
     const saved = this.readState();
     const leader = seat === this.hostSeat();
+    if (!leader && op.type !== "add-local" && op.type !== "remove-local")
+      return this.reject(socket, message.id, "host-only");
+    const now = Date.now();
+    const budget = this.readMeta<LobbyBudget>("lobbyBudget");
+    const available = budget
+      ? Math.min(
+          LOBBY_BURST,
+          budget.tokens + Math.max(0, now - budget.at) / LOBBY_REFILL_MS,
+        )
+      : LOBBY_BURST;
+    if (available < 1)
+      return this.reject(socket, message.id, "lobby-rate-limit");
+    // Only accepted operations spend tokens. Rejections do not write SQLite.
+    // Every mutation below is synchronous until its persisted commit.
+    const spend = () =>
+      this.writeMeta("lobbyBudget", { tokens: available - 1, at: now });
     const done = (writes: () => void) => {
       this.ctx.storage.transactionSync(() => {
+        spend();
         writes();
         this.rememberCommand(seat, message.id);
       });
@@ -1123,10 +1144,10 @@ export class GameRoom extends DurableObject<Env> {
         return finish();
       }
       case "replace-bot":
-        return this.replaceBot(socket, seat, message.id, op);
+        return this.replaceBot(socket, seat, message.id, op, spend);
       case "return-to-lobby":
         if (!saved) return this.reject(socket, message.id, "game-not-started");
-        return this.returnToLobby(socket, seat, message.id);
+        return this.returnToLobby(socket, seat, message.id, spend);
       case "start":
       case "settings":
       case "add-bot":
@@ -1204,6 +1225,7 @@ export class GameRoom extends DurableObject<Env> {
       createEngineContext(startedAt),
     );
     this.ctx.storage.transactionSync(() => {
+      spend();
       for (const entry of allSeats)
         if (!seats.some((candidate) => candidate.seat === entry.seat))
           this.ctx.storage.sql.exec(
@@ -1238,6 +1260,7 @@ export class GameRoom extends DurableObject<Env> {
     seat: Seat,
     id: string,
     op: { member: string; seat: Seat },
+    spend: () => void,
   ): Promise<void> {
     const saved = this.readState();
     if (!saved) return this.reject(socket, id, "game-not-started");
@@ -1258,6 +1281,7 @@ export class GameRoom extends DurableObject<Env> {
       undefined,
       false,
       () => {
+        spend();
         this.ctx.storage.sql.exec(
           "UPDATE seats SET name=?,control='human',token_hash=? WHERE seat=?",
           member.name,
@@ -1291,8 +1315,10 @@ export class GameRoom extends DurableObject<Env> {
     socket: WebSocket,
     seat: Seat,
     id: string,
+    spend: () => void,
   ): Promise<void> {
     this.ctx.storage.transactionSync(() => {
+      spend();
       this.ctx.storage.sql.exec("DELETE FROM state");
       this.ctx.storage.sql.exec("DELETE FROM events");
       this.ctx.storage.sql.exec("DELETE FROM commands");

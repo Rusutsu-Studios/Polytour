@@ -1238,6 +1238,124 @@ describe("Authoritative private rooms", () => {
     expect(measured).toEqual({ previous: 5, current: 0 });
   });
 
+  it("shares the persisted lobby budget across sockets, reconnects and hibernation", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    const second = await connect(host);
+    await second.next("welcome");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    // Keep refill time fixed even when CI or eviction takes longer than one second.
+    // afterEach restores this clock before the next test.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    // Actual state changes and accepted no-ops have the same write budget.
+    for (let n = 0; n < 20; n++)
+      expect(
+        await roomOp(n % 2 ? second : inbox, `bounded-${n}`, {
+          type: "lock",
+          locked: n % 2 === 0,
+        }),
+      ).toBe("ack");
+    expect(
+      await roomOp(inbox, "bounded-0", { type: "lock", locked: false }),
+    ).toBe("duplicate");
+    await closeInbox(second);
+    await runInDurableObject(stub, async (instance, durableState) => {
+      const spy = vi.spyOn(durableState.storage.sql, "exec");
+      try {
+        const room = instance as unknown as {
+          webSocketMessage(socket: WebSocket, frame: string): Promise<void>;
+        };
+        await room.webSocketMessage(
+          durableState.getWebSockets()[0],
+          JSON.stringify({
+            type: "lobby",
+            id: "budget-exhausted",
+            op: { type: "lock", locked: true },
+          }),
+        );
+        expect(spy.mock.calls.every(([sql]) => sql.startsWith("SELECT"))).toBe(
+          true,
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    expect(await answer(inbox, "budget-exhausted")).toBe("lobby-rate-limit");
+    expect((await lobbyOf(host.roomCode)).locked).toBe(false);
+    await closeInbox(inbox);
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    await resumed.next("welcome");
+    expect(
+      await roomOp(resumed, "after-reconnect", { type: "lock", locked: true }),
+    ).toBe("lobby-rate-limit");
+    const count = await runInDurableObject(stub, (_instance, durableState) => {
+      const count = durableState.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM commands")
+        .one().count;
+      const row = durableState.storage.sql
+        .exec<{ v: string }>("SELECT v FROM meta WHERE k='lobbyBudget'")
+        .one();
+      const budget = JSON.parse(row.v) as { tokens: number; at: number };
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v=? WHERE k='lobbyBudget'",
+        JSON.stringify({ ...budget, at: budget.at - 1_000 }),
+      );
+      return count;
+    });
+    expect(count).toBe(20);
+    expect(
+      await roomOp(resumed, "after-refill", { type: "lock", locked: true }),
+    ).toBe("ack");
+    expect(
+      await roomOp(resumed, "refill-spent", { type: "lock", locked: false }),
+    ).toBe("lobby-rate-limit");
+  });
+
+  it("charges only accepted lobby operations and retains the budget when returning from a match", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    const welcome = await inbox.next("welcome");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    // Keep refill time fixed even when CI or eviction takes longer than one second.
+    // afterEach restores this clock before the next test.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    expect(
+      await roomOp(inbox, "invalid-bot", { type: "add-bot", seat: host.seat }),
+    ).toBe("seat-taken");
+    expect(
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql
+          .exec("SELECT v FROM meta WHERE k='lobbyBudget'")
+          .toArray(),
+      ),
+    ).toEqual([]);
+    expect(
+      await roomOp(inbox, "normal-settings", {
+        type: "settings",
+        config: welcome.lobby.config,
+      }),
+    ).toBe("ack");
+    expect(
+      await roomOp(inbox, "normal-start", { type: "start", fillBots: true }),
+    ).toBe("ack");
+    await inbox.next("events");
+    expect(
+      await roomOp(inbox, "normal-return", { type: "return-to-lobby" }),
+    ).toBe("ack");
+    const retained = await runInDurableObject(
+      stub,
+      (_instance, durableState) =>
+        JSON.parse(
+          durableState.storage.sql
+            .exec<{ v: string }>("SELECT v FROM meta WHERE k='lobbyBudget'")
+            .one().v,
+        ) as { tokens: number },
+    );
+    expect(retained.tokens).toBe(17);
+  });
+
   it("answers clock sync without reading or writing SQLite", async () => {
     const host = await create();
     const inbox = await connect(host);
