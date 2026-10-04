@@ -5,7 +5,7 @@ diagnostic metadata use a discriminated union on `type`, defined once with Zod i
 `src/shared/protocol/` and imported by both client and worker. A fixed pair of
 transport-only debug ping/pong strings is described below. Binary encoding
 (e.g. MessagePack) is a later
-optimization only if profiling says so — messages are small and infrequent.
+optimization only if profiling says so - messages are small and infrequent.
 
 ## Implemented playable protocol
 
@@ -333,7 +333,7 @@ type QueueServerMessage =
 
 `welcome` includes `protocolVersion`. On mismatch the client shows "Update
 available" and reloads (the service worker fetches the new build). Never deploy a
-protocol change that old clients can misread silently — bump the version.
+protocol change that old clients can misread silently - bump the version.
 
 Every deploy restarts the Durable Objects and drops their WebSockets, so every open
 client reconnects to the new code within seconds. That reconnect's `welcome` is

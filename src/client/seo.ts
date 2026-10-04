@@ -1,6 +1,6 @@
 const LOCALE_METADATA = {
   fr: {
-    title: "Polytour — Jeu de plateau multijoueur en ligne",
+    title: "Polytour - Jeu de plateau multijoueur en ligne",
     description:
       "Jouez à Polytour, un jeu de plateau immobilier pour 2 à 4 joueurs. Achetez des villes, construisez et jouez entre amis ou contre des bots dans votre navigateur.",
     imageAlt: "Plateau de jeu Polytour avec ses villes et ses pions",
@@ -8,7 +8,7 @@ const LOCALE_METADATA = {
     alternateLocale: "en_GB",
   },
   en: {
-    title: "Polytour — Online Multiplayer Board Game",
+    title: "Polytour - Online Multiplayer Board Game",
     description:
       "Play Polytour, a property-trading board game for 2–4 players. Buy cities, build and play with friends or bots in your browser.",
     imageAlt: "Polytour game board with cities and player tokens",

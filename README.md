@@ -1,5 +1,21 @@
 # Polytour
 
+<p align="center">
+  <a href="https://polytour.fun">
+    <img width="2556" height="1299" alt="Polytour" src="https://github.com/user-attachments/assets/ac73fe25-975e-4bc9-a5bb-3046ac07e04c" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://polytour.fun">
+    <img src="https://img.shields.io/badge/🎮_PLAY_NOW-polytour.fun-brightgreen?style=for-the-badge" alt="Play Polytour">
+  </a>
+</p>
+
+<p align="center">
+  <sub><i>Screenshot might not be up to date.</i></sub>
+</p>
+
 A multiplayer property-strategy board game for PC browsers. Two to four players travel from
 French cities to Tokyo, buy land, build, pay rent and compete for collections on an
 original Three.js toy board. Cloudflare Workers and one SQLite Durable Object per

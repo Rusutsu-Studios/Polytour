@@ -1,4 +1,4 @@
-# Polytour — AGENTS.md
+# Polytour - AGENTS.md
 
 This file is the one set of project instructions for every coding agent: Codex
 reads it directly, and Claude Code reads it through the `@AGENTS.md` import in
@@ -56,7 +56,7 @@ The prototype uses Three.js/R3F, GSAP, Motion, ordinary CSS, React state, and a
 small reconnecting socket adapter. Drei, postprocessing, Tailwind, Zustand,
 Howler and partysocket remain planned; see TECH_STACK.md.
 
-## Layout (planned — single package, one Worker, one deploy)
+## Layout (planned - single package, one Worker, one deploy)
 
 ```
 src/
@@ -86,7 +86,7 @@ pnpm typecheck      # tsc -b
 pnpm lint           # biome check .
 pnpm build          # vite build (client + worker)
 pnpm run deploy     # build + wrangler deploy (bare `pnpm deploy` is a pnpm builtin)
-pnpm cf-typegen     # wrangler types — rerun after any wrangler.jsonc change
+pnpm cf-typegen     # wrangler types - rerun after any wrangler.jsonc change
 pnpm test:e2e       # desktop UI plus production Worker/socket flows
                     # first run: pnpm exec playwright install chromium
 pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
@@ -138,7 +138,7 @@ verification commands exist; local browser/proof evidence stays gitignored.
   `server.accept()` or `addEventListener` inside a DO.
 - Per-connection identity (playerId, seat) goes in `ws.serializeAttachment()` (≤16 KB);
   anything else must be reloaded from SQLite after hibernation. The constructor runs
-  on every wake-up — keep it cheap: check for existing tables inside
+  on every wake-up - keep it cheap: check for existing tables inside
   `blockConcurrencyWhile`; create the schema only in `init()`. Unknown and cleaned-up
   rooms must not recreate tables on lookup, join, socket callbacks or alarms.
   Presence comes from `ctx.getWebSockets(tag)`, never from a stored flag.
@@ -160,7 +160,7 @@ verification commands exist; local browser/proof evidence stays gitignored.
 - Persist first, then broadcast. Write the new state + event log rows in one
   synchronous `sql.exec` sequence (no `await` between related writes).
 - SQLite-backed DO classes only (`new_sqlite_classes` in migrations). DO migrations
-  in `wrangler.jsonc` are append-only — never edit or remove a shipped tag.
+  in `wrangler.jsonc` are append-only - never edit or remove a shipped tag.
 - D1 holds cross-match data (users, match results, ratings). Game-in-progress state
   lives only in the DO.
 - Every deploy restarts all DOs mid-game. New code must load state saved by the
@@ -338,4 +338,4 @@ If an architecture rule fires on code that genuinely needs the exception, add a
   product, assets, or store listings. Mechanics are fine; branding is not.
 - Don't add a dependency that duplicates one in the stack table without updating
   [docs/TECH_STACK.md](docs/TECH_STACK.md) with the reason.
-- Don't put game logic in React components or in the Worker/DO glue — it belongs in `shared/engine`.
+- Don't put game logic in React components or in the Worker/DO glue - it belongs in `shared/engine`.
