@@ -2,7 +2,6 @@ import type { CSSProperties } from "react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
-import ActionButton from "./ActionButton.js";
 import { money } from "./board-display.js";
 import "./RoomSettings.css";
 
@@ -19,6 +18,11 @@ const TOGGLES = [
     "tripleMonopoly",
     "Victoire par trois collections",
     "Win with three complete sets",
+  ],
+  [
+    "resortMonopoly",
+    "Victoire par les quatre plages",
+    "Win with all four beaches",
   ],
   ["hotelsDirectly", "Hôtels directement achetables", "Buy hotels directly"],
   ["extraRollOnDouble", "Rejouer après un double", "Roll again on doubles"],
@@ -269,7 +273,6 @@ export function RoomSettings({
   config,
   onChange,
   disabled = false,
-  save,
 }: RoomSettingsProps) {
   const { t } = useLocale();
   const giftDescriptionId = useId();
@@ -406,17 +409,14 @@ export function RoomSettings({
               "Be the last player left after everyone else goes bankrupt. Zero cash alone is not bankruptcy: properties can cover a debt.",
             )}
           </li>
-          <li>
-            {t(
-              "Posséder les quatre stations touristiques.",
-              "Own all four resorts.",
-            )}
-          </li>
+          {config.resortMonopoly !== false && (
+            <li>{t("Posséder les quatre plages.", "Own all four beaches.")}</li>
+          )}
           {config.lineMonopoly && (
             <li>
               {t(
-                "Posséder toutes les villes et stations d’un même côté du plateau.",
-                "Own every city and resort on one side of the board.",
+                "Posséder toutes les villes et plages d’un même côté du plateau.",
+                "Own every city and beach on one side of the board.",
               )}
             </li>
           )}
@@ -443,36 +443,11 @@ export function RoomSettings({
         </ul>
         <p>
           {t(
-            "À égalité de patrimoine : argent disponible, puis nombre de stations, puis ordre de jeu initial.",
-            "Net-worth ties: most cash, then most resorts, then original turn order.",
+            "À égalité de patrimoine : argent disponible, puis nombre de plages, puis ordre de jeu initial.",
+            "Net-worth ties: most cash, then most beaches, then original turn order.",
           )}
         </p>
       </section>
-      {save && (
-        <ActionButton
-          type="button"
-          className="room-settings-save"
-          disabled={disabled || !save.dirty}
-          disabledReason={
-            disabled
-              ? t(
-                  "Les réglages ne peuvent pas être modifiés pour le moment.",
-                  "Settings cannot be changed right now.",
-                )
-              : t(
-                  "Tous les réglages sont déjà enregistrés.",
-                  "All settings are already saved.",
-                )
-          }
-          onClick={() => {
-            if (!disabled && save.dirty) save.onSave();
-          }}
-        >
-          {save.dirty
-            ? t("Enregistrer les réglages", "Save settings")
-            : t("Réglages enregistrés", "Settings saved")}
-        </ActionButton>
-      )}
     </div>
   );
 }

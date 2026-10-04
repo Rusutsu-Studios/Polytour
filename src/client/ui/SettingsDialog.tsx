@@ -21,7 +21,13 @@ export default function SettingsDialog(props: RoomSettingsProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const { reducedMotion } = useDirector();
-  const dismiss = () => setOpen(false);
+  const saved = useRef(false);
+  // Leaders' changes are sent once, whichever way the dialog closes.
+  const dismiss = () => {
+    if (!saved.current && !disabled && save?.dirty) save.onSave();
+    saved.current = true;
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (!open || !dialogRef.current) return;
@@ -43,7 +49,10 @@ export default function SettingsDialog(props: RoomSettingsProps) {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={`${id}-dialog`}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          saved.current = false;
+          setOpen(true);
+        }}
       >
         <Icon name="settings" size={21} />
         <span className="settings-trigger-title">
@@ -107,8 +116,8 @@ export default function SettingsDialog(props: RoomSettingsProps) {
                       )
                     : save
                       ? t(
-                          "Enregistrez vos changements pour la salle.",
-                          "Save your changes for this room.",
+                          "Vos changements sont enregistrés à la fermeture.",
+                          "Your changes are saved when you close this window.",
                         )
                       : t(
                           "Choisissez les règles de votre prochaine partie.",

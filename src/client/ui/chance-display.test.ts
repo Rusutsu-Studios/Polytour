@@ -155,8 +155,8 @@ describe("luck-card descriptions without a draw", () => {
       for (const detail of [staged, direct]) {
         expect(detail).toContain(
           locale === "fr"
-            ? "Les stations, les hôtels et les monuments"
-            : "Resorts, Hotels and Landmarks",
+            ? "Les plages, les hôtels et les monuments"
+            : "Beaches, Hotels and Landmarks",
         );
         expect(detail).toContain(
           locale === "fr" ? "défaussée sans effet" : "discarded without effect",

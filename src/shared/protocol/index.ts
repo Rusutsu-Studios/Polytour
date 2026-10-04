@@ -21,6 +21,7 @@ export const RoomConfigSchema = z
     festivalCount: z.number().int().min(0).max(20).default(3),
     lineMonopoly: z.boolean().default(true),
     tripleMonopoly: z.boolean().default(true),
+    resortMonopoly: z.boolean().default(false),
     hotelsDirectly: z.boolean().default(false),
     extraRollOnDouble: z.boolean().default(true),
     tripleDoubleToIsland: z.boolean().default(true),

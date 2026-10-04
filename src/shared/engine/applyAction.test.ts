@@ -944,7 +944,11 @@ describe("wins, rankings and timeouts", () => {
       [[1, 2, 3, 4, 5, 6], 7, "line-monopoly"],
       [[4, 14, 18], 25, "resort-monopoly"],
     ] as const) {
-      let state = newGame(4, { ...CONFIG, boardRule: "country" });
+      let state = newGame(4, {
+        ...CONFIG,
+        boardRule: "country",
+        resortMonopoly: true,
+      });
       const seat = state.activeSeat;
       for (const tile of tiles) state = grant(state, tile, seat);
       const bought = act(land(state, last).state, {
@@ -954,6 +958,17 @@ describe("wins, rankings and timeouts", () => {
       expect(bought.result).toMatchObject({ winner: seat, kind });
       expect(bought.result?.standings[0].seat).toBe(seat);
     }
+  });
+  it("leaves the four-resort win off by default but keeps it on saves without the option", () => {
+    const own = (config: GameConfig) => {
+      let state = newGame(4, { ...config, boardRule: "country" });
+      const seat = state.activeSeat;
+      for (const tile of [4, 14, 18]) state = grant(state, tile, seat);
+      return act(land(state, 25).state, { type: "Buy", level: 0 }).state;
+    };
+    expect(own(CONFIG).status).toBe("active");
+    const { resortMonopoly: _marker, ...unmarked } = CONFIG;
+    expect(own(unmarked).result?.kind).toBe("resort-monopoly");
   });
   it("honors disabled line/triple conditions and real timed settings", () => {
     let state = newGame(4, {
