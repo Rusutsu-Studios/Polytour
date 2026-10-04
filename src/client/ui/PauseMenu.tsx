@@ -157,9 +157,19 @@ export default function PauseMenu({
   }, [page]);
 
   useEffect(() => {
-    // Confirming the pause can briefly disable Continue before its ack arrives.
-    // Return keyboard focus to Resume once the server accepts the command.
-    if (paused && !blocked && page === "menu") continueRef.current?.focus();
+    // A pause acknowledgement can disable Continue or remove a vote button.
+    // Restore Resume without overriding focus returned from settings or Leave.
+    const focusLost =
+      document.activeElement === document.body ||
+      document.activeElement === dialogRef.current;
+    if (
+      paused &&
+      !blocked &&
+      page === "menu" &&
+      (returnTo.current === "continue" || focusLost)
+    ) {
+      continueRef.current?.focus();
+    }
   }, [paused, blocked, page]);
 
   const backToMenu = () => {

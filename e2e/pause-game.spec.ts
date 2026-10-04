@@ -173,13 +173,13 @@ async function startGame(host: Actor, actors: Actor[], playerCount: number) {
   }
 }
 
-async function openPause(actor: Actor) {
-  await actor.page
-    .getByRole("button", {
-      name: label(actor, "Menu pause", "Pause menu"),
-      exact: true,
-    })
-    .click();
+async function openPause(actor: Actor, keyboard = false) {
+  const trigger = actor.page.getByRole("button", {
+    name: label(actor, "Menu pause", "Pause menu"),
+    exact: true,
+  });
+  if (keyboard) await trigger.press("Enter");
+  else await trigger.click();
   await expect(actor.page.locator(".pause-dialog")).toBeVisible();
 }
 
@@ -251,8 +251,15 @@ for (const viewport of desktopSizes) {
     try {
       await startGame(actor, [actor], 2);
       const scheduledBotAt = await findBotTimer(actor);
-      await openPause(actor);
+      // Native keyboard activation avoids waiting for a moving pointer target
+      // while the real bot alarm approaches. This still opens the normal UI.
+      await openPause(actor, true);
       await expect.poll(() => actor.state?.pause?.kind).toBe("paused");
+      expect(
+        actor.state?.players.find(
+          (player) => player.seat === actor.state?.pending?.seat,
+        )?.control,
+      ).toBe("bot");
       await expect(actor.page.locator(".pause-note")).toHaveText(
         pausedNote(actor),
       );
@@ -297,6 +304,7 @@ for (const viewport of desktopSizes) {
       await actor.page.screenshot({
         path: `.local/verification/game-paused-${viewport.width}.png`,
       });
+      const resumeMessagesAt = actor.received.length;
       if (viewport.width === 1280) await resumeButton(actor).click();
       else if (viewport.width === 1440)
         await actor.page
@@ -305,19 +313,32 @@ for (const viewport of desktopSizes) {
       else await actor.page.keyboard.press("Escape");
       await expect(actor.page.locator(".pause-dialog")).toHaveCount(0);
       await expect.poll(() => actor.state?.pause).toBeNull();
-      const resumedState = actor.state;
-      if (!pausedState?.pending || !resumedState?.pending)
+      const resumedFrame = actor.received
+        .slice(resumeMessagesAt)
+        .find(
+          (message) =>
+            message.type === "events" &&
+            message.events.some((event) => event.type === "GameResumed"),
+        );
+      if (resumedFrame?.type !== "events")
+        throw new Error("Expected an authoritative resume event");
+      const resumed = resumedFrame.events.find(
+        (event) => event.type === "GameResumed",
+      );
+      if (!pausedState?.pending || !resumed?.pending)
         throw new Error("Expected the bot's decision to survive the pause");
-      expect(resumedState.pending.deadline).toBeGreaterThan(
+      expect(resumed.pending.seat).toBe(pausedState.pending.seat);
+      expect(resumed.pending.deadline).toBeGreaterThan(
         pausedState.pending.deadline,
       );
-      expect(resumedState.matchDeadline ?? 0).toBeGreaterThan(
+      expect(resumed.matchDeadline ?? 0).toBeGreaterThan(
         pausedState.matchDeadline ?? 0,
       );
-      const resumedSeq = actor.seq;
+      // The bot can act before a slow browser finishes its UI assertions.
+      // Anchor progress to the resume frame, rather than that later sample.
       await expect
         .poll(() => actor.seq, { timeout: 20_000 })
-        .toBeGreaterThan(resumedSeq);
+        .toBeGreaterThan(resumedFrame.toSeq);
       expect(
         actor.sent.filter(
           (message) =>
@@ -437,7 +458,7 @@ test("an off-turn human requests a multiplayer vote, decline keeps play running 
         requiredSeats: [0, 1],
         acceptedSeats: [requester.credentials.seat],
       });
-    expect(requester.seq).toBeGreaterThan(beforeRequestSeq);
+    await expect.poll(() => requester.seq).toBeGreaterThan(beforeRequestSeq);
     expect(voter.state?.activeSeat).toBe(activeSeat);
     await expect(voter.page.locator(".pause-dialog")).toBeVisible();
     await expect(voter.page.locator(".pause-dialog")).toContainText(
@@ -552,14 +573,22 @@ test("each local human must accept, and a unanimous paused snapshot survives rel
       /2\s*\/\s*3/,
     );
     await host.page
-      .getByRole("button", {
-        name: "Accepter la pause pour Sora",
-        exact: true,
-      })
+      .getByRole("button", { name: "Réglages", exact: true })
       .click();
+    await host.page.keyboard.press("Escape");
+    await expect(
+      host.page.getByRole("button", { name: "Réglages", exact: true }),
+    ).toBeFocused();
+    const finalConsent = host.page.getByRole("button", {
+      name: "Accepter la pause pour Sora",
+      exact: true,
+    });
+    await finalConsent.focus();
+    await host.page.keyboard.press("Enter");
     await expect
       .poll(() => actors.map((actor) => actor.state?.pause?.kind))
       .toEqual(["paused", "paused"]);
+    await expect(resumeButton(host)).toBeFocused();
     for (const actor of actors)
       await expect(actor.page.locator(".pause-note")).toHaveText(
         pausedNote(actor),
