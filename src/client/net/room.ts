@@ -349,6 +349,10 @@ export function useRoom(credentials: RoomCredentials | null) {
                   "Cette partie sauvegardée utilise une version incompatible. Revenez à l’accueil pour créer une partie.",
                   "This saved game uses an incompatible version. Return to the home screen to create a game.",
                 ],
+                "lobby-rate-limit": [
+                  "Trop de modifications de la salle. Patientez un instant, puis réessayez.",
+                  "Too many room changes. Wait a moment, then try again.",
+                ],
                 "illegal-action": [
                   "Ce choix n’est plus disponible. Vérifiez les actions proposées.",
                   "This choice is no longer available. Check the available actions.",
