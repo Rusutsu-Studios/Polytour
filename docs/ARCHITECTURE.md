@@ -147,6 +147,11 @@ or database contents. This metadata is sent
 only to the requesting room member. It is refreshed after reconnection or when an
 initial measurement was interrupted, without continuous metadata polling.
 
+The Debug view also lists the bank's account (paid to players, received from
+players and the balance, which starts at 0). It comes from the public match
+state the client already holds, so it adds no traffic. State version 2 added the
+account; a version-1 save climbs with an empty account.
+
 The route diagram joins those player entry points to one shared `GameRoom` with
 its local SQLite database. A DO's exact execution POP and physical server hostname
 have no documented runtime getters; their unhelpful placeholder rows are omitted

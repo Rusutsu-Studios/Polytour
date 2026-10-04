@@ -57,6 +57,7 @@ import {
   reserveAnchor,
   screenTop,
   sideFrame,
+  startBankPoint,
   tileCenter,
   tilePoint,
   tileRotation,
@@ -132,8 +133,13 @@ const ROLL_SPOT: readonly [number, number, number] = [1.05, LAWN_TOP, 1.05];
 const DICE_DEFAULT_COLOR = "#d9473a";
 // The dice take the roller's color, brighter than the pawn so pips stay crisp.
 const DICE_COLORS = ["#e0533b", "#3a87e2", "#9564d3", "#2f9b5f"] as const;
-const [BANK_X, BANK_Z] = tileCenter(0);
-const BANK_POSITION: readonly [number, number, number] = [BANK_X, 0.7, BANK_Z];
+const [BANK_X, BANK_Z] = startBankPoint();
+// Bank money leaves and lands just above the bank printed on Start.
+const BANK_POSITION: readonly [number, number, number] = [
+  BANK_X,
+  LOT_TOP + 0.12,
+  BANK_Z,
+];
 
 function pawnPosition(seat: Seat, tile: number): [number, number, number] {
   const [x, z] = pawnSpot(seat, tile);
@@ -1328,11 +1334,26 @@ function CashReserves({ state }: { state: PublicState }) {
   );
 }
 
-function cashTransfer(event: GameEvent) {
+/**
+ * Who pays whom. `null` is the bank, unless `tile` is set: property money
+ * moves between a player and that lot, not through the bank.
+ */
+function cashTransfer(event: GameEvent): {
+  from: Seat | null;
+  to: Seat | null;
+  amount: number;
+  tile?: number;
+} | null {
   switch (event.type) {
     case "SalaryPaid":
-    case "PropertySold":
       return { from: null, to: event.seat, amount: event.amount };
+    case "PropertySold":
+      return {
+        from: null,
+        to: event.seat,
+        amount: event.amount,
+        tile: event.tile,
+      };
     case "RentPaid":
       return { from: event.seat, to: event.owner, amount: event.amount };
     case "MoneyTransferred":
@@ -1345,7 +1366,12 @@ function cashTransfer(event: GameEvent) {
       };
     case "PropertyBought":
     case "PropertyUpgraded":
-      return { from: event.seat, to: null, amount: event.amount };
+      return {
+        from: event.seat,
+        to: null,
+        amount: event.amount,
+        tile: event.tile,
+      };
     default:
       return null;
   }
@@ -1586,10 +1612,15 @@ function SceneContent(props: BoardProps) {
       )
         return true;
       const generation = ++cashEffectGeneration;
-      const reserve = (seat: Seat | null) =>
-        seat === null
-          ? BANK_POSITION
-          : reserveSpot(seat, 0, 0, BOARD_BOTTOM + 0.2);
+      const lot = transfer.tile;
+      const reserve = (
+        seat: Seat | null,
+      ): readonly [number, number, number] => {
+        if (seat !== null) return reserveSpot(seat, 0, 0, BOARD_BOTTOM + 0.2);
+        if (lot === undefined) return BANK_POSITION;
+        const [x, z] = tileCenter(lot);
+        return [x, LOT_TOP + 0.12, z];
+      };
       const from = reserve(transfer.from);
       const to = reserve(transfer.to);
       const count = Math.min(
