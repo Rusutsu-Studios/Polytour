@@ -314,12 +314,6 @@ for (const viewport of [
       });
       await expect(salary).toBeEnabled();
       await salary.fill("450000");
-      await settings
-        .getByRole("button", { name: "Save settings", exact: true })
-        .click();
-      await expect(
-        settings.getByRole("button", { name: "Settings saved", exact: true }),
-      ).toBeDisabled();
       await guestPage.keyboard.press("Escape");
       await expect(guestPage.locator(".settings-trigger")).toBeFocused();
       await guestPage

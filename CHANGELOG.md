@@ -11,6 +11,14 @@ has been published, and it does not reconstruct earlier development history.
 
 ### Changed
 
+- The four-resort win is now called the four-beach win in the interface (French: plages).
+- The room settings dialog saves the leader's changes when it closes; the Save
+  settings button is gone.
+
+## [0.5.1] - 2026-10-04
+
+### Changed
+
 - The four-resort win is now an optional room setting, off by default. Saved
   matches made before the option keep the win enabled.
 

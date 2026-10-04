@@ -157,10 +157,6 @@
   gap: 16px 32px;
 }
 
-.settings-dialog .room-settings:has(.room-settings-save) {
-  grid-template-rows: auto auto auto auto;
-}
-
 .settings-dialog .room-settings-main {
   grid-column: 1;
   grid-row: 1 / -1;
@@ -205,13 +201,6 @@
   align-self: start;
   margin-top: 0;
   padding-top: 12px;
-}
-
-.settings-dialog .room-settings-save {
-  grid-column: 2;
-  grid-row: 4;
-  align-self: end;
-  margin-top: 0;
 }
 
 .settings-dialog .room-settings-wins {
@@ -331,8 +320,7 @@
     padding-inline: 20px;
   }
 
-  .settings-dialog .room-settings,
-  .settings-dialog .room-settings:has(.room-settings-save) {
+  .settings-dialog .room-settings {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     gap: 22px;
@@ -341,8 +329,7 @@
   .settings-dialog .room-settings-main,
   .settings-dialog .room-settings-rules,
   .settings-dialog .room-settings-fairness,
-  .settings-dialog .room-settings-wins,
-  .settings-dialog .room-settings-save {
+  .settings-dialog .room-settings-wins {
     grid-column: 1;
     grid-row: auto;
   }

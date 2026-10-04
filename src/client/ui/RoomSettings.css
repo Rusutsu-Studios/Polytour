@@ -258,20 +258,6 @@
   line-height: 1.6;
 }
 
-.room-settings-save {
-  width: 100%;
-  min-height: 46px;
-  margin-top: 20px;
-  padding: 10px 18px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--ink);
-  color: var(--paper);
-  font-size: 15px;
-  font-weight: 750;
-  box-shadow: 0 3px 4px #173b4526;
-}
-
 .room-setting-help {
   margin: 0 0 8px 30px;
   color: var(--muted);
@@ -305,20 +291,6 @@
   font-size: 14px;
 }
 
-.room-settings-save:hover:not(:disabled) {
-  background: #24566b;
-}
-
-.room-settings-save:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.room-settings-save:disabled {
-  background: #d2dfda;
-  color: #47666c;
-  box-shadow: none;
-}
-
 .room-setting-range:disabled,
 .room-setting-pill:has(input:disabled),
 .room-setting-toggle:has(input:disabled) {
@@ -345,7 +317,6 @@
 }
 
 .room-settings input:focus-visible,
-.room-settings-save:focus-visible,
 .room-settings-fairness summary:focus-visible {
   outline: 3px solid var(--settings-blue);
   outline-offset: 3px;

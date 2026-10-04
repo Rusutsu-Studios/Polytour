@@ -226,8 +226,8 @@ function pickDetail(action: BoardPickAction, state: PublicState): string {
   if (owner)
     return resort
       ? t(
-          `Votre station · loyer ${money(propertyRent(state, tile))}`,
-          `Your resort · rent ${money(propertyRent(state, tile))}`,
+          `Votre plage · loyer ${money(propertyRent(state, tile))}`,
+          `Your beach · rent ${money(propertyRent(state, tile))}`,
         )
       : t(
           `Votre ville · ${levelName(property?.level ?? 0)} · construire`,
@@ -235,8 +235,8 @@ function pickDetail(action: BoardPickAction, state: PublicState): string {
         );
   return resort
     ? t(
-        `Station libre · ${money(tilePrice(tile, state) ?? 0)}`,
-        `Unowned resort · ${money(tilePrice(tile, state) ?? 0)}`,
+        `Plage libre · ${money(tilePrice(tile, state) ?? 0)}`,
+        `Unowned beach · ${money(tilePrice(tile, state) ?? 0)}`,
       )
     : t(
         `Ville libre · terrain ${money(tilePrice(tile, state) ?? 0)}`,
@@ -510,7 +510,7 @@ export default function DecisionPanel({
                 ),
         ]
       : pending?.kind === "buy" && resort
-        ? [t("Acheter une station", "Buy a resort"), ""]
+        ? [t("Acheter une plage", "Buy a beach"), ""]
         : pending?.kind === "host" && decline
           ? [
               decisionCopy("host")[0],
@@ -1116,7 +1116,7 @@ export default function DecisionPanel({
                 ? t("Fin de votre partie", "End of your game")
                 : selectedAction && "level" in selectedAction
                   ? resort
-                    ? t("Station balnéaire", "Resort")
+                    ? t("Plage", "Beach")
                     : levelName(selectedAction.level)
                   : selectedAction
                     ? actionLabel(selectedAction, state)

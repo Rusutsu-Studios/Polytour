@@ -88,12 +88,8 @@ function observeRoomCommands(screen: Page) {
   };
 }
 
-/** Saves the leader's settings draft for the room, then closes the sheet. */
+/** Closing the sheet saves the leader's settings draft for the room. */
 async function saveSettings(page: Page) {
-  await page.getByRole("button", { name: "Enregistrer les réglages" }).click();
-  await expect(page.locator(".room-settings-save")).toHaveText(
-    "Réglages enregistrés",
-  );
   await page
     .locator(".settings-dialog-footer")
     .getByRole("button", { name: "Fermer les réglages" })
@@ -396,10 +392,10 @@ test("win conditions follow the settings draft and saved rules in both languages
     name: "How to win with these settings",
   });
   await expect(wins.getByRole("listitem")).toHaveCount(5);
-  await expect(wins).not.toContainText("Own all four resorts.");
-  await dialog.getByLabel("Win with all four resorts", { exact: true }).check();
+  await expect(wins).not.toContainText("Own all four beaches.");
+  await dialog.getByLabel("Win with all four beaches", { exact: true }).check();
   await expect(wins.getByRole("listitem")).toHaveCount(6);
-  await expect(wins).toContainText("Own all four resorts.");
+  await expect(wins).toContainText("Own all four beaches.");
   await expect(wins).toContainText("Zero cash alone is not bankruptcy");
   await expect(wins).toContainText("10000-round limit");
   await dialog.getByLabel("Win with a full side", { exact: true }).uncheck();
@@ -459,12 +455,9 @@ test("win conditions follow the settings draft and saved rules in both languages
       path: `.local/verification/win-settings-en-${size.width}.png`,
     });
   }
-  await dialog
-    .getByRole("button", { name: "Save settings", exact: true })
-    .click();
-  await expect(dialog.locator(".room-settings-save")).toHaveText(
-    "Settings saved",
-  );
+  await expect(
+    dialog.getByRole("button", { name: /^Save settings$/ }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.locator(".lobby-seats")).toBeVisible();
@@ -475,7 +468,7 @@ test("win conditions follow the settings draft and saved rules in both languages
   });
   await expect(frenchWins.getByRole("listitem")).toHaveCount(4);
   await expect(frenchWins).toContainText("après 20 min");
-  await expect(frenchWins).toContainText("quatre stations touristiques");
+  await expect(frenchWins).toContainText("quatre plages");
   await dialog
     .getByLabel("Victoire par ligne complète", { exact: true })
     .check();
@@ -1280,7 +1273,10 @@ test("desktop room controls fit, create and join preserve the host settings", as
         .getByRole("radio", { name: "20 min", exact: true }),
     ).toBeChecked();
     await hostCommand("settings", () =>
-      page.getByRole("button", { name: "Enregistrer les réglages" }).click(),
+      page
+        .locator(".settings-dialog-footer")
+        .getByRole("button", { name: "Fermer les réglages" })
+        .click(),
     );
     await expect(
       second
@@ -1290,10 +1286,6 @@ test("desktop room controls fit, create and join preserve the host settings", as
     await expect(
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeEnabled();
-    await page
-      .locator(".settings-dialog-footer")
-      .getByRole("button", { name: "Fermer les réglages" })
-      .click();
     await second.getByRole("button", { name: "Revenir au plateau" }).click();
     // Friends took the first two bots' places. Only the leader sends the last
     // bot away or seats one again on the open card.
