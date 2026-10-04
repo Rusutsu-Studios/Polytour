@@ -1642,12 +1642,14 @@ describe("Authoritative private rooms", () => {
       });
       expect(await answer(socket, "start-level")).toBe("ack");
       const stub = env.GAME_ROOM.getByName(host.roomCode);
-      await runInDurableObject(stub, (_instance, durableState) => {
+      await runInDurableObject(stub, async (_instance, durableState) => {
         const row = durableState.storage.sql
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0];
         const state = JSON.parse(row.json) as GameState;
         expect(state.config.botDifficulty).toBe(level);
+        // Reconnect must observe the pending purchase before any alarm runs.
+        const alarmAt = Date.now() + 60_000;
         durableState.storage.sql.exec(
           "UPDATE state SET json=? WHERE id=1",
           JSON.stringify({
@@ -1670,8 +1672,9 @@ describe("Authoritative private rooms", () => {
         );
         durableState.storage.sql.exec(
           "INSERT INTO timers(kind,fire_at) VALUES('bot',?)",
-          Date.now() - 1,
+          alarmAt,
         );
+        await durableState.storage.setAlarm(alarmAt);
       });
       const resumed = await connect(host);
       const recovered = await resumed.next("welcome");
@@ -1681,7 +1684,8 @@ describe("Authoritative private rooms", () => {
           "UPDATE timers SET fire_at=? WHERE kind='bot'",
           Date.now() - 1,
         );
-        await durableState.storage.setAlarm(Date.now() - 1);
+        // The SQL timer is due, but only the explicit helper may fire the alarm.
+        await durableState.storage.setAlarm(Date.now() + 60_000);
       });
       expect(await runDurableObjectAlarm(stub)).toBe(true);
       const batch = await resumed.next("events");
