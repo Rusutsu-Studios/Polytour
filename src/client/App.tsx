@@ -1228,6 +1228,7 @@ function MatchView({
           aria-label={t("Carnet de voyage", "Game log")}
           title={t("Carnet de voyage", "Game log")}
           aria-expanded={tool === "journal"}
+          aria-controls="game-tool-panel"
           onClick={(event) => showTool("journal", event.currentTarget)}
         >
           <Icon name="journal" size={18} />
@@ -1484,9 +1485,10 @@ function MatchView({
       <AnimatePresence>
         {tool && (
           <motion.section
+            id="game-tool-panel"
             ref={toolRef}
             key={tool}
-            className={`tool-drawer${tool === "rules" ? " tool-drawer--rules" : ""}`}
+            className={`tool-drawer${tool === "journal" ? " tool-drawer--journal" : tool === "rules" ? " tool-drawer--rules" : ""}`}
             aria-labelledby="tool-title"
             initial={reducedMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1647,9 +1649,6 @@ function MatchView({
         )}
       </AnimatePresence>
 
-      <div className="match-caption">
-        <span>{latestAction}</span>
-      </div>
       <span
         className="match-network"
         role="status"

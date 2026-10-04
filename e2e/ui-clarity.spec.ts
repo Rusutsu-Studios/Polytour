@@ -239,6 +239,124 @@ test("cash shortages have their own explanation", async ({ page }) => {
   await expect(house).toBeDisabled();
 });
 
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`optional game log stays above the lower-left player at ${size.width}×${size.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    const room = await decisionRoom(page);
+    await page.keyboard.press("Escape");
+    const trigger = page.getByRole("button", {
+      name: "Carnet de voyage",
+      exact: true,
+    });
+    const journal = page.locator(".tool-drawer--journal");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(journal).toHaveCount(0);
+    await expect(page.locator(".match-caption")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", {
+        name: /Explorer le plateau|Explore the board|Rechercher|Search/,
+      }),
+    ).toHaveCount(0);
+
+    await trigger.focus();
+    await trigger.press("Enter");
+    await expect(journal).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const close = journal.getByRole("button", {
+      name: "Fermer les outils",
+      exact: true,
+    });
+    await expect(close).toBeFocused();
+    await expect(journal).toContainText("Lancez les dés pour commencer.");
+
+    room.send(
+      Array.from({ length: 45 }, (_, index) => ({
+        type: "MoneyTransferred" as const,
+        from: null,
+        to: 0 as const,
+        amount: (index + 1) * 1000,
+        reason: "Fixture",
+      })),
+    );
+    const rows = journal.locator("li");
+    await expect(rows).toHaveCount(40);
+    await expect(rows.first()).toHaveText("La banque verse 45 k à Camille");
+    await expect(rows.last()).toHaveText("La banque verse 6 k à Camille");
+    const box = await journal.boundingBox();
+    const player = await page
+      .locator('.player-card[data-seat="0"]')
+      .boundingBox();
+    expect(box).not.toBeNull();
+    expect(player).not.toBeNull();
+    expect(box?.x).toBeGreaterThanOrEqual(0);
+    expect(box?.y).toBeGreaterThanOrEqual(0);
+    expect(Math.abs((box?.x ?? 0) - (player?.x ?? 0))).toBeLessThan(3);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThan(size.width / 2);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThan(player?.y ?? 0);
+    expect(box?.height).toBeLessThan(size.height / 2);
+    await rows.last().scrollIntoViewIfNeeded();
+    await expect(rows.last()).toBeInViewport();
+    expect(
+      await journal
+        .locator(".journal")
+        .evaluate((element) => element.scrollTop),
+    ).toBeGreaterThan(0);
+    room.send([
+      {
+        type: "MoneyTransferred",
+        from: null,
+        to: 0,
+        amount: 46_000,
+        reason: "Fixture",
+      },
+    ]);
+    await expect(rows).toHaveCount(40);
+    await expect(rows.first()).toHaveText("La banque verse 46 k à Camille");
+    await rows.first().scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `.local/verification/game-log-${size.width}.png`,
+    });
+
+    await page.keyboard.press("Escape");
+    await expect(journal).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.press("Space");
+    await expect(journal).toBeVisible();
+    await trigger.focus();
+    await trigger.press("Space");
+    await expect(journal).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.press("Enter");
+    await close.click();
+    await expect(journal).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    await page.getByRole("button", { name: "Menu pause", exact: true }).click();
+    await page.getByRole("button", { name: "Réglages", exact: true }).click();
+    await page
+      .locator(".pause-dialog")
+      .getByLabel("Langue", { exact: true })
+      .selectOption("en");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Game log", exact: true }).click();
+    await expect(journal.getByRole("heading")).toHaveText("Game log");
+    await expect(rows.first()).toHaveText("The bank pays 46 k to Camille");
+    await journal
+      .getByRole("button", { name: "Close tools", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Game log", exact: true }),
+    ).toBeFocused();
+  });
+}
+
 test("globe and language text switch directly on click and keyboard and persist", async ({
   page,
 }) => {
