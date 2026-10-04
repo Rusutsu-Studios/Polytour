@@ -103,9 +103,25 @@ const COPY = {
     "Use a protection card or pay the rent.",
   ],
 } as const;
-function decisionCopy(kind: keyof typeof COPY): readonly [string, string] {
+function decisionCopy(
+  kind: keyof typeof COPY,
+  islandRollsRemaining?: number,
+): readonly [string, string] {
   const [frTitle, frDescription, enTitle, enDescription] = COPY[kind];
-  return [t(frTitle, enTitle), t(frDescription, enDescription)];
+  const description = t(frDescription, enDescription);
+  if (kind === "island" && islandRollsRemaining !== undefined)
+    return [
+      t(frTitle, enTitle),
+      `${description} ${t(
+        islandRollsRemaining === 1
+          ? "Encore 1 lancer avant la libération automatique, même sans double."
+          : `Encore ${islandRollsRemaining} lancers avant la libération automatique, même sans double.`,
+        islandRollsRemaining === 1
+          ? "1 roll left until automatic release, even without doubles."
+          : `${islandRollsRemaining} rolls left until automatic release, even without doubles.`,
+      )}`,
+    ];
+  return [t(frTitle, enTitle), description];
 }
 function actionKey(action: Action): string {
   return `${action.type}:${"level" in action ? action.level : "tile" in action ? action.tile : "card" in action ? action.card : ""}`;
@@ -500,6 +516,11 @@ export default function DecisionPanel({
   const countdown = pending
     ? Math.max(0, Math.ceil((pending.deadline - now) / 1000))
     : 0;
+  const islandRollsRemaining = Math.max(
+    0,
+    ruleEconomy(economyRule(state.config)).islandMaxFailedEscapes -
+      (active?.islandTurns ?? 0),
+  );
   const copy: readonly [string, string] =
     pending?.kind === "card-target"
       ? [
@@ -529,7 +550,7 @@ export default function DecisionPanel({
                 `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
               ),
             ]
-          : decisionCopy(pending?.kind ?? "roll");
+          : decisionCopy(pending?.kind ?? "roll", islandRollsRemaining);
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
