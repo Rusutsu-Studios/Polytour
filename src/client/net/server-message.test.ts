@@ -51,6 +51,32 @@ const diagnostics: RoomDiagnostics = {
 };
 
 describe("room debug server envelopes", () => {
+  it("validates pause and resume events before they reach the reducer", () => {
+    const events = [
+      {
+        type: "PauseChanged",
+        pause: { kind: "paused", requestedBy: 0, startedAt: 10 },
+        pauseCooldownUntil: 300_000,
+      },
+      { type: "GameResumed", seat: 0, pending: null, matchDeadline: 400_000 },
+    ];
+    const envelope = { type: "events", fromSeq: 1, toSeq: 2, events };
+    expect(parseServerMessage(JSON.stringify(envelope))).toMatchObject({
+      events,
+    });
+    for (const event of [
+      {
+        ...events[0],
+        pause: { kind: "paused", requestedBy: 9, startedAt: 10 },
+      },
+      { ...events[0], pauseCooldownUntil: "later" },
+      { ...events[1], pending: { kind: "roll", seat: 0 } },
+      { ...events[1], matchDeadline: "later" },
+    ])
+      expect(() =>
+        parseServerMessage(JSON.stringify({ ...envelope, events: [event] })),
+      ).toThrow();
+  });
   it.each([false, true])(
     "retains the frozen resort festival marker %s",
     (resortFestivals) => {

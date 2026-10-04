@@ -27,6 +27,12 @@ export const BOT_TIMING = {
   resume: 900,
 } as const;
 
+/** Multiplayer pause requests share one cooldown, even when declined or expired. */
+export const PAUSE_TIMING = {
+  vote: 30_000,
+  cooldown: 5 * 60_000,
+} as const;
+
 export const CHANCE_AMOUNTS = {
   windfall: 150_000,
   fine: 100_000,

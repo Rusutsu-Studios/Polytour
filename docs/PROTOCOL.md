@@ -99,7 +99,8 @@ debug socket has been removed; `/api/health` remains.
   (`Not admitted`), so their capability stops working. `replace-bot` hands a bot's
   place to an admitted member: the engine emits `PlayerControlChanged {seat,
   control: "human", name}` and the seat keeps its money, cities, cards and turn.
-  It is refused while dice are pending. `return-to-lobby` discards the match
+  It is refused while dice, a pause vote or an accepted pause are pending.
+  `return-to-lobby` discards the match
   (state, event log, commands, timers) and keeps places, bots, settings and the
   frozen rules version; admitted members then take empty places, then bots' places.
 - Local players share a device: `add-local {seat, name}` (lobby only, any seated
@@ -108,7 +109,10 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
-- Protocol version 4 adds leaders, waiting members and local players (nullable
+- Protocol version 5 adds `RequestPause`, `VotePause {accept}` and `ResumeGame`,
+  public `pause` / `pauseCooldownUntil`, and `PauseChanged` / `GameResumed` events;
+  older clients reload. Version 4 adds leaders, waiting members and local players
+  (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
   New rooms freeze rules version 8 with `boardRule: "country"`,
@@ -126,7 +130,19 @@ debug socket has been removed; `/api/health` remains.
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
   `legalActions` supplies the choices; tile indices are 0..31; reference rooms use levels 0..4 and legacy prototype rooms retain 0..5.
 - Each intent has an id and `atSeq`; duplicates, stale state, wrong seats, malformed
-  actions, and actions during pending entropy are rejected.
+  actions, and actions during pending entropy are rejected. Pause actions keep
+  these checks and device/local-seat authorization, but may be sent off turn.
+  A solo human pauses immediately; several humans require unanimous acceptance
+  within 30 seconds while gameplay continues. Permanent bots, bankrupt players
+  and waiting members have no vote; disconnected humans still do. A multiplayer
+  request starts the shared five-minute cooldown. Rejection or expiry clears the
+  vote without stopping play. Any eligible human can resume an accepted pause.
+  Gameplay intents while paused get `game-paused`; a request during cooldown
+  gets `pause-cooldown`. Votes are outside `legalActions`, which lists turn choices.
+  Starting a pause after a spent decision applies its default and rejects the
+  stale request; match expiry wins over a new request. Pending dice get
+  `randomness-pending` for pause intents and defer vote expiry until that roll
+  resolves, preserving the commitment sequence.
 - `randomness {status,commitment?,proof?,message?}` carries the persisted roll
   context and resolved receipt. New-room defaults use immediate server Web Crypto:
   no beacon fetch, null round/chain/signature, `verified: false`. Saved drand rooms
@@ -141,7 +157,12 @@ debug socket has been removed; `/api/health` remains.
 - Presence derives from live hibernatable sockets. A disconnected human has a
   60-second grace period before server bot takeover; reconnect restores control.
 - With no open player sockets, a room sleeps instead of simulating bots. The match
-  still ends at its original deadline. Reconnect restores the pending timers and
+  still ends at its original deadline. An accepted pause retains its decision and
+  match budgets: resume shifts both deadlines by the elapsed pause duration.
+  Grace still runs; after every eligible human has disconnected for 60 seconds,
+  the server resumes the pause and restores unattended match expiry. Reconnect
+  within grace restores the persisted pause. Reconnect restores the pending timers
+  and
   may therefore encounter an already expired decision or a finished match.
 - Create/join failures use JSON errors. `room-storage-limit` (503) identifies the
   verified Cloudflare SQLite free-tier write-limit error; other internal failures
@@ -229,7 +250,14 @@ missing events follow immediately in an `events` message. Current `lobby` and
 `presence` messages follow as well.
 
 `Snapshot` = `toPublic(GameState)` (no PRNG state, no deck order), including
-`turnOrder` and the current `pending` decision with its `deadline`.
+`turnOrder` and the current `pending` decision with its `deadline`. Protocol 5
+also includes `pause: null | {kind: "vote", requestedBy, requiredSeats,
+acceptedSeats, deadline} | {kind: "paused", requestedBy, startedAt}` and the real-time
+`pauseCooldownUntil` timestamp. A paused snapshot keeps the stored deadlines;
+remaining decision and match budgets are measured at `pause.startedAt` until resume.
+`PauseChanged {pause, pauseCooldownUntil}` replaces the pause status.
+`GameResumed {seat, pending, matchDeadline}` clears it and supplies the complete
+shifted deadlines, so replay and reconnect recover the same remaining time.
 
 ## Game events
 

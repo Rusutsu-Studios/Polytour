@@ -37,6 +37,7 @@ export function useAmbientMotion({
     !lowGraphics &&
     !preview &&
     state?.status === "active" &&
+    state.pause?.kind !== "paused" &&
     visible;
   useEffect(() => {
     if (!animated) {

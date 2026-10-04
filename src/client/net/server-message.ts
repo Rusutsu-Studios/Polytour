@@ -7,6 +7,41 @@ import { RoomDiagnosticsSchema } from "../../shared/protocol/room-diagnostics.js
 const seat = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
 const tile = z.number().int().min(0).max(31);
 const integer = z.number().int();
+const pause = z
+  .discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("vote"),
+      requestedBy: seat,
+      requiredSeats: z.array(seat).min(2).max(4),
+      acceptedSeats: z.array(seat).min(1).max(4),
+      deadline: integer.nonnegative(),
+    }),
+    z.object({
+      kind: z.literal("paused"),
+      requestedBy: seat,
+      startedAt: integer.nonnegative(),
+    }),
+  ])
+  .nullable();
+const pending = z
+  .object({
+    kind: z.enum([
+      "roll",
+      "island",
+      "travel",
+      "buy",
+      "build",
+      "buyout",
+      "rent-card",
+      "host",
+      "card-target",
+      "sell",
+    ]),
+    seat,
+    deadline: z.number(),
+  })
+  .passthrough()
+  .nullable();
 const publicState = z.object({
   gameId: z.string(),
   config: z
@@ -46,25 +81,7 @@ const publicState = z.object({
   round: integer,
   phase: z.enum(["roll", "resolve"]),
   doublesInTurn: integer,
-  pending: z
-    .object({
-      kind: z.enum([
-        "roll",
-        "island",
-        "travel",
-        "buy",
-        "build",
-        "buyout",
-        "rent-card",
-        "host",
-        "card-target",
-        "sell",
-      ]),
-      seat,
-      deadline: z.number(),
-    })
-    .passthrough()
-    .nullable(),
+  pending,
   lastRoll: z
     .object({
       seat,
@@ -87,6 +104,8 @@ const publicState = z.object({
     })
     .nullable(),
   startedAt: z.number(),
+  pause,
+  pauseCooldownUntil: integer.nonnegative(),
 });
 const state = z.custom<PublicState>(
   (value) => publicState.safeParse(value).success,
@@ -118,6 +137,8 @@ const eventTypes = new Set([
   "PropertiesSwapped",
   "PlayerBankrupt",
   "PlayerControlChanged",
+  "PauseChanged",
+  "GameResumed",
 ]);
 const event = z.custom<GameEvent>((value) => {
   if (
@@ -130,6 +151,14 @@ const event = z.custom<GameEvent>((value) => {
     return false;
   if (value.type === "GameCreated")
     return "state" in value && publicState.safeParse(value.state).success;
+  if (value.type === "PauseChanged")
+    return z
+      .object({ pause, pauseCooldownUntil: integer.nonnegative() })
+      .safeParse(value).success;
+  if (value.type === "GameResumed")
+    return z
+      .object({ seat, pending, matchDeadline: z.number().nullable() })
+      .safeParse(value).success;
   if ("seat" in value && !seat.safeParse(value.seat).success) return false;
   if ("tile" in value && !tile.safeParse(value.tile).success) return false;
   if (value.type === "DiceRolled")

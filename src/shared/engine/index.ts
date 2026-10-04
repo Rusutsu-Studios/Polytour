@@ -20,6 +20,7 @@ export {
   DEFAULT_GAME_CONFIG,
   decisionWindow,
   economyRule,
+  expirePauseVote,
   getPlayer,
   getProperty,
   legalActions,

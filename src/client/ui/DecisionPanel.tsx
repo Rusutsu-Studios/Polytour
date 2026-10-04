@@ -117,6 +117,14 @@ function actionLabel(action: Action, state: PublicState): string {
       return `${levelName(action.level)} · ${money(actionCost(state, action))}`;
     case "Roll":
       return t("Lancer les dés", "Roll the dice");
+    case "RequestPause":
+      return t("Demander une pause", "Request pause");
+    case "VotePause":
+      return action.accept
+        ? t("Accepter la pause", "Accept pause")
+        : t("Refuser la pause", "Decline pause");
+    case "ResumeGame":
+      return t("Reprendre la partie", "Resume game");
     case "PayIsland":
       return t(
         `Payer la traversée · ${money(actionCost(state, action))}`,
@@ -498,7 +506,14 @@ export default function DecisionPanel({
       dismissed !== decisionKey,
   );
   const countdown = pending
-    ? Math.max(0, Math.ceil((pending.deadline - now) / 1000))
+    ? Math.max(
+        0,
+        Math.ceil(
+          (pending.deadline -
+            (state.pause?.kind === "paused" ? state.pause.startedAt : now)) /
+            1000,
+        ),
+      )
     : 0;
   const copy: readonly [string, string] =
     pending?.kind === "card-target"
@@ -533,9 +548,10 @@ export default function DecisionPanel({
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
+    if (state.pause?.kind === "paused") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [state.pause?.kind]);
   useEffect(() => {
     if (!modalOpen) return;
     const dialog = dialogRef.current;

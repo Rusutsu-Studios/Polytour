@@ -10,7 +10,7 @@
 // match keeps the rules it started with until it ends.
 
 /** The shape this build writes. Bump it together with a new ladder step. */
-export const CURRENT_STATE_VERSION = 2;
+export const CURRENT_STATE_VERSION = 3;
 
 export type StateMigration = {
   /** Version produced by this step; it reads version `to - 1`. */
@@ -34,6 +34,14 @@ export const STATE_MIGRATIONS: readonly StateMigration[] = [
       saved === null || typeof saved !== "object"
         ? saved
         : { ...saved, bankReceived: 0, bankPaidOut: 0 },
+  },
+  {
+    // Version 3 adds authoritative pause state without changing saved match rules.
+    to: 3,
+    migrate: (saved) =>
+      saved === null || typeof saved !== "object"
+        ? saved
+        : { ...saved, pause: null, pauseCooldownUntil: 0 },
   },
 ];
 

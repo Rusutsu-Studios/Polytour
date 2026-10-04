@@ -14,6 +14,7 @@ import {
   botDecisionAt,
   changeControl,
   createGame,
+  expirePauseVote,
   legalActions,
   toPublic,
 } from "../shared/engine/index.js";
@@ -863,6 +864,7 @@ export class GameRoom extends DurableObject<Env> {
       return this.reject(socket, message.id, "stale");
     if (
       saved.state.status === "active" &&
+      saved.state.pause?.kind !== "paused" &&
       saved.state.matchDeadline !== null &&
       now >= saved.state.matchDeadline
     ) {
@@ -875,30 +877,49 @@ export class GameRoom extends DurableObject<Env> {
       return this.reject(socket, message.id, "randomness-pending");
     if (this.commandUsed(seat, message.id))
       return this.reject(socket, message.id, "duplicate");
-    // Input handling can precede a delayed alarm. A human may not extend the
-    // decision by racing that alarm; the persisted timeout owns the next move.
-    if (saved.state.pending && now >= saved.state.pending.deadline)
-      return this.reject(socket, message.id, "decision-expired");
-    const legal = legalActions(toPublic(saved.state), seat).some(
-      (action) => JSON.stringify(action) === JSON.stringify(message.action),
-    );
-    if (!legal)
-      return this.reject(
-        socket,
-        message.id,
-        saved.state.activeSeat !== seat ? "not-your-turn" : "illegal-action",
+    const pauseAction =
+      message.action.type === "RequestPause" ||
+      message.action.type === "VotePause" ||
+      message.action.type === "ResumeGame";
+    if (!pauseAction && saved.state.pause?.kind === "paused")
+      return this.reject(socket, message.id, "game-paused");
+    // Input handling can precede a delayed alarm. Starting a pause cannot freeze
+    // an already spent decision; apply its default before accepting that request.
+    if (
+      saved.state.pause?.kind !== "paused" &&
+      saved.state.pending &&
+      now >= saved.state.pending.deadline
+    ) {
+      if (message.action.type === "RequestPause") {
+        await this.expireDecision(saved);
+        return this.reject(socket, message.id, "stale");
+      }
+      if (!pauseAction)
+        return this.reject(socket, message.id, "decision-expired");
+    }
+    if (!pauseAction) {
+      const legal = legalActions(toPublic(saved.state), seat).some(
+        (action) => JSON.stringify(action) === JSON.stringify(message.action),
       );
+      if (!legal)
+        return this.reject(
+          socket,
+          message.id,
+          saved.state.activeSeat !== seat ? "not-your-turn" : "illegal-action",
+        );
+    }
     if (message.action.type === "Roll") {
       await this.beginDice(seat, message.action, message.id, saved.seq);
       this.send(socket, { type: "ack", id: message.id });
       return;
     }
-    const result = applyAction(
-      saved.state,
-      seat,
-      message.action,
-      createEngineContext(now),
-    );
+    const result = applyAction(saved.state, seat, message.action, {
+      ...createEngineContext(now),
+      // Grace takeover is metadata only: disconnected humans still vote.
+      pauseSeats: saved.state.players
+        .filter((player) => player.control === "human" && !player.bankrupt)
+        .map((player) => player.seat),
+    });
     if (!result.ok)
       return this.reject(
         socket,
@@ -1235,6 +1256,7 @@ export class GameRoom extends DurableObject<Env> {
   ): Promise<void> {
     const saved = this.readState();
     if (!saved) return this.reject(socket, id, "game-not-started");
+    if (saved.state.pause) return this.reject(socket, id, "pause-in-progress");
     if (this.readMeta("pendingDice"))
       return this.reject(socket, id, "randomness-pending");
     const member = this.members().find((entry) => entry.id === op.member);
@@ -1378,7 +1400,7 @@ export class GameRoom extends DurableObject<Env> {
       this.writeMeta("pendingDice", pending);
       if (intentId) this.rememberCommand(seat, intentId);
       this.ctx.storage.sql.exec(
-        "DELETE FROM timers WHERE kind IN ('bot','decision')",
+        "DELETE FROM timers WHERE kind IN ('bot','decision','pause-vote')",
       );
       this.ctx.storage.sql.exec(
         "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('randomness',?)",
@@ -1408,7 +1430,11 @@ export class GameRoom extends DurableObject<Env> {
       const saved = this.readState();
       if (!saved || saved.seq !== pending.atSeq)
         throw new Error("State moved after dice commitment");
-      if (saved.state.status !== "active") return;
+      if (
+        saved.state.status !== "active" ||
+        saved.state.pause?.kind === "paused"
+      )
+        return;
       if (
         saved.state.matchDeadline !== null &&
         Date.now() >= saved.state.matchDeadline
@@ -1437,9 +1463,12 @@ export class GameRoom extends DurableObject<Env> {
             ),
           };
       if (!applied.ok) throw new Error(applied.error.message);
+      // A vote may expire while a legacy beacon is pending. Keep its committed
+      // sequence stable until the roll resolves, then clear the vote in this batch.
+      const expiredVote = expirePauseVote(applied.state, Date.now());
       this.persist(
-        applied.state,
-        applied.events,
+        expiredVote.state,
+        [...applied.events, ...expiredVote.events],
         undefined,
         result.proof,
         true,
@@ -1482,7 +1511,8 @@ export class GameRoom extends DurableObject<Env> {
     resetBot = false,
   ): void {
     if (!this.schemaReady) return;
-    if (state?.status === "active" && state.matchDeadline !== null)
+    const paused = state?.pause?.kind === "paused";
+    if (state?.status === "active" && !paused && state.matchDeadline !== null)
       this.setTimer("match-end", state.matchDeadline);
     else this.ctx.storage.sql.exec("DELETE FROM timers WHERE kind='match-end'");
     if (state?.status !== "active")
@@ -1496,7 +1526,19 @@ export class GameRoom extends DurableObject<Env> {
     // Keep its state, grace timers and real-time end intact; reconnect restores
     // the remaining timers without extending any engine deadline.
     const pendingDice = this.readMeta<PendingDice>("pendingDice");
-    if (state?.status !== "active" || this.seatedSockets().length === 0) {
+    if (
+      state?.status === "active" &&
+      state.pause?.kind === "vote" &&
+      !pendingDice
+    )
+      this.setTimer("pause-vote", state.pause.deadline);
+    else
+      this.ctx.storage.sql.exec("DELETE FROM timers WHERE kind='pause-vote'");
+    if (
+      state?.status !== "active" ||
+      paused ||
+      this.seatedSockets().length === 0
+    ) {
       this.ctx.storage.sql.exec(
         "DELETE FROM timers WHERE kind IN ('bot','decision','randomness')",
       );
@@ -1599,7 +1641,10 @@ export class GameRoom extends DurableObject<Env> {
       }
       if (timer.kind === "match-end") {
         const saved = this.readState();
-        if (saved?.state.status === "active") {
+        if (
+          saved?.state.status === "active" &&
+          saved.state.pause?.kind !== "paused"
+        ) {
           const result = applyTimeout(
             saved.state,
             createEngineContext(Date.now()),
@@ -1616,13 +1661,45 @@ export class GameRoom extends DurableObject<Env> {
           this.writeMeta(`takeover:${seat}`, true);
           this.broadcast({ type: "presence", seat, status: "bot" });
         }
+        const abandoned = this.readState();
+        if (abandoned?.state.pause?.kind === "paused") {
+          const humans = abandoned.state.players.filter(
+            (player) => player.control === "human" && !player.bankrupt,
+          );
+          if (
+            humans.length > 0 &&
+            humans.every(
+              (player) =>
+                !this.seatSockets(player.seat).length &&
+                this.readMeta<boolean>(`takeover:${player.seat}`) === true,
+            )
+          ) {
+            // Brief disconnections preserve a pause. Once every human's grace
+            // has elapsed, restore room expiry rather than retain it forever.
+            const resumed = applyAction(
+              abandoned.state,
+              humans[0].seat,
+              { type: "ResumeGame" },
+              createEngineContext(Date.now()),
+            );
+            if (resumed.ok) this.persist(resumed.state, resumed.events);
+          }
+        }
         await this.updateTimers();
         continue;
       }
       const saved = this.readState();
-      if (saved?.state.status !== "active" || this.readMeta("pendingDice"))
+      if (
+        saved?.state.status !== "active" ||
+        saved.state.pause?.kind === "paused" ||
+        this.readMeta("pendingDice")
+      )
         continue;
-      if (timer.kind === "bot") {
+      if (timer.kind === "pause-vote") {
+        const result = expirePauseVote(saved.state, Date.now());
+        this.persist(result.state, result.events);
+        await this.scheduleAlarm();
+      } else if (timer.kind === "bot") {
         const seat = saved.state.pending?.seat ?? saved.state.activeSeat;
         const action = botAction(toPublic(saved.state), seat);
         if (action.type === "Roll")
@@ -1640,25 +1717,30 @@ export class GameRoom extends DurableObject<Env> {
           } else await this.updateTimers();
         }
       } else if (timer.kind === "decision") {
-        const kind = saved.state.pending?.kind;
-        if (kind === "roll" || kind === "island" || kind === "travel")
-          await this.beginDice(
-            saved.state.pending?.seat ?? saved.state.activeSeat,
-            null,
-            null,
-            saved.seq,
-          );
-        else {
-          const result = applyTimeout(
-            saved.state,
-            createEngineContext(Date.now()),
-          );
-          this.persist(result.state, result.events);
-          await this.scheduleAlarm();
-        }
+        await this.expireDecision(saved);
       }
     }
     await this.scheduleAlarm();
+  }
+
+  /** Resolves an expired human choice through the same path as its alarm. */
+  private async expireDecision(saved: {
+    state: GameState;
+    seq: number;
+  }): Promise<void> {
+    const kind = saved.state.pending?.kind;
+    if (kind === "roll" || kind === "island" || kind === "travel")
+      await this.beginDice(
+        saved.state.pending?.seat ?? saved.state.activeSeat,
+        null,
+        null,
+        saved.seq,
+      );
+    else {
+      const result = applyTimeout(saved.state, createEngineContext(Date.now()));
+      this.persist(result.state, result.events);
+      await this.scheduleAlarm();
+    }
   }
 
   async webSocketClose(socket: WebSocket): Promise<void> {

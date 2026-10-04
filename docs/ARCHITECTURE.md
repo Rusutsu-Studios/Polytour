@@ -47,7 +47,7 @@ places and leadership for recovery. During a match, departure closes the device'
 sockets but preserves its places, match state and usual reconnect grace.
 
 Persisted alarms drive bots, decision deadlines, disconnect grace, real-time match
-expiry. New-room rolls resolve immediately through server Web Crypto, without a
+expiry and pause-vote expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
 survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
 Live Chance draws receive fresh Web Crypto through `EngineContext.chanceEntropy`
@@ -60,7 +60,31 @@ timer, then expires normally; reconnect restores the pending work without moving
 either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
 an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
 for the write-quota incident and measured regressions.
-State version 1 is retained, with the explicit migration ladder from PR #19.
+State version 3 adds public pause and cooldown fields; the migration ladder gives
+older states `pause: null` and `pauseCooldownUntil: 0` without changing their frozen
+rules. Protocol version 5 makes older clients reload before interpreting pause events.
+
+A solo human pauses immediately. With several non-bankrupt human players, an
+engine-owned 30-second vote requires every human seat, including local players and
+disconnected humans under temporary bot takeover. The game continues until they
+all accept; rejection or expiry clears the vote. Multiplayer requests share a
+five-minute room cooldown measured in real time from the request. Waiting members
+and permanent bots cannot vote. A bot cannot be handed to a waiting member during
+a vote or pause, so the consenting roster stays fixed.
+
+An accepted pause persists its start time and removes gameplay alarms: match end,
+decision, bot and entropy. The engine rejects gameplay intents while paused. On
+resume it emits the replacement decision and match deadlines shifted by the pause
+duration; any eligible human can resume, on or off turn. Grace alarms keep running.
+A reconnect or eviction restores the same pause; if every eligible human completes
+its usual 60-second disconnect grace, the server resumes the match and restores
+match expiry while unattended gameplay remains asleep. This also covers leaving a
+paused room explicitly, without retaining paused room storage indefinitely.
+
+Pending legacy dice block all pause intents. While a commitment is unresolved,
+vote expiry waits as well, keeping the committed event sequence unchanged. Dice
+resolution clears an expired vote in the same persisted event batch as its result;
+no late acceptance can count and the commitment/proof remains unchanged.
 New rooms freeze rules version 8: country-grouped board, reference economy,
 staged hotels, World Tour flights to free or own properties, a 200 k rent for
 four resorts and a build offer after a buyout. Version-6 rooms pay four resorts
@@ -337,10 +361,18 @@ info is added later, redact per socket using the seat in the attachment.
 
 | Timer | Fires | Effect |
 | --- | --- | --- |
+| `pause-vote` | `state.pause.deadline` during voting | Clear an expired vote; gameplay continues. Deferred during a pending dice commitment. |
+| `match-end` | `state.matchDeadline` | Finish an active unpaused match, including an unattended match. |
 | `decision` | `state.pending.deadline` (computed by the engine) | `applyTimeout` applies the rule-defined default for a human seat (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
 | `grace:<seat>` | 60 s after socket close | Seat becomes a bot seat (`botAction`, medium) until the player reconnects. |
 | `bot` | `botDecisionAt`: once the events that opened the decision have played at 1×, plus 0.7 s (roll) or 1.4 s (choice); 0.9 s after a wake-up | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
 | `cleanup` | 10 min after `Finished` | `deleteAll()` storage. |
+
+During an accepted pause, only disconnect grace and existing cleanup work remain
+scheduled. Starting a pause after an already expired decision applies that decision's
+usual automatic default and rejects the now stale request. Starting a pause after
+match expiry is refused. All pause actions retain device/local-seat authorization,
+sequence checks and duplicate-command protection, while bypassing turn-only choices.
 
 The DO never computes deadlines itself: the engine sets
 `deadline = now + decisionSeconds + animationBudget(events)` and puts it in the
@@ -394,8 +426,8 @@ game:
   original 50% refunds and unrestricted travel. Board selection reaches the engine,
   economy helpers, client labels, textures, town plots and tile inspection, so an
   old tile index never becomes a different property after deployment.
-- The protocol is version 3, forcing old browser clients to reload before they
-  interpret new board indices. Internal rule markers are server-owned and cannot
+- The protocol is version 5, forcing old browser clients to reload before they
+  interpret pause state and events. Internal rule markers are server-owned and cannot
   be submitted as room settings. The state migration ladder checks older shapes
   before engine access; no Durable Object class migration is introduced.
 - Fresh live Chance selection preserves the saved remaining deck, discard and held

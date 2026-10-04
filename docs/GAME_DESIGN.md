@@ -427,6 +427,20 @@ connected or inside the disconnect grace period. **Bot** seats never time out: t
 act through `botAction` at their difficulty. A disconnected human seat becomes a
 bot seat (medium difficulty) when its grace period ends, until the player reconnects.
 
+Opening the pause menu in a match with one human immediately pauses play. In a
+match with multiple humans, any non-bankrupt human may request a pause; every
+non-bankrupt human must accept, including local players sharing one screen and
+temporarily disconnected humans. The requester agrees automatically. Play keeps
+running during the 30-second vote; a refusal or expiry cancels it. The whole room
+can request a multiplayer pause only once every five minutes, whether accepted,
+declined or expired. Bots and spectators never vote.
+
+A confirmed pause freezes decisions, bot moves and the match clock. Any eligible
+human can resume; the engine adds the paused duration to both deadlines so every
+remaining second is preserved. Closing the solo menu resumes; closing a multiplayer
+menu merely returns to the paused board. If all humans exhaust their disconnect
+grace while paused, the room resumes its match clock so abandoned rooms can expire.
+
 ## Engine contract
 
 ```ts

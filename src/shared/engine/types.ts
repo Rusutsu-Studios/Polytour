@@ -134,6 +134,19 @@ export type PendingDecision = DecisionBase &
         readonly creditor: Seat | null;
       }
   );
+export type PauseState =
+  | {
+      readonly kind: "vote";
+      readonly requestedBy: Seat;
+      readonly requiredSeats: readonly Seat[];
+      readonly acceptedSeats: readonly Seat[];
+      readonly deadline: number;
+    }
+  | {
+      readonly kind: "paused";
+      readonly requestedBy: Seat;
+      readonly startedAt: number;
+    };
 export type PublicState = {
   readonly gameId: string;
   readonly config: GameConfig;
@@ -148,6 +161,8 @@ export type PublicState = {
   readonly phase: "roll" | "resolve";
   readonly doublesInTurn: number;
   readonly pending: PendingDecision | null;
+  readonly pause: PauseState | null;
+  readonly pauseCooldownUntil: number;
   readonly lastRoll: {
     readonly seat: Seat;
     readonly dice: readonly [number, number];
@@ -276,6 +291,17 @@ export type GameEvent =
   | IslandEscapeFailedEvent
   | LeftIslandEvent
   | GameOverEvent
+  | {
+      readonly type: "PauseChanged";
+      readonly pause: PauseState | null;
+      readonly pauseCooldownUntil: number;
+    }
+  | {
+      readonly type: "GameResumed";
+      readonly seat: Seat;
+      readonly pending: PendingDecision | null;
+      readonly matchDeadline: number | null;
+    }
   | { readonly type: "DecisionOpened"; readonly pending: PendingDecision }
   | { readonly type: "DecisionClosed" }
   | {
@@ -366,6 +392,9 @@ export type GameEvent =
 export type RollAction = { readonly type: "Roll" };
 export type Action =
   | RollAction
+  | { readonly type: "RequestPause" }
+  | { readonly type: "VotePause"; readonly accept: boolean }
+  | { readonly type: "ResumeGame" }
   | { readonly type: "PayIsland" }
   | { readonly type: "Travel"; readonly tile: number }
   | { readonly type: "Decline" }
@@ -381,6 +410,8 @@ export type RuleError = {
     | "not-active-seat"
     | "invalid-phase"
     | "game-over"
+    | "game-paused"
+    | "pause-cooldown"
     | "illegal-action"
     | "invalid-dice";
   readonly message: string;
@@ -394,6 +425,8 @@ export type ApplyActionResult =
   | { readonly ok: false; readonly error: RuleError };
 export type EngineContext = {
   readonly now: number;
+  /** Permanent human seats, including those under temporary disconnect takeover. */
+  readonly pauseSeats?: readonly Seat[];
   readonly dice?: readonly [number, number];
   /** Fresh server uint32 words for live Chance draws; omit for seeded simulation. */
   readonly chanceEntropy?: readonly number[];

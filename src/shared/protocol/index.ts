@@ -4,8 +4,8 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 4 adds room leaders, waiting members and local players; stale clients reload.
-export const PROTOCOL_VERSION = 4;
+// Version 5 adds authoritative pause state, votes and resume events; stale clients reload.
+export const PROTOCOL_VERSION = 5;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -48,6 +48,9 @@ export const MemberIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
 const tile = z.number().int().min(0).max(31);
 const level = z.number().int().min(0).max(5);
 export const ActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("RequestPause") }).strict(),
+  z.object({ type: z.literal("VotePause"), accept: z.boolean() }).strict(),
+  z.object({ type: z.literal("ResumeGame") }).strict(),
   z.object({ type: z.literal("Roll") }).strict(),
   z.object({ type: z.literal("PayIsland") }).strict(),
   z.object({ type: z.literal("Decline") }).strict(),
