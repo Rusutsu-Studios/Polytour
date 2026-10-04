@@ -3,7 +3,7 @@ import {
   applyAction,
   applyEvent,
   applyTimeout,
-  CHANCE_CARDS,
+  chanceDeck,
   createGame,
   DEFAULT_GAME_CONFIG,
   toPublic,
@@ -134,15 +134,17 @@ describe("live Chance draws", () => {
 
   it("draws without repeats, refills from discard and keeps held cards unavailable", () => {
     let state = newGame();
+    const deck = chanceDeck(state.config);
     const drawn: ChanceCard[] = [];
-    for (let count = 0; count < CHANCE_CARDS.length; count += 1) {
-      const result = draw(state, [0]);
+    // The second word rolls the die of a Detour or Tailwind.
+    for (let count = 0; count < deck.length; count += 1) {
+      const result = draw(state, [0, 0]);
       drawn.push(result.card);
       state = result.state;
     }
-    expect(new Set(drawn).size).toBe(CHANCE_CARDS.length);
+    expect(drawn.sort()).toEqual(deck.sort());
     expect(state.deck).toEqual([]);
-    expect(state.discard).toHaveLength(CHANCE_CARDS.length - 2);
+    expect(state.discard).toHaveLength(deck.length - 2);
     expect(state.players.flatMap((player) => player.heldCards).sort()).toEqual([
       "Coupon",
       "Guardian Angel",
@@ -150,9 +152,9 @@ describe("live Chance draws", () => {
     const before = JSON.stringify(state);
     const previousDiscard = [...state.discard];
     const previousRng = state.rngState;
-    const result = draw(state, [1]);
+    const result = draw(state, [1, 0]);
     expect(result.card).toBe(previousDiscard[1]);
-    expect(result.state.deck).toHaveLength(CHANCE_CARDS.length - 3);
+    expect(result.state.deck).toHaveLength(deck.length - 3);
     expect(result.state.discard).toEqual([result.card]);
     expect(result.state.deck).not.toContain("Guardian Angel");
     expect(result.state.deck).not.toContain("Coupon");

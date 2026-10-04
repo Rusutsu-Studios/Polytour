@@ -1,6 +1,7 @@
 import type {
   BoardRule,
   BuildLevel,
+  ChanceRule,
   EconomyRule,
   WorldTourRule,
 } from "../board/types.js";
@@ -43,6 +44,8 @@ export type GameConfig = {
   readonly fourResortRent?: boolean;
   /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
+  /** Missing on saves before rules version 9: the original sixteen-card deck. */
+  readonly chanceRule?: ChanceRule;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
@@ -69,10 +72,25 @@ export const CHANCE_CARDS = [
   "Contractor",
   "Jailbreak",
   "Charity",
+  // Reworked decks only (rules version 9).
+  "Tailwind",
+  "Power Cut",
 ] as const;
 export type ChanceCard = (typeof CHANCE_CARDS)[number];
+/** Cards that cost the drawer money, a turn or ground; framed as bad cards. */
+export const BAD_CHANCE_CARDS: readonly ChanceCard[] = [
+  "Stranded",
+  "Parking Fine",
+  "Audit",
+  "Charity",
+  "Detour",
+];
 export type KeepCard = "Guardian Angel" | "Coupon";
-export type TargetCard = "Earthquake" | "Land Swap" | "Contractor";
+export type TargetCard =
+  | "Earthquake"
+  | "Land Swap"
+  | "Contractor"
+  | "Power Cut";
 export type PlayerState = {
   readonly playerId: string;
   readonly name: string;
@@ -92,6 +110,8 @@ export type PropertyState = {
   readonly tile: number;
   readonly owner: Seat | null;
   readonly level: BuildLevel;
+  /** Power Cut: no rent until the owner's lap count reaches this value. */
+  readonly powerCutUntilLap?: number;
 };
 type DecisionBase = { readonly seat: Seat; readonly deadline: number };
 export type PendingDecision = DecisionBase &
@@ -360,12 +380,20 @@ export type GameEvent =
       readonly seat: Seat;
       readonly card: ChanceCard;
       readonly kept: boolean;
+      /** The die a reworked Detour or Tailwind rolled, 1 to 6. */
+      readonly roll?: number;
     }
   | { readonly type: "CardUsed"; readonly seat: Seat; readonly card: KeepCard }
   | {
       readonly type: "PropertyDowngraded";
       readonly tile: number;
       readonly level: BuildLevel;
+    }
+  | {
+      readonly type: "PowerCut";
+      readonly seat: Seat;
+      readonly tile: number;
+      readonly untilLap: number;
     }
   | {
       readonly type: "PropertiesSwapped";

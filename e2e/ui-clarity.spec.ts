@@ -129,6 +129,7 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
                 worldTourRule: DEFAULT_GAME_CONFIG.worldTourRule,
                 fourResortRent: DEFAULT_GAME_CONFIG.fourResortRent,
                 buildAfterBuyout: DEFAULT_GAME_CONFIG.buildAfterBuyout,
+                chanceRule: DEFAULT_GAME_CONFIG.chanceRule,
                 seats: ([0, 1, 2, 3] as const).map((seat) => ({
                   seat,
                   name:

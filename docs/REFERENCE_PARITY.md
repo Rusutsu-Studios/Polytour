@@ -227,6 +227,17 @@ on it straight away, up to the limit a landing on their own city would allow.
 New rooms freeze `rulesVersion: 8` with `fourResortRent: true` and
 `buildAfterBuyout: true`; version-7 and earlier rooms keep the earlier behaviour.
 
+### Reworked Chance deck — rules version 9, 5 October 2026
+
+At the user's request (issues #61, #85 and #100, with reference card screenshots
+on #100), new rooms freeze `rulesVersion: 9` with `chanceRule: "reworked"`. The
+Tax audit card sends the player to the Tax office, like the reference luxury-tax
+card, instead of charging 10% of cash. Power Cut follows the reference power cut:
+no rent from one opponent city until its owner passes Start three times. Detour
+and the new Tailwind roll one die (1–6) instead of moving a fixed three tiles,
+and duplicate bad cards make about 45% of draws bad. These are Polytour choices,
+not reference values. Version-8 and earlier rooms keep the original deck.
+
 ## Capture from the running reference before adding an exact preset
 
 | Area | Evidence needed | Current status |

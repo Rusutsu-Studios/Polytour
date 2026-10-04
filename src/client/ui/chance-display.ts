@@ -5,6 +5,7 @@ import {
 } from "../../shared/board/index.js";
 import {
   type ChanceCard,
+  chanceRule,
   economyRule,
   type GameConfig,
   type GameEvent,
@@ -31,6 +32,8 @@ export const CARD_NAMES: Record<ChanceCard, string> = {
   Contractor: "Coup de pouce",
   Jailbreak: "Liberté",
   Charity: "Solidarité",
+  Tailwind: "Vent arrière",
+  "Power Cut": "Coupure de courant",
 };
 const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   "Grand Tour": "Grand Tour",
@@ -49,6 +52,8 @@ const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   Contractor: "Contractor",
   Jailbreak: "Jailbreak",
   Charity: "Charity",
+  Tailwind: "Tailwind",
+  "Power Cut": "Power cut",
 };
 export function cardName(card: ChanceCard): string {
   return t(CARD_NAMES[card], ENGLISH_CARD_NAMES[card]);
@@ -147,12 +152,19 @@ export function describeChanceCardDetails(
     case "Birthday":
       return [gifts];
     case "Audit":
-      return [
-        t(
-          "Le montant est arrondi à l’unité supérieure. Un cash nul ou négatif ne produit aucun paiement.",
-          "The amount is rounded up to a whole unit. Zero or negative cash produces no charge.",
-        ),
-      ];
+      return chanceRule(config) === "reworked"
+        ? [
+            t(
+              `Le trajet suit le sens du jeu : franchir le départ rapporte ${money(config.startSalary)} et compte un tour. Le centre des impôts prélève ensuite ${ECONOMY.taxPercent} % de la valeur de vos propriétés.`,
+              `Move clockwise: passing Start pays ${money(config.startSalary)} and counts a lap. The Tax office then charges ${ECONOMY.taxPercent}% of your properties’ value.`,
+            ),
+          ]
+        : [
+            t(
+              "Le montant est arrondi à l’unité supérieure. Un cash nul ou négatif ne produit aucun paiement.",
+              "The amount is rounded up to a whole unit. Zero or negative cash produces no charge.",
+            ),
+          ];
     case "Guardian Angel":
     case "Coupon":
       return [
@@ -187,10 +199,33 @@ export function describeChanceCardDetails(
       ];
     case "Detour":
       return [
+        ...(chanceRule(config) === "reworked"
+          ? [
+              t(
+                "Un dé décide du nombre de cases, de 1 à 6.",
+                "A die decides how many spaces, from 1 to 6.",
+              ),
+            ]
+          : []),
         t(
           "Même si vous traversez le départ à reculons, vous ne recevez pas de salaire et ne comptez pas de tour complet. Ce déplacement ne donne pas de lancer supplémentaire sur un double.",
           "Crossing Start backwards pays no salary and does not count a lap. This move does not grant another roll for doubles.",
         ),
+      ];
+    case "Tailwind":
+      return [
+        t(
+          `Un dé décide du nombre de cases, de 1 à 6. Franchir le départ rapporte ${money(config.startSalary)} et compte un tour. Ce déplacement ne donne pas de lancer supplémentaire sur un double.`,
+          `A die decides how many spaces, from 1 to 6. Passing Start pays ${money(config.startSalary)} and counts a lap. This move does not grant another roll for doubles.`,
+        ),
+      ];
+    case "Power Cut":
+      return [
+        t(
+          `Choisissez une ville adverse, hôtels compris. Elle ne rapporte aucun loyer tant que son propriétaire n’a pas franchi le départ ${CHANCE_AMOUNTS.powerCutLaps} fois. Un nouveau propriétaire rétablit le courant ; les plages sont exclues.`,
+          `Choose an opponent’s city, Hotels included. It earns no rent until its owner has passed Start ${CHANCE_AMOUNTS.powerCutLaps} times. A new owner restores the power; beaches are excluded.`,
+        ),
+        noTarget,
       ];
     case "Contractor":
       return [
@@ -229,9 +264,11 @@ export function describeChanceCardDetails(
 export type CardDraw = Extract<GameEvent, { type: "CardDrawn" }>;
 export type CardPresentation = {
   title: string;
+  /** How to play: the full description beside the badge and notes. */
   text: string;
   badge: string;
-  art: "fortune" | "travel" | "city";
+  /** In game: one short sentence under the card's drawing. */
+  short: string;
   tone: "gain" | "cost" | "travel" | "keep";
 };
 
@@ -240,7 +277,7 @@ export function describeCard(
   event: CardDraw,
   state: PublicState,
 ): CardPresentation {
-  const card = describeChanceCard(event.card, state.config);
+  const card = describeChanceCard(event.card, state.config, event.roll);
   if (
     (event.card === "Guardian Angel" || event.card === "Coupon") &&
     !event.kept
@@ -248,6 +285,7 @@ export function describeCard(
     return {
       ...card,
       badge: t("Déjà dans votre main", "Already in your hand"),
+      short: t("Déjà dans votre main.", "Already in your hand."),
       text:
         event.card === "Guardian Angel"
           ? t(
@@ -267,12 +305,11 @@ export function describeCard(
 export function describeChanceCard(
   card: ChanceCard,
   config: GameConfig,
+  /** The die a drawn Detour or Tailwind rolled; absent in the catalogue. */
+  roll?: number,
 ): CardPresentation {
-  const base = {
-    title: cardName(card),
-    art: "fortune" as const,
-    tone: "gain" as const,
-  };
+  const base = { title: cardName(card), tone: "gain" as const };
+  const steps = roll === undefined ? "1–6" : `${roll}`;
   const rules = ruleEconomy(economyRule(config));
   // Landmarks guard prototype rooms; Hotels guard reference rooms from transfers.
   const reference = rules.topLevel === 4;
@@ -280,9 +317,12 @@ export function describeChanceCard(
     case "Grand Tour":
       return {
         ...base,
-        art: "travel",
         tone: "travel",
         badge: t("Retour au départ", "Back to Start"),
+        short: t(
+          "Allez au Départ et touchez votre salaire.",
+          "Go to Start and collect your salary.",
+        ),
         text: t(
           `Rejoignez le Départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
           `Move to Start. Collect ${money(config.startSalary)} salary if you pass it.`,
@@ -291,9 +331,9 @@ export function describeChanceCard(
     case "Stranded":
       return {
         ...base,
-        art: "travel",
         tone: "cost",
         badge: t("Escale sur l’île", "Go to the Island"),
+        short: t("Allez sur l’île.", "Go to the Island."),
         text: t(
           "Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée ou avec une libération.",
           "Move to the Island. Leave by rolling doubles, paying the fare or being released.",
@@ -302,9 +342,9 @@ export function describeChanceCard(
     case "Jet Set":
       return {
         ...base,
-        art: "travel",
         tone: "travel",
         badge: t("Tour du monde", "World tour"),
+        short: t("Allez au Tour du monde.", "Go to World tour."),
         text: t(
           "Rejoignez le Tour du monde. À votre prochain tour, choisissez une destination.",
           "Move to World tour. On your next turn, choose a destination.",
@@ -313,9 +353,9 @@ export function describeChanceCard(
     case "Stadium Call":
       return {
         ...base,
-        art: "city",
         tone: "travel",
         badge: t("Direction le championnat", "Go to the Championship"),
+        short: t("Allez au Championnat.", "Go to the Championship."),
         text: reference
           ? t(
               `Rejoignez le Championnat. Organisez-le dans une de vos villes : ${money(rules.championshipFee)} pour le déplacer, gratuit pour le renouveler. Chaque édition ajoute ×1 au loyer, jusqu’à ×${rules.maxHostMultiplier}.`,
@@ -330,6 +370,10 @@ export function describeChanceCard(
       return {
         ...base,
         badge: `+ ${money(CHANCE_AMOUNTS.windfall)}`,
+        short: t(
+          `Recevez ${money(CHANCE_AMOUNTS.windfall)} de la banque.`,
+          `Collect ${money(CHANCE_AMOUNTS.windfall)} from the bank.`,
+        ),
         text: t(
           "La banque vous verse cette somme.",
           "Collect this amount from the bank.",
@@ -340,6 +384,10 @@ export function describeChanceCard(
         ...base,
         tone: "cost",
         badge: `− ${money(CHANCE_AMOUNTS.fine)}`,
+        short: t(
+          `Payez ${money(CHANCE_AMOUNTS.fine)}.`,
+          `Pay ${money(CHANCE_AMOUNTS.fine)}.`,
+        ),
         text: t(
           "Réglez cette amende de stationnement à la banque.",
           "Pay this parking fine to the bank.",
@@ -352,15 +400,34 @@ export function describeChanceCard(
           `${money(CHANCE_AMOUNTS.birthday)} par adversaire`,
           `${money(CHANCE_AMOUNTS.birthday)} from each opponent`,
         ),
+        short: t(
+          `Recevez ${money(CHANCE_AMOUNTS.birthday)} de chaque adversaire.`,
+          `Collect ${money(CHANCE_AMOUNTS.birthday)} from each opponent.`,
+        ),
         text: t(
           "Chaque adversaire encore en jeu vous offre cette somme, selon les règles de cadeaux de la salle.",
           "Each opponent still in the game gives you this amount, subject to the room’s gift rules.",
         ),
       };
     case "Audit":
+      if (chanceRule(config) === "reworked")
+        return {
+          ...base,
+          tone: "cost",
+          badge: t("Direction les impôts", "Go to the Tax office"),
+          short: t("Allez au centre des impôts.", "Go to the Tax office."),
+          text: t(
+            "Rejoignez le centre des impôts et payez-y l’impôt sur vos propriétés.",
+            "Move to the Tax office and pay the tax on your properties there.",
+          ),
+        };
       return {
         ...base,
         tone: "cost",
+        short: t(
+          `Payez ${CHANCE_AMOUNTS.auditPercent} % de votre cash.`,
+          `Pay ${CHANCE_AMOUNTS.auditPercent}% of your cash.`,
+        ),
         badge: t(
           `${CHANCE_AMOUNTS.auditPercent} % de votre cash`,
           `${CHANCE_AMOUNTS.auditPercent}% of your cash`,
@@ -375,6 +442,7 @@ export function describeChanceCard(
         ...base,
         tone: "keep",
         badge: t("Gardez cette carte", "Keep this card"),
+        short: t("Gardez-la : un loyer offert.", "Keep it: skip one rent."),
         text: t(
           "Au prochain loyer, vous pourrez jouer cette carte pour ne rien payer.",
           "Play this card when rent is due to pay nothing.",
@@ -385,6 +453,10 @@ export function describeChanceCard(
         ...base,
         tone: "keep",
         badge: t("Loyer réduit de moitié", "Half-price rent"),
+        short: t(
+          "Gardez-le : un loyer à moitié prix.",
+          "Keep it: pay half of one rent.",
+        ),
         text: t(
           "Gardez ce bon : vous pourrez l’utiliser pour diviser un futur loyer par deux.",
           "Keep this coupon to halve a future rent payment.",
@@ -393,9 +465,12 @@ export function describeChanceCard(
     case "Earthquake":
       return {
         ...base,
-        art: "city",
         tone: "cost",
         badge: t("Un bâtiment en moins", "Remove one building level"),
+        short: t(
+          "Détruisez un bâtiment adverse.",
+          "Knock down an opponent’s building.",
+        ),
         text: reference
           ? t(
               "Choisissez une ville adverse construite pour lui retirer un niveau, hôtels compris.",
@@ -409,9 +484,12 @@ export function describeChanceCard(
     case "Land Swap":
       return {
         ...base,
-        art: "city",
         tone: "travel",
         badge: t("Échange de propriétés", "Swap properties"),
+        short: t(
+          "Échangez une ville avec un adversaire.",
+          "Swap a city with an opponent.",
+        ),
         text: reference
           ? t(
               "Votre ville éligible la moins chère peut être échangée contre une ville adverse de prix égal ou inférieur, hors hôtels.",
@@ -422,25 +500,58 @@ export function describeChanceCard(
               "Swap your cheapest eligible city for an opponent’s city of equal or lower land price. Landmarks are excluded.",
             ),
       };
-    case "Detour":
+    case "Detour": {
+      const back =
+        chanceRule(config) === "reworked"
+          ? steps
+          : `${CHANCE_AMOUNTS.detourSteps}`;
       return {
         ...base,
-        art: "travel",
         tone: "travel",
-        badge: t(
-          `Reculez de ${CHANCE_AMOUNTS.detourSteps} cases`,
-          `Move back ${CHANCE_AMOUNTS.detourSteps} spaces`,
-        ),
+        badge: t(`Reculez de ${back} cases`, `Move back ${back} spaces`),
+        short: t(`Reculez de ${back} cases.`, `Move back ${back} spaces.`),
         text: t(
           "Reculez, puis appliquez l’effet de votre nouvelle case.",
           "Move back, then resolve the space you land on.",
         ),
       };
+    }
+    case "Tailwind":
+      return {
+        ...base,
+        tone: "travel",
+        badge: t(`Avancez de ${steps} cases`, `Move forward ${steps} spaces`),
+        short: t(`Avancez de ${steps} cases.`, `Move forward ${steps} spaces.`),
+        text: t(
+          "Avancez, puis appliquez l’effet de votre nouvelle case.",
+          "Move forward, then resolve the space you land on.",
+        ),
+      };
+    case "Power Cut":
+      return {
+        ...base,
+        tone: "cost",
+        badge: t(
+          `Aucun loyer pendant ${CHANCE_AMOUNTS.powerCutLaps} tours`,
+          `No rent for ${CHANCE_AMOUNTS.powerCutLaps} laps`,
+        ),
+        short: t(
+          "Coupez le courant d’une ville adverse.",
+          "Cut the power of an opponent’s city.",
+        ),
+        text: t(
+          `Choisissez une ville adverse : elle ne rapporte plus de loyer pendant ${CHANCE_AMOUNTS.powerCutLaps} tours de son propriétaire.`,
+          `Choose an opponent’s city: it earns no rent for its owner’s next ${CHANCE_AMOUNTS.powerCutLaps} laps.`,
+        ),
+      };
     case "Contractor":
       return {
         ...base,
-        art: "city",
         badge: t("Une construction offerte", "One free building level"),
+        short: t(
+          "Construisez gratuitement dans une de vos villes.",
+          "Build for free in one of your cities.",
+        ),
         text: t(
           "Si une de vos villes est éligible, choisissez-la pour recevoir un niveau de construction gratuit.",
           "Choose one of your eligible cities to add one building level for free.",
@@ -449,9 +560,9 @@ export function describeChanceCard(
     case "Jailbreak":
       return {
         ...base,
-        art: "travel",
         tone: "travel",
         badge: t("Tout le monde repart", "Everyone is released"),
+        short: t("Tout le monde quitte l’île.", "Everyone leaves the Island."),
         text: t(
           "Tous les joueurs présents sur l’Île paisible sont libérés. Ils repartent à leur tour.",
           "All players on the Island are released. They move again on their next turn.",
@@ -462,6 +573,10 @@ export function describeChanceCard(
         ...base,
         tone: "cost",
         badge: `− ${money(CHANCE_AMOUNTS.charity)}`,
+        short: t(
+          `Donnez ${money(CHANCE_AMOUNTS.charity)} à l’adversaire le plus pauvre.`,
+          `Give ${money(CHANCE_AMOUNTS.charity)} to the poorest opponent.`,
+        ),
         text: t(
           "Vous offrez cette somme à l’adversaire encore en jeu qui possède le moins de cash, selon les règles de cadeaux de la salle.",
           "Give this amount to the opponent still in the game with the least cash, subject to the room’s gift rules.",

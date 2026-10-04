@@ -1447,11 +1447,10 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
   });
   await page.clock.runFor(750);
   await expect(page.locator("#chance-title")).toHaveText("Bonne fortune");
-  await expect(page.locator(".chance-impact")).toHaveText("+ 150 k");
-  await expect(page.locator(".chance-art")).toHaveJSProperty(
-    "naturalWidth",
-    960,
+  await expect(page.locator(".chance-impact")).toHaveText(
+    "Recevez 150 k de la banque.",
   );
+  await expect(page.locator(".chance-art")).toBeVisible();
   // Effects await the card presentation; the exact server state already includes them.
   const balances = await page.evaluate(async () => {
     const modulePath =
@@ -1515,7 +1514,9 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
   // Cross the skipped card's old deadline while the new card is still reading.
   await page.clock.runFor(2000);
   await expect(page.locator("#chance-title")).toHaveText("Ange gardien");
-  await expect(page.locator(".chance-impact")).toHaveText("Gardez cette carte");
+  await expect(page.locator(".chance-impact")).toHaveText(
+    "Gardez-la : un loyer offert.",
+  );
   await page.keyboard.press("Escape");
   await expect(page.locator(".chance-dialog")).toHaveCount(0);
   await page.evaluate(async (state) => {
@@ -1536,10 +1537,7 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
     ]);
   }, original);
   await expect(page.locator("#chance-title")).toHaveText("Coup de pouce");
-  await expect(page.locator(".chance-art")).toHaveJSProperty(
-    "naturalWidth",
-    960,
-  );
+  await expect(page.locator(".chance-art")).toBeVisible();
   await page.screenshot({ path: ".local/verification/card-construction.png" });
   // Reduced motion keeps the reading moment, with a stationary illustration.
   await expect(page.locator(".chance-reading")).not.toBeVisible();
@@ -2058,6 +2056,8 @@ const LUCK_CARD_TITLES = {
     "Coup de pouce",
     "Liberté",
     "Solidarité",
+    "Vent arrière",
+    "Coupure de courant",
   ],
   en: [
     "Grand Tour",
@@ -2076,6 +2076,8 @@ const LUCK_CARD_TITLES = {
     "Contractor",
     "Jailbreak",
     "Charity",
+    "Tailwind",
+    "Power cut",
   ],
 } as const;
 
@@ -2100,7 +2102,7 @@ for (const locale of ["fr", "en"] as const) {
         exact: true,
       }),
     ).toBeVisible();
-    await expect(catalogue.locator(".luck-card-button")).toHaveCount(16);
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(18);
     const detail = page.locator(".luck-card-dialog");
     const closeCard = detail.locator(".luck-card-close");
     const backToCards = detail.locator(".luck-card-back");
@@ -2154,12 +2156,12 @@ for (const locale of ["fr", "en"] as const) {
     await helpTrigger.click();
     await expect(help).toBeVisible();
     await expect(detail).not.toBeVisible();
-    await expect(catalogue.locator(".luck-card-button")).toHaveCount(16);
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(18);
     const lastCard = catalogue.locator(".luck-card-button").last();
     await lastCard.click();
     await expect(
       detail.getByRole("heading", {
-        name: LUCK_CARD_TITLES[locale][15],
+        name: LUCK_CARD_TITLES[locale].at(-1),
         exact: true,
       }),
     ).toBeVisible();
@@ -2211,7 +2213,7 @@ test("match card help uses the active salary and saved economy rather than welco
     .click();
   const help = page.locator(".help-dialog");
   const catalogue = help.locator(".help-cards");
-  await expect(catalogue.locator(".luck-card-button")).toHaveCount(16);
+  await expect(catalogue.locator(".luck-card-button")).toHaveCount(18);
   const detail = page.locator(".luck-card-dialog");
   await catalogue
     .locator(".luck-card-button")

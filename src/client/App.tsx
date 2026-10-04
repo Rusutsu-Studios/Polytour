@@ -18,6 +18,7 @@ import type {
   WinKind,
 } from "../shared/engine/index.js";
 import {
+  chanceDeck,
   decisionWindow,
   getProperty,
   legalActions,
@@ -377,6 +378,14 @@ function BoardFallback({
   );
 }
 
+function ownerName(state: PublicState, tile: number): string {
+  const owner = getProperty(state, tile)?.owner;
+  return (
+    state.players.find((player) => player.seat === owner)?.name ??
+    t("la banque", "the bank")
+  );
+}
+
 function eventText(event: GameEvent, state: PublicState): string | null {
   const name =
     "seat" in event
@@ -419,10 +428,31 @@ function eventText(event: GameEvent, state: PublicState): string | null {
         `${name} reçoit ${money(event.amount)} au départ`,
         `${name} receives ${money(event.amount)} at Start`,
       );
-    case "CardDrawn":
+    case "CardDrawn": {
+      const roll = event.roll ?? "";
       return t(
-        `${name} tire « ${cardName(event.card)} »`,
-        `${name} draws “${cardName(event.card)}”`,
+        `${name} tire « ${cardName(event.card)} »${roll && ` · dé ${roll}`}`,
+        `${name} draws “${cardName(event.card)}”${roll && ` · die ${roll}`}`,
+      );
+    }
+    case "PropertyDowngraded": {
+      const owner = ownerName(state, event.tile);
+      return t(
+        `${tileName(event.tile, state.config)} (${owner}) perd un bâtiment`,
+        `${tileName(event.tile, state.config)} (${owner}) loses a building`,
+      );
+    }
+    case "PowerCut": {
+      const owner = ownerName(state, event.tile);
+      return t(
+        `${name} coupe le courant à ${tileName(event.tile, state.config)} (${owner})`,
+        `${name} cuts the power in ${tileName(event.tile, state.config)} (${owner})`,
+      );
+    }
+    case "PropertiesSwapped":
+      return t(
+        `${name} échange ${tileName(event.tile, state.config)} contre ${tileName(event.otherTile, state.config)}`,
+        `${name} swaps ${tileName(event.tile, state.config)} for ${tileName(event.otherTile, state.config)}`,
       );
     case "CardUsed":
       return t(
@@ -668,7 +698,10 @@ function Help({
           dialog.current?.querySelector<HTMLElement>(".help-cards h3")?.focus()
         }
       >
-        {t("Voir les 16 cartes Surprise", "View all 16 luck cards")}
+        {t(
+          `Voir les ${new Set(chanceDeck(config)).size} cartes Surprise`,
+          `View all ${new Set(chanceDeck(config)).size} luck cards`,
+        )}
         <Icon name="arrow" size={15} />
       </button>
       <ol className="rules-list">
@@ -1879,6 +1912,7 @@ function App() {
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
     fourResortRent: room.lobby?.fourResortRent ?? true,
     buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
+    chanceRule: room.lobby?.chanceRule ?? "reworked",
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
   };
   const you = room.you?.seat ?? null;

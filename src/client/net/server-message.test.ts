@@ -77,6 +77,30 @@ describe("room debug server envelopes", () => {
         parseServerMessage(JSON.stringify({ ...envelope, events: [event] })),
       ).toThrow();
   });
+  it("accepts a Power Cut and a Chance die roll from the reworked deck", () => {
+    const events = [
+      { type: "CardDrawn", seat: 1, card: "Tailwind", kept: false, roll: 4 },
+      { type: "PowerCut", seat: 1, tile: 13, untilLap: 3 },
+    ];
+    expect(
+      parseServerMessage(
+        JSON.stringify({ type: "events", fromSeq: 1, toSeq: 2, events }),
+      ),
+    ).toMatchObject({ events });
+    expect(parseServerMessage(JSON.stringify(welcome))).toMatchObject({
+      lobby: { chanceRule: "reworked" },
+    });
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          type: "events",
+          fromSeq: 1,
+          toSeq: 1,
+          events: [{ ...events[1], tile: 40 }],
+        }),
+      ),
+    ).toThrow();
+  });
   it.each([false, true])(
     "retains the frozen resort festival marker %s",
     (resortFestivals) => {

@@ -1,7 +1,11 @@
 import { motion } from "motion/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getBoard, ruleEconomy } from "../../shared/board/index.js";
+import {
+  CHANCE_AMOUNTS,
+  getBoard,
+  ruleEconomy,
+} from "../../shared/board/index.js";
 import type { BuildLevel } from "../../shared/board/types.js";
 import {
   type Action,
@@ -165,6 +169,11 @@ function actionLabel(action: Action, state: PublicState): string {
           return t(
             `Retirer un niveau à ${tileName(action.tile, state.config)}`,
             `Remove a level from ${tileName(action.tile, state.config)}`,
+          );
+        if (pending.card === "Power Cut")
+          return t(
+            `Couper le courant à ${tileName(action.tile, state.config)}`,
+            `Cut the power in ${tileName(action.tile, state.config)}`,
           );
       }
       return t("Choisir cette ville", "Choose this city");
@@ -529,10 +538,15 @@ export default function DecisionPanel({
                   "Choisissez votre ville qui recevra un niveau de construction offert.",
                   "Choose one of your cities to receive a free building level.",
                 )
-              : t(
-                  "Choisissez la ville adverse qui perdra un niveau de construction.",
-                  "Choose the opponent’s city that will lose a building level.",
-                ),
+              : pending.card === "Power Cut"
+                ? t(
+                    `Choisissez la ville adverse privée de loyer pendant ${CHANCE_AMOUNTS.powerCutLaps} tours de son propriétaire.`,
+                    `Choose the opponent’s city that earns no rent for its owner’s next ${CHANCE_AMOUNTS.powerCutLaps} laps.`,
+                  )
+                : t(
+                    "Choisissez la ville adverse qui perdra un niveau de construction.",
+                    "Choose the opponent’s city that will lose a building level.",
+                  ),
         ]
       : pending?.kind === "buy" && resort
         ? [t("Acheter une plage", "Buy a beach"), ""]

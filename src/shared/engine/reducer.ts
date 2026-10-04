@@ -60,11 +60,12 @@ function changeOwner(
 ): PublicState {
   return {
     ...state,
-    properties: state.properties.map((property) =>
-      property.tile === tile
-        ? { ...property, owner, level: owner === null ? 0 : property.level }
-        : property,
-    ),
+    properties: state.properties.map((property) => {
+      if (property.tile !== tile) return property;
+      // A new owner, or the bank, restores a cut city's power.
+      const { powerCutUntilLap: _cut, ...rest } = property;
+      return { ...rest, owner, level: owner === null ? 0 : property.level };
+    }),
     players: state.players.map((player) => ({
       ...player,
       properties:
@@ -242,6 +243,15 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
         properties: state.properties.map((property) =>
           property.tile === event.tile
             ? { ...property, level: event.level }
+            : property,
+        ),
+      };
+    case "PowerCut":
+      return {
+        ...state,
+        properties: state.properties.map((property) =>
+          property.tile === event.tile
+            ? { ...property, powerCutUntilLap: event.untilLap }
             : property,
         ),
       };

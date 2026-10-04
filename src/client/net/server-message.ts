@@ -71,7 +71,12 @@ const publicState = z.object({
     }),
   ),
   properties: z.array(
-    z.object({ tile, owner: seat.nullable(), level: integer.min(0).max(5) }),
+    z.object({
+      tile,
+      owner: seat.nullable(),
+      level: integer.min(0).max(5),
+      powerCutUntilLap: integer.optional(),
+    }),
   ),
   turnOrder: z.array(seat),
   startingTurnOrder: z.array(seat),
@@ -135,6 +140,7 @@ const eventTypes = new Set([
   "CardUsed",
   "PropertyDowngraded",
   "PropertiesSwapped",
+  "PowerCut",
   "PlayerBankrupt",
   "PlayerControlChanged",
   "PauseChanged",
@@ -195,6 +201,7 @@ const lobby = z.object({
   worldTourRule: z.enum(["free-and-own", "free-first"]).default("free-and-own"),
   fourResortRent: z.boolean().default(true),
   buildAfterBuyout: z.boolean().default(true),
+  chanceRule: z.enum(["reworked", "original"]).default("reworked"),
   resortFestivals: z.boolean().optional(),
   seats: z
     .array(

@@ -18,6 +18,13 @@ export type EconomyRule = "reference" | "prototype";
  * when none is free. Prototype matches fly to any other tile either way.
  */
 export type WorldTourRule = "free-and-own" | "free-first";
+/**
+ * Frozen Chance deck of a match. "reworked" (rules version 9) weights the deck
+ * so bad cards are about 45% of draws, rolls a die for Detour and Tailwind,
+ * sends Audit to the tax square and adds Power Cut. "original" (and saves
+ * without a marker) keeps sixteen single cards, a 3-step Detour and a 10% Audit.
+ */
+export type ChanceRule = "reworked" | "original";
 export type ResortId = 1 | 2 | 3 | 4;
 
 export type CityTile = {

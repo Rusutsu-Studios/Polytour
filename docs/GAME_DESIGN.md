@@ -229,8 +229,8 @@ it to the bank.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
-- **Chance:** draw uniformly from the remaining cards in a 16-card deck, without
-  replacement. When its draw pile is empty, discarded cards form the next draw
+- **Chance:** draw uniformly from the remaining cards in a 24-card deck (rooms
+  before rules version 9: 16 cards), without replacement. When its draw pile is empty, discarded cards form the next draw
   pile; held keep cards remain unavailable.
 
 ### Payment, rent, buyout, and insolvency
@@ -327,7 +327,14 @@ the same ordering picks the winner, so every match has exactly one winner.
 Instant wins are the dramatic core: they force players to buy out opponents'
 properties to *block* a monopoly, which is where the tension comes from.
 
-## Chance deck (16 cards)
+## Chance deck (24 cards)
+
+Rules version 9 holds 24 cards: the eighteen below, with extra copies of bad
+cards (Parking Fine ×3; Audit, Charity, Detour and Stranded ×2), so bad cards
+make up 11 of 24 draws, about 45%. Bad cards are those that cost the drawer
+(`BAD_CHANCE_CARDS`); the in-game card shows them in a wooden frame, good cards
+in a gold one. Rooms created before version 9 keep sixteen single cards, a
+3-tile Detour and a 10% Audit, and never draw Tailwind or Power Cut.
 
 | Card | Effect | Keep? |
 | --- | --- | --- |
@@ -338,15 +345,17 @@ properties to *block* a monopoly, which is where the tension comes from.
 | Windfall | Collect 150,000 | |
 | Parking Fine | Pay 100,000 | |
 | Birthday | Collect 50,000 from every other non-bankrupt player | |
-| Audit | Pay 10% of your cash, rounded up | |
+| Audit | Move clockwise to the Tax office and pay its tax there (before v9: pay 10% of your cash, rounded up) | |
 | Guardian Angel | Cancel one rent payment | ✅ |
 | Coupon | Halve one rent payment | ✅ |
 | Earthquake | Downgrade one opponent building by 1 level, Hotels included (prototype: not Landmarks) | |
 | Land Swap | Optionally choose an opponent city; exchange it with your eligible city of lowest land price (not Hotels; prototype: not Landmarks) | |
-| Detour | Move back 3 tiles | |
+| Detour | Roll one die and move back that many tiles (before v9: 3 tiles) | |
 | Contractor | Upgrade one of your cities by 1 level for free | |
 | Jailbreak | Everyone on the Island is released | |
 | Charity | Give 100,000 to the poorest player | |
+| Tailwind | Roll one die and move forward that many tiles (v9) | |
+| Power Cut | An opponent's city earns no rent until its owner has passed Start 3 more times; a new owner restores it (v9) | |
 
 ### Chance resolution details
 
@@ -361,8 +370,10 @@ properties to *block* a monopoly, which is where the tension comes from.
   **clockwise** along the board, so the lap rule applies: Grand Tour always pays
   salary once and counts a lap, and Stadium Call drawn on tile 19 goes all the way
   round and does too. (The client walks the pawn along that clockwise path, faster
-  on a long move.) Detour moves counter-clockwise and never pays Start, even when
-  it lands on Start. Jet Set ends the turn on World Tour, and Stranded sends the
+  on a long move.) Tailwind moves clockwise and pays Start when it passes it.
+  Detour moves counter-clockwise and never pays Start, even when it lands on
+  Start. The die of Detour and Tailwind is rolled with the draw, from the same
+  live Chance entropy as the draw itself, and shown on the card. Jet Set ends the turn on World Tour, and Stranded sends the
   pawn to Island; both use those tiles' rules.
 - A card with no legal target (or no legal effect) does nothing and is discarded.
 - Guardian Angel is offered after a rent amount is known and before it is paid; it

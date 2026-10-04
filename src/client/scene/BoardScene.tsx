@@ -21,6 +21,7 @@ import {
   economyRule,
   getProperty,
   legalActions,
+  powerCutActive,
   propertyRefund,
   propertyRent,
 } from "../../shared/engine/index.js";
@@ -223,6 +224,7 @@ function TileFace({
   pickable,
   forSale,
   boardRule,
+  unpowered,
 }: {
   index: number;
   amount: number | null;
@@ -231,6 +233,8 @@ function TileFace({
   onSelect: (tile: number) => void;
   preview?: boolean;
   dimmed: boolean;
+  /** A Power Cut darkens the lot until its owner's power returns. */
+  unpowered: boolean;
   pickable: boolean;
   forSale: boolean;
   boardRule: BoardRule;
@@ -276,7 +280,7 @@ function TileFace({
       {/* Multiplying the print keeps one texture per tile while choices dim others. */}
       <meshBasicMaterial
         map={texture}
-        color={dimmed ? "#9d98a4" : "#ffffff"}
+        color={dimmed ? "#9d98a4" : unpowered ? "#7f8bab" : "#ffffff"}
         toneMapped={false}
       />
     </mesh>
@@ -370,6 +374,9 @@ function BoardTiles({
             owner={owner}
             salary={salary}
             dimmed={Boolean(targets && !targets.includes(tile.index))}
+            unpowered={Boolean(
+              state && property && powerCutActive(state, property),
+            )}
             pickable={
               !preview &&
               (targets == null ||
@@ -455,8 +462,11 @@ function TileFocus({ state, selected, preview, targets }: BoardProps) {
   );
 }
 
-/** A construction animating on one tile: its buildings rise with progress. */
-type Growth = { tile: number; progress: number };
+/**
+ * A construction animating on one tile: its buildings rise with progress.
+ * An earthquake also shakes them sideways along the lot.
+ */
+type Growth = { tile: number; progress: number; shake?: number };
 type TownsHandle = {
   draw: (state: PublicState | null, growth: Growth | null) => void;
 };
@@ -537,7 +547,7 @@ function Towns({
         const bandZ = buildingBandZ(tile.index);
         const [faceX, faceZ] = visibleFaces(tile.index);
         const building = (
-          localX: number,
+          plotX: number,
           fullWidth: number,
           fullHeight: number,
           depth = 0.28,
@@ -546,6 +556,7 @@ function Towns({
         ) => {
           let width = fullWidth;
           let height = fullHeight;
+          const localX = plotX + (growing?.shake ?? 0);
           const [x, z] = tilePoint(tile.index, localX, bandZ);
           const base = LOT_TOP;
           if (growing) {
@@ -1682,6 +1693,74 @@ function SceneContent(props: BoardProps) {
       sprite.visible = false;
       invalidate();
     }
+    /** Eight sparks fly out of a lot as `sparkProgress` runs from 0 to 1. */
+    function drawSparks(x: number, z: number, spread = 0.45, lift = 0.6) {
+      const burst = sparks.current;
+      if (!burst) return;
+      const progress = sparkProgress.value;
+      for (let index = 0; index < 8; index++) {
+        const angle = (index * Math.PI) / 4;
+        const radius = 0.16 + progress * spread;
+        sparkTransform.position.set(
+          x + Math.cos(angle) * radius,
+          LOT_TOP + 0.1 + Math.sin(progress * Math.PI) * lift,
+          z + Math.sin(angle) * radius,
+        );
+        sparkTransform.rotation.set(progress * Math.PI, angle, Math.PI / 4);
+        sparkTransform.scale.setScalar(0.08 * (1 - progress));
+        sparkTransform.updateMatrix();
+        burst.setMatrixAt(index, sparkTransform.matrix);
+      }
+      burst.instanceMatrix.needsUpdate = true;
+    }
+    function paintEffect(ringColor: string, sparkColor: string) {
+      const ring = pulse.current;
+      const burst = sparks.current;
+      if (ring?.material instanceof THREE.MeshBasicMaterial)
+        ring.material.color.set(ringColor);
+      if (burst?.material instanceof THREE.MeshBasicMaterial)
+        burst.material.color.set(sparkColor);
+    }
+    /** A ring and a spark burst on one lot, where a card's effect lands. */
+    async function flash(
+      tile: number,
+      ringColor: string,
+      sparkColor: string,
+      hold: number,
+      context: AnimationContext,
+    ) {
+      const ring = pulse.current;
+      const burst = sparks.current;
+      if (!ring || !burst) return;
+      const effectGeneration = ++propertyEffectGeneration;
+      const [x, z] = tileCenter(tile);
+      ring.position.set(x, LOT_TOP + 0.03, z);
+      paintEffect(ringColor, sparkColor);
+      ring.visible = burst.visible = true;
+      await play((timeline) => {
+        timeline.fromTo(
+          ring.scale,
+          { x: 0.1, y: 0.1, z: 0.1 },
+          { x: 1.3, y: 1.3, z: 1.3, duration: 0.5, ease: "power2.out" },
+        );
+        timeline.fromTo(
+          sparkProgress,
+          { value: 0 },
+          {
+            value: 1,
+            duration: 0.5,
+            ease: "power2.out",
+            onUpdate: () => drawSparks(x, z),
+          },
+          0,
+        );
+        timeline.set({}, {}, hold);
+      }, context);
+      if (effectGeneration === propertyEffectGeneration) {
+        ring.visible = burst.visible = false;
+        invalidate();
+      }
+    }
     async function animateCash(
       transfer: CashTransfer | null,
       context: AnimationContext,
@@ -2035,35 +2114,14 @@ function SceneContent(props: BoardProps) {
           const [x, z] = tileCenter(event.tile);
           ring.position.set(x, LOT_TOP + 0.03, z);
           const owner = getProperty(context.next, event.tile)?.owner;
-          if (ring.material instanceof THREE.MeshBasicMaterial)
-            ring.material.color.set(
-              owner == null ? "#ffda72" : PLAYER_COLORS[owner],
-            );
+          paintEffect(
+            owner == null ? "#ffda72" : PLAYER_COLORS[owner],
+            "#ffcf59",
+          );
           ring.visible = true;
           const burst = sparks.current;
           if (burst) burst.visible = true;
-          const updateSparks = () => {
-            if (!burst) return;
-            const progress = sparkProgress.value;
-            for (let index = 0; index < 8; index++) {
-              const angle = (index * Math.PI) / 4;
-              const radius = 0.16 + progress * 0.45;
-              sparkTransform.position.set(
-                x + Math.cos(angle) * radius,
-                LOT_TOP + 0.1 + Math.sin(progress * Math.PI) * 0.6,
-                z + Math.sin(angle) * radius,
-              );
-              sparkTransform.rotation.set(
-                progress * Math.PI,
-                angle,
-                Math.PI / 4,
-              );
-              sparkTransform.scale.setScalar(0.08 * (1 - progress));
-              sparkTransform.updateMatrix();
-              burst.setMatrixAt(index, sparkTransform.matrix);
-            }
-            burst.instanceMatrix.needsUpdate = true;
-          };
+          const updateSparks = () => drawSparks(x, z);
           // New houses rise one after another on their plot, and a beach
           // raises its bungalow the moment it is taken; the view shows the
           // next state on this tile while it is being built.
@@ -2127,6 +2185,125 @@ function SceneContent(props: BoardProps) {
             if (burst) burst.visible = false;
             invalidate();
           }
+        } else if (event.type === "PropertyDowngraded") {
+          // Earthquake: the city shakes on its lot, sinks into a cloud of
+          // dust, then whatever still stands rises again. The roofs keep the
+          // owner's colour, so everyone sees whose city was hit.
+          const ring = pulse.current;
+          const burst = sparks.current;
+          if (!ring || !burst) return;
+          const effectGeneration = ++propertyEffectGeneration;
+          const [x, z] = tileCenter(event.tile);
+          const wreck = { tile: event.tile, progress: 1, shake: 0, time: 0 };
+          const drawWreck = () =>
+            towns.current?.draw(context.previous ?? context.next, wreck);
+          const drawRemains = () => towns.current?.draw(context.next, growth);
+          ring.position.set(x, LOT_TOP + 0.03, z);
+          paintEffect("#e5533d", "#b9a58b");
+          ring.visible = true;
+          drawWreck();
+          await play((timeline) => {
+            timeline.fromTo(
+              ring.scale,
+              { x: 0.1, y: 0.1, z: 0.1 },
+              { x: 1.4, y: 1.4, z: 1.4, duration: 0.7, ease: "power2.out" },
+            );
+            timeline.to(
+              wreck,
+              {
+                time: 1,
+                duration: 0.8,
+                ease: "none",
+                onUpdate: () => {
+                  wreck.shake =
+                    Math.sin(wreck.time * Math.PI * 12) *
+                    0.06 *
+                    (1 - wreck.time);
+                  drawWreck();
+                },
+              },
+              0,
+            );
+            timeline.call(
+              () => {
+                burst.visible = true;
+              },
+              [],
+              0.8,
+            );
+            timeline.to(
+              wreck,
+              {
+                progress: 0,
+                duration: 0.6,
+                ease: "power2.in",
+                onUpdate: drawWreck,
+              },
+              0.8,
+            );
+            timeline.fromTo(
+              sparkProgress,
+              { value: 0 },
+              {
+                value: 1,
+                duration: 0.9,
+                ease: "power2.out",
+                onUpdate: () => drawSparks(x, z, 0.6, 0.3),
+              },
+              0.8,
+            );
+            timeline.call(
+              () => {
+                growth.tile = event.tile;
+                growth.progress = 0;
+                drawRemains();
+              },
+              [],
+              1.45,
+            );
+            timeline.to(
+              growth,
+              {
+                progress: 1,
+                duration: 0.5,
+                ease: "none",
+                onUpdate: drawRemains,
+              },
+              1.45,
+            );
+            timeline.set({}, {}, DECISION_TIMING.wreckAnimation / 1000);
+          }, context);
+          if (effectGeneration === propertyEffectGeneration) {
+            ring.visible = burst.visible = false;
+            invalidate();
+          }
+        } else if (event.type === "PowerCut") {
+          await flash(
+            event.tile,
+            "#24435a",
+            "#ffd35c",
+            DECISION_TIMING.propertyAnimation / 1000,
+            context,
+          );
+        } else if (event.type === "PropertiesSwapped") {
+          // Both cities change roofs at once; a ring in each new owner's
+          // colour marks one lot after the other.
+          towns.current?.draw(context.next, null);
+          const half = DECISION_TIMING.propertyAnimation / 2000;
+          await flash(
+            event.tile,
+            PLAYER_COLORS[event.otherSeat],
+            "#ffcf59",
+            half,
+            context,
+          );
+          await flash(
+            event.otherTile,
+            PLAYER_COLORS[event.seat],
+            "#ffcf59",
+            half,
+            context,
+          );
         }
       },
     });

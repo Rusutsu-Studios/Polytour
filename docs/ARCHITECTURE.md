@@ -85,9 +85,10 @@ Pending legacy dice block all pause intents. While a commitment is unresolved,
 vote expiry waits as well, keeping the committed event sequence unchanged. Dice
 resolution clears an expired vote in the same persisted event batch as its result;
 no late acceptance can count and the commitment/proof remains unchanged.
-New rooms freeze rules version 8: country-grouped board, reference economy,
+New rooms freeze rules version 9: country-grouped board, reference economy,
 staged hotels, World Tour flights to free or own properties, a 200 k rent for
-four resorts and a build offer after a buyout. Version-6 rooms pay four resorts
+four resorts, a build offer after a buyout and the reworked Chance deck.
+Version-8 rooms keep the original sixteen Chance cards. Version-6 rooms pay four resorts
 like three and offer no build after a buyout; version-5 rooms also keep flights
 to own properties only when none is free.
 Existing version-2/3 rooms retain the original board, prototype
@@ -413,9 +414,10 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 8 with country-grouped tiles, reference economy, staged hotels, full
+  use version 9 with country-grouped tiles, reference economy, staged hotels, full
   nominal sale refunds, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true` and `buildAfterBuyout: true`. Version-4/5/6 rooms retain
+  `fourResortRent: true`, `buildAfterBuyout: true` and `chanceRule: "reworked"`.
+  Saves without the Chance marker keep the original deck. Version-4/5/6 rooms retain
   their resort festivals and rent; an absent festival marker on those saved matches
   follows the original economy. A version-4/5 save without the World Tour selector
   keeps World Tour on free properties first, and a save without the two version-8

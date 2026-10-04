@@ -16,6 +16,8 @@ export const DECISION_TIMING = {
   taxAnimation: 6_000,
   moneyAnimation: 650,
   propertyAnimation: 1_100,
+  /** Earthquake: the city shakes, its top building sinks, the rest settle. */
+  wreckAnimation: 2_000,
   islandAnimation: 700,
 } as const;
 
@@ -39,8 +41,23 @@ export const CHANCE_AMOUNTS = {
   birthday: 50_000,
   auditPercent: 10,
   charity: 100_000,
+  /** Original rule only; reworked rooms roll a die for Detour and Tailwind. */
   detourSteps: 3,
+  /** Start passes the owner makes before a cut city earns rent again. */
+  powerCutLaps: 3,
   /** A full country, a festival and a newly hosted championship each double rent. */
   countryMultiplier: 2,
   initialHostMultiplier: 2,
+} as const;
+
+/**
+ * Copies of a card in a reworked deck; unlisted cards appear once. The five
+ * bad cards fill 11 of 24 slots, so about 45% of draws cost the drawer.
+ */
+export const CHANCE_DECK_COPIES = {
+  "Parking Fine": 3,
+  Audit: 2,
+  Charity: 2,
+  Detour: 2,
+  Stranded: 2,
 } as const;

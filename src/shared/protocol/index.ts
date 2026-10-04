@@ -1,11 +1,16 @@
 import { z } from "zod";
-import type { BoardRule, EconomyRule, WorldTourRule } from "../board/index.js";
+import type {
+  BoardRule,
+  ChanceRule,
+  EconomyRule,
+  WorldTourRule,
+} from "../board/index.js";
 import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 5 adds authoritative pause state, votes and resume events; stale clients reload.
-export const PROTOCOL_VERSION = 5;
+// Version 6 adds the PowerCut event and Chance die rolls; stale clients reload.
+export const PROTOCOL_VERSION = 6;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -197,6 +202,7 @@ export type LobbyState = {
   readonly worldTourRule: WorldTourRule;
   readonly fourResortRent: boolean;
   readonly buildAfterBuyout: boolean;
+  readonly chanceRule: ChanceRule;
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

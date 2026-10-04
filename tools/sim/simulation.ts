@@ -11,7 +11,7 @@ import {
   applyEvent,
   boardRule,
   botAction,
-  CHANCE_CARDS,
+  chanceDeck,
   createGame,
   DEFAULT_GAME_CONFIG,
   economyRule,
@@ -66,13 +66,7 @@ export function assertInvariants(state: GameState, expectedCash: number): void {
     ...state.discard,
     ...state.players.flatMap((player) => player.heldCards),
   ];
-  if (
-    remaining.length !== CHANCE_CARDS.length ||
-    CHANCE_CARDS.some(
-      (card) =>
-        remaining.filter((candidate) => candidate === card).length !== 1,
-    )
-  )
+  if (remaining.sort().join() !== chanceDeck(state.config).sort().join())
     throw new Error("Card conservation failed");
   for (const player of state.players) {
     if (

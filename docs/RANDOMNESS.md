@@ -50,7 +50,9 @@ timeouts. For a draw pile of size `n`, the engine rejects words at or above
 `floor(2^32 / n) * n`, then selects `word % n`. Each remaining card has the same
 chance and is removed from the pile after selection: draws are without replacement.
 The initial seeded deck order and public turn order/festivals cannot predict the
-next live card.
+next live card. A reworked deck holds duplicate bad cards (rules version 9), so
+each copy is one equally likely entry. The die of a Detour or Tailwind takes the
+next word with the same rejection rule for `n = 6`, and the card shows it.
 
 When the pile is empty, discarded cards replenish it; held keep cards remain
 unavailable. The same uniform selection applies to the replenished pile. Existing

@@ -90,9 +90,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 2–3 are original production rooms; 5 combines the board and reference rules;
  * 6 lets World Tour reach the traveller's own properties as well as free ones;
  * 7 restricts initial festivals to cities;
- * 8 pays four resorts double the third's rent and lets a buyout be built on.
+ * 8 pays four resorts double the third's rent and lets a buyout be built on;
+ * 9 reworks the Chance deck (see ChanceRule).
  */
-const RULES_VERSION = 8;
+const RULES_VERSION = 9;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -101,7 +102,8 @@ function frozenRules(version: number | null) {
     version !== 5 &&
     version !== 6 &&
     version !== 7 &&
-    version !== 8
+    version !== 8 &&
+    version !== 9
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -114,6 +116,7 @@ function frozenRules(version: number | null) {
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
     fourResortRent: version >= 8,
     buildAfterBuyout: version >= 8,
+    chanceRule: version >= 9 ? ("reworked" as const) : ("original" as const),
     resortFestivals: version >= 4 && version < 7,
   };
 }
@@ -289,7 +292,12 @@ export class GameRoom extends DurableObject<Env> {
     const fourResorts = state.config.fourResortRent;
     const buyoutBuild = state.config.buildAfterBuyout;
     const festivals = state.config.resortFestivals;
+    const chances = state.config.chanceRule;
     if (
+      // Saves made before rules version 9 carry no Chance marker.
+      (rulesVersion !== null &&
+        chances !== frozen.chanceRule &&
+        (rulesVersion >= 9 || chances !== undefined)) ||
       // Version-7 matches require the marker; older unmarked saves keep their rules.
       (rulesVersion !== null &&
         festivals !== frozen.resortFestivals &&

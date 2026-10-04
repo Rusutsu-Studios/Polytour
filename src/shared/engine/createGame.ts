@@ -1,6 +1,7 @@
 import type {
   BoardRule,
   BuildLevel,
+  ChanceRule,
   EconomyRule,
   WorldTourRule,
 } from "../board/index.js";
@@ -8,6 +9,7 @@ import {
   BOARD_SIZE,
   BOT_TIMING,
   CHANCE_AMOUNTS,
+  CHANCE_DECK_COPIES,
   COUNTRY_IDS,
   DECISION_TIMING,
   ECONOMY,
@@ -29,6 +31,7 @@ import type {
   Action,
   ApplyActionResult,
   BotDifficulty,
+  ChanceCard,
   CreateGameResult,
   EngineContext,
   GameConfig,
@@ -66,6 +69,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  chanceRule: "reworked",
   sellBackPercent: 100,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
@@ -85,6 +89,23 @@ export function worldTourRule(
   config: Pick<GameConfig, "worldTourRule">,
 ): WorldTourRule {
   return config.worldTourRule ?? "free-first";
+}
+/** Saves before rules version 9 keep the original sixteen-card deck. */
+export function chanceRule(config: Pick<GameConfig, "chanceRule">): ChanceRule {
+  return config.chanceRule ?? "original";
+}
+/** The cards a full deck holds under the match's frozen Chance rule. */
+export function chanceDeck(
+  config: Pick<GameConfig, "chanceRule">,
+): ChanceCard[] {
+  const copies: Partial<Record<ChanceCard, number>> = CHANCE_DECK_COPIES;
+  return chanceRule(config) === "reworked"
+    ? CHANCE_CARDS.flatMap((card) =>
+        Array<ChanceCard>(copies[card] ?? 1).fill(card),
+      )
+    : CHANCE_CARDS.filter(
+        (card) => card !== "Tailwind" && card !== "Power Cut",
+      );
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
@@ -108,6 +129,17 @@ export function getProperty(
   tile: number,
 ): PropertyState | undefined {
   return state.properties.find((property) => property.tile === tile);
+}
+/** A Power Cut lasts until the owner has passed Start enough times. */
+export function powerCutActive(
+  state: PublicState,
+  property: PropertyState,
+): boolean {
+  return (
+    property.powerCutUntilLap !== undefined &&
+    property.owner !== null &&
+    getPlayer(state, property.owner).laps < property.powerCutUntilLap
+  );
 }
 export function propertyOwner(state: PublicState, tile: number): Seat | null {
   return getProperty(state, tile)?.owner ?? null;
@@ -192,6 +224,7 @@ export function propertyRent(state: PublicState, tileIndex: number): number {
       : rent;
   }
   if (!tile || !isCityTile(tile) || !property) return 0;
+  if (powerCutActive(state, property)) return 0;
   const rent = getTileBaseRent(
     tileIndex,
     property.level,
@@ -224,6 +257,7 @@ export function rentBoost(
     return null;
   if (isCityTile(tile) && property.level === 5) return null;
   if (isResortTile(tile) && !resortFestivals(state.config)) return null;
+  if (powerCutActive(state, property)) return null;
   const boosts: RentBoost[] = [];
   if (isCityTile(tile) && state.championshipHost?.tile === tileIndex)
     boosts.push({
@@ -657,7 +691,9 @@ function animationBudget(events: readonly GameEvent[]): number {
           DECISION_TIMING.propertyAnimation
         );
       case "PropertyDowngraded":
+        return total + DECISION_TIMING.wreckAnimation;
       case "PropertiesSwapped":
+      case "PowerCut":
         return total + DECISION_TIMING.propertyAnimation;
       default:
         return total;
@@ -970,6 +1006,13 @@ function resolver(initial: GameState, context: ResolutionContext) {
         getTile(property.tile, state.config)?.kind === "city" &&
         property.level < 5,
     );
+  /** A card's own die: live entropy, or the seeded sequence in simulations. */
+  const rollDie = () => {
+    if (context.chanceIndex) return context.chanceIndex(6) + 1;
+    const next = nextRandom(state.rngState);
+    secrets({ rngState: next.state });
+    return Math.floor(next.value * 6) + 1;
+  };
   const chance = (seat: Seat) => {
     if (state.deck.length === 0) {
       if (context.chanceIndex) {
@@ -994,7 +1037,19 @@ function resolver(initial: GameState, context: ResolutionContext) {
     const keep = card === "Guardian Angel" || card === "Coupon";
     const kept =
       keep && !getPlayer(state, seat).heldCards.includes(card as KeepCard);
-    emit({ type: "CardDrawn", seat, card, kept });
+    const reworked = chanceRule(state.config) === "reworked";
+    // The card shows its die, so the roll happens with the draw.
+    const roll =
+      card === "Tailwind" || (reworked && card === "Detour")
+        ? rollDie()
+        : undefined;
+    emit({
+      type: "CardDrawn",
+      seat,
+      card,
+      kept,
+      ...(roll === undefined ? {} : { roll }),
+    });
     if (kept) return;
     secrets({ discard: [...state.discard, card] });
     const relocate = (target: number) => {
@@ -1048,6 +1103,13 @@ function resolver(initial: GameState, context: ResolutionContext) {
         );
         break;
       case "Audit":
+        if (reworked) {
+          const tax = getBoard(state.config).find(
+            (tile) => tile.kind === "tax",
+          );
+          if (tax) relocate(tax.index);
+          break;
+        }
         prepend({
           kind: "payment",
           from: seat,
@@ -1104,10 +1166,27 @@ function resolver(initial: GameState, context: ResolutionContext) {
         break;
       }
       case "Detour":
+      case "Tailwind":
         secrets({ extraRoll: false });
-        move(seat, -CHANCE_AMOUNTS.detourSteps);
+        move(
+          seat,
+          (card === "Detour" ? -1 : 1) * (roll ?? CHANCE_AMOUNTS.detourSteps),
+        );
         prepend({ kind: "landing", seat });
         break;
+      case "Power Cut": {
+        const targets = state.properties
+          .filter(
+            (property) =>
+              property.owner !== null &&
+              property.owner !== seat &&
+              getTile(property.tile, state.config)?.kind === "city" &&
+              !powerCutActive(state, property),
+          )
+          .map((property) => property.tile);
+        if (targets.length) open({ kind: "card-target", seat, card, targets });
+        break;
+      }
       case "Contractor": {
         const cap =
           getPlayer(state, seat).laps > 0 ||
@@ -1389,6 +1468,15 @@ function resolver(initial: GameState, context: ResolutionContext) {
               type: "PropertyDowngraded",
               tile: action.tile,
               level: (property.level - 1) as BuildLevel,
+            });
+          else if (pending.card === "Power Cut" && property.owner !== null)
+            emit({
+              type: "PowerCut",
+              seat,
+              tile: action.tile,
+              untilLap:
+                getPlayer(state, property.owner).laps +
+                CHANCE_AMOUNTS.powerCutLaps,
             });
           else if (pending.card === "Contractor")
             emit({
@@ -1739,7 +1827,7 @@ function timeoutAction(state: PublicState): Action {
         : {
             type: "ChooseTarget",
             tile:
-              pending.card === "Earthquake"
+              pending.card === "Earthquake" || pending.card === "Power Cut"
                 ? bestRentTarget(state, pending.targets)
                 : [...pending.targets].sort(
                     (a, b) =>
@@ -2045,6 +2133,12 @@ export function createGame(
     if (marker !== undefined && typeof marker !== "boolean")
       throw new RangeError("Unsupported rules version 8 marker");
   if (
+    config.chanceRule !== undefined &&
+    !["reworked", "original"].includes(config.chanceRule)
+  )
+    throw new RangeError("Unsupported Chance rule");
+  const chances = config.chanceRule ?? "reworked";
+  if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
     config.sellBackPercent !== 100
@@ -2097,7 +2191,7 @@ export function createGame(
     players.map((player) => player.seat),
     seed,
   );
-  const deck = shuffle(CHANCE_CARDS, order.state);
+  const deck = shuffle(chanceDeck({ chanceRule: chances }), order.state);
   const festivals = shuffle(
     board
       .filter(
@@ -2119,6 +2213,7 @@ export function createGame(
       worldTourRule: config.worldTourRule ?? "free-and-own",
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
+      chanceRule: chances,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,

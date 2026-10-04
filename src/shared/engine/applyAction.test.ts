@@ -15,11 +15,13 @@ import {
   applyAction,
   applyEvent,
   applyTimeout,
+  BAD_CHANCE_CARDS,
   botAction,
   botDecisionAt,
   buyoutPrice,
   buyoutPriceAt,
   CHANCE_CARDS,
+  chanceDeck,
   changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -54,6 +56,7 @@ const CONFIG: GameConfig = {
   sellBackPercent: 100,
   fourResortRent: false,
   buildAfterBuyout: false,
+  chanceRule: "original",
   roundLimit: 20,
   timeLimitMinutes: undefined,
   festivalCount: 0,
@@ -781,7 +784,7 @@ describe("forced sales and bankruptcy", () => {
   });
 });
 
-describe("all sixteen Chance cards", () => {
+describe("the original sixteen Chance cards", () => {
   it("movement cards follow clockwise laps, Detour never pays Start, and corner cards end doubles", () => {
     const state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
@@ -935,6 +938,130 @@ describe("all sixteen Chance cards", () => {
   it("has a handled branch for every configured card", () => {
     for (const card of CHANCE_CARDS)
       expect(draw(newGame(), card).state.lastCard?.card).toBe(card);
+  });
+});
+describe("the reworked Chance deck (rules version 9)", () => {
+  const REWORKED: GameConfig = {
+    ...DEFAULT_GAME_CONFIG,
+    roundLimit: 20,
+    timeLimitMinutes: undefined,
+    festivalCount: 0,
+  };
+  /** A live draw: the first entropy word picks the card, the next the die. */
+  function drawLive(
+    state: GameState,
+    card: ChanceCard,
+    die: number,
+    tile = 12,
+  ) {
+    const ready = setPlayer(
+      { ...state, deck: [card], discard: [] },
+      state.activeSeat,
+      { position: tile - 3 },
+    );
+    const result = applyAction(
+      ready,
+      ready.activeSeat,
+      { type: "Roll" },
+      { now: 1, dice: [1, 2], chanceEntropy: [0, die - 1] },
+    );
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.events.reduce(applyEvent, toPublic(ready))).toEqual(
+      toPublic(result.state),
+    );
+    return result;
+  }
+  it("deals bad cards about 45% of the time and keeps old rooms on sixteen cards", () => {
+    const deck = chanceDeck(REWORKED);
+    const bad = deck.filter((card) => BAD_CHANCE_CARDS.includes(card));
+    expect(deck).toHaveLength(24);
+    expect(bad.length / deck.length).toBeCloseTo(0.45, 1);
+    expect(new Set(deck)).toEqual(new Set(CHANCE_CARDS));
+    expect(newGame(4, REWORKED).deck).toHaveLength(24);
+    expect(chanceDeck(CONFIG)).toHaveLength(16);
+    expect(chanceDeck({})).toEqual(chanceDeck(CONFIG));
+    expect(chanceDeck(CONFIG)).not.toContain("Power Cut");
+  });
+  it("sends Audit to the Tax office, which charges the tax there", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    state = grant(state, 1, seat, 1);
+    const audited = draw(state, "Audit");
+    expect(getPlayer(audited.state, seat)).toMatchObject({
+      position: 30,
+      laps: 0,
+    });
+    const tax = audited.events.find(
+      (event) => event.type === "MoneyTransferred" && event.reason === "Tax",
+    );
+    expect(tax).toMatchObject({ from: seat, to: null });
+    expect(getPlayer(audited.state, seat).cash).toBe(
+      2_000_000 - (tax?.type === "MoneyTransferred" ? tax.amount : 0),
+    );
+  });
+  it("rolls a die for Detour and Tailwind, paying salary when Tailwind passes Start", () => {
+    const state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const back = drawLive(state, "Detour", 2);
+    expect(back.events).toContainEqual(
+      expect.objectContaining({ type: "CardDrawn", card: "Detour", roll: 2 }),
+    );
+    expect(getPlayer(back.state, seat)).toMatchObject({
+      position: 10,
+      laps: 0,
+    });
+    const forward = drawLive(state, "Tailwind", 6, 28);
+    expect(forward.events).toContainEqual(
+      expect.objectContaining({ type: "CardDrawn", card: "Tailwind", roll: 6 }),
+    );
+    expect(getPlayer(forward.state, seat)).toMatchObject({
+      position: 2,
+      laps: 1,
+      cash: 2_400_000,
+    });
+    // Seeded simulations roll from the private sequence instead.
+    const seeded = draw(state, "Detour");
+    const drawn = seeded.events.find((event) => event.type === "CardDrawn");
+    expect(drawn?.type === "CardDrawn" ? drawn.roll : 0).toBeGreaterThan(0);
+    expect(seeded.state.rngState).not.toBe(state.rngState);
+  });
+  it("Power Cut stops a rival city's rent until its owner passes Start three times", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const rival = other(state);
+    state = grant(grant(state, 1, rival, 2), 2, rival);
+    const offered = draw(state, "Power Cut").state;
+    expect(offered.pending).toMatchObject({
+      kind: "card-target",
+      card: "Power Cut",
+      targets: [1, 2],
+    });
+    // A bot or an expired decision cuts the city that earns the most.
+    expect(botAction(offered, seat)).toEqual({ type: "ChooseTarget", tile: 1 });
+    const cut = act(offered, { type: "ChooseTarget", tile: 1 });
+    expect(cut.events).toContainEqual({
+      type: "PowerCut",
+      seat,
+      tile: 1,
+      untilLap: 3,
+    });
+    expect(propertyRent(cut.state, 1)).toBe(0);
+    expect(propertyRent(cut.state, 2)).toBeGreaterThan(0);
+    // A cut city is not a target again while its power is off.
+    const again = draw(withActive(cut.state, seat), "Power Cut").state;
+    expect(again.pending).toMatchObject({ targets: [2] });
+    expect(propertyRent(setPlayer(cut.state, rival, { laps: 2 }), 1)).toBe(0);
+    expect(
+      propertyRent(setPlayer(cut.state, rival, { laps: 3 }), 1),
+    ).toBeGreaterThan(0);
+    // A new owner restores the power.
+    const sold = applyEvent(toPublic(cut.state), {
+      type: "PropertySold",
+      seat: rival,
+      tile: 1,
+      amount: 0,
+    });
+    expect(getProperty(sold, 1)).not.toHaveProperty("powerCutUntilLap");
   });
 });
 describe("wins, rankings and timeouts", () => {

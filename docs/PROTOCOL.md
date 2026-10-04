@@ -109,17 +109,21 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
-- Protocol version 5 adds `RequestPause`, `VotePause {accept}` and `ResumeGame`,
+- Protocol version 6 adds the `PowerCut {seat, tile, untilLap}` event, an
+  optional `roll` (1–6) on `CardDrawn` for Detour and Tailwind, an optional
+  `powerCutUntilLap` on a property and the lobby's `chanceRule`; older clients
+  reload. Protocol version 5 adds `RequestPause`, `VotePause {accept}` and `ResumeGame`,
   public `pause` / `pauseCooldownUntil`, and `PauseChanged` / `GameResumed` events;
   older clients reload. Version 4 adds leaders, waiting members and local players
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 8 with `boardRule: "country"`,
+  New rooms freeze rules version 9 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true` and `buildAfterBuyout: true`; version-7 lobbies report both
-  booleans as `false`. The optional festival marker preserves version-4/5/6 rooms
+  `fourResortRent: true`, `buildAfterBuyout: true` and `chanceRule: "reworked"`;
+  version-7 lobbies report both booleans as `false`, and version-8 and earlier
+  lobbies report `chanceRule: "original"`. The optional festival marker preserves version-4/5/6 rooms
   (cities and resorts); missing markers follow the saved economy. Lobbies before
   version 6 report `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
@@ -150,7 +154,8 @@ debug socket has been removed; `/api/health` remains.
   their committed round is unchanged on retry. The wire shapes remain compatible.
 - `events {fromSeq,toSeq,events,proofs?}` drives the shared reducer and Director.
   `CardDrawn` records a uniform draw without replacement using fresh server
-  `EngineContext.chanceEntropy`, independent of seeded setup. This also handles
+  `EngineContext.chanceEntropy`, independent of seeded setup. A Detour or
+  Tailwind die takes the next entropy word and travels as `roll`. This also handles
   saved decks without a protocol, state schema or rules-version bump. Snapshots
   expose no remaining deck, seed, Chance entropy, hidden resolution queue or
   session token. Replay restores saved draws rather than drawing again.
