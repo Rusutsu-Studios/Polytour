@@ -242,7 +242,8 @@ describe("Authoritative game pause", () => {
           kind,
           Date.now() - 1,
         );
-      await durableState.storage.setAlarm(Date.now() - 1);
+      // Keep the platform alarm future: the test helper fires the overdue SQL work.
+      await durableState.storage.setAlarm(Date.now() + 60_000);
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     const frozen = await readRoom(game.code);
@@ -574,7 +575,8 @@ describe("Authoritative game pause", () => {
         "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('pause-vote',?)",
         Date.now() - 1,
       );
-      await durableState.storage.setAlarm(Date.now() - 1);
+      // Keep the platform alarm future: the test helper fires the overdue SQL work.
+      await durableState.storage.setAlarm(Date.now() + 60_000);
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     const pending = await readRoom(game.code);

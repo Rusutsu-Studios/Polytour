@@ -282,6 +282,11 @@ test.describe("low graphics", () => {
     expect(standard.height).toBe(Math.floor(low.height * 1.5));
     expect(standard.frustum).toEqual(low.frustum);
     await highGraphics.press("Escape");
+    await expect(
+      page
+        .locator(".pause-dialog")
+        .getByRole("button", { name: "Réglages", exact: true }),
+    ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.locator(".pause-dialog")).toHaveCount(0);
     await expect(roll).toBeEnabled();
