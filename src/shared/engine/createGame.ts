@@ -155,7 +155,7 @@ function ownsCountry(
 }
 /**
  * Prototype rooms apply the single largest modifier. Reference rooms add each
- * modifier's bonus: a full country (Ã—2) and a Ã—2 championship make Ã—3.
+ * modifier's bonus: a full country (×2) and a ×2 championship make ×3.
  */
 function rentMultiplier(
   state: PublicState,
@@ -377,7 +377,7 @@ export function championshipCost(state: PublicState, tile: number): number {
     ? 0
     : rules(state).championshipFee;
 }
-/** The championship after hosting it on a tile: a prototype move restarts at Ã—2. */
+/** The championship after hosting it on a tile: a prototype move restarts at ×2. */
 export function nextChampionship(
   state: PublicState,
   tile: number,
@@ -678,7 +678,7 @@ export function decisionWindow(
 }
 /**
  * When a server bot should act on the pending decision: once the events that
- * opened it have played at 1Ã— speed, plus a short pause, so players can follow
+ * opened it have played at 1× speed, plus a short pause, so players can follow
  * a bot's turn. The deadline already holds that animation budget.
  */
 export function botDecisionAt(state: PublicState): number | null {

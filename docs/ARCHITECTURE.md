@@ -63,8 +63,7 @@ for the write-quota incident and measured regressions.
 State version 1 is retained, with the explicit migration ladder from PR #19.
 New rooms freeze rules version 9: Audit moves clockwise to Tax; older rooms keep
 its cash charge. Other frozen rules retain the country-grouped board and reference
-economy,
-staged hotels, World Tour flights to free or own properties, a 200 k rent for
+economy, staged hotels, World Tour flights to free or own properties, a 200 k rent for
 four resorts and a build offer after a buyout. Version-6 rooms pay four resorts
 like three and offer no build after a buyout; version-5 rooms also keep flights
 to own properties only when none is free.
@@ -102,7 +101,7 @@ one request can be pending; a five-second timeout releases it even if the
 transport never settles after cancellation. Browser connectivity changes,
 game reconnects and returning to a visible page immediately restart measurement,
 discarding superseded responses. Commit-phase teardown removes timers and listeners
-and aborts pending work. A small bottom-right `AMS Â· 42 ms` indicator and the
+and aborts pending work. A small bottom-right `AMS · 42 ms` indicator and the
 Debug tab share this stream; closing Debug leaves the static HUD probe running.
 Leaving the match stops it. The probe validates its complete sentinel
 body before accepting a sample, so an SPA fallback cannot look like a successful
@@ -249,11 +248,11 @@ Add them only when a concrete requirement appears.
 | `GET /*` (existing static file) | Static assets (Worker not invoked); unknown paths return 404 |
 | `POST /api/auth/guest` | Verify Turnstile, create guest user in D1, set signed session cookie |
 | `GET /api/me` | Current user profile |
-| `POST /api/rooms` | Create private room: generate a 6-char code, call `GAME_ROOM.getByName(code).init()`; on "already initialized", retry with a new code â†’ returns the code |
+| `POST /api/rooms` | Create private room: generate a 6-char code, call `GAME_ROOM.getByName(code).init()`; on "already initialized", retry with a new code → returns the code |
 | `GET /api/leaderboard` | Top ratings from D1 (cache with Workers Cache) |
 | `GET /api/matches/:id/replay` | Stream event log from R2 |
-| `GET /ws/room/:code` | Check `Origin`, authenticate cookie â†’ `env.GAME_ROOM.getByName(code).fetch(req)` |
-| `GET /ws/queue/:mode` | Check `Origin`, authenticate â†’ `env.MATCHMAKER.getByName(mode).fetch(req)` |
+| `GET /ws/room/:code` | Check `Origin`, authenticate cookie → `env.GAME_ROOM.getByName(code).fetch(req)` |
+| `GET /ws/queue/:mode` | Check `Origin`, authenticate → `env.MATCHMAKER.getByName(mode).fetch(req)` |
 
 The Worker authenticates **before** forwarding a WS upgrade and passes the verified
 `userId` to the DO in a header it sets itself (strip any incoming copy of that header first).
@@ -268,10 +267,10 @@ WebSocket hijacking on top of `SameSite=Lax`.
 ```mermaid
 stateDiagram-v2
   [*] --> Lobby: init() from POST /api/rooms or the Matchmaker
-  Lobby --> Playing: host starts (2â€“4 seats filled by players or host-added bots)
-  Playing --> Playing: intents â†’ engine â†’ events
+  Lobby --> Playing: host starts (2–4 seats filled by players or host-added bots)
+  Playing --> Playing: intents → engine → events
   Playing --> Finished: win condition or round limit
-  Finished --> Archived: results â†’ D1, log â†’ R2
+  Finished --> Archived: results → D1, log → R2
   Archived --> [*]: alarm deletes storage after grace period
 ```
 
@@ -314,7 +313,7 @@ sequenceDiagram
 
   C->>DO: {type:"intent", id, atSeq, action:{type:"roll"}}
   DO->>DO: Zod-parse, check synced + seat from ws attachment
-  alt atSeq â‰  current seq
+  alt atSeq ≠ current seq
     DO-->>C: {type:"reject", id, reason:"stale"}
   else current
     DO->>E: applyAction(state, seat, action, EngineContext with fresh Chance entropy)
@@ -341,14 +340,14 @@ info is added later, redact per socket using the seat in the attachment.
 | --- | --- | --- |
 | `decision` | `state.pending.deadline` (computed by the engine) | `applyTimeout` applies the rule-defined default for a human seat (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
 | `grace:<seat>` | 60 s after socket close | Seat becomes a bot seat (`botAction`, medium) until the player reconnects. |
-| `bot` | `botDecisionAt`: once the events that opened the decision have played at 1Ã—, plus 0.7 s (roll) or 1.4 s (choice); 0.9 s after a wake-up | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
+| `bot` | `botDecisionAt`: once the events that opened the decision have played at 1×, plus 0.7 s (roll) or 1.4 s (choice); 0.9 s after a wake-up | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
 | `cleanup` | 10 min after `Finished` | `deleteAll()` storage. |
 
 The DO never computes deadlines itself: the engine sets
 `deadline = now + decisionSeconds + animationBudget(events)` and puts it in the
 events and in `state.pending`, so the countdown clients see and the alarm always
 agree. `animationBudget` and the per-event animation durations live together in
-`shared/board/timing.ts`: the budget is each event's 1Ã— animation duration plus a
+`shared/board/timing.ts`: the budget is each event's 1× animation duration plus a
 fixed slack (e.g. 20%), so a slow animation never eats a player's decision time and
 the server and the client Director can't drift apart.
 
@@ -356,21 +355,21 @@ the server and the client Director can't drift apart.
 
 The client keeps `lastSeq`. On connect it sends `{type:"sync", lastSeq}`. The DO
 always answers with `welcome` first (protocol version, seat, current `seq`), then:
-- If `lastSeq` is within the last 500 events â†’ `welcome.snapshot = null`, followed by
+- If `lastSeq` is within the last 500 events → `welcome.snapshot = null`, followed by
   `events WHERE seq > lastSeq`.
-- Otherwise â†’ `welcome` carries a full snapshot; the client snaps `viewState` to it
+- Otherwise → `welcome` carries a full snapshot; the client snaps `viewState` to it
   (no animation).
 
 ### Deploys and games in progress
 
 Every deploy restarts every Durable Object and drops all WebSockets; no Cloudflare
-setting prevents it. A deploy must cost players a 1â€“2 s "reconnectingâ€¦", never the
+setting prevents it. A deploy must cost players a 1–2 s "reconnecting…", never the
 game:
 
 - Nothing lives only in memory: state, event log, and timers are in SQLite (persist
   first, then broadcast), and the alarm survives the restart.
 - Clients reconnect on their own and resync through `welcome` + `lastSeq`; a
-  protocol mismatch reloads the page ([PROTOCOL.md â†’ Versioning](PROTOCOL.md#versioning)).
+  protocol mismatch reloads the page ([PROTOCOL.md → Versioning](PROTOCOL.md#versioning)).
 - The 60 s `grace:<seat>` timer is far longer than a deploy reconnect, so a deploy
   never hands a seat to a bot.
 - **New code must load games saved by the previous version.** `meta` stores a
@@ -461,7 +460,7 @@ touch docs or Markdown are excluded (watch-path excludes `docs/*` and `*.md`), s
 every deploy restarts the running games (see
 [Deploys and games in progress](#deploys-and-games-in-progress)). Build: `pnpm run build`,
 deploy: `npx wrangler deploy`, build caching on; configured under the Worker's
-**Settings â†’ Build** in the dashboard.
+**Settings → Build** in the dashboard.
 
 Every other branch gets a **Worker Preview**: Workers Builds runs `pnpm run build` then
 `npx wrangler preview`, which creates or updates a Preview named after the branch with

@@ -46,7 +46,7 @@ import {
 const SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
   (name, index) => ({ playerId: `player-${index}`, name, control: "human" }),
 );
-/** Saved prototype rooms (rules versions 2â€“3) keep these rules; see the reference block below. */
+/** Saved prototype rooms (rules versions 2–3) keep these rules; see the reference block below. */
 const CONFIG: GameConfig = {
   ...DEFAULT_GAME_CONFIG,
   economyRule: "prototype",
@@ -1667,7 +1667,7 @@ describe("reference economy on the original board", () => {
       festivalTiles: [31],
       championshipHost: { tile: 31, multiplier: 2 },
     };
-    // Country, festival and a Ã—2 championship each add one: Ã—4.
+    // Country, festival and a ×2 championship each add one: ×4.
     expect(propertyRent(state, 31)).toBe(2_400_000);
     state = { ...state, championshipHost: { tile: 31, multiplier: 10 } };
     expect(propertyRent(state, 31)).toBe(6_000_000);
@@ -1986,7 +1986,7 @@ describe("reference economy on the original board", () => {
   it.each([
     // Rules version 6: free properties and the traveller's own.
     ["free-and-own", (tile: number) => tile !== 1],
-    // Rules versions 4â€“5: the traveller's own only when none is free.
+    // Rules versions 4–5: the traveller's own only when none is free.
     ["free-first", (tile: number) => tile !== 1 && tile !== 2],
   ] as const)(
     "flies a %s World Tour only to the properties that rule allows",
