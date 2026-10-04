@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-04
+
 ### Changed
 
 - Share the ponytail Claude Code plugin with every project member through a committed `.claude/settings.json` (marketplace plus enabled plugin).
