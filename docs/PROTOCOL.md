@@ -128,7 +128,7 @@ debug socket has been removed; `/api/health` remains.
   Lobby snapshots expose their frozen rule markers separately from room settings.
   The optional `taxCardMovement` selector describes Audit for card help. Only
   `true` means movement to Tax; false or omission retains the cash charge.
-  Older clients ignore this additive field; protocol version stays 4.
+  Older clients ignore this additive field; Audit adds no further bump to current protocol 5.
   The strict room-setting schema never accepts internal rule markers; clients
   derive legal construction, travel and sale choices from the shared engine.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
