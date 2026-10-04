@@ -147,6 +147,16 @@ test.describe("low graphics", () => {
   }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    async function openVideoSettings() {
+      await page
+        .getByRole("button", { name: "Menu pause", exact: true })
+        .click();
+      await page
+        .locator(".pause-dialog")
+        .getByRole("button", { name: "Réglages", exact: true })
+        .click();
+      await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+    }
     async function rendering(sampleIdle = false) {
       return page.evaluate(async (sample) => {
         const modulePath = performance
@@ -231,12 +241,7 @@ test.describe("low graphics", () => {
       "nav.game-tools [data-graphics-quality]",
     );
     await expect(toolbarGraphics).toHaveCount(0);
-    await page.getByRole("button", { name: "Menu pause", exact: true }).click();
-    await page
-      .locator(".pause-dialog")
-      .getByRole("button", { name: "Réglages", exact: true })
-      .click();
-    await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+    await openVideoSettings();
     const graphics = page.getByRole("group", {
       name: "Graphismes",
       exact: true,
@@ -271,10 +276,19 @@ test.describe("low graphics", () => {
       frustum: low.frustum,
     });
     const standard = await rendering();
-    expect((await rendering(true)).idleFrames).toBeGreaterThan(0);
+    // Solo settings now pause the match, including its ambient scene motion.
+    await expect.poll(() => rendering(true)).toMatchObject({ idleFrames: 0 });
     expect(standard.width).toBe(Math.floor(low.width * 1.5));
     expect(standard.height).toBe(Math.floor(low.height * 1.5));
     expect(standard.frustum).toEqual(low.frustum);
+    await highGraphics.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".pause-dialog")).toHaveCount(0);
+    await expect(roll).toBeEnabled();
+    await expect
+      .poll(async () => (await rendering(true)).idleFrames)
+      .toBeGreaterThan(0);
+    await openVideoSettings();
     await highGraphics.press("ArrowRight");
     await expect(lowGraphics).toBeChecked();
     await expect(highGraphics).not.toBeChecked();
