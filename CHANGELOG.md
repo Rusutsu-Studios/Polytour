@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-04
+
 ### Changed
 
 - The four-resort win is now an optional room setting, off by default, and is
