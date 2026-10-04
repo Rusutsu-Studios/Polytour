@@ -1005,6 +1005,50 @@ describe("wins, rankings and timeouts", () => {
     expect(botDecisionAt(toPublic(custom))).toBe(presented + BOT_TIMING.choice);
     expect(botDecisionAt({ ...toPublic(purchase), pending: null })).toBeNull();
   });
+  it("reserves card and tax reading time before decisions and bot actions", () => {
+    const card = draw(newGame(), "Windfall").state;
+    const motion =
+      1 + DECISION_TIMING.diceAnimation + 3 * DECISION_TIMING.stepAnimation;
+    expect(card.pending?.deadline).toBe(
+      motion +
+        DECISION_TIMING.cardAnimation +
+        DECISION_TIMING.moneyAnimation +
+        DECISION_TIMING.roll,
+    );
+    expect(botDecisionAt(toPublic(card))).toBe(
+      motion +
+        DECISION_TIMING.cardAnimation +
+        DECISION_TIMING.moneyAnimation +
+        BOT_TIMING.roll,
+    );
+    const taxed = land(grant(newGame(), 1, newGame().activeSeat, 2), 29).state;
+    expect(taxed.pending?.deadline).toBe(
+      motion + DECISION_TIMING.taxAnimation + DECISION_TIMING.roll,
+    );
+    expect(botDecisionAt(toPublic(taxed))).toBe(
+      motion + DECISION_TIMING.taxAnimation + BOT_TIMING.roll,
+    );
+    // Taxes remain bounded even when a payment first needs property sales.
+    const debtor = land(
+      setPlayer(
+        grant(newGame(), 1, newGame().activeSeat, 2),
+        newGame().activeSeat,
+        { cash: 0 },
+      ),
+      29,
+    ).state;
+    expect(debtor.pending?.kind).toBe("sell");
+    const payment = act(debtor, { type: "Sell", tile: 1 }, undefined, 2).state;
+    expect(debtor.pending?.deadline).toBe(
+      motion + DECISION_TIMING.taxAnimation + DECISION_TIMING.sell,
+    );
+    expect(botDecisionAt(toPublic(payment))).toBe(
+      2 +
+        DECISION_TIMING.propertyAnimation +
+        DECISION_TIMING.moneyAnimation +
+        BOT_TIMING.roll,
+    );
+  });
   it("bot choices are always among exposed legal actions", () => {
     for (const difficulty of ["easy", "medium", "hard"] as const) {
       let state = newGame();
@@ -1453,11 +1497,12 @@ describe("combined reference rules on the country board", () => {
     expect(buyoutPrice(hotel, 3)).toBeNull();
     expect(propertyRent(hotel, 3)).toBe(propertyRentAt(state, 3, 4));
   });
-  it("counts regrouped resorts and applies festival rent using the reference rates", () => {
+  it("preserves regrouped resort festival rent for older reference matches", () => {
     let state = newGame(4, {
       ...CONFIG,
       economyRule: "reference",
       boardRule: "country",
+      resortFestivals: true,
     });
     const seat = state.activeSeat;
     state = grant(grant(state, 4, seat), 14, seat);
@@ -1471,7 +1516,11 @@ describe("combined reference rules on the country board", () => {
 });
 
 /** Reference economy also works on the explicitly frozen original tour. */
-const REFERENCE: GameConfig = { ...CONFIG, economyRule: "reference" };
+const REFERENCE: GameConfig = {
+  ...CONFIG,
+  economyRule: "reference",
+  resortFestivals: true,
+};
 function reference(count = 4, config: GameConfig = REFERENCE): GameState {
   return newGame(count, config);
 }
@@ -1546,7 +1595,7 @@ describe("reference economy on the original board", () => {
     state = { ...state, championshipHost: { tile: 31, multiplier: 10 } };
     expect(propertyRent(state, 31)).toBe(6_000_000);
   });
-  it("charges 25/50/100 k per resort, doubles a festival resort and draws festivals on resorts", () => {
+  it("preserves 25/50/100 k resort rents and festival draws for older reference rules", () => {
     let state = reference();
     const seat = state.activeSeat;
     state = grant(state, 5, seat);
@@ -1560,7 +1609,12 @@ describe("reference economy on the original board", () => {
     const festivals = (rule: GameConfig["economyRule"]) =>
       Array.from({ length: 30 }, (_, seed) =>
         createGame(
-          { ...DEFAULT_GAME_CONFIG, economyRule: rule, boardRule: "legacy" },
+          {
+            ...DEFAULT_GAME_CONFIG,
+            economyRule: rule,
+            boardRule: "legacy",
+            resortFestivals: rule === "reference",
+          },
           SEATS,
           seed,
           {
@@ -1570,6 +1624,17 @@ describe("reference economy on the original board", () => {
       ).flat();
     expect(festivals("reference").length).toBeGreaterThan(0);
     expect(festivals("prototype")).toEqual([]);
+  });
+  it("ignores beach festivals in new matches and preserves unmarked saved reference rent", () => {
+    let state = newGame(4, { ...DEFAULT_GAME_CONFIG, boardRule: "country" });
+    state = grant(state, 4, state.activeSeat);
+    state = { ...state, festivalTiles: [4] };
+    expect(propertyRent(state, 4)).toBe(25_000);
+    expect(rentBoost(state, 4)).toBeNull();
+    const { resortFestivals: _marker, ...oldConfig } = state.config;
+    const legacy = { ...state, config: oldConfig };
+    expect(propertyRent(legacy, 4)).toBe(50_000);
+    expect(rentBoost(legacy, 4)).toEqual({ multiplier: 2, source: "festival" });
   });
   it("protects Hotels from buyout and Land Swap, lets Earthquake hit them and has no Landmark", () => {
     const fresh = reference();

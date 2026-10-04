@@ -25,11 +25,11 @@
     background 150ms,
     transform 150ms;
 }
-.seat-choice:hover:not(:disabled) {
+.seat-choice:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fff;
   transform: translateY(-1px);
 }
-.seat-choice:disabled {
+.seat-choice:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.55;
   cursor: default;
 }
@@ -87,10 +87,10 @@
   font-weight: 750;
   cursor: pointer;
 }
-.seat-promote:hover:not(:disabled) {
+.seat-promote:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #f1d888;
 }
-.seat-promote:disabled {
+.seat-promote:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.55;
   cursor: default;
 }
@@ -231,10 +231,10 @@
   color: var(--ink);
   background: #edf0df;
 }
-.room-leader-choice:not(:disabled) {
+.room-leader-choice:not(:is(:disabled, [aria-disabled="true"])) {
   cursor: pointer;
 }
-.room-leader-choice:hover:not(:disabled) {
+.room-leader-choice:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #dcebdd;
   border-color: #6a9381;
 }

@@ -597,7 +597,7 @@ test("@live legacy drand publishes a future commitment, verifies a live beacon, 
   await actor.page.evaluate((session) => {
     sessionStorage.setItem("polytour-room-v1", JSON.stringify(session));
   }, credential);
-  await actor.page.reload();
+  await actor.page.goto("/");
   await expect(actor.page.locator(".player-card")).toHaveCount(4);
   if (await actor.page.locator(".decision-popup").isVisible())
     await actor.page.keyboard.press("Escape");

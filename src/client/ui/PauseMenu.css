@@ -350,11 +350,11 @@
   font-size: 14px;
 }
 
-.pause-zoom button:hover:not(:disabled) {
+.pause-zoom button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #d6eade;
 }
 
-.pause-zoom button:disabled {
+.pause-zoom button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.45;
   cursor: default;
 }

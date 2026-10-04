@@ -54,6 +54,7 @@ export const DEFAULT_GAME_CONFIG = {
   roundLimit: 10_000,
   timeLimitMinutes: 120,
   festivalCount: 3,
+  resortFestivals: false,
   lineMonopoly: true,
   tripleMonopoly: true,
   hotelsDirectly: false,
@@ -82,6 +83,15 @@ export function worldTourRule(
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
+}
+/** New matches exclude resorts; unmarked saves retain their original economy. */
+export function resortFestivals(
+  config: Pick<GameConfig, "resortFestivals" | "economyRule">,
+): boolean {
+  return (
+    config.resortFestivals ??
+    ruleEconomy(config.economyRule ?? "prototype").resortFestivals
+  );
 }
 export function getPlayer(state: PublicState, seat: Seat): PlayerState {
   const player = state.players.find((candidate) => candidate.seat === seat);
@@ -170,7 +180,7 @@ export function propertyRent(state: PublicState, tileIndex: number): number {
       Math.min(3, Math.max(1, count)) as 1 | 2 | 3,
       rule,
     );
-    return rules(state).resortFestivals
+    return resortFestivals(state.config)
       ? rent * rentMultiplier(state, [festival])
       : rent;
   }
@@ -206,7 +216,7 @@ export function rentBoost(
   if (!tile || !property || (!isCityTile(tile) && !isResortTile(tile)))
     return null;
   if (isCityTile(tile) && property.level === 5) return null;
-  if (isResortTile(tile) && !rules(state).resortFestivals) return null;
+  if (isResortTile(tile) && !resortFestivals(state.config)) return null;
   const boosts: RentBoost[] = [];
   if (isCityTile(tile) && state.championshipHost?.tile === tileIndex)
     boosts.push({
@@ -617,8 +627,17 @@ function animationBudget(events: readonly GameEvent[]): number {
         return total + DECISION_TIMING.cardAnimation;
       case "SalaryPaid":
       case "RentPaid":
-      case "MoneyTransferred":
         return total + DECISION_TIMING.moneyAnimation;
+      case "MoneyTransferred":
+        return (
+          total +
+          (event.reason === "Tax"
+            ? Math.max(
+                DECISION_TIMING.moneyAnimation,
+                DECISION_TIMING.taxAnimation,
+              )
+            : DECISION_TIMING.moneyAnimation)
+        );
       case "BoughtOut":
       case "PropertyBought":
       case "PropertySold":
@@ -1805,6 +1824,11 @@ export function createGame(
   )
     throw new RangeError("Festival count must be from 0 to 20");
   if (
+    config.resortFestivals !== undefined &&
+    typeof config.resortFestivals !== "boolean"
+  )
+    throw new RangeError("Resort festival rule must be a boolean");
+  if (
     config.hotelPurchaseRule !== undefined &&
     !["staged-hotels", "legacy-lap"].includes(config.hotelPurchaseRule)
   )
@@ -1882,7 +1906,8 @@ export function createGame(
     board
       .filter(
         (tile) =>
-          isCityTile(tile) || (economy.resortFestivals && isResortTile(tile)),
+          isCityTile(tile) ||
+          (config.resortFestivals === true && isResortTile(tile)),
       )
       .map((tile) => tile.index),
     deck.state,
@@ -1891,6 +1916,7 @@ export function createGame(
     gameId: config.gameId,
     config: {
       ...config,
+      resortFestivals: config.resortFestivals ?? false,
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
       economyRule: config.economyRule ?? "reference",
       boardRule: config.boardRule ?? "country",

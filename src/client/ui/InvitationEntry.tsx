@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { translate as t } from "../i18n.js";
+import ActionButton from "./ActionButton.js";
 import Icon from "./Icon.js";
 
 export default function InvitationEntry({
@@ -66,7 +67,7 @@ export default function InvitationEntry({
               aria-describedby={error ? "invitation-error" : undefined}
               onChange={(event) => onName(event.target.value)}
             />
-            <button
+            <ActionButton
               type="submit"
               className="button primary welcome-play"
               disabled={loading}
@@ -76,7 +77,7 @@ export default function InvitationEntry({
                 ? t("Connexion à la salle…", "Joining room…")
                 : t("Rejoindre", "Join")}
               <Icon name="arrow" />
-            </button>
+            </ActionButton>
             {error && (
               <p id="invitation-error" className="error-message" role="alert">
                 {error}
