@@ -60,7 +60,11 @@ for (const entry of ["play", "join", "invitation"] as const) {
   });
 }
 
-async function decisionRoom(page: Page, cash = 2_000_000) {
+async function decisionRoom(
+  page: Page,
+  cash = 2_000_000,
+  transform?: (state: PublicState) => PublicState,
+) {
   const now = Date.now();
   const base = toPublic(
     createGame(
@@ -73,7 +77,7 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
       { now },
     ).state,
   );
-  const snapshot: PublicState = {
+  const initialSnapshot: PublicState = {
     ...base,
     activeSeat: 0,
     players: base.players.map((player) =>
@@ -87,6 +91,7 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
       deadline: now + 60_000,
     },
   };
+  const snapshot = transform?.(initialSnapshot) ?? initialSnapshot;
   let socket: WebSocketRoute | undefined;
   let seq = 0;
   const intents: string[] = [];
@@ -161,6 +166,84 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
       );
     },
   };
+}
+
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+]) {
+  for (const economy of size.width === 1440
+    ? (["reference", "prototype"] as const)
+    : (["reference"] as const)) {
+    test(`Island remaining rolls use ${economy} rules at ${size.width}×${size.height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(size);
+      const room = await decisionRoom(page, 2_000_000, (state) => ({
+        ...state,
+        config: { ...state.config, economyRule: economy },
+        players: state.players.map((player) =>
+          player.seat === 0
+            ? { ...player, position: 8, onIsland: true, islandTurns: 0 }
+            : player,
+        ),
+        pending: {
+          kind: "island",
+          seat: 0,
+          fee: economy === "reference" ? 200_000 : 100_000,
+          deadline: Date.now() + 60_000,
+        },
+      }));
+      const maximum = economy === "reference" ? 3 : 2;
+      const dialog = page.locator(".decision-popup[open]");
+      const description = dialog.locator("#decision-description");
+      await expect(dialog.locator("#decision-heading")).toBeFocused();
+      for (let failed = 0; failed < maximum; failed += 1) {
+        if (failed > 0)
+          room.send([
+            { type: "IslandEscapeFailed", seat: 0, islandTurns: failed },
+          ]);
+        const remaining = maximum - failed;
+        for (const locale of ["fr", "en"] as const) {
+          await page.evaluate((language) => {
+            localStorage.setItem("polytour.locale", language);
+            window.dispatchEvent(
+              new StorageEvent("storage", { key: "polytour.locale" }),
+            );
+          }, locale);
+          await expect(description).toContainText(
+            locale === "fr"
+              ? `Encore ${remaining} ${remaining === 1 ? "lancer" : "lancers"} avant la libération automatique, même sans double.`
+              : `${remaining} ${remaining === 1 ? "roll" : "rolls"} left until automatic release, even without doubles.`,
+          );
+          const box = await dialog.boundingBox();
+          expect(box).not.toBeNull();
+          expect(box?.x).toBeGreaterThanOrEqual(0);
+          expect(box?.y).toBeGreaterThanOrEqual(0);
+          expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+            size.width,
+          );
+          expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
+            size.height,
+          );
+          if (failed === 0)
+            await page.screenshot({
+              path: `.local/verification/island-rolls-${economy}-${locale}-${size.width}.png`,
+            });
+        }
+      }
+      expect(room.intents).toEqual([]);
+      await dialog
+        .getByRole("button", { name: "Minimize the decision" })
+        .click();
+      const resume = page.getByRole("button", { name: /Resume decision/ });
+      await expect(resume).toBeFocused();
+      await resume.press("Enter");
+      await expect(description).toContainText("1 roll left");
+      await expect(dialog.locator("#decision-heading")).toBeFocused();
+    });
+  }
 }
 
 for (const size of [
