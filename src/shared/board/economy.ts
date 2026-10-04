@@ -20,11 +20,12 @@ type RuleEconomy = {
   readonly islandReleaseFee: number;
   /** Failed escape rolls after which the player is released on the spot. */
   readonly islandMaxFailedEscapes: number;
-  /** Rent per resort with one, two or three owned. */
+  /** Rent per resort with one to four owned; four counts from rules version 8. */
   readonly resortRents: {
     readonly 1: number;
     readonly 2: number;
     readonly 3: number;
+    readonly 4: number;
   };
   /** Houses a player may own on one city before completing a first lap. */
   readonly firstLapHouseCap: BuildLevel;
@@ -57,7 +58,7 @@ export const RULE_ECONOMY = {
     minimumTax: 50_000,
     islandReleaseFee: 100_000,
     islandMaxFailedEscapes: 2,
-    resortRents: { 1: 50_000, 2: 100_000, 3: 200_000 },
+    resortRents: { 1: 50_000, 2: 100_000, 3: 200_000, 4: 200_000 },
     firstLapHouseCap: 3,
     topLevel: 5,
     protectedLevel: 5,
@@ -74,7 +75,7 @@ export const RULE_ECONOMY = {
     minimumTax: 0,
     islandReleaseFee: 200_000,
     islandMaxFailedEscapes: 3,
-    resortRents: { 1: 25_000, 2: 50_000, 3: 100_000 },
+    resortRents: { 1: 25_000, 2: 50_000, 3: 100_000, 4: 200_000 },
     firstLapHouseCap: 2,
     topLevel: 4,
     protectedLevel: 4,
@@ -103,7 +104,7 @@ export const BUILD_LEVELS = [
 ] as const satisfies readonly BuildLevelConfig[];
 
 export function getResortRent(
-  resortsOwned: 1 | 2 | 3,
+  resortsOwned: 1 | 2 | 3 | 4,
   rule: EconomyRule,
 ): number {
   return RULE_ECONOMY[rule].resortRents[resortsOwned];

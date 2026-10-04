@@ -22,7 +22,8 @@ a stylized 3D board with juicy, choreographed animations.
 > championship, Hotels that cannot be bought out and no Landmark. Festivals are
 > cities only; saved version-4/5/6 rooms keep resort festivals. World Tour
 > reaches free properties and the traveller's own (version 5: own only when none
-> is free). Two houses
+> is free). Four resorts pay 200 k rent, and a bought-out city can be built on
+> at once. Two houses
 > before a first completed lap, three after; the Hotel follows on a later
 > visit to a three-house city. Direct
 > hotels are an explicit custom exception; saved version-2/3 rooms keep their original board and the

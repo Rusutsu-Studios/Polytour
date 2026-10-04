@@ -1782,6 +1782,8 @@ function App() {
     hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
     sellBackPercent: room.lobby?.sellBackPercent ?? 100,
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
+    fourResortRent: room.lobby?.fourResortRent ?? true,
+    buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
   };
   const you = room.you?.seat ?? null;

@@ -6,6 +6,8 @@ type SalaryPaid = Extract<GameEvent, { type: "SalaryPaid" }>;
 export type AnimationContext = {
   previous: PublicState | null;
   next: PublicState;
+  /** Events already received that will play after this one. */
+  upcoming: readonly GameEvent[];
   /**
    * The salary a move earns by crossing Start. The scene credits it with
    * `settle` when the pawn passes Start instead of after the walk.
@@ -143,6 +145,7 @@ class Director {
         const context = {
           previous,
           next,
+          upcoming: this.queue.map((queued) => queued.event),
           playbackRate: behind >= CATCH_UP_BATCHES ? CATCH_UP_PLAYBACK_RATE : 1,
           reducedMotion: this.value.reducedMotion,
           salary: salary && { event: salary, settle },
