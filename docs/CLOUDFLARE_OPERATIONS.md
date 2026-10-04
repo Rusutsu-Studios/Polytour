@@ -1,6 +1,6 @@
 # Prototype Durable Object operations
 
-## Incident — 1 October 2026
+## Incident - 1 October 2026
 
 The branch Preview's GameRoom logs at 07:19:30 UTC+2 explicitly report
 `Exceeded allowed rows written in Durable Objects free tier.` The user-facing

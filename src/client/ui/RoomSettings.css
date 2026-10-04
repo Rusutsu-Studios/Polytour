@@ -272,6 +272,39 @@
   box-shadow: 0 3px 4px #173b4526;
 }
 
+.room-setting-help {
+  margin: 0 0 8px 30px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.room-settings-wins {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #bfd0cf;
+}
+
+.room-settings-wins h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.room-settings-wins ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.room-settings-wins li + li {
+  margin-top: 6px;
+}
+
+.room-settings-wins p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .room-settings-save:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #24566b;
 }

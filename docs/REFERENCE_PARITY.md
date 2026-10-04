@@ -53,7 +53,7 @@ New rooms use the reference rent table and three-house totals compared below; a
 few totals and the hotel costs remain interpolated. The sixth Landmark level is
 an original Polytour mechanic that only saved prototype rooms keep.
 
-## Hotel progression and source checks — 1 October 2026
+## Hotel progression and source checks - 1 October 2026
 
 The user explicitly requires no hotel on a city's initial purchase. A
 [Steam moderator's answer from 16 February 2018](https://steamcommunity.com/app/397900/discussions/0/2860219962083799627/)
@@ -81,7 +81,7 @@ Other sources were compared without treating their contents as user instructions
 Keep rents and intermediate prices provisional. These dated checks refine the
 documented comparison and construction progression without claiming exact parity.
 
-## Economy comparison — 2 October 2026
+## Economy comparison - 2 October 2026
 
 The user asked for a comparison of buyouts, prices, festivals, hotels, the cost of
 each element and tax. They believed the reference tax depends on owned property
@@ -160,7 +160,7 @@ Findings:
 - The split between land and house cost is still unknown between the two
   captured endpoints. The sale dialog suggests a 240 k bare plot for the 13th city.
 
-### Adopted in combined rules version 5 — 3 October 2026
+### Adopted in combined rules version 5 - 3 October 2026
 
 The user approved every proposed change, with one exception: Earthquake can still
 damage a Hotel. New rooms freeze `rulesVersion: 5` with
@@ -210,7 +210,7 @@ houses. Monopolies still decide most matches. Bankruptcies are rarer (7.7 %
 against 15 %) because sales refund the full investment. The last player in turn
 order wins 19.3 % of matches instead of 15.3 %.
 
-### World Tour to own properties — rules version 6, 3 October 2026
+### World Tour to own properties - rules version 6, 3 October 2026
 
 At the user's request, a World Tour flight can always reach the player's own
 cities and resorts as well as unowned ones, instead of their own only when none

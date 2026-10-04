@@ -9,7 +9,7 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.4.4] - 2026-10-04
+## [0.5.1] - 2026-10-04
 
 ### Fixed
 
@@ -26,6 +26,27 @@ has been published, and it does not reconstruct earlier development history.
   to play; click or keyboard activation switches directly to the other language (#43).
 - Use a minimize icon on decision windows and a compact bottom tab that keeps
   the countdown and reopens the same selection (#50).
+
+## [0.5.0] - 2026-10-03
+
+### Added
+
+- A French/English win-condition summary above Save settings, updated from the
+  current room settings and available in the fixed rules during a match.
+- An explanation of Birthday/Charity payments and how gift bankruptcy changes
+  forced sales and payment limits.
+
+### Fixed
+
+- Keep the settings footer within short desktop viewports while longer settings
+  content scrolls.
+
+## [0.4.4] - 2026-10-03
+
+### Changed
+
+- Refresh French/English welcome copy, show creator credits and a GitHub link,
+  and use simple hyphens in titles and unavailable-value labels (#90).
 
 ## [0.4.3] - 2026-10-03
 
