@@ -916,6 +916,22 @@
   padding: 10px;
   min-height: 37px;
 }
+.network-status {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.network-status:is(:hover, :focus-visible) {
+  color: var(--coral-dark);
+}
+.network-status:focus-visible {
+  outline: 2px solid var(--coral-dark);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
 .match-network {
   position: absolute;
   z-index: 3;
@@ -1302,6 +1318,10 @@
 .text-button:is(:hover, :focus-visible) {
   color: var(--coral-dark);
 }
+.personal-settings-trigger {
+  min-width: 32px;
+  min-height: 32px;
+}
 .text-button:is(:disabled, [aria-disabled="true"]) {
   color: #5e7c7c;
   opacity: 0.65;
@@ -1633,6 +1653,12 @@ input::placeholder {
   padding: 0 48px 24px;
   font-size: 11px;
   color: #446969;
+}
+.lobby-credit {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .scene-loading {
   height: 100%;

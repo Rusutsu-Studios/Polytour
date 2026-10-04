@@ -97,18 +97,25 @@ function diagnosticValue(panel: Locator, label: string) {
   return panel.getByText(label, { exact: true }).locator("..").locator("dd");
 }
 
-async function expectSharedPing(panel: Locator, point: string) {
+async function expectSharedPing(
+  panel: Locator,
+  point: string,
+  badge = ".match-network",
+) {
   // Both views can refresh between independent DOM reads. Compare one render.
   await expect
     .poll(() =>
-      panel.evaluate((element, entry) => {
-        const latency = element.querySelector('[role="status"]')?.textContent;
-        return (
-          /^\d+ ms$/.test(latency ?? "") &&
-          document.querySelector(".match-network")?.textContent ===
-            `${entry} · ${latency}`
-        );
-      }, point),
+      panel.evaluate(
+        (element, { entry, selector }) => {
+          const latency = element.querySelector('[role="status"]')?.textContent;
+          return (
+            /^\d+ ms$/.test(latency ?? "") &&
+            document.querySelector(selector)?.textContent ===
+              `${entry} · ${latency}`
+          );
+        },
+        { entry: point, selector: badge },
+      ),
     )
     .toBe(true);
 }
@@ -211,7 +218,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
       }
     });
   });
-  // Track timers before the always-on match probe creates its first cadence.
+  // Track timers before the shared home/match probe creates its first cadence.
   await page.clock.install({ time: Date.now() });
   await page.goto("/");
   if (options.observePongs) {
@@ -310,6 +317,122 @@ async function setDocumentVisibility(page: Page, visible: boolean) {
   }, visible);
 }
 
+for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+  test(`home network status opens shared Debug without a room at ${viewport.width}`, async ({
+    page,
+  }) => {
+    const roomRequests: string[] = [];
+    const sockets: string[] = [];
+    let probes = 0;
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith("/api/rooms"))
+        roomRequests.push(request.url());
+    });
+    page.on("websocket", (socket) => {
+      if (new URL(socket.url()).pathname.startsWith("/ws/room/"))
+        sockets.push(socket.url());
+    });
+    await page.route("**/connection-probe.txt**", (route) => {
+      probes += 1;
+      return route.fulfill(FRANKFURT_PROBE);
+    });
+    await page.setViewportSize(viewport);
+    await page.clock.install({ time: Date.now() });
+    await page.goto("/");
+    const badge = page.locator(".lobby-network");
+    await expect(badge).toHaveAccessibleName("Débogage réseau");
+    await expect(badge).toHaveText(/^FRA · \d+ ms$/);
+    await expect(page.locator(".lobby-credit")).toContainText(
+      "Crée par Poli & GJJS",
+    );
+    await freezeClock(page);
+    const beforeOpening = probes;
+    await badge.press("Enter");
+    const modal = page.locator(".pause-dialog");
+    const panel = modal.locator(".pause-debug");
+    await expect(
+      modal.getByRole("tab", { name: "Débogage", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expectSharedPing(panel, "FRA", ".lobby-network");
+    expect(probes).toBe(beforeOpening);
+    await page.screenshot({
+      path: `.local/verification/home-network-${viewport.width}.png`,
+    });
+    await expect(
+      diagnosticValue(panel, "Point d’entrée Cloudflare"),
+    ).toContainText("Frankfurt, Germany");
+    await expect(diagnosticValue(panel, "Région")).toHaveText("Europe");
+    await expect(diagnosticValue(panel, "Hôte")).toHaveText("127.0.0.1");
+    await expect(
+      modal.locator(
+        ".pause-menu-actions, .pause-request, .pause-vote, .pause-note, .pause-debug-bank, .room-debug-route",
+      ),
+    ).toHaveCount(0);
+    await expect(modal).not.toHaveAttribute("aria-describedby", /.+/);
+    await expect(
+      panel.getByText("Connexion de la partie", { exact: true }),
+    ).toHaveCount(0);
+    await completeProbe(page, () => page.clock.runFor(5000));
+    expect(probes).toBe(beforeOpening + 1);
+    await expectSharedPing(panel, "FRA", ".lobby-network");
+    await modal.getByRole("tab", { name: "Jeu", exact: true }).click();
+    await modal.getByLabel("Langue", { exact: true }).selectOption("en");
+    await modal.getByRole("tab", { name: "Debug", exact: true }).click();
+    await expect(badge).toHaveAccessibleName("Network debug");
+    await expectSharedPing(panel, "FRA", ".lobby-network");
+    await page.keyboard.press("Escape");
+    await expect(modal).toHaveCount(0);
+    await expect(badge).toBeFocused();
+    await expect(page.locator(".language-trigger")).toHaveText("EN");
+    expect(roomRequests).toEqual([]);
+    expect(sockets).toEqual([]);
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
+    ).toBeNull();
+  });
+}
+
+test("the match network button opens Debug directly without requesting a multiplayer pause", async ({
+  page,
+}) => {
+  await page.route("**/connection-probe.txt**", (route) =>
+    route.fulfill(FRANKFURT_PROBE),
+  );
+  const match = await enterMatch(page, {
+    roomDiagnostics: () => FRANKFURT_ROOM,
+  });
+  await freezeClock(page);
+  const badge = page.locator(".match-network");
+  await expect(badge).toHaveAccessibleName("Débogage réseau");
+  await badge.press("Enter");
+  const modal = page.locator(".pause-dialog");
+  await expect(
+    modal.getByRole("tab", { name: "Débogage", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expectSharedPing(modal.locator(".pause-debug"), "FRA");
+  // Debug is active on mount; development StrictMode may mount it twice.
+  await expect.poll(() => match.metadataRequests()).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => match.pingRequests()).toBe(match.metadataRequests());
+  await expect(modal.locator(".room-debug-route")).toContainText("GameRoom");
+  const previousTime = await page.locator(".match-clock").innerText();
+  await page.clock.runFor(1000);
+  await expect(page.locator(".match-clock")).not.toHaveText(previousTime);
+  await page.keyboard.press("Escape");
+  const gear = modal.getByRole("button", { name: "Réglages", exact: true });
+  await expect(gear).toBeFocused();
+  await expect(gear).toHaveText("");
+  await expect(gear.locator("svg")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(modal).toHaveCount(0);
+  await expect(badge).toBeFocused();
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync", ...Array(match.metadataRequests()).fill("debug-info")]);
+  expect(match.connections()).toBe(1);
+});
+
 test("opening a multiplayer pause menu keeps clocks and authoritative updates running without losing modal focus", async ({
   page,
 }) => {
@@ -328,6 +451,12 @@ test("opening a multiplayer pause menu keeps clocks and authoritative updates ru
   );
   await expect(modal).not.toHaveAttribute("aria-describedby", /.+/);
   await expect(continueButton).toBeFocused();
+  const settingsGear = modal.getByRole("button", {
+    name: "Réglages",
+    exact: true,
+  });
+  await expect(settingsGear).toHaveText("");
+  await expect(settingsGear.locator("svg")).toBeVisible();
   await page.screenshot({ path: ".local/verification/pause-menu.png" });
   const previousTime = await page.locator(".match-clock").innerText();
   await expect
@@ -645,6 +774,8 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
   response = null;
   await setBrowserOnline(page, true);
   await expect.poll(() => requests).toBe(whileOffline + 2);
+  const beforeLeaving = requests;
+  response = FRANKFURT_PROBE;
   await page.getByRole("button", { name: "Menu pause", exact: true }).click();
   await page.getByRole("button", { name: "Quitter", exact: true }).click();
   await page
@@ -654,9 +785,12 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
     page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
   await expect.poll(aborts).toBe(beforeClosing + 3);
+  await expect(page.locator(".lobby-network")).toHaveText(/^FRA · \d+ ms$/);
+  await expect.poll(() => requests).toBe(beforeLeaving + 1);
   const afterLeaving = requests;
-  await page.clock.runFor(20_000);
-  expect(requests).toBe(afterLeaving);
+  await completeProbe(page, () => page.clock.runFor(5000));
+  await expect.poll(() => requests).toBe(afterLeaving + 1);
+  await expect(page.locator(".lobby-network")).toHaveText(/^FRA · \d+ ms$/);
   expect(match.connections()).toBe(1);
   expect(
     match.messages.map((raw) =>
@@ -665,7 +799,7 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
   ).toEqual(["sync"]);
 });
 
-test("the match probe immediately refreshes after network changes and pauses while hidden or reconnecting", async ({
+test("the shared probe refreshes after network and room connection changes and pauses while hidden or offline", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -728,10 +862,13 @@ test("the match probe immediately refreshes after network changes and pauses whi
   expectedRequests += 1;
   expect(requests).toBe(expectedRequests);
   response = ZURICH_PROBE;
-  await match.disconnect();
+  await completeProbe(page, () => match.disconnect());
+  expectedRequests += 1;
+  await expect.poll(() => requests).toBe(expectedRequests);
   await expect(diagnosticValue(panel, "Connexion de la partie")).toHaveText(
     "Reconnexion en cours…",
   );
+  await expect(entry).toContainText("ZRH");
   await page.clock.runFor(999);
   expect(requests).toBe(expectedRequests);
   await completeProbe(page, () => page.clock.runFor(1));

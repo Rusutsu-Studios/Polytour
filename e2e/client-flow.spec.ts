@@ -195,21 +195,62 @@ test.describe("low graphics", () => {
     }
 
     await page.goto("/");
-    const highLabel = "Graphismes : Élevés. Passer aux graphismes faibles.";
-    const lowLabel = "Graphismes : Faibles. Passer aux graphismes élevés.";
-    const homeGraphics = page.locator(".topbar-right [data-graphics-quality]");
-    await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "high");
-    await expect(homeGraphics).toHaveAccessibleName(highLabel);
-    await expect(homeGraphics).toHaveText("Élevés");
-    await homeGraphics.click();
+    const homeSettings = page.locator(".personal-settings-trigger");
+    const preview = page.locator(".welcome-board-preview .canvas-layer");
+    await expect(homeSettings).toHaveAccessibleName("Réglages");
+    await expect(homeSettings).toHaveText("");
+    await expect(
+      page.locator(".topbar-right [data-graphics-quality]"),
+    ).toHaveCount(0);
+    await expect(preview).toHaveAttribute("data-scene-ready", "true");
+    await expect.poll(rendering).toMatchObject({
+      dpr: 1.5,
+      shadows: true,
+      shadowLights: 1,
+    });
+    await homeSettings.click();
+    await expect(
+      page.getByRole("tab", { name: "Vidéo", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.screenshot({ path: ".local/verification/home-video-1440.png" });
+    const homeGraphics = page.locator(".pause-dialog .graphics-quality");
+    await expect(
+      homeGraphics.getByRole("radio", { name: "Élevé", exact: true }),
+    ).toBeChecked();
+    await homeGraphics
+      .getByRole("radio", { name: "Faible", exact: true })
+      .check();
+    await expect(preview).toHaveAttribute("data-low-graphics", "true");
+    await expect.poll(rendering).toMatchObject({
+      dpr: 1,
+      shadows: false,
+      shadowLights: 0,
+    });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".pause-dialog")).toHaveCount(0);
+    await expect(homeSettings).toBeFocused();
+    await page.screenshot({
+      path: ".local/verification/home-settings-entry-1440.png",
+    });
     await page.reload();
-    await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "low");
-    await expect(homeGraphics).toHaveAccessibleName(lowLabel);
+    await expect(preview).toHaveAttribute("data-low-graphics", "true");
+    await homeSettings.click();
+    await expect(
+      homeGraphics.getByRole("radio", { name: "Faible", exact: true }),
+    ).toBeChecked();
+    await page.keyboard.press("Escape");
     await chooseLanguage(page, "en");
-    await expect(homeGraphics).toHaveAccessibleName(
-      "Graphics: Low. Switch to High.",
-    );
-    await expect(homeGraphics).toHaveText("Low");
+    await expect(homeSettings).toHaveAccessibleName("Settings");
+    await homeSettings.click();
+    await expect(
+      page.getByRole("tab", { name: "Video", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(homeGraphics).toHaveAccessibleName("Graphics");
+    await expect(
+      homeGraphics.getByRole("radio", { name: "Low", exact: true }),
+    ).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(homeSettings).toBeFocused();
     await chooseLanguage(page, "fr");
     await page.getByLabel("Votre nom de joueur").fill("Graphics QA");
     await openLobby(page);

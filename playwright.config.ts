@@ -16,6 +16,7 @@ export default defineConfig({
   retries: 0,
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
+    locale: "fr-CH",
     viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",
     launchOptions: { args: ["--enable-unsafe-swiftshader"] },

@@ -8,6 +8,10 @@
   while returning HTTP 404 (#92).
 - New rooms include a retained Escape card that releases its holder from Lost
   Island for free; saved rooms retain their existing card decks (#48).
+- The welcome menu opens video settings from a gear button. The network status
+  beside the credits and in a match opens the same settings panel on Debug.
+- First visits follow the browser's French or English language preference;
+  an explicitly saved language choice takes priority.
 
 ### Fixed
 
@@ -15,6 +19,8 @@
   mode the same text-control styling as language; active streamer mode uses red
   text (#37).
 - Interface minus signs use the standard ASCII hyphen-minus (-).
+- The pause menu uses a gear button for settings, and the language shortcut
+  remains available in the welcome toolbar.
 - Lobby departures and player removals shift occupied seats left, preserving
   leadership, reconnect credentials and local player controls. New players and
   bots fill the first open seat (#94).

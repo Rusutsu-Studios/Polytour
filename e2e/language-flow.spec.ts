@@ -5,6 +5,103 @@ import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
+for (const scenario of [
+  { name: "English regional browser", browser: "en-GB", expected: "en" },
+  { name: "French regional browser", browser: "fr-CH", expected: "fr" },
+  { name: "unsupported browser", browser: "de-DE", expected: "fr" },
+  {
+    name: "first supported English preference",
+    browser: "fr-CH",
+    languages: ["de-DE", "en-US", "fr-CH"],
+    expected: "en",
+  },
+  {
+    name: "first supported French preference",
+    browser: "en-GB",
+    languages: ["es-ES", "fr-BE", "en-US"],
+    expected: "fr",
+  },
+  {
+    name: "primary language after unsupported preferences",
+    browser: "en-US",
+    languages: ["de-DE", "es-ES"],
+    expected: "en",
+  },
+  {
+    name: "saved English overrides French browser",
+    browser: "fr-CH",
+    stored: "en",
+    expected: "en",
+  },
+  {
+    name: "saved French overrides English browser",
+    browser: "en-GB",
+    stored: "fr",
+    expected: "fr",
+  },
+  {
+    name: "invalid saved language falls back to browser",
+    browser: "en-GB",
+    stored: "es",
+    expected: "en",
+  },
+] as const) {
+  test.describe(scenario.name, () => {
+    test.use({ locale: scenario.browser });
+    test("selects the initial interface language", async ({ page }) => {
+      await page.addInitScript((settings) => {
+        if ("languages" in settings)
+          Object.defineProperty(navigator, "languages", {
+            get: () => settings.languages,
+          });
+        if ("stored" in settings && typeof settings.stored === "string")
+          localStorage.setItem("polytour.locale", settings.stored);
+      }, scenario);
+      await page.goto("/");
+      await expect(page.locator("html")).toHaveAttribute(
+        "lang",
+        scenario.expected,
+      );
+      await expect(
+        page.getByRole("heading", {
+          name: scenario.expected === "en" ? "New game" : "Nouvelle partie",
+        }),
+      ).toBeVisible();
+    });
+  });
+}
+
+test.describe("browser storage unavailable", () => {
+  test.use({ locale: "en-US" });
+  test("detects browser language and permits a manual choice without storage", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        get() {
+          throw new DOMException(
+            "Storage blocked for this test",
+            "SecurityError",
+          );
+        },
+      });
+    });
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { name: "New game" })).toBeVisible();
+    await chooseLanguage(page, "fr");
+    await expect(
+      page.getByRole("heading", { name: "Nouvelle partie" }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { name: "New game" })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
 test("home sliders, language persistence and readable HTTP failure", async ({
   page,
 }) => {

@@ -123,16 +123,17 @@ favicon, share-image and crawler policy.
 
 ## Browser diagnostics
 
-The match HUD measures the full HTTP round trip to the same-origin static asset
+The app measures the full HTTP round trip to the same-origin static asset
 `GET /connection-probe.txt`, without browser caching, every five seconds while
-the match is connected, the browser page is visible and the browser is online. Only
+the browser page is visible and the browser is online. Only
 one request can be pending; a five-second timeout releases it even if the
 transport never settles after cancellation. Browser connectivity changes,
 game reconnects and returning to a visible page immediately restart measurement,
 discarding superseded responses. Commit-phase teardown removes timers and listeners
-and aborts pending work. A small bottom-right `AMS · 42 ms` indicator and the
-Debug tab share this stream; closing Debug leaves the static HUD probe running.
-Leaving the match stops it. The probe validates its complete sentinel
+and aborts pending work. The `AMS · 42 ms` button beside the welcome credits or at
+the bottom right of a match opens settings directly on Debug. These buttons and
+the Debug tab share this stream; closing Debug or leaving a match keeps the
+welcome probe running. The probe validates its complete sentinel
 body before accepting a sample, so an SPA fallback cannot look like a successful
 measurement. The response's `Cf-Ray` suffix identifies the current Cloudflare
 entry point, and its URL identifies the contacted hostname, including a branch
