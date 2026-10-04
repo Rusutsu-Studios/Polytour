@@ -1,5 +1,8 @@
 type IconName =
   | "dice"
+  | "buy"
+  | "build"
+  | "sell"
   | "arrow"
   | "copy"
   | "people"
@@ -26,6 +29,9 @@ type IconName =
   | "bot";
 const paths: Record<IconName, string> = {
   dice: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 7h.01M17 7h.01M12 12h.01M7 17h.01M17 17h.01",
+  buy: "M3 3h2l3 12h11l3-9H6m3 13h.01M18 19h.01",
+  build: "m3 10 9-7 9 7M5 9v12h14V9m-10 12v-7h6v7",
+  sell: "m20 13-7 7L3 10V3h7l10 10ZM7 7h.01",
   arrow: "M4 12h16m-6-6 6 6-6 6",
   copy: "M9 9h11v12H9V9ZM5 15H3V3h12v2",
   people:
@@ -73,6 +79,7 @@ export default function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      data-icon={name}
     >
       <path d={paths[name]} />
     </svg>
