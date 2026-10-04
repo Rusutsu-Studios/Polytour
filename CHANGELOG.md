@@ -9,11 +9,21 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Changed
+
+- Share the ponytail Claude Code plugin with every project member through a committed `.claude/settings.json` (marketplace plus enabled plugin).
+
 ## [0.7.1] - 2026-10-04
 
 ### Changed
 
-- Share the ponytail Claude Code plugin with every project member through a committed `.claude/settings.json` (marketplace plus enabled plugin).
+- The four-resort win is now an optional room setting, off by default, and is
+  called the four-beach win in the interface (French: plages). Saved matches made
+  before the option keep the win enabled.
+- The room settings dialog saves the leader's changes when it closes; the Save
+  settings button is gone.
+- The arrow on the Start tile has a longer, clearer arrowhead on its left end.
+- The French Start tile is named "Départ" instead of "Grand départ".
 
 ## [0.7.0] - 2026-10-04
 

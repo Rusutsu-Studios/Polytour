@@ -28,6 +28,8 @@ export type GameConfig = {
   readonly resortFestivals?: boolean;
   readonly lineMonopoly?: boolean;
   readonly tripleMonopoly?: boolean;
+  /** Missing on saved matches made before the option: they keep the win enabled. */
+  readonly resortMonopoly?: boolean;
   readonly hotelsDirectly?: boolean;
   /** Missing on existing saves: preserve the original lap-only hotel rule. */
   readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";

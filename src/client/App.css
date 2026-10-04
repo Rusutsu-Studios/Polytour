@@ -1966,9 +1966,6 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   font-size: 12px;
   line-height: 1.5;
 }
-.settings-unsaved {
-  margin-top: 15px;
-}
 .match-clock {
   font-variant-numeric: tabular-nums;
   font-weight: 750;

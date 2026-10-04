@@ -305,7 +305,7 @@ lands it on World Tour, even in the middle of a doubles streak.
 1. **Last standing** - every other player is bankrupt.
 2. **Triple Monopoly** - own every city of any 3 countries; enabled by default, configurable.
 3. **Line Monopoly** - own every city and resort on one side; enabled by default, configurable.
-4. **Resort Monopoly** - own all 4 resorts.
+4. **Resort Monopoly** (shown as "beaches" in the interface) - own all 4 resorts; disabled by default, a room option (saves made before the option keep it enabled).
 5. **Time limit / round cap** - highest net worth (cash + invested value) wins.
 
 Check instant wins after any change of ownership (purchase, buyout, Land Swap, sale)

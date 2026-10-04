@@ -94,7 +94,7 @@ export default function CityCard({
     tile.kind === "city"
       ? t("Ville", "City")
       : tile.kind === "resort"
-        ? t("Plage", "Resort")
+        ? t("Plage", "Beach")
         : t("Case spéciale", "Special space");
 
   return createPortal(
@@ -210,8 +210,8 @@ export default function CityCard({
 
 function resortTotal(count: number) {
   return count === 1
-    ? t("1 plage en tout", "1 resort in all")
-    : t(`${count} plages en tout`, `${count} resorts in all`);
+    ? t("1 plage en tout", "1 beach in all")
+    : t(`${count} plages en tout`, `${count} beaches in all`);
 }
 
 function boostLabel(boost: RentBoost) {
@@ -437,12 +437,12 @@ function ResortDeed({
         <caption>
           {t(
             "Loyer selon les plages du propriétaire",
-            "Rent by resorts the owner holds",
+            "Rent by beaches the owner holds",
           )}
         </caption>
         <thead>
           <tr>
-            <th scope="col">{t("Plages possédées", "Resorts owned")}</th>
+            <th scope="col">{t("Plages possédées", "Beaches owned")}</th>
             <th scope="col">{t("Loyer de base", "Base rent")}</th>
             {boost && (
               <th scope="col" className="city-card-boosted">
@@ -462,14 +462,14 @@ function ResortDeed({
               >
                 <th scope="row">
                   {resorts === 1
-                    ? t("1 plage", "1 resort")
+                    ? t("1 plage", "1 beach")
                     : resorts === 2
-                      ? t("2 plages", "2 resorts")
+                      ? t("2 plages", "2 beaches")
                       : resorts === 3 && top === 3
-                        ? t("3 plages ou plus", "3 resorts or more")
+                        ? t("3 plages ou plus", "3 beaches or more")
                         : resorts === 3
-                          ? t("3 plages", "3 resorts")
-                          : t("4 plages", "4 resorts")}
+                          ? t("3 plages", "3 beaches")
+                          : t("4 plages", "4 beaches")}
                   {current && (
                     <span className="city-card-now">{t("actuel", "now")}</span>
                   )}
@@ -489,11 +489,11 @@ function ResortDeed({
         {resortFestivals(state.config)
           ? t(
               "Les plages n’ont ni constructions ni rachat. Leur loyer dépend du nombre de plages du propriétaire ; un festival peut le multiplier.",
-              "Resorts have no buildings or buyout. Rent depends on the owner’s resort count; a Festival can multiply it.",
+              "Beaches have no buildings or buyout. Rent depends on the owner’s beach count; a Festival can multiply it.",
             )
           : t(
               "Les plages n’ont ni constructions, ni festival, ni rachat. Leur loyer dépend du nombre de plages du propriétaire.",
-              "Resorts have no buildings, Festival or buyout. Rent depends on the owner’s resort count.",
+              "Beaches have no buildings, Festival or buyout. Rent depends on the owner’s beach count.",
             )}
       </p>
     </div>
