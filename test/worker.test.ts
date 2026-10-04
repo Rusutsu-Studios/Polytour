@@ -22,6 +22,7 @@ import {
   applyEvent,
   botDecisionAt,
   CHANCE_CARDS,
+  propertyRent,
   toPublic,
 } from "../src/shared/engine/index.js";
 import type {
@@ -2023,7 +2024,7 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on rules version 7 with four-resort rent and building after a buyout", async () => {
+  it("freezes new rooms on rules version 8 with city-only festivals, four-resort rent and building after a buyout", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -2033,6 +2034,14 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.worldTourRule).toBe("free-and-own");
     expect(game.state.config.fourResortRent).toBe(true);
     expect(game.state.config.buildAfterBuyout).toBe(true);
+    expect(game.state.config.resortFestivals).toBe(false);
+    const cities = getBoard(game.state.config)
+      .filter(isCityTile)
+      .map((tile) => tile.index);
+    expect(game.state.festivalTiles).toHaveLength(3);
+    expect(
+      game.state.festivalTiles.every((tile) => cities.includes(tile)),
+    ).toBe(true);
     expect(game.state.properties.map((property) => property.tile)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23, 25,
       26, 27, 29, 31,
@@ -2044,7 +2053,13 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("7");
+    expect(rules).toBe("8");
+    await evictDurableObject(stub);
+    const resumed = await connect(game.credentials[0]);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.lobby.resortFestivals).toBe(false);
+    expect(welcome.snapshot?.config.resortFestivals).toBe(false);
+    expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
   });
 
   it.each([
@@ -2052,6 +2067,7 @@ describe("Authoritative private rooms", () => {
     { version: "5", marker: false, ownReachable: false },
     { version: "6", marker: true, ownReachable: true },
     { version: "7", marker: true, ownReachable: true },
+    { version: "8", marker: true, ownReachable: true },
   ])(
     "opens a version-$version World Tour with the room's frozen destinations",
     async ({ version, marker, ownReachable }) => {
@@ -2066,18 +2082,26 @@ describe("Authoritative private rooms", () => {
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
         const {
-          worldTourRule: _marker,
+          resortFestivals: _festival,
+          worldTourRule: _tour,
           fourResortRent: _four,
           buildAfterBuyout: _build,
-          ...unmarked
+          ...bare
         } = saved.config;
-        // Versions before 7 predate the resort and buyout markers.
+        // Versions before 8 predate the resort and buyout markers; before 7 the
+        // festival marker, and before 6 the World Tour marker.
         const config =
-          version === "7"
+          version === "8"
             ? saved.config
-            : marker
-              ? { ...unmarked, worldTourRule: saved.config.worldTourRule }
-              : unmarked;
+            : version === "7"
+              ? {
+                  ...bare,
+                  resortFestivals: saved.config.resortFestivals,
+                  worldTourRule: saved.config.worldTourRule,
+                }
+              : marker
+                ? { ...bare, worldTourRule: saved.config.worldTourRule }
+                : bare;
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
           version,
@@ -2158,6 +2182,8 @@ describe("Authoritative private rooms", () => {
       { fourResortRent: false },
       { buildAfterBuyout: true },
       { buildAfterBuyout: false },
+      { resortFestivals: true },
+      { resortFestivals: false },
     ]) {
       const response = await exports.default.fetch(
         new Request(`${origin}/api/rooms`, {
@@ -2249,55 +2275,127 @@ describe("Authoritative private rooms", () => {
     );
   });
 
-  it("starts preexisting version-5 lobbies with their original World Tour rule", async () => {
-    const host = await create();
-    const stub = env.GAME_ROOM.getByName(host.roomCode);
-    await runInDurableObject(stub, (_instance, durableState) =>
-      durableState.storage.sql.exec(
-        "UPDATE meta SET v='5' WHERE k='rulesVersion'",
-      ),
-    );
-    await evictDurableObject(stub);
-    const inbox = await connect(host);
-    expect((await inbox.next("welcome")).lobby).toMatchObject({
-      boardRule: "country",
-      economyRule: "reference",
-      worldTourRule: "free-first",
-    });
-    inbox.send({
-      type: "lobby",
-      id: "version-5-lobby-start",
-      op: { type: "start", fillBots: true },
-    });
-    const events = await inbox.next("events");
-    const created = events.events.find((event) => event.type === "GameCreated");
-    expect(
-      created?.type === "GameCreated" ? created.state.config : null,
-    ).toMatchObject({
-      boardRule: "country",
-      economyRule: "reference",
-      worldTourRule: "free-first",
-    });
-  });
+  it.each([5, 6])(
+    "starts preexisting version-%s lobbies with their original rules",
+    async (version) => {
+      const host = await create();
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      await runInDurableObject(stub, (_instance, durableState) =>
+        durableState.storage.sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(version),
+        ),
+      );
+      await evictDurableObject(stub);
+      const inbox = await connect(host);
+      expect((await inbox.next("welcome")).lobby).toMatchObject({
+        boardRule: "country",
+        economyRule: "reference",
+        worldTourRule: version >= 6 ? "free-and-own" : "free-first",
+        resortFestivals: true,
+      });
+      inbox.send({
+        type: "lobby",
+        id: `version-${version}-lobby-start`,
+        op: { type: "start", fillBots: true },
+      });
+      const events = await inbox.next("events");
+      const created = events.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      expect(
+        created?.type === "GameCreated" ? created.state.config : null,
+      ).toMatchObject({
+        boardRule: "country",
+        economyRule: "reference",
+        worldTourRule: version >= 6 ? "free-and-own" : "free-first",
+        resortFestivals: true,
+      });
+    },
+  );
 
-  it("starts preexisting version-6 lobbies without the version-7 rules", async () => {
-    const host = await create();
-    const stub = env.GAME_ROOM.getByName(host.roomCode);
-    await runInDurableObject(stub, (_instance, durableState) =>
+  it("keeps a saved version-6 beach festival and its rent after wake-up and an intent", async () => {
+    const game = await startFour();
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    const active = game.state.activeSeat;
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      const {
+        resortFestivals: _marker,
+        fourResortRent: _four,
+        buildAfterBuyout: _build,
+        ...oldConfig
+      } = saved.config;
       durableState.storage.sql.exec(
         "UPDATE meta SET v='6' WHERE k='rulesVersion'",
+      );
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          config: oldConfig,
+          festivalTiles: [4],
+          properties: saved.properties.map((property) =>
+            property.tile === 4 ? { ...property, owner: active } : property,
+          ),
+          players: saved.players.map((player) =>
+            player.seat === active
+              ? { ...player, position: 1, properties: [4] }
+              : player,
+          ),
+          pending: {
+            kind: "buy",
+            seat: active,
+            tile: 1,
+            maxLevel: 2,
+            deadline: Date.now() + 30_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
+      );
+    });
+    await evictDurableObject(stub);
+    const inbox = await connect(game.credentials[active]);
+    const welcome = await inbox.next("welcome");
+    expect(welcome.lobby.resortFestivals).toBe(true);
+    if (!welcome.snapshot) throw new Error("Expected saved match snapshot");
+    expect(welcome.snapshot.config.resortFestivals).toBeUndefined();
+    expect(welcome.snapshot.festivalTiles).toEqual([4]);
+    expect(propertyRent(welcome.snapshot, 4)).toBe(50_000);
+    inbox.send({
+      type: "intent",
+      id: "keep-v6-festival",
+      atSeq: welcome.seq,
+      action: { type: "Decline" },
+    });
+    const events = await inbox.next("events");
+    const next = events.events.reduce(applyEvent, welcome.snapshot);
+    expect(next.festivalTiles).toEqual([4]);
+    expect(propertyRent(next, 4)).toBe(50_000);
+  });
+
+  it("starts preexisting version-7 lobbies without the version-8 rules", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='7' WHERE k='rulesVersion'",
       ),
     );
     await evictDurableObject(stub);
     const inbox = await connect(host);
     expect((await inbox.next("welcome")).lobby).toMatchObject({
       worldTourRule: "free-and-own",
+      resortFestivals: false,
       fourResortRent: false,
       buildAfterBuyout: false,
     });
     inbox.send({
       type: "lobby",
-      id: "version-6-lobby-start",
+      id: "version-7-lobby-start",
       op: { type: "start", fillBots: true },
     });
     const events = await inbox.next("events");
@@ -2474,10 +2572,10 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
-      // cannot carry its World Tour marker, version 6 the version-7 markers, and
-      // 999 is unknown.
+      // cannot carry its World Tour marker, version 6 cannot exclude resort
+      // festivals, version 7 the version-8 markers, and 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",

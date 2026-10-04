@@ -24,6 +24,8 @@ export type GameConfig = {
   readonly decisionSeconds?: number;
   readonly timeLimitMinutes?: number;
   readonly festivalCount?: number;
+  /** Missing on older saves: retain the economy's original resort festivals. */
+  readonly resortFestivals?: boolean;
   readonly lineMonopoly?: boolean;
   readonly tripleMonopoly?: boolean;
   readonly hotelsDirectly?: boolean;
@@ -35,13 +37,15 @@ export type GameConfig = {
   readonly boardRule?: BoardRule;
   /** Missing on saves before rules version 6: own properties only when none is free. */
   readonly worldTourRule?: WorldTourRule;
-  /** Missing on saves before rules version 7: four resorts pay what three do. */
+  /** Missing on saves before rules version 8: four resorts pay what three do. */
   readonly fourResortRent?: boolean;
-  /** Missing on saves before rules version 7: a bought-out city is not built on. */
+  /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
+  /** Missing on existing saves: the third consecutive double sends you to the island. */
+  readonly tripleDoubleToIsland?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;
 };
@@ -148,6 +152,13 @@ export type PublicState = {
   } | null;
   readonly lastCard: { readonly seat: Seat; readonly card: ChanceCard } | null;
   readonly bankLedger: number;
+  /**
+   * The bank's own account: salaries and money that cards, taxes and fines move
+   * between players and the bank. Property purchases, building, sales and
+   * written-off debts stay in `bankLedger` only.
+   */
+  readonly bankReceived: number;
+  readonly bankPaidOut: number;
   readonly championshipHost: {
     readonly tile: number;
     readonly multiplier: number;

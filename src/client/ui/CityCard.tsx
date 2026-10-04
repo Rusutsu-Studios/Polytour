@@ -22,6 +22,7 @@ import {
   type RentBoost,
   rentBoost,
   resortCount,
+  resortFestivals,
   type Seat,
   worldTourRule,
 } from "../../shared/engine/index.js";
@@ -397,7 +398,7 @@ function ResortDeed({
   const owner = getProperty(state, index)?.owner ?? null;
   const rules = ruleEconomy(economyRule(state.config));
   const boost = rentBoost(state, index);
-  // Rooms from rules version 7 pay a fourth resort more; older ones stop at three.
+  // Rooms from rules version 8 pay a fourth resort more; older ones stop at three.
   const top = state.config.fourResortRent === true ? 4 : 3;
   const count =
     owner === null
@@ -485,7 +486,7 @@ function ResortDeed({
         </tbody>
       </table>
       <p className="city-card-note">
-        {rules.resortFestivals
+        {resortFestivals(state.config)
           ? t(
               "Les plages n’ont ni constructions ni rachat. Leur loyer dépend du nombre de plages du propriétaire ; un festival peut le multiplier.",
               "Resorts have no buildings or buyout. Rent depends on the owner’s resort count; a Festival can multiply it.",

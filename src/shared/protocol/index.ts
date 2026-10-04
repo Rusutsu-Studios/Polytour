@@ -23,6 +23,7 @@ export const RoomConfigSchema = z
     tripleMonopoly: z.boolean().default(true),
     hotelsDirectly: z.boolean().default(false),
     extraRollOnDouble: z.boolean().default(true),
+    tripleDoubleToIsland: z.boolean().default(true),
     botCanBuild: z.boolean().default(true),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),
@@ -192,6 +193,8 @@ export type LobbyState = {
   readonly worldTourRule: WorldTourRule;
   readonly fourResortRent: boolean;
   readonly buildAfterBuyout: boolean;
+  /** Omitted by older servers; those rooms retain their economy's festival rule. */
+  readonly resortFestivals?: boolean;
   seats: LobbySeat[];
 };
 export type RandomnessStatus = {

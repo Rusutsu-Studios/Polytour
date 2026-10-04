@@ -24,6 +24,7 @@ import {
   netWorth,
   propertyRefund,
   propertyRent,
+  resortFestivals,
 } from "../shared/engine/index.js";
 import type {
   RandomnessStatus,
@@ -40,6 +41,7 @@ import {
   useRoom,
 } from "./net/room.js";
 import { useCloudflarePing } from "./net/use-cloudflare-ping.js";
+import ActionButton from "./ui/ActionButton.js";
 import {
   fullMoney,
   levelName,
@@ -64,6 +66,7 @@ import DiceExplanation from "./ui/DiceExplanation.js";
 import GraphicsToggle from "./ui/GraphicsToggle.js";
 import Icon from "./ui/Icon.js";
 import InvitationEntry from "./ui/InvitationEntry.js";
+import LanguagePicker from "./ui/LanguagePicker.js";
 import LuckCardHelp from "./ui/LuckCardHelp.js";
 import PauseMenu from "./ui/PauseMenu.js";
 import {
@@ -82,23 +85,6 @@ import "./App.css";
 
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
 const DEFAULT_CONFIG = RoomConfigSchema.parse({});
-function LanguagePicker() {
-  const { locale, setLocale } = useLocale();
-  return (
-    <label className="language-picker">
-      <span className="sr-only">Langue / Language</span>
-      <select
-        value={locale}
-        onChange={(event) =>
-          setLocale(event.currentTarget.value === "en" ? "en" : "fr")
-        }
-      >
-        <option value="fr">Français</option>
-        <option value="en">English</option>
-      </select>
-    </label>
-  );
-}
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -265,14 +251,18 @@ function MatchResults({
           )}
         </p>
       )}
-      <button
+      <ActionButton
         type="button"
         className="button secondary"
         onClick={onLeave}
         disabled={leaving}
+        disabledReason={t(
+          "Vous quittez la salle. Veuillez patienter.",
+          "You are leaving the room. Please wait.",
+        )}
       >
         {t("Quitter la salle", "Leave the room")}
-      </button>
+      </ActionButton>
       <button
         type="button"
         className="text-button"
@@ -320,7 +310,7 @@ function BoardFallback({
       {getBoard(boardConfig).map((tile) => {
         const owner = state ? getProperty(state, tile.index)?.owner : null;
         return (
-          <button
+          <ActionButton
             type="button"
             key={tile.index}
             style={
@@ -340,6 +330,17 @@ function BoardFallback({
                     `Select ${tileName(tile.index, boardConfig)} to sell · ${money(propertyRefund(state, tile.index))}`,
                   )
                 : undefined
+            }
+            disabledReason={
+              saleBlocked
+                ? t(
+                    "Attendez la fin de l’action en cours.",
+                    "Wait for the current action to finish.",
+                  )
+                : t(
+                    "Choisissez une propriété en surbrillance disponible pour cette action.",
+                    "Choose a highlighted property available for this action.",
+                  )
             }
             disabled={
               choices !== undefined &&
@@ -369,7 +370,7 @@ function BoardFallback({
                       )
                     : TILE_ICONS[tile.kind]}
             </b>
-          </button>
+          </ActionButton>
         );
       })}
     </section>
@@ -1608,6 +1609,11 @@ function MatchView({
           roomDebug={room.roomDebug}
           ownSeat={own}
           onDebugActiveChange={room.setDebugActive}
+          bank={{
+            received: authoritative.bankReceived,
+            paidOut: authoritative.bankPaidOut,
+            balance: authoritative.bankReceived - authoritative.bankPaidOut,
+          }}
         />
       )}
       {debug && (
@@ -1778,6 +1784,7 @@ function App() {
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
     fourResortRent: room.lobby?.fourResortRent ?? true,
     buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
+    resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;
@@ -1798,12 +1805,12 @@ function App() {
           </span>
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
-            <LanguagePicker />
             <GraphicsToggle
               lowGraphics={lowGraphics}
               onChange={changeGraphics}
               compact
             />
+            <LanguagePicker />
             <button
               type="button"
               className="text-button help-button"
@@ -1813,7 +1820,7 @@ function App() {
               <span>{t("Comment jouer", "How to play")}</span>
             </button>
             {(credentials || invitationCode !== null) && (
-              <button
+              <ActionButton
                 type="button"
                 className="text-button"
                 disabled={loading || room.leaving}
@@ -1822,7 +1829,7 @@ function App() {
                 {room.leaving
                   ? t("Départ en cours…", "Leaving…")
                   : t("Quitter", "Leave")}
-              </button>
+              </ActionButton>
             )}
           </div>
         </header>
@@ -1868,7 +1875,7 @@ function App() {
                     if (event.key === "Enter") void enter();
                   }}
                 />
-                <button
+                <ActionButton
                   type="button"
                   className="button primary welcome-play"
                   disabled={loading}
@@ -1883,7 +1890,7 @@ function App() {
                     ? t("Préparation du salon…", "Preparing the lobby…")
                     : t("Jouer", "Play")}
                   <Icon name="arrow" />
-                </button>
+                </ActionButton>
                 <div className="join-form">
                   <label htmlFor="room-code">
                     {t("Vous avez un code ?", "Have a room code?")}
@@ -1904,7 +1911,7 @@ function App() {
                         if (event.key === "Enter") void enter(true);
                       }}
                     />
-                    <button
+                    <ActionButton
                       type="button"
                       className="button ink"
                       disabled={loading}
@@ -1912,7 +1919,7 @@ function App() {
                     >
                       {t("Rejoindre", "Join")}
                       <Icon name="arrow" size={18} />
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
                 {formError && (
@@ -2035,9 +2042,27 @@ function App() {
                         )
                       : t("Partie à 4 joueurs.", "4-player game.")}
                 </p>
-                <button
+                <ActionButton
                   type="button"
                   className="button primary welcome-play"
+                  disabledReason={
+                    starting
+                      ? undefined
+                      : roomOffline
+                        ? t(
+                            "Reconnectez-vous au serveur avant de démarrer.",
+                            "Reconnect to the server before starting.",
+                          )
+                        : settingsDirty
+                          ? t(
+                              "Enregistrez les réglages avant de démarrer.",
+                              "Save the settings before starting.",
+                            )
+                          : t(
+                              "Ajoutez un bot ou invitez un ami : il faut au moins 2 joueurs.",
+                              "Add a bot or invite a friend: at least 2 players are needed.",
+                            )
+                  }
                   disabled={
                     roomOffline ||
                     starting ||
@@ -2051,7 +2076,7 @@ function App() {
                     ? t("Le plateau se prépare…", "Preparing board…")
                     : t("Démarrer la partie", "Start game")}
                   <Icon name="arrow" />
-                </button>
+                </ActionButton>
               </>
             )}
             {!leader && you !== null && (
@@ -2148,14 +2173,18 @@ function App() {
         <div className="network-error" role="alert">
           <span>{room.error}</span>
           {room.connection !== "online" && (
-            <button
+            <ActionButton
               type="button"
               className="text-button"
               onClick={room.reconnect}
               disabled={room.leaving}
+              disabledReason={t(
+                "Vous quittez la salle. Veuillez patienter.",
+                "You are leaving the room. Please wait.",
+              )}
             >
               {t("Reconnecter", "Reconnect")}
-            </button>
+            </ActionButton>
           )}
           <button
             type="button"

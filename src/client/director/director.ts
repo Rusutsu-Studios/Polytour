@@ -2,11 +2,17 @@ import { useSyncExternalStore } from "react";
 import type { GameEvent, PublicState } from "../../shared/engine/index.js";
 import { applyEvent } from "../../shared/engine/index.js";
 
+type SalaryPaid = Extract<GameEvent, { type: "SalaryPaid" }>;
 export type AnimationContext = {
   previous: PublicState | null;
   next: PublicState;
   /** Events already received that will play after this one. */
   upcoming: readonly GameEvent[];
+  /**
+   * The salary a move earns by crossing Start. The scene credits it with
+   * `settle` when the pawn passes Start instead of after the walk.
+   */
+  salary?: { event: SalaryPaid; settle: () => void };
   playbackRate: number;
   reducedMotion: boolean;
 };
@@ -112,13 +118,29 @@ class Director {
       // Only a view several actions behind the server speeds up to catch up.
       const behind = this.batch - entry.batch;
       const previous = this.value.viewState;
-      const next =
+      const following = this.queue[0]?.event;
+      const salary =
+        event.type === "PlayerMoved" &&
+        following?.type === "SalaryPaid" &&
+        following.seat === event.seat
+          ? following
+          : undefined;
+      if (salary) this.queue.shift();
+      const moved =
         event.type === "GameCreated"
           ? event.state
           : previous
             ? applyEvent(previous, event)
             : null;
-      if (!next) continue;
+      if (!moved) continue;
+      const next = salary ? applyEvent(moved, salary) : moved;
+      let settled = false;
+      const settle = () => {
+        const view = this.value.viewState;
+        if (!salary || settled || !view) return;
+        settled = true;
+        this.update({ viewState: applyEvent(view, salary) });
+      };
       if (this.animator || this.presenter) {
         const context = {
           previous,
@@ -126,6 +148,7 @@ class Director {
           upcoming: this.queue.map((queued) => queued.event),
           playbackRate: behind >= CATCH_UP_BATCHES ? CATCH_UP_PLAYBACK_RATE : 1,
           reducedMotion: this.value.reducedMotion,
+          salary: salary && { event: salary, settle },
         };
         await Promise.all([
           this.animator?.animate(event, context),
@@ -133,7 +156,10 @@ class Director {
         ]);
       }
       if (generation !== this.generation) return;
-      this.update({ viewState: next });
+      const view = this.value.viewState;
+      this.update({
+        viewState: settled && view ? applyEvent(view, event) : next,
+      });
     }
     if (generation === this.generation) this.update({ busy: false });
   }

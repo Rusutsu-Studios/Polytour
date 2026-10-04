@@ -9,7 +9,7 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-04
+## [0.7.0] - 2026-10-04
 
 ### Added
 
@@ -28,6 +28,74 @@ has been published, and it does not reconstruct earlier development history.
 
 - Once the dice show their total, the space the pawn is about to reach is
   outlined in the roller's colour, through the walk and the decision there (#97).
+
+## [0.6.1] - 2026-10-04
+
+### Fixed
+
+- Money flies to and from the tile it belongs to instead of the Start tile: a
+  purchase or upgrade is paid into its city, a sale refunds from it, and taxes,
+  the island fee, the World Tour fare and the championship fee are paid on their
+  own tile (#89).
+- The Start salary is paid the moment the pawn passes Start, with a "+400K"
+  floating up from the tile and fading, instead of after the whole move or
+  World Tour flight has finished (#88, #89).
+
+## [0.6.0] - 2026-10-04
+
+### Added
+
+- A small bank is printed on Start. Salaries, taxes, fees and card payments fly
+  to and from it instead of the bare tile, while purchase, building and sale
+  money flies between the player and the lot; the Start salary is printed just
+  below the bank (#60).
+- Pause > Settings > Debug shows the bank's account: paid to players, received
+  from players and its balance, which starts at 0. Property money is not part of
+  it (#60).
+
+### Changed
+
+- Match state version 2 records the bank's account. Saved version-1 matches
+  load with an empty account (#60).
+
+## [0.5.2] - 2026-10-04
+
+### Added
+
+- Room option, enabled by default, to send a player to the Island after a third
+  consecutive double; switching it off lets the third double move normally (#102).
+
+## [0.5.1] - 2026-10-04
+
+### Fixed
+
+- Restrict festivals to cities in new matches, including rent and beach details;
+  preserve existing matches with their original frozen festival rules (#96).
+- Explain unavailable actions in small ivory popups on hover or keyboard focus,
+  including construction prerequisites, insufficient cash, reconnecting and
+  unsaved room settings (#32).
+- Keep room preparation and joining feedback inline, without loading popups.
+- Keep Surprise cards visible for eight seconds and show tax payments to every
+  player in a matching six-second popup; reserve reading time before the next
+  decision and bot action (#31).
+- Show the current language as a simple globe-and-text FR/EN button beside How
+  to play; click or keyboard activation switches directly to the other language (#43).
+- Use a minimize icon on decision windows and a compact bottom tab that keeps
+  the countdown and reopens the same selection (#50).
+
+## [0.5.0] - 2026-10-03
+
+### Added
+
+- A French/English win-condition summary above Save settings, updated from the
+  current room settings and available in the fixed rules during a match.
+- An explanation of Birthday/Charity payments and how gift bankruptcy changes
+  forced sales and payment limits.
+
+### Fixed
+
+- Keep the settings footer within short desktop viewports while longer settings
+  content scrolls.
 
 ## [0.4.4] - 2026-10-03
 

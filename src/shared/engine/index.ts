@@ -36,6 +36,7 @@ export {
   rentBoost,
   rentCardPayment,
   resortCount,
+  resortFestivals,
   toPublic,
   travelSalary,
   worldTourRule,

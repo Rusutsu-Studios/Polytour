@@ -13,6 +13,8 @@ import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
+import ActionButton from "./ActionButton.js";
+import { fullMoney } from "./board-display.js";
 import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
 import RoomDebug, { translatedRegion } from "./RoomDebug.js";
@@ -35,6 +37,8 @@ export type PauseMenuProps = {
   /** Null while this screen waits for a place in the room. */
   ownSeat: Seat | null;
   onDebugActiveChange: (active: boolean) => void;
+  /** The bank's running totals, from the authoritative match state. */
+  bank: { received: number; paidOut: number; balance: number };
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -54,6 +58,7 @@ export default function PauseMenu({
   roomDebug,
   ownSeat,
   onDebugActiveChange,
+  bank,
 }: PauseMenuProps) {
   const { locale, setLocale, t } = useLocale();
   const { reducedMotion } = useDirector();
@@ -352,10 +357,14 @@ export default function PauseMenu({
                           className="pause-zoom"
                           aria-labelledby={`${id}-zoom-label`}
                         >
-                          <button
+                          <ActionButton
                             type="button"
                             aria-label={t("Dézoomer le plateau", "Zoom out")}
                             disabled={zoom <= 0.8}
+                            disabledReason={t(
+                              "Le plateau est déjà dézoomé au maximum.",
+                              "The board is already zoomed out as far as possible.",
+                            )}
                             onClick={() =>
                               onZoom(
                                 Math.max(
@@ -366,7 +375,7 @@ export default function PauseMenu({
                             }
                           >
                             −
-                          </button>
+                          </ActionButton>
                           <button
                             type="button"
                             className="pause-zoom-reset"
@@ -374,10 +383,14 @@ export default function PauseMenu({
                           >
                             {t("Recentrer", "Reset view")}
                           </button>
-                          <button
+                          <ActionButton
                             type="button"
                             aria-label={t("Zoomer le plateau", "Zoom in")}
                             disabled={zoom >= 1.3}
+                            disabledReason={t(
+                              "Le plateau est déjà zoomé au maximum.",
+                              "The board is already zoomed in as far as possible.",
+                            )}
                             onClick={() =>
                               onZoom(
                                 Math.min(
@@ -388,7 +401,7 @@ export default function PauseMenu({
                             }
                           >
                             +
-                          </button>
+                          </ActionButton>
                           <output aria-labelledby={`${id}-zoom-label`}>
                             {Math.round(zoom * 100)} %
                           </output>
@@ -487,6 +500,39 @@ export default function PauseMenu({
                             {t(
                               "Ping HTTP vers Cloudflare, distinct de la latence de la partie.",
                               "HTTP ping to Cloudflare, separate from the game’s latency.",
+                            )}
+                          </p>
+                        </section>
+                        <section
+                          className="pause-debug-bank"
+                          aria-labelledby={`${id}-bank-title`}
+                        >
+                          <h3 id={`${id}-bank-title`}>{t("Banque", "Bank")}</h3>
+                          <dl>
+                            <div>
+                              <dt>
+                                {t("Versé aux joueurs", "Paid to players")}
+                              </dt>
+                              <dd>{fullMoney(bank.paidOut)}</dd>
+                            </div>
+                            <div>
+                              <dt>
+                                {t("Reçu des joueurs", "Received from players")}
+                              </dt>
+                              <dd>{fullMoney(bank.received)}</dd>
+                            </div>
+                            <div>
+                              <dt>{t("Solde du compte", "Account balance")}</dt>
+                              <dd data-negative={bank.balance < 0}>
+                                {bank.balance > 0 ? "+" : ""}
+                                {fullMoney(bank.balance)}
+                              </dd>
+                            </div>
+                          </dl>
+                          <p className="pause-debug-note">
+                            {t(
+                              "Le compte de la banque démarre à 0. Salaires et primes le font baisser ; taxes et amendes le font monter. Les achats, constructions et ventes de propriétés n’y passent pas.",
+                              "The bank account starts at 0. Salaries and bonuses lower it; taxes and fines raise it. Property purchases, building and sales don’t go through it.",
                             )}
                           </p>
                         </section>

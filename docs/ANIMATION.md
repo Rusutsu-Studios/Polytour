@@ -165,10 +165,13 @@ Purchase, development and buyout dialogs use original isometric previews and
 selectable stages, without explanatory sentences: the title, city, price, rent
 and remaining cash say it. Every level up to the hotel is a card; a level this
 player cannot take yet (the staged hotel, or one they cannot afford) stays
-visible, greyed out with a padlock, and its reason is on hover. The dialogs
+visible, greyed out with a padlock, and its reason opens in a small ivory popup
+on hover or keyboard focus. Unavailable actions use the same popup for cash,
+connection, selection and setup requirements; they stay inert when activated. The dialogs
 preserve the authoritative decision deadline and submit only the confirmed legal
 action. Native dialogs protect keyboard focus; Escape minimizes a choice without
-spending money.
+spending money. The minimize button uses a horizontal line; the bottom tab
+keeps the decision title and live countdown and restores the selected option.
 
 Inspecting a space opens a large title-deed dialog over the board. It shows the
 owner, the rent due there now, and the buyout price or purchase price. A table
@@ -181,11 +184,15 @@ close it and select another space on the board to inspect that space.
 Escape, the close button or a backdrop click closes it.
 
 The Director now has a separate DOM presenter alongside its scene animator.
-`CardDrawn` waits for a bounded illustrated reading moment (the 3.2 s card
-budget, divided by the automatic catch-up playback rate) before the subsequent
+`CardDrawn` waits for a bounded illustrated reading moment (eight seconds at
+normal speed, at least six during automatic catch-up) before the subsequent
 effects play. Continue and Escape resolve that moment; state recovery, snapshot
 replacement and reconnect cancel it. This reading hold uses the existing
-decision clock and does not extend a server deadline. Reduced motion keeps a
+decision clock; the engine reserves its full budget before the next decision or
+bot action. A `MoneyTransferred` event with reason `Tax` opens a matching
+six-second payment popup for every observer, naming the payer and exact amount.
+Its hold runs alongside the money animation and ends before the next event.
+Reduced motion keeps a
 static card and its instructions. Card art and prompts are documented in
 [CARD_ART.md](CARD_ART.md).
 
@@ -194,7 +201,10 @@ note faces, straps and coin details are instanced. Salary, rent, transfers,
 purchases, building, buyouts and sales animate a pooled bundle along the actual
 payer/recipient path, using the existing 200 ms money or 450 ms property budget.
 Cancelled timelines cannot hide a later effect. Static reserves follow view
-state; the DOM HUD remains the exact cash display.
+state; the DOM HUD remains the exact cash display. Salaries, taxes, fees and card
+payments fly to and from a small bank printed on Start's right-hand side, clear
+of the pawns' inner quarter, so system money has a visible home. Purchase,
+building and sale money flies between the player and that lot instead.
 
 ## Dice: deterministic result, physical feel
 

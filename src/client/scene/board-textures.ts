@@ -11,6 +11,7 @@ import {
   LOT_WIDTH,
   PRICE_BAND,
   ROAD_WIDTH,
+  START_BANK_PRINT,
   screenTop,
 } from "./board-layout.js";
 import {
@@ -709,6 +710,76 @@ export function lotTexture(index: number, print: LotPrint) {
   });
 }
 
+/**
+ * A small classical bank printed on Start: where salaries come from and where
+ * purchases and taxes go. `width` is the facade's full width in pixels.
+ */
+function drawBank(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  width: number,
+) {
+  const unit = width / 100;
+  const left = centerX - 50 * unit;
+  const top = centerY - 44 * unit;
+  const at = (x: number, y: number): [number, number] => [
+    left + x * unit,
+    top + y * unit,
+  ];
+  const box = (x: number, y: number, w: number, h: number, color: string) => {
+    context.fillStyle = color;
+    context.beginPath();
+    context.roundRect(...at(x, y), w * unit, h * unit, 1.5 * unit);
+    context.fill();
+    context.stroke();
+  };
+  context.save();
+  context.lineJoin = "round";
+  context.lineWidth = 2.4 * unit;
+  context.strokeStyle = INK;
+  // A soft print shadow keeps the drawing grounded on the paper.
+  context.fillStyle = "rgba(29, 58, 70, 0.12)";
+  context.beginPath();
+  context.ellipse(
+    centerX + 3 * unit,
+    top + 86 * unit,
+    52 * unit,
+    7 * unit,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+  // Steps, body, door and columns.
+  box(2, 76, 96, 9, "#e3d3b2");
+  box(8, 69, 84, 8, "#efe3c6");
+  box(12, 40, 76, 30, "#fff4dd");
+  box(43, 50, 14, 20, "#5b4636");
+  for (const x of [16, 29, 62, 75]) box(x, 40, 9, 30, "#fffaf0");
+  box(8, 33, 84, 8, "#e3d3b2");
+  // The pediment, in Start's green, carries a gold coin.
+  context.fillStyle = "#2f8a4c";
+  context.beginPath();
+  context.moveTo(...at(4, 33));
+  context.lineTo(...at(50, 4));
+  context.lineTo(...at(96, 33));
+  context.closePath();
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#ffcf59";
+  context.beginPath();
+  context.arc(...at(50, 22), 7.5 * unit, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.strokeStyle = "#c98f1c";
+  context.lineWidth = 1.6 * unit;
+  context.beginPath();
+  context.arc(...at(50, 22), 4 * unit, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+}
+
 /** Corner art; its inner quarter stays plain for the pawns standing there. */
 export function cornerTexture(
   index: number,
@@ -735,15 +806,15 @@ export function cornerTexture(
       context.fillStyle = mix(PAPER, "#3a9a57", 0.1);
       context.fillRect(square * 2, 0, size - square * 2, size);
       // Arrow pointing in the direction of play.
-      const y = size * 0.7;
+      const y = size * 0.76;
       context.fillStyle = "#2f8a4c";
       context.beginPath();
-      context.moveTo(size * 0.2, y - size * 0.2);
-      context.lineTo(size * 0.2, y - size * 0.09);
-      context.lineTo(size * 0.9, y - size * 0.09);
-      context.lineTo(size * 0.9, y + size * 0.09);
-      context.lineTo(size * 0.2, y + size * 0.09);
-      context.lineTo(size * 0.2, y + size * 0.2);
+      context.moveTo(size * 0.2, y - size * 0.17);
+      context.lineTo(size * 0.2, y - size * 0.085);
+      context.lineTo(size * 0.9, y - size * 0.085);
+      context.lineTo(size * 0.9, y + size * 0.085);
+      context.lineTo(size * 0.2, y + size * 0.085);
+      context.lineTo(size * 0.2, y + size * 0.17);
       context.lineTo(size * 0.03 + square * 2, y);
       context.closePath();
       context.fill();
@@ -758,14 +829,21 @@ export function cornerTexture(
         900,
         DISPLAY_FONT,
       );
+      drawBank(
+        context,
+        size * START_BANK_PRINT[0],
+        size * START_BANK_PRINT[1],
+        size * 0.36,
+      );
+      // The salary is printed just below the bank it comes from.
       context.fillStyle = "#2f8a4c";
       fitText(
         context,
         `+${boardAmount(salary, locale)}`,
-        size * 0.7,
-        size * 0.3,
+        size * 0.74,
         size * 0.5,
-        64,
+        size * 0.44,
+        52,
         900,
         DISPLAY_FONT,
       );
@@ -1142,6 +1220,19 @@ export function scoreTexture(total: number, double: boolean) {
     context.fillStyle = INK;
     context.font = `900 92px ${DISPLAY_FONT}`;
     context.fillText(String(total), 78, 82);
+  });
+}
+
+/** A floating "+400K" for money gained on a tile, readable on any lot. */
+export function gainTexture(text: string) {
+  return canvasTexture(384, 128, (context) => {
+    context.font = `900 88px ${DISPLAY_FONT}`;
+    context.lineJoin = "round";
+    context.lineWidth = 16;
+    context.strokeStyle = "#8a5a00";
+    context.strokeText(text, 192, 68);
+    context.fillStyle = "#fff2a6";
+    context.fillText(text, 192, 68);
   });
 }
 

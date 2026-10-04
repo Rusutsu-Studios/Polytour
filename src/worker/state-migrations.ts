@@ -10,7 +10,7 @@
 // match keeps the rules it started with until it ends.
 
 /** The shape this build writes. Bump it together with a new ladder step. */
-export const CURRENT_STATE_VERSION = 1;
+export const CURRENT_STATE_VERSION = 2;
 
 export type StateMigration = {
   /** Version produced by this step; it reads version `to - 1`. */
@@ -21,11 +21,21 @@ export type StateMigration = {
 
 /**
  * Append-only, ordered by `to`. Version 1 is the first shipped shape, so there
- * is nothing below it to migrate and the ladder starts empty. Never edit or
- * remove a shipped step: a match saved by an older build has to climb exactly
- * the same rungs the build that wrote it expected to be climbed.
+ * is nothing below it to migrate. Never edit or remove a shipped step: a match
+ * saved by an older build has to climb exactly the same rungs the build that
+ * wrote it expected to be climbed.
  */
-export const STATE_MIGRATIONS: readonly StateMigration[] = [];
+export const STATE_MIGRATIONS: readonly StateMigration[] = [
+  {
+    // Version 2 adds the bank's own account. Older saves only kept a ledger
+    // that mixes in property money, so their account starts over at zero.
+    to: 2,
+    migrate: (saved) =>
+      saved === null || typeof saved !== "object"
+        ? saved
+        : { ...saved, bankReceived: 0, bankPaidOut: 0 },
+  },
+];
 
 export type MigratedState = {
   /** Saved JSON at `CURRENT_STATE_VERSION` (or at `target`, when given). */

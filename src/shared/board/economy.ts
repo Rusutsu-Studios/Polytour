@@ -20,7 +20,7 @@ type RuleEconomy = {
   readonly islandReleaseFee: number;
   /** Failed escape rolls after which the player is released on the spot. */
   readonly islandMaxFailedEscapes: number;
-  /** Rent per resort with one to four owned; four counts from rules version 7. */
+  /** Rent per resort with one to four owned; four counts from rules version 8. */
   readonly resortRents: {
     readonly 1: number;
     readonly 2: number;

@@ -15,6 +15,7 @@ const publicState = z.object({
       startingCash: integer,
       startSalary: integer,
       roundLimit: integer,
+      resortFestivals: z.boolean().optional(),
     })
     .passthrough(),
   players: z.array(
@@ -72,6 +73,8 @@ const publicState = z.object({
     .nullable(),
   lastCard: z.object({ seat, card: z.string() }).nullable(),
   bankLedger: integer,
+  bankReceived: integer.min(0),
+  bankPaidOut: integer.min(0),
   championshipHost: z.object({ tile, multiplier: integer }).nullable(),
   festivalTiles: z.array(tile),
   matchDeadline: z.number().nullable(),
@@ -163,6 +166,7 @@ const lobby = z.object({
   worldTourRule: z.enum(["free-and-own", "free-first"]).default("free-and-own"),
   fourResortRent: z.boolean().default(true),
   buildAfterBuyout: z.boolean().default(true),
+  resortFestivals: z.boolean().optional(),
   seats: z
     .array(
       z.object({

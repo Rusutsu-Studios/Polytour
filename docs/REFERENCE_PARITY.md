@@ -218,14 +218,14 @@ is free. This deliberately departs from the reference rule above. New rooms free
 `rulesVersion: 6` with `worldTourRule: "free-and-own"`; version-4/5 rooms keep
 `"free-first"`, and prototype rooms still fly to any other tile.
 
-### Four resorts and building after a buyout — rules version 7, 4 October 2026
+### Four resorts and building after a buyout — rules version 8, 4 October 2026
 
 At the user's request (issues #99 and #101), two further departures from the
 reference economy apply to new rooms. Owning all four resorts pays 200 k rent
 instead of the third resort's 100 k, and the player who buys out a city may build
 on it straight away, up to the limit a landing on their own city would allow.
-New rooms freeze `rulesVersion: 7` with `fourResortRent: true` and
-`buildAfterBuyout: true`; version-6 rooms keep the earlier behaviour.
+New rooms freeze `rulesVersion: 8` with `fourResortRent: true` and
+`buildAfterBuyout: true`; version-7 and earlier rooms keep the earlier behaviour.
 
 ## Capture from the running reference before adding an exact preset
 
@@ -245,3 +245,12 @@ Use the actual settings screen and tile tooltips to capture this matrix, then
 create a versioned config preset with tests. Do not rewrite the rules of a game
 already in progress. The initial functional prototype can be played while this
 comparison is being collected.
+
+### Polytour festival exception — 4 October 2026
+
+Issue #96 requests that beaches never receive a festival. New rooms use rules
+version 7 with `resortFestivals: false`: the initial draw selects cities only,
+and resorts receive no festival rent bonus. This is an explicit Polytour rule,
+separate from the reference evidence above. Existing version-4/5/6 rooms retain
+their original resort festivals, rent and settings; unmarked saved configurations
+fall back to their frozen economy.

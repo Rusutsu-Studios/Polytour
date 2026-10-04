@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
+import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -21,7 +22,7 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   await expect(
     page.getByRole("heading", { name: "Nouvelle partie" }),
   ).toBeVisible();
-  await page.getByLabel("Langue / Language").selectOption("en");
+  await chooseLanguage(page, "en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "New game" })).toBeVisible();
   await page.getByRole("button", { name: "How to play", exact: true }).click();
@@ -104,7 +105,7 @@ test("home sliders, language persistence and readable HTTP failure", async ({
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "New game" })).toBeVisible();
-  await page.getByLabel("Langue / Language").selectOption("fr");
+  await chooseLanguage(page, "fr");
   await expect(
     page.getByRole("heading", { name: "Nouvelle partie" }),
   ).toBeVisible();
@@ -126,7 +127,7 @@ test("English local match switches language without rejoining or changing game s
     });
   });
   await page.goto("/");
-  await page.getByLabel("Langue / Language").selectOption("en");
+  await chooseLanguage(page, "en");
   await page.getByLabel("Player name").fill("English player");
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.locator(".lobby-seats")).toContainText("Atlas");

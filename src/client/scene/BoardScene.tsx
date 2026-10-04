@@ -57,6 +57,7 @@ import {
   reserveAnchor,
   screenTop,
   sideFrame,
+  startBankPoint,
   tileCenter,
   tilePoint,
   tileRotation,
@@ -64,8 +65,10 @@ import {
   visibleFaces,
 } from "./board-layout.js";
 import {
+  boardAmount,
   cornerTexture,
   FESTIVAL_COLORS,
+  gainTexture,
   lawnTexture,
   lotTexture,
   noteTexture,
@@ -132,8 +135,13 @@ const ROLL_SPOT: readonly [number, number, number] = [1.05, LAWN_TOP, 1.05];
 const DICE_DEFAULT_COLOR = "#d9473a";
 // The dice take the roller's color, brighter than the pawn so pips stay crisp.
 const DICE_COLORS = ["#e0533b", "#3a87e2", "#9564d3", "#2f9b5f"] as const;
-const [BANK_X, BANK_Z] = tileCenter(0);
-const BANK_POSITION: readonly [number, number, number] = [BANK_X, 0.7, BANK_Z];
+const [BANK_X, BANK_Z] = startBankPoint();
+// Bank money leaves and lands just above the bank printed on Start.
+const BANK_POSITION: readonly [number, number, number] = [
+  BANK_X,
+  LOT_TOP + 0.12,
+  BANK_Z,
+];
 
 function pawnPosition(seat: Seat, tile: number): [number, number, number] {
   const [x, z] = pawnSpot(seat, tile);
@@ -1328,24 +1336,52 @@ function CashReserves({ state }: { state: PublicState }) {
   );
 }
 
-function cashTransfer(event: GameEvent) {
+/**
+ * Who pays whom. `null` is the bank, unless `tile` is set: property money
+ * moves between a player and that lot, not through the bank.
+ */
+type CashTransfer = {
+  from: Seat | null;
+  to: Seat | null;
+  amount: number;
+  tile?: number;
+};
+
+function cashTransfer(event: GameEvent): CashTransfer | null {
   switch (event.type) {
     case "SalaryPaid":
-    case "PropertySold":
       return { from: null, to: event.seat, amount: event.amount };
+    case "PropertySold":
+      return {
+        from: null,
+        to: event.seat,
+        amount: event.amount,
+        tile: event.tile,
+      };
     case "RentPaid":
-      return { from: event.seat, to: event.owner, amount: event.amount };
+      return {
+        from: event.seat,
+        to: event.owner,
+        tile: event.tile,
+        amount: event.amount,
+      };
     case "MoneyTransferred":
       return { from: event.from, to: event.to, amount: event.amount };
     case "BoughtOut":
       return {
         from: event.seat,
         to: event.previousOwner,
+        tile: event.tile,
         amount: event.amount,
       };
     case "PropertyBought":
     case "PropertyUpgraded":
-      return { from: event.seat, to: null, amount: event.amount };
+      return {
+        from: event.seat,
+        to: null,
+        amount: event.amount,
+        tile: event.tile,
+      };
     default:
       return null;
   }
@@ -1454,6 +1490,10 @@ function SceneContent(props: BoardProps) {
   const sparks = useRef<THREE.InstancedMesh>(null);
   const sparkTransform = useMemo(() => new THREE.Object3D(), []);
   const sparkProgress = useMemo(() => ({ value: 0 }), []);
+  const { locale } = useLocale();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const gain = useRef<THREE.Sprite>(null);
   const cashFlight = useRef<THREE.Group>(null);
   const cashNotes = useRef<THREE.InstancedMesh>(null);
   const cashFaces = useRef<THREE.InstancedMesh>(null);
@@ -1604,8 +1644,48 @@ function SceneContent(props: BoardProps) {
         timeline.play();
       });
     }
-    async function animateCash(event: GameEvent, context: AnimationContext) {
-      const transfer = cashTransfer(event);
+    /** A "+400K" that floats up from a tile and fades when money is gained there. */
+    async function showGain(
+      tile: number,
+      amount: number,
+      context: AnimationContext,
+    ) {
+      const sprite = gain.current;
+      if (!sprite) return;
+      const text = `+${boardAmount(amount, localeRef.current)}`;
+      const key = `gain:${text}`;
+      let texture = scoreTextures.current.get(key);
+      if (!texture) {
+        texture = gainTexture(text);
+        scoreTextures.current.set(key, texture);
+      }
+      const [x, z] = tileCenter(tile);
+      sprite.material.map = texture;
+      sprite.material.opacity = 0;
+      sprite.material.needsUpdate = true;
+      sprite.position.set(x, LOT_TOP + 0.9, z);
+      sprite.scale.set(1.4, 0.47, 1);
+      sprite.visible = true;
+      await play((timeline) => {
+        timeline.to(sprite.material, { opacity: 1, duration: 0.12 }, 0);
+        timeline.to(
+          sprite.position,
+          { y: LOT_TOP + 2.3, duration: 1.4, ease: "power1.out" },
+          0,
+        );
+        timeline.to(
+          sprite.material,
+          { opacity: 0, duration: 0.7, ease: "power1.in" },
+          0.7,
+        );
+      }, context);
+      sprite.visible = false;
+      invalidate();
+    }
+    async function animateCash(
+      transfer: CashTransfer | null,
+      context: AnimationContext,
+    ) {
       const flight = cashFlight.current;
       const notes = cashNotes.current;
       const faces = cashFaces.current;
@@ -1620,10 +1700,15 @@ function SceneContent(props: BoardProps) {
       )
         return true;
       const generation = ++cashEffectGeneration;
-      const reserve = (seat: Seat | null) =>
-        seat === null
-          ? BANK_POSITION
-          : reserveSpot(seat, 0, 0, BOARD_BOTTOM + 0.2);
+      const lot = transfer.tile;
+      const reserve = (
+        seat: Seat | null,
+      ): readonly [number, number, number] => {
+        if (seat !== null) return reserveSpot(seat, 0, 0, BOARD_BOTTOM + 0.2);
+        if (lot === undefined) return BANK_POSITION;
+        const [x, z] = tileCenter(lot);
+        return [x, LOT_TOP + 0.12, z];
+      };
       const from = reserve(transfer.from);
       const to = reserve(transfer.to);
       const count = Math.min(
@@ -1691,11 +1776,7 @@ function SceneContent(props: BoardProps) {
           snap(context.next);
           return;
         }
-        if (
-          (cashTransfer(event)?.amount ?? 0) > 0 &&
-          !(await animateCash(event, context))
-        )
-          return;
+        if (!(await animateCash(cashTransfer(event), context))) return;
         // The outline of the space ahead stays through the walk and the
         // decision that opens there; any later event clears it.
         if (
@@ -1825,6 +1906,20 @@ function SceneContent(props: BoardProps) {
           );
           const from = event.from ?? before?.position ?? 0;
           const steps = event.steps ?? (event.position - from + 32) % 32;
+          // The salary is paid the moment the pawn reaches Start, not when
+          // the walk ends.
+          const pending: Promise<unknown>[] = [];
+          let paid = false;
+          const paySalary = () => {
+            const salary = context.salary;
+            if (!salary || paid) return;
+            paid = true;
+            salary.settle();
+            pending.push(
+              animateCash(cashTransfer(salary.event), context),
+              showGain(0, salary.event.amount, context),
+            );
+          };
           await play((timeline) => {
             if (steps === 0) {
               // A move without a route: one long leap to the destination.
@@ -1846,6 +1941,7 @@ function SceneContent(props: BoardProps) {
                 { y, duration: half, ease: "bounce.out" },
                 half,
               );
+              timeline.call(paySalary, [], half * 2);
             } else {
               // A board-game walk: one hop per tile, a settle on the last.
               // Corners passed on the way are turned on the road. World Tour
@@ -1867,6 +1963,8 @@ function SceneContent(props: BoardProps) {
                   ? pawnPosition(event.seat, tile)
                   : passingPosition(event.seat, tile);
                 const at = (step - 1) * duration;
+                if (tile === 0)
+                  timeline.call(paySalary, [], at + duration * 0.9);
                 timeline.to(
                   pawn.position,
                   { x, z, duration: duration * 0.9, ease: "sine.inOut" },
@@ -1893,6 +1991,8 @@ function SceneContent(props: BoardProps) {
               }
             }
           }, context);
+          paySalary();
+          await Promise.all(pending);
         } else if (
           event.type === "SentToIsland" ||
           event.type === "PlayerBankrupt"
@@ -2158,6 +2258,9 @@ function SceneContent(props: BoardProps) {
       >
         <meshBasicMaterial color="#e8a321" toneMapped={false} />
       </mesh>
+      <sprite ref={gain} visible={false} renderOrder={6}>
+        <spriteMaterial depthTest={false} transparent toneMapped={false} />
+      </sprite>
       <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, 0.5, 28]} />
         <meshBasicMaterial
