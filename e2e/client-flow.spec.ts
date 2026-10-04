@@ -432,7 +432,6 @@ test("win conditions follow the settings draft and saved rules in both languages
       const summary = element.querySelector(
         ".room-settings-wins",
       ) as HTMLElement;
-      const save = element.querySelector(".room-settings-save") as HTMLElement;
       const rect = element.getBoundingClientRect();
       const footer = element.querySelector(
         ".settings-dialog-footer",
@@ -444,7 +443,7 @@ test("win conditions follow the settings draft and saved rules in both languages
         overflow: body.scrollWidth > body.clientWidth,
         ordered:
           summary.getBoundingClientRect().bottom <=
-          save.getBoundingClientRect().top,
+          footer.getBoundingClientRect().top,
       };
     });
     expect(layout.top).toBeGreaterThanOrEqual(0);
