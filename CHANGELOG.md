@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-04
+
 ### Changed
 
 - The four-resort win is now an optional room setting, off by default, and is
@@ -16,6 +18,7 @@ has been published, and it does not reconstruct earlier development history.
   before the option keep the win enabled.
 - The room settings dialog saves the leader's changes when it closes; the Save
   settings button is gone.
+- The arrow on the Start tile has a longer, clearer arrowhead on its left end.
 
 ## [0.7.0] - 2026-10-04
 

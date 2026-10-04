@@ -809,22 +809,22 @@ export function cornerTexture(
       const y = size * 0.76;
       context.fillStyle = "#2f8a4c";
       context.beginPath();
-      context.moveTo(size * 0.2, y - size * 0.17);
-      context.lineTo(size * 0.2, y - size * 0.085);
-      context.lineTo(size * 0.9, y - size * 0.085);
-      context.lineTo(size * 0.9, y + size * 0.085);
-      context.lineTo(size * 0.2, y + size * 0.085);
-      context.lineTo(size * 0.2, y + size * 0.17);
-      context.lineTo(size * 0.03 + square * 2, y);
+      context.moveTo(size * 0.34, y - size * 0.2);
+      context.lineTo(size * 0.34, y - size * 0.095);
+      context.lineTo(size * 0.94, y - size * 0.095);
+      context.lineTo(size * 0.94, y + size * 0.095);
+      context.lineTo(size * 0.34, y + size * 0.095);
+      context.lineTo(size * 0.34, y + size * 0.2);
+      context.lineTo(size * 0.16, y);
       context.closePath();
       context.fill();
       context.fillStyle = "#fffaf0";
       fitText(
         context,
         tileName(index, { boardRule }).toLocaleUpperCase(locale),
-        size * 0.56,
+        size * 0.65,
         y + 2,
-        size * 0.62,
+        size * 0.56,
         58,
         900,
         DISPLAY_FONT,

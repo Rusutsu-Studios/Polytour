@@ -465,9 +465,9 @@ function ResortDeed({
                     ? t("1 plage", "1 beach")
                     : resorts === 2
                       ? t("2 plages", "2 beaches")
-                      : beaches === 3 && top === 3
+                      : resorts === 3 && top === 3
                         ? t("3 plages ou plus", "3 beaches or more")
-                        : beaches === 3
+                        : resorts === 3
                           ? t("3 plages", "3 beaches")
                           : t("4 plages", "4 beaches")}
                   {current && (
