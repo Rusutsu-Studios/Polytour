@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="960" height="560" fill="#fffaf0"/>
+  <text x="32" y="44" font-size="24" font-weight="700" fill="#173b45">Polytour palette and toon ramp</text>
+  <text x="32" y="68" font-size="13" fill="#47666c">Proposal for issue #36. Player colours are unchanged; each swatch shows the three toon bands (shadow 55 %, mid 80 %, light 100 %).</text>
+
+  <text x="32" y="108" font-size="15" font-weight="700" fill="#173b45">Players</text>
+  <g transform="translate(32 120)">
+    <g>
+      <rect width="56" height="72" rx="10" fill="#682111"/><rect x="56" width="56" height="72" fill="#98301c"/><rect x="112" width="56" height="72" rx="0" fill="#be3d24"/>
+      <text y="92" font-size="13" font-weight="700" fill="#173b45">Coral · seat 0</text><text y="110" font-size="12" fill="#47666c">#be3d24</text>
+    </g>
+    <g transform="translate(216 0)">
+      <rect width="56" height="72" rx="10" fill="#133b71"/><rect x="56" width="56" height="72" fill="#1c56a5"/><rect x="112" width="56" height="72" fill="#236cce"/>
+      <text y="92" font-size="13" font-weight="700" fill="#173b45">Ocean · seat 1</text><text y="110" font-size="12" fill="#47666c">#236cce</text>
+    </g>
+    <g transform="translate(432 0)">
+      <rect width="56" height="72" rx="10" fill="#472c63"/><rect x="56" width="56" height="72" fill="#674191"/><rect x="112" width="56" height="72" fill="#8151b5"/>
+      <text y="92" font-size="13" font-weight="700" fill="#173b45">Lavender · seat 2</text><text y="110" font-size="12" fill="#47666c">#8151b5</text>
+    </g>
+    <g transform="translate(648 0)">
+      <rect width="56" height="72" rx="10" fill="#15412a"/><rect x="56" width="56" height="72" fill="#1e5e3d"/><rect x="112" width="56" height="72" fill="#26764c"/>
+      <text y="92" font-size="13" font-weight="700" fill="#173b45">Forest · seat 3</text><text y="110" font-size="12" fill="#47666c">#26764c</text>
+    </g>
+  </g>
+
+  <text x="32" y="268" font-size="15" font-weight="700" fill="#173b45">Environment and materials</text>
+  <g transform="translate(32 280)" font-size="12">
+    <g><rect width="88" height="56" rx="10" fill="#8fd3f0"/><rect y="28" width="88" height="28" rx="0" fill="#cdeefa"/><text y="74" fill="#173b45" font-weight="700">Sky</text><text y="90" fill="#47666c">#8fd3f0 → #cdeefa</text></g>
+    <g transform="translate(112 0)"><rect width="88" height="56" rx="10" fill="#fbf6ec" stroke="#173b45" stroke-opacity=".2" stroke-width="2"/><text y="74" fill="#173b45" font-weight="700">Ivory track</text><text y="90" fill="#47666c">#fbf6ec</text></g>
+    <g transform="translate(224 0)"><rect width="88" height="56" rx="10" fill="#8fcf6a"/><text y="74" fill="#173b45" font-weight="700">Lawn</text><text y="90" fill="#47666c">#8fcf6a</text></g>
+    <g transform="translate(336 0)"><rect width="88" height="56" rx="10" fill="#4fc3d9"/><path d="M10 30 q10 -8 20 0 t20 0 t20 0 t10 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/><text y="74" fill="#173b45" font-weight="700">Lagoon</text><text y="90" fill="#47666c">#4fc3d9</text></g>
+    <g transform="translate(448 0)"><rect width="88" height="56" rx="10" fill="#f3dca4"/><text y="74" fill="#173b45" font-weight="700">Sand</text><text y="90" fill="#47666c">#f3dca4</text></g>
+    <g transform="translate(560 0)"><rect width="88" height="56" rx="10" fill="#e2574a"/><text y="74" fill="#173b45" font-weight="700">Terracotta</text><text y="90" fill="#47666c">#e2574a</text></g>
+    <g transform="translate(672 0)"><rect width="88" height="56" rx="10" fill="#56b4d8"/><text y="74" fill="#173b45" font-weight="700">Glass</text><text y="90" fill="#47666c">#56b4d8</text></g>
+    <g transform="translate(784 0)"><rect width="88" height="56" rx="10" fill="#173b45"/><text y="74" fill="#173b45" font-weight="700">Ink</text><text y="90" fill="#47666c">#173b45</text></g>
+  </g>
+
+  <text x="32" y="408" font-size="15" font-weight="700" fill="#173b45">Metals (standard material, sparkle) and skin tones</text>
+  <g transform="translate(32 420)" font-size="12">
+    <g><rect width="88" height="56" rx="10" fill="#ffc83d"/><rect x="8" y="8" width="40" height="10" rx="5" fill="#fff3c4"/><text y="74" fill="#173b45" font-weight="700">Gold</text><text y="90" fill="#47666c">#ffc83d</text></g>
+    <g transform="translate(112 0)"><rect width="88" height="56" rx="10" fill="#cfd8de"/><rect x="8" y="8" width="40" height="10" rx="5" fill="#f4f8fa"/><text y="74" fill="#173b45" font-weight="700">Silver</text><text y="90" fill="#47666c">#cfd8de</text></g>
+    <g transform="translate(224 0)"><rect width="88" height="56" rx="10" fill="#5fa86a"/><rect x="8" y="8" width="72" height="40" rx="4" fill="none" stroke="#fffaf0" stroke-width="3"/><text y="74" fill="#173b45" font-weight="700">Note green</text><text y="90" fill="#47666c">#5fa86a</text></g>
+    <g transform="translate(400 0)">
+      <circle cx="28" cy="28" r="26" fill="#f7c88b"/><circle cx="96" cy="28" r="26" fill="#e0a26e"/><circle cx="164" cy="28" r="26" fill="#b97a4f"/><circle cx="232" cy="28" r="26" fill="#7a4a2e"/>
+      <text y="74" fill="#173b45" font-weight="700">Skin tones (one per character)</text><text y="90" fill="#47666c">#f7c88b · #e0a26e · #b97a4f · #7a4a2e</text>
+    </g>
+  </g>
+  <text x="32" y="540" font-size="12" fill="#47666c">Region colours stay as REGION_COLORS in board-display.ts. Saturation lives on pieces; large surfaces stay light.</text>
+</svg>

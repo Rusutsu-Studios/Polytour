@@ -14,6 +14,10 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
 
 ## Art direction
 
+The target illustrated look (toon shading, palette, pawn characters, city
+monuments, bungalows, money pieces and UI style) is proposed in
+[ART_DIRECTION.md](ART_DIRECTION.md). The points below remain the baseline.
+
 - **Style:** stylized low-poly with soft gradients, baked ambient occlusion, rounded
   bevels. Think "collectible toy", not realism. Each country gets a distinct color
   and a signature landmark model.

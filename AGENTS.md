@@ -40,6 +40,7 @@ a stylized 3D board with juicy, choreographed animations.
 | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | Any rules/engine/balance work |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Any client↔server message change |
 | [docs/ANIMATION.md](docs/ANIMATION.md) | Any rendering, VFX, sound, or UI motion work |
+| [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md) | Any model, material, palette, character or UI look work |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Picking the next task |
 | [docs/RELEASING.md](docs/RELEASING.md), [CHANGELOG.md](CHANGELOG.md) | Application version, release preparation or milestone planning |
 | [docs/RANDOMNESS.md](docs/RANDOMNESS.md) | Dice, entropy, commitments and proof verification |
