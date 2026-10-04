@@ -1299,7 +1299,7 @@ test("late room pongs from timed out or closed Debug cannot become a fresh laten
     "data-room-pongs-received",
     "1",
   );
-  await expect(measuredLatency).toHaveText("—");
+  await expect(measuredLatency).toHaveText("-");
   await expect(page.locator(".room-debug-chart")).toHaveCount(0);
   await page.clock.runFor(100);
   match.pong(1);
@@ -1307,7 +1307,7 @@ test("late room pongs from timed out or closed Debug cannot become a fresh laten
     "data-room-pongs-received",
     "2",
   );
-  await expect(measuredLatency).toHaveText("—");
+  await expect(measuredLatency).toHaveText("-");
   await expect(page.locator(".room-debug-chart")).toHaveCount(0);
   await page.clock.runFor(100);
   match.pong(2);

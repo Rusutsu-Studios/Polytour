@@ -9,6 +9,13 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-03
+
+### Changed
+
+- Refresh French/English welcome copy, show creator credits and a GitHub link,
+  and use simple hyphens in titles and unavailable-value labels (#90).
+
 ## [0.4.3] - 2026-10-03
 
 ### Fixed
