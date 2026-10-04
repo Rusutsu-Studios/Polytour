@@ -335,6 +335,7 @@ type QueueServerMessage =
 | --- | --- |
 | Max frame size | 4 KB inbound |
 | Rate | 20 msgs/s per socket, burst 40 → close with 1008 on abuse |
+| Lobby operations | Room-wide burst 20, refill 1/s; persisted across reconnects, hibernation and return-to-lobby. Only accepted operations consume tokens; exhausted requests get `lobby-rate-limit` without storage writes. Gameplay, clock sync and diagnostics use their existing paths. |
 | Chat | 120 chars, 1 msg / 2 s |
 | Replay window | last 500 events; older gaps get a snapshot |
 
