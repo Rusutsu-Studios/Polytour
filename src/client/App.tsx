@@ -1804,7 +1804,6 @@ function App() {
             <Logo small={Boolean(isGame)} />
           </span>
           <div className="topbar-right">
-            <span className="prototype-tag">Prototype</span>
             <GraphicsToggle
               lowGraphics={lowGraphics}
               onChange={changeGraphics}

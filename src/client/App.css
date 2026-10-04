@@ -1305,14 +1305,6 @@
 .graphics-toggle:hover {
   background: #e6f1e8;
 }
-.prototype-tag {
-  background: #b9eadd;
-  color: #285d58;
-  border-radius: 6px;
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: 700;
-}
 .text-button {
   display: inline-flex;
   align-items: center;
@@ -2373,10 +2365,6 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   font-size: 12px;
 }
 
-.lobby-shell .prototype-tag {
-  background: #c1ecf2;
-  color: #235a70;
-}
 .lobby-shell .travel-stamp,
 .lobby-shell .fair-play {
   color: #24546a;
@@ -2623,9 +2611,6 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   .topbar {
     height: 80px;
     padding: 0 22px;
-  }
-  .prototype-tag {
-    display: none;
   }
   .welcome-grid {
     display: flex;
