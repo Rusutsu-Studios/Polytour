@@ -22,6 +22,12 @@ debug socket has been removed; `/api/health` remains.
   without a location mapping. This endpoint does not locate the room's DO.
 
 - `POST /api/rooms {name, config?, bots?}` returns 201 and `{roomCode, seat, token}`.
+  `config.botDifficulty` accepts `easy`, `medium` or `hard`, defaulting to
+  `medium` when omitted. Lobby settings share this field; start freezes it for
+  every server bot. Saved matches without it keep Medium. It is an additive
+  config field; protocol version 5 asks older clients to refresh because their
+  room-config parser rejects unknown fields. Actions, events and rules versions
+  are unchanged.
   `bots` (0–3, default 0) seats server bots after the creator; Play asks for three.
   Creation attempts first pass the fixed `room-creation` edge key (120/minute per
   Cloudflare location), then the Matchmaker named `room-admission` (burst 60,

@@ -1,0 +1,27 @@
+{
+  "games": 300,
+  "economyRule": "reference",
+  "boardRule": "country",
+  "levels": ["easy", "medium", "hard"],
+  "difficultyWins": {
+    "medium": 137,
+    "hard": 161,
+    "easy": 2
+  },
+  "config": "3 bots (levels rotate across seats), 60-round limit, 3 seeded festivals; reference grid and fees",
+  "medianRounds": 44,
+  "p90Rounds": 60,
+  "wins": {
+    "line-monopoly": 16,
+    "triple-monopoly": 190,
+    "last-standing": 44,
+    "round-limit": 50
+  },
+  "seatWins": [105, 96, 99, 0],
+  "turnPositionWins": [117, 95, 88, 0],
+  "landmarkBuilds": 0,
+  "landmarkRent": 0,
+  "modifiedHotelRent": 1282737500,
+  "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+  "note": "Reference rules have no Landmark; compare round-limit rate, bankruptcies and turnPositionWins with the prototype run"
+}

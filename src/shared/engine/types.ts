@@ -51,6 +51,8 @@ export type GameConfig = {
   /** Missing on existing saves: the third consecutive double sends you to the island. */
   readonly tripleDoubleToIsland?: boolean;
   readonly botCanBuild?: boolean;
+  /** Missing on saved matches: retain Medium decisions. */
+  readonly botDifficulty?: BotDifficulty;
   readonly giftCanBankrupt?: boolean;
 };
 export type BotDifficulty = "easy" | "medium" | "hard";

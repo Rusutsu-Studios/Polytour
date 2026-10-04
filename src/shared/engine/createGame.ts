@@ -1,3 +1,4 @@
+import { BOT_POLICY } from "../board/bot-policy.js";
 import type {
   BoardRule,
   BuildLevel,
@@ -1727,16 +1728,84 @@ export function changeControl(
     events: [event],
   };
 }
+function acquiredState(
+  state: PublicState,
+  tile: number,
+  seat: Seat,
+): PublicState {
+  return {
+    ...state,
+    properties: state.properties.map((property) =>
+      property.tile === tile ? { ...property, owner: seat } : property,
+    ),
+  };
+}
+
+function acquisitionValue(
+  state: PublicState,
+  tile: number,
+  seat: Seat,
+): number {
+  const acquired = acquiredState(state, tile, seat);
+  if (instantWin(acquired, seat)) return BOT_POLICY.winningValue;
+  const definition = getTile(tile, state.config);
+  const country =
+    definition && isCityTile(definition)
+      ? getCountryCityTiles(definition.country, state.config)
+      : [];
+  const completes =
+    country.length > 0 &&
+    country.every((city) => propertyOwner(acquired, city.index) === seat);
+  const blocks = state.players.some(
+    (player) =>
+      player.seat !== seat &&
+      !player.bankrupt &&
+      instantWin(acquiredState(state, tile, player.seat), player.seat),
+  );
+  return (
+    propertyInvestedValue(state, tile) +
+    propertyRent(acquired, tile) * BOT_POLICY.rentHorizon +
+    (completes ? BOT_POLICY.collectionValue : 0) +
+    (blocks ? BOT_POLICY.winningValue / 2 : 0)
+  );
+}
+
+function botReserve(state: PublicState, seat: Seat): number {
+  const position = getPlayer(state, seat).position;
+  let exposure = 0;
+  for (let first = 1; first <= 6; first++) {
+    for (let second = 1; second <= 6; second++) {
+      const tile = (position + first + second) % BOARD_SIZE;
+      const owner = propertyOwner(state, tile);
+      if (owner !== null && owner !== seat)
+        exposure += propertyRent(state, tile);
+    }
+  }
+  return Math.max(
+    rules(state).islandReleaseFee,
+    Math.ceil((exposure * BOT_POLICY.threatHorizon) / 36),
+  );
+}
+
 export function botAction(
   state: PublicState,
   seat: Seat,
-  difficulty: BotDifficulty = "medium",
+  difficulty: BotDifficulty = state.config.botDifficulty ?? "medium",
 ): Action {
   const actions = legalActions(state, seat);
   if (actions.length === 0) throw new RangeError("Bot has no legal decision");
   const pending = state.pending;
   if (!pending) return actions[0];
   const cash = getPlayer(state, seat).cash;
+  if (difficulty === "easy") {
+    if (pending.kind === "buy")
+      return (
+        actions.find((action) => action.type === "Buy" && action.level === 0) ??
+        actions[0]
+      );
+    if (pending.kind === "build" || pending.kind === "buyout")
+      return { type: "Decline" };
+  }
   switch (pending.kind) {
     case "island":
       return (
@@ -1750,19 +1819,34 @@ export function botAction(
           (action): action is Extract<Action, { type: "Travel" }> =>
             action.type === "Travel",
         )
+        .filter(
+          (action) =>
+            difficulty !== "hard" ||
+            (propertyOwner(state, action.tile) === seat
+              ? nextRentIncrease(state, action.tile) > 0
+              : cash +
+                  travelSalary(state, seat, action.tile) -
+                  ECONOMY.worldTourFee >=
+                landPrice(state, action.tile)),
+        )
         .sort((a, b) => {
           const score = (tile: number) =>
-            propertyOwner(state, tile) === null && getProperty(state, tile)
-              ? landPrice(state, tile) +
-                (getTile(tile, state.config)?.kind === "resort"
-                  ? ECONOMY.resortPrice
-                  : 0)
-              : propertyOwner(state, tile) === seat
-                ? nextRentIncrease(state, tile)
-                : -propertyRent(state, tile);
+            difficulty === "hard"
+              ? propertyOwner(state, tile) === null
+                ? acquisitionValue(state, tile, seat)
+                : nextRentIncrease(state, tile)
+              : propertyOwner(state, tile) === null && getProperty(state, tile)
+                ? landPrice(state, tile) +
+                  (getTile(tile, state.config)?.kind === "resort"
+                    ? ECONOMY.resortPrice
+                    : 0)
+                : propertyOwner(state, tile) === seat
+                  ? nextRentIncrease(state, tile)
+                  : -propertyRent(state, tile);
           return score(b.tile) - score(a.tile) || a.tile - b.tile;
         });
-      return cash > ECONOMY.worldTourFee * 4 && travel.length
+      return (difficulty === "hard" || cash > ECONOMY.worldTourFee * 4) &&
+        travel.length
         ? travel[0]
         : actions[0];
     }
@@ -1782,10 +1866,15 @@ export function botAction(
         difficulty === "easy"
           ? 0
           : difficulty === "hard"
-            ? Math.max(economy.minimumTax, Math.floor(cash / 4))
+            ? botReserve(state, seat)
             : economy.islandReleaseFee;
+      const winningPurchase =
+        difficulty === "hard" &&
+        pending.kind === "buy" &&
+        instantWin(acquiredState(state, pending.tile, seat), seat) !== null;
       const affordable = builds.filter(
-        (action) => cash - actionCost(state, action) >= reserve,
+        (action) =>
+          cash - actionCost(state, action) >= (winningPurchase ? 0 : reserve),
       );
       const selected = [...affordable]
         .reverse()
@@ -1798,8 +1887,16 @@ export function botAction(
       return selected ?? { type: "Decline" };
     }
     case "buyout":
+      if (difficulty === "hard")
+        return actions.some((action) => action.type === "Buyout") &&
+          (instantWin(acquiredState(state, pending.tile, seat), seat) !==
+            null ||
+            (cash - pending.price >= botReserve(state, seat) &&
+              acquisitionValue(state, pending.tile, seat) >= pending.price))
+          ? { type: "Buyout" }
+          : { type: "Decline" };
       return cash - pending.price >= rules(state).islandReleaseFee &&
-        (difficulty === "hard" || pending.price <= cash / 2)
+        pending.price <= cash / 2
         ? { type: "Buyout" }
         : { type: "Decline" };
     case "rent-card":
@@ -1818,6 +1915,14 @@ export function botAction(
         : timeoutAction(state);
     }
     case "sell":
+      if (difficulty === "hard")
+        return [...actions].sort((a, b) => {
+          if (a.type !== "Sell" || b.type !== "Sell") return 0;
+          const loss = (tile: number) =>
+            acquisitionValue(state, tile, seat) /
+            Math.max(1, propertyRefund(state, tile));
+          return loss(a.tile) - loss(b.tile) || a.tile - b.tile;
+        })[0];
       return timeoutAction(state);
     case "card-target":
       return pending.card === "Land Swap"
@@ -1841,6 +1946,11 @@ export function createGame(
     throw new RangeError("Start salary must be a non-negative integer");
   if (!Number.isInteger(config.roundLimit) || config.roundLimit < 1)
     throw new RangeError("Round limit must be a positive integer");
+  if (
+    config.botDifficulty !== undefined &&
+    !["easy", "medium", "hard"].includes(config.botDifficulty)
+  )
+    throw new RangeError("Unsupported bot difficulty");
   if (
     config.decisionSeconds !== undefined &&
     (!Number.isInteger(config.decisionSeconds) || config.decisionSeconds < 1)

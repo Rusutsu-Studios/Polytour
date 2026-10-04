@@ -389,6 +389,11 @@ test("win conditions follow the settings draft and saved rules in both languages
   await expect(page.locator(".lobby-seats")).toContainText("Atlas");
   await page.locator(".settings-trigger").click();
   const dialog = page.locator(".settings-dialog");
+  const bots = dialog.getByRole("group", { name: "Bot difficulty" });
+  await expect(
+    bots.getByRole("radio", { name: "Medium", exact: true }),
+  ).toBeChecked();
+  await bots.getByRole("radio", { name: "Hard", exact: true }).check();
   const wins = dialog.getByRole("region", {
     name: "How to win with these settings",
   });
@@ -466,6 +471,11 @@ test("win conditions follow the settings draft and saved rules in both languages
   const frenchWins = dialog.getByRole("region", {
     name: "Comment gagner avec ces réglages",
   });
+  await expect(
+    dialog
+      .getByRole("group", { name: "Difficulté des bots" })
+      .getByRole("radio", { name: "Difficile", exact: true }),
+  ).toBeChecked();
   await expect(frenchWins.getByRole("listitem")).toHaveCount(4);
   await expect(frenchWins).toContainText("après 20 min");
   await expect(frenchWins).toContainText("quatre plages");
