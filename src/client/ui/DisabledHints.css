@@ -1,0 +1,33 @@
+.disabled-action-hint {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #173b45;
+  box-shadow:
+    0 5px 0 #b8c5a5,
+    0 12px 28px rgb(18 48 64 / 25%);
+  pointer-events: none;
+  font-size: 14px;
+  line-height: 1.45;
+  z-index: 100;
+}
+.disabled-action-hint strong {
+  display: block;
+  margin: -14px -18px 10px;
+  padding: 9px 18px;
+  border-radius: 12px 12px 0 0;
+  background: #f8db9b;
+  font-size: 14px;
+}
+.disabled-action-hint p {
+  margin: 0;
+}
+button[aria-disabled="true"] {
+  cursor: not-allowed;
+}

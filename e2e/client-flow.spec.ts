@@ -7,6 +7,7 @@ import type {
 import { APP_VERSION } from "../src/shared/version.js";
 import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
+import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -194,12 +195,12 @@ test.describe("low graphics", () => {
     await page.reload();
     await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "low");
     await expect(homeGraphics).toHaveAccessibleName(lowLabel);
-    await page.getByLabel("Langue / Language").selectOption("en");
+    await chooseLanguage(page, "en");
     await expect(homeGraphics).toHaveAccessibleName(
       "Graphics: Low. Switch to High.",
     );
     await expect(homeGraphics).toHaveText("Low");
-    await page.getByLabel("Langue / Language").selectOption("fr");
+    await chooseLanguage(page, "fr");
     await page.getByLabel("Votre nom de joueur").fill("Graphics QA");
     await openLobby(page);
     await page.locator(".settings-trigger").click();
@@ -382,7 +383,7 @@ test("win conditions follow the settings draft and saved rules in both languages
 }) => {
   test.setTimeout(180_000);
   await page.goto("/");
-  await page.getByLabel("Langue / Language").selectOption("en");
+  await chooseLanguage(page, "en");
   await page.getByLabel("Player name").fill("Rules check");
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.locator(".lobby-seats")).toContainText("Atlas");
@@ -461,7 +462,7 @@ test("win conditions follow the settings draft and saved rules in both languages
   await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.locator(".lobby-seats")).toBeVisible();
-  await page.getByLabel("Langue / Language").selectOption("fr");
+  await chooseLanguage(page, "fr");
   await page.locator(".settings-trigger").click();
   const frenchWins = dialog.getByRole("region", {
     name: "Comment gagner avec ces réglages",
@@ -818,7 +819,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(lockedHotel).toBeDisabled();
   await expect(lockedHotel).toHaveAttribute("data-locked", "true");
   await expect(lockedHotel).toHaveAttribute(
-    "title",
+    "data-disabled-reason",
     /3 maisons, un tour complet, puis revenir ici/,
   );
   await expect(
@@ -1918,7 +1919,7 @@ test("the room leader seats a local player, admits a friend, hands over during p
     const friendPicker = friend.locator(".room-leader-picker");
     await expect(friendPicker.locator(".room-leader-choice")).toHaveCount(4);
     await expect(
-      friendPicker.locator(".room-leader-choice:enabled"),
+      friendPicker.locator('.room-leader-choice:not([aria-disabled="true"])'),
     ).toHaveCount(0);
 
     // Hold the outgoing transfer briefly to observe the pending state, then
@@ -1956,7 +1957,9 @@ test("the room leader seats a local player, admits a friend, hands over during p
       };
     });
     await coraChoice.click();
-    await expect(picker.locator(".room-leader-choice:enabled")).toHaveCount(0);
+    await expect(
+      picker.locator(".room-leader-choice:not([aria-disabled='true'])"),
+    ).toHaveCount(0);
     await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
     await page.evaluate(() => {
       const surface = window as Window & { releaseLeaderTransfer?: () => void };
@@ -1965,7 +1968,9 @@ test("the room leader seats a local player, admits a friend, hands over during p
       surface.releaseLeaderTransfer();
     });
     await expect(coraChoice).toHaveAttribute("aria-pressed", "true");
-    await expect(picker.locator(".room-leader-choice:enabled")).toHaveCount(0);
+    await expect(
+      picker.locator(".room-leader-choice:not([aria-disabled='true'])"),
+    ).toHaveCount(0);
     await expect(page.getByLabel(/Verrouiller la salle/)).toHaveCount(0);
     await expect(
       friendPicker.locator('.room-leader-choice[data-seat="2"]'),
@@ -1979,7 +1984,7 @@ test("the room leader seats a local player, admits a friend, hands over during p
     await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
     await expect(coraChoice).toBeEnabled();
     await expect(
-      friendPicker.locator(".room-leader-choice:enabled"),
+      friendPicker.locator(".room-leader-choice:not([aria-disabled='true'])"),
     ).toHaveCount(0);
     await expect(page.getByLabel(/Verrouiller la salle/)).toBeEnabled();
 
@@ -2063,7 +2068,7 @@ for (const locale of ["fr", "en"] as const) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
-    await page.getByLabel("Langue / Language").selectOption(locale);
+    await chooseLanguage(page, locale);
     const helpTrigger = page.getByRole("button", {
       name: locale === "fr" ? "Comment jouer" : "How to play",
       exact: true,

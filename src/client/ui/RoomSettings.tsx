@@ -276,7 +276,18 @@ export function RoomSettings({
     if (!disabled) onChange({ ...config, ...patch });
   };
   return (
-    <div className="room-settings" data-readonly={disabled}>
+    <div
+      className="room-settings"
+      data-readonly={disabled}
+      data-disabled-reason={
+        disabled
+          ? t(
+              "Seul le chef de salle peut modifier les réglages avant la partie, une fois connecté.",
+              "Only the room leader can change settings before the game, while connected.",
+            )
+          : undefined
+      }
+    >
       <div className="room-settings-main">
         <NumberSetting
           label={t("Capital de départ", "Starting cash")}

@@ -24,6 +24,7 @@ import {
 import type { RandomnessStatus } from "../../shared/protocol/index.js";
 import { useDirector } from "../director/director.js";
 import { translate as t, useLocale } from "../i18n.js";
+import ActionButton from "./ActionButton.js";
 import {
   levelName,
   money,
@@ -457,6 +458,15 @@ export default function DecisionPanel({
       });
     }
   }
+  const unavailableReason = blocked
+    ? t(
+        "Attendez la fin de l’action ou la reconnexion au serveur.",
+        "Wait for the current action to finish or for the server to reconnect.",
+      )
+    : t(
+        "Choisissez une propriété en surbrillance sur le plateau.",
+        "Choose a highlighted property on the board.",
+      );
   const lockedReason = (level: BuildLevel) =>
     level <= ruleCap
       ? t("Pas assez d’argent", "Not enough cash")
@@ -690,10 +700,11 @@ export default function DecisionPanel({
           )}
           <div className="sale-confirmation">
             {decline && (
-              <button
+              <ActionButton
                 type="button"
                 className="button quiet"
                 disabled={blocked}
+                disabledReason={unavailableReason}
                 onClick={() => {
                   if (bankruptcy) setSelection(null);
                   else choose(decline);
@@ -702,12 +713,13 @@ export default function DecisionPanel({
                 {bankruptcy
                   ? t("Revenir aux ventes", "Back to property sales")
                   : t("Déclarer faillite", "Declare bankruptcy")}
-              </button>
+              </ActionButton>
             )}
-            <button
+            <ActionButton
               type="button"
               className={`button primary sale-confirm ${bankruptcy ? "decision-bankruptcy" : ""}`}
               disabled={blocked || !selectedAction}
+              disabledReason={unavailableReason}
               onClick={confirm}
             >
               {blocked
@@ -716,7 +728,7 @@ export default function DecisionPanel({
                   ? confirmLabel(selectedAction, state)
                   : t("Choisissez une ville", "Choose a city")}
               <Icon name="arrow" size={18} />
-            </button>
+            </ActionButton>
           </div>
         </div>
       </section>
@@ -769,6 +781,7 @@ export default function DecisionPanel({
               aria-label={pickLabel}
               value={pickedAction?.tile ?? ""}
               disabled={blocked}
+              data-disabled-reason={unavailableReason}
               onChange={(event) => {
                 if (event.target.value !== "")
                   onPick(Number(event.target.value));
@@ -889,38 +902,41 @@ export default function DecisionPanel({
           </div>
           <div className="pick-actions">
             {freeRoll && (
-              <button
+              <ActionButton
                 type="button"
                 className="button secondary"
                 disabled={blocked}
+                disabledReason={unavailableReason}
                 onClick={() => act(freeRoll)}
               >
                 <Icon name="dice" size={18} />
                 {t("Lancer les dés", "Roll the dice")}
-              </button>
+              </ActionButton>
             )}
             {decline && (
-              <button
+              <ActionButton
                 type="button"
                 className="button quiet"
                 disabled={blocked}
+                disabledReason={unavailableReason}
                 onClick={() => act(decline)}
               >
                 {actionLabel(decline, state)}
-              </button>
+              </ActionButton>
             )}
             {pickedAction && (
-              <button
+              <ActionButton
                 type="button"
                 className="button primary decision-confirm"
                 disabled={blocked}
+                disabledReason={unavailableReason}
                 onClick={() => act(pickedAction)}
               >
                 {blocked
                   ? t("Veuillez patienter…", "Please wait…")
                   : pickConfirmLabel(pickedAction, state)}
                 <Icon name="arrow" size={20} />
-              </button>
+              </ActionButton>
             )}
           </div>
         </div>
@@ -1005,24 +1021,31 @@ export default function DecisionPanel({
                 className="button primary decision-resume"
                 onClick={() => setDismissed(null)}
               >
-                {t("Reprendre le choix", "Resume decision")}{" "}
-                <Icon name="arrow" />
+                <Icon name="screen" size={19} />
+                <span>
+                  {copy[0]}
+                  <small>{t("Reprendre le choix", "Resume decision")}</small>
+                </span>
+                <span className="decision-dock-timer" role="timer">
+                  {countdown}s
+                </span>
               </button>
             ) : (
               actions.map((action) => (
-                <button
+                <ActionButton
                   type="button"
                   key={actionKey(action)}
                   className="button primary roll-button"
                   aria-label={actionLabel(action, state)}
                   disabled={blocked}
+                  disabledReason={unavailableReason}
                   onClick={() => act(action)}
                 >
                   <Icon name="dice" size={24} />
                   {action.type === "Roll"
                     ? t("Lancer", "Roll")
                     : actionLabel(action, state)}
-                </button>
+                </ActionButton>
               ))
             )}
           </div>
@@ -1072,7 +1095,7 @@ export default function DecisionPanel({
             aria-label={t("Réduire le choix", "Minimize the decision")}
             onClick={dismiss}
           >
-            <Icon name="close" size={17} />
+            <Icon name="minimize" size={17} />
           </button>
         </div>
         <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
@@ -1241,7 +1264,7 @@ export default function DecisionPanel({
                     selectedAction !== undefined &&
                     actionKey(selectedAction) === actionKey(action);
                   return (
-                    <button
+                    <ActionButton
                       type="button"
                       className="construction-choice"
                       key={actionKey(action)}
@@ -1255,7 +1278,9 @@ export default function DecisionPanel({
                             )
                           : `${levelName(action.level)} · ${lockedReason(action.level)}`
                       }
-                      title={legal ? undefined : lockedReason(action.level)}
+                      disabledReason={
+                        !legal ? lockedReason(action.level) : unavailableReason
+                      }
                       disabled={blocked || !legal}
                       onClick={() => choose(action)}
                     >
@@ -1282,7 +1307,7 @@ export default function DecisionPanel({
                           <Icon name="check" size={15} />
                         ) : null}
                       </span>
-                    </button>
+                    </ActionButton>
                   );
                 })}
               </fieldset>
@@ -1304,6 +1329,7 @@ export default function DecisionPanel({
                     : destinations[0]?.tile
                 }
                 disabled={blocked}
+                data-disabled-reason={unavailableReason}
                 onChange={(event) => {
                   const action = destinations.find(
                     (choice) => choice.tile === Number(event.target.value),
@@ -1330,7 +1356,7 @@ export default function DecisionPanel({
                     "Choose rolling or travel",
                   )}
                 >
-                  <button
+                  <ActionButton
                     type="button"
                     className="button secondary"
                     aria-label={t(
@@ -1339,12 +1365,13 @@ export default function DecisionPanel({
                     )}
                     aria-pressed={selectedAction?.type === "Roll"}
                     disabled={blocked}
+                    disabledReason={unavailableReason}
                     onClick={() => choose(freeRoll)}
                   >
                     {t("Lancer gratuitement", "Roll for free")}
-                  </button>
+                  </ActionButton>
                   {destinationChoice && (
-                    <button
+                    <ActionButton
                       type="button"
                       className="button secondary"
                       aria-label={t(
@@ -1353,11 +1380,12 @@ export default function DecisionPanel({
                       )}
                       aria-pressed={selectedAction?.type === "Travel"}
                       disabled={blocked}
+                      disabledReason={unavailableReason}
                       onClick={() => choose(destinationChoice)}
                     >
                       {t("Voyager ici", "Travel here")} ·{" "}
                       {money(actionCost(state, destinationChoice))}
-                    </button>
+                    </ActionButton>
                   )}
                 </fieldset>
               )}
@@ -1368,7 +1396,7 @@ export default function DecisionPanel({
               aria-label={t("Choisir une action", "Choose an action")}
             >
               {choices.map((action) => (
-                <button
+                <ActionButton
                   type="button"
                   key={actionKey(action)}
                   className="button secondary"
@@ -1377,20 +1405,22 @@ export default function DecisionPanel({
                     actionKey(selectedAction) === actionKey(action)
                   }
                   disabled={blocked}
+                  disabledReason={unavailableReason}
                   onClick={() => choose(action)}
                 >
                   {actionLabel(action, state)}
-                </button>
+                </ActionButton>
               ))}
             </fieldset>
           ) : null}
         </div>
         <div className="decision-confirmation">
           {decline && (
-            <button
+            <ActionButton
               type="button"
               className="button quiet"
               disabled={blocked}
+              disabledReason={unavailableReason}
               onClick={() => {
                 if (pending?.kind === "sell") {
                   if (bankruptcy && fallbackChoice) choose(fallbackChoice);
@@ -1401,12 +1431,13 @@ export default function DecisionPanel({
               {bankruptcy
                 ? t("Revenir aux ventes", "Back to property sales")
                 : actionLabel(decline, state)}
-            </button>
+            </ActionButton>
           )}
-          <button
+          <ActionButton
             type="button"
             className={`button primary decision-confirm ${bankruptcy ? "decision-bankruptcy" : ""}`}
             disabled={blocked || !selectedAction}
+            disabledReason={unavailableReason}
             onClick={confirm}
           >
             {blocked
@@ -1415,7 +1446,7 @@ export default function DecisionPanel({
                 ? confirmLabel(selectedAction, state)
                 : t("Choisir une option", "Choose an option")}
             <Icon name="arrow" size={20} />
-          </button>
+          </ActionButton>
         </div>
       </motion.div>
     </dialog>,

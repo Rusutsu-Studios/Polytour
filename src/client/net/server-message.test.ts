@@ -51,6 +51,38 @@ const diagnostics: RoomDiagnostics = {
 };
 
 describe("room debug server envelopes", () => {
+  it.each([false, true])(
+    "retains the frozen resort festival marker %s",
+    (resortFestivals) => {
+      const message = parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          lobby: { ...welcome.lobby, resortFestivals },
+        }),
+      );
+      expect(message).toMatchObject({
+        type: "welcome",
+        lobby: { resortFestivals },
+      });
+    },
+  );
+  it("keeps the marker absent for older servers and rejects invalid values", () => {
+    const message = parseServerMessage(JSON.stringify(welcome));
+    expect(
+      message.type === "welcome" && message.lobby.resortFestivals,
+    ).toBeUndefined();
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          lobby: { ...welcome.lobby, resortFestivals: "yes" },
+        }),
+      ),
+    ).toThrow();
+    expect(RoomConfigSchema.safeParse({ resortFestivals: true }).success).toBe(
+      false,
+    );
+  });
   it("retains the advertised capability without changing an older welcome", () => {
     const older = parseServerMessage(JSON.stringify(welcome));
     expect(older.type).toBe("welcome");
