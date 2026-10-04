@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-04
+
 ### Added
 
 - A small toy bank stands on Start, and money paid to or by the bank flies to and
