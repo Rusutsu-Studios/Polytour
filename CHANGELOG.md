@@ -9,6 +9,13 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-04
+
+### Added
+
+- Room option, enabled by default, to send a player to the Island after a third
+  consecutive double; switching it off lets the third double move normally (#102).
+
 ## [0.5.1] - 2026-10-04
 
 ### Fixed
