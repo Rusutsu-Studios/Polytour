@@ -1,4 +1,8 @@
 import type { EconomyRule } from "../../src/shared/board/index.js";
+import {
+  type BotDifficulty,
+  botAction,
+} from "../../src/shared/engine/index.js";
 import { SIM_CONFIG, simSeats, simulateGame } from "./simulation.js";
 
 function option(name: string, fallback: number): number {
@@ -27,23 +31,57 @@ const config = {
   sellBackPercent: rules === "reference" ? (100 as const) : (50 as const),
   roundLimit,
 };
+const levelsIndex = process.argv.indexOf("--levels");
+const difficultyIndex = process.argv.indexOf("--difficulty");
+const levels =
+  levelsIndex < 0
+    ? Array.from({ length: players }, () =>
+        difficultyIndex < 0 ? "medium" : process.argv[difficultyIndex + 1],
+      )
+    : (process.argv[levelsIndex + 1] ?? "").split(",");
+if (
+  levels.length !== players ||
+  levels.some((level) => !["easy", "medium", "hard"].includes(level))
+)
+  throw new RangeError(
+    "Use --difficulty easy|medium|hard or --levels with one comma-separated level per seat",
+  );
+// Rotate policies across table seats for a paired comparison on the same seeds.
 const results = Array.from({ length: games }, (_, seed) =>
-  simulateGame(seed, config, undefined, simSeats(players)),
+  simulateGame(
+    seed,
+    config,
+    (state) => {
+      const seat = state.pending?.seat;
+      if (seat === undefined) throw new Error("Missing decision");
+      return botAction(
+        state,
+        seat,
+        levels[(seat + seed) % players] as BotDifficulty,
+      );
+    },
+    simSeats(players),
+  ),
 );
 const rounds = results.map((result) => result.rounds).sort((a, b) => a - b);
 const count: Record<string, number> = {};
 const seatWins = [0, 0, 0, 0];
 const turnPositionWins = [0, 0, 0, 0];
+const difficultyWins: Record<string, number> = {};
 for (const result of results) {
   count[result.kind] = (count[result.kind] ?? 0) + 1;
   seatWins[result.winner]++;
   turnPositionWins[result.turnPosition]++;
+  const level = levels[(result.winner + result.seed) % players];
+  difficultyWins[level] = (difficultyWins[level] ?? 0) + 1;
 }
 const report = {
   games,
   economyRule: rules,
   boardRule: config.boardRule,
-  config: `${["", "", "two", "three", "four"][players]} medium bots, ${roundLimit}-round limit, 3 seeded festivals; ${rules === "reference" ? "reference grid and fees" : "captured costs + provisional rents"}`,
+  levels,
+  difficultyWins,
+  config: `${players} bots (levels rotate across seats), ${roundLimit}-round limit, 3 seeded festivals; ${rules === "reference" ? "reference grid and fees" : "captured costs + provisional rents"}`,
   medianRounds: rounds[Math.floor((games - 1) * 0.5)],
   p90Rounds: rounds[Math.floor((games - 1) * 0.9)],
   wins: count,
