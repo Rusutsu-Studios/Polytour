@@ -2101,6 +2101,34 @@ for (const locale of ["fr", "en"] as const) {
       await expect(detail.locator(".luck-card-notes")).not.toBeEmpty();
       await expect(closeCard).toHaveAccessibleName(backLabel);
       await expect(backToCards).toHaveAccessibleName(backLabel);
+      if (title === LUCK_CARD_TITLES[locale][7]) {
+        await expect(detail.locator(".luck-card-impact")).toContainText(
+          locale === "fr" ? "Direction la Taxe" : "Go to Tax",
+        );
+        await expect(detail.locator(".luck-card-description")).toContainText(
+          locale === "fr" ? "taxe sur vos propriétés" : "property tax",
+        );
+        await expect(detail.locator(".luck-card-description")).toContainText(
+          "400 k",
+        );
+        await expect(detail.locator(".luck-card-notes")).toContainText(
+          locale === "fr" ? "faillite" : "bankruptcy",
+        );
+        for (const size of DESKTOP_SIZES.slice(0, 3)) {
+          await page.setViewportSize(size);
+          const bounds = await detail.boundingBox();
+          expect(bounds).not.toBeNull();
+          if (!bounds) throw new Error("Expected Audit dialog bounds");
+          expect(bounds.x).toBeGreaterThanOrEqual(0);
+          expect(bounds.y).toBeGreaterThanOrEqual(0);
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(size.width);
+          expect(bounds.y + bounds.height).toBeLessThanOrEqual(size.height);
+          await page.screenshot({
+            path: `.local/verification/audit-${locale}-${size.width}.png`,
+          });
+        }
+        await page.setViewportSize({ width: 1440, height: 900 });
+      }
       await closeCard.click();
       await expect(detail).not.toBeVisible();
       await expect(help).toBeVisible();
@@ -2178,6 +2206,7 @@ test("match card help uses the active salary and saved economy rather than welco
         startSalary: 760_000,
         economyRule: "prototype",
         boardRule: "legacy",
+        taxCardMovement: false,
       },
       activeSeat: 0,
       pending: {
@@ -2221,6 +2250,21 @@ test("match card help uses the active salary and saved economy rather than welco
   await expect(detail.locator(".luck-card-description")).toContainText(
     "hors monuments",
   );
+  await page.keyboard.press("Escape");
+  await catalogue
+    .locator(".luck-card-button")
+    .filter({ hasText: "Contrôle fiscal" })
+    .click();
+  await expect(detail.locator(".luck-card-impact")).toContainText(
+    "10 % de votre cash",
+  );
+  await expect(detail.locator(".luck-card-description")).toContainText(
+    "trésorerie positive",
+  );
+  await expect(detail.locator(".luck-card-notes")).toContainText(
+    "Un cash nul ou négatif ne produit aucun paiement",
+  );
+  await page.screenshot({ path: ".local/verification/audit-legacy-fr.png" });
   await page.keyboard.press("Escape");
   await expect(help).toBeVisible();
 });

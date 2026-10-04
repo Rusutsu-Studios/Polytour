@@ -2066,6 +2066,7 @@ describe("Authoritative private rooms", () => {
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
     expect(welcome.lobby.resortFestivals).toBe(false);
+    expect(welcome.lobby.taxCardMovement).toBe(true);
     expect(welcome.snapshot?.config.resortFestivals).toBe(false);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
   });

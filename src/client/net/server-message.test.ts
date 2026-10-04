@@ -163,6 +163,29 @@ function lobby() {
   };
 }
 describe("frozen lobby rules at the client boundary", () => {
+  it.each([true, false, undefined])(
+    "preserves Audit movement selector %s",
+    (taxCardMovement) => {
+      const message = parseServerMessage(
+        JSON.stringify({
+          type: "lobby",
+          lobby: { ...lobby(), taxCardMovement },
+        }),
+      );
+      if (message.type !== "lobby") throw new Error("Expected lobby");
+      expect(message.lobby.taxCardMovement).toBe(taxCardMovement);
+    },
+  );
+  it("rejects an invalid Audit movement selector", () => {
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          type: "lobby",
+          lobby: { ...lobby(), taxCardMovement: "true" },
+        }),
+      ),
+    ).toThrow();
+  });
   it("retains old board, economy and hotel markers for a recovered lobby", () => {
     const markers = {
       sellBackPercent: 50,

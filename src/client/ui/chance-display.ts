@@ -147,6 +147,22 @@ export function describeChanceCardDetails(
     case "Birthday":
       return [gifts];
     case "Audit":
+      if (config.taxCardMovement === true) {
+        return [
+          t(
+            `Le trajet suit le sens du jeu ; franchir le départ rapporte ${money(config.startSalary)} et compte un tour.`,
+            `Move clockwise; passing Start pays ${money(config.startSalary)} and counts a lap.`,
+          ),
+          t(
+            `La taxe est de ${ECONOMY.taxPercent} % du montant investi dans vos propriétés, bâtiments compris, arrondie à l’unité supérieure, avec un minimum de ${money(rules.minimumTax)}.`,
+            `Tax is ${ECONOMY.taxPercent}% of the amount invested in your properties, including buildings, rounded up to a whole unit, with a minimum of ${money(rules.minimumTax)}.`,
+          ),
+          t(
+            "Si votre cash ne suffit pas, vendez des propriétés pour régler la dette. Une dette impossible à couvrir entraîne la faillite.",
+            "If you lack cash, sell properties to cover the debt. A debt you cannot cover causes bankruptcy.",
+          ),
+        ];
+      }
       return [
         t(
           "Le montant est arrondi à l’unité supérieure. Un cash nul ou négatif ne produit aucun paiement.",
@@ -358,6 +374,17 @@ export function describeChanceCard(
         ),
       };
     case "Audit":
+      if (config.taxCardMovement === true) {
+        return {
+          ...base,
+          tone: "cost",
+          badge: t("Direction la Taxe", "Go to Tax"),
+          text: t(
+            `Rejoignez la Taxe et payez la taxe sur vos propriétés. Franchir le départ rapporte ${money(config.startSalary)} de salaire.`,
+            `Move to Tax and pay property tax. Passing Start pays ${money(config.startSalary)} salary.`,
+          ),
+        };
+      }
       return {
         ...base,
         tone: "cost",

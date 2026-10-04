@@ -62,6 +62,80 @@ describe("luck-card descriptions without a draw", () => {
     },
   );
 
+  it.each(["fr", "en"] as const)(
+    "describes Audit using the frozen movement selector in %s",
+    (locale) => {
+      setLocale(locale);
+      for (const taxCardMovement of [true, false, undefined]) {
+        const config = {
+          ...DEFAULT_GAME_CONFIG,
+          startSalary: 760_000,
+          taxCardMovement,
+        };
+        const card = describeChanceCard("Audit", config);
+        const details = describeChanceCardDetails("Audit", config).join(" ");
+        const state = toPublic(
+          createGame(
+            config,
+            [
+              { playerId: "audit-human", name: "Player", control: "human" },
+              { playerId: "audit-bot", name: "Bot", control: "bot" },
+            ],
+            49,
+            { now: 0 },
+          ).state,
+        );
+        expect(
+          describeCard(
+            { type: "CardDrawn", seat: 0, card: "Audit", kept: false },
+            state,
+          ),
+        ).toEqual(card);
+        if (taxCardMovement === true) {
+          expect(card.badge).toBe(
+            locale === "fr" ? "Direction la Taxe" : "Go to Tax",
+          );
+          expect(card.text).toContain(
+            locale === "fr" ? "taxe sur vos propriétés" : "property tax",
+          );
+          expect(card.text).toContain("760 k");
+          expect(details).toContain("760 k");
+          expect(details).toContain(
+            locale === "fr" ? "bâtiments compris" : "including buildings",
+          );
+          expect(details).toContain(
+            locale === "fr" ? "vendez des propriétés" : "sell properties",
+          );
+          expect(details).toContain(
+            locale === "fr" ? "faillite" : "bankruptcy",
+          );
+          expect(details).toContain(
+            locale === "fr" ? "unité supérieure" : "rounded up",
+          );
+          expect(details).toContain("minimum");
+          expect(details).not.toContain(
+            locale === "fr" ? "cash nul" : "Zero or negative cash",
+          );
+        } else {
+          expect(card.badge).toBe(
+            locale === "fr" ? "10 % de votre cash" : "10% of your cash",
+          );
+          expect(card.text).toBe(
+            locale === "fr"
+              ? "Payez à la banque cette part de votre trésorerie positive."
+              : "Pay this share of your positive cash balance to the bank.",
+          );
+          expect(details).toBe(
+            locale === "fr"
+              ? "Le montant est arrondi à l’unité supérieure. Un cash nul ou négatif ne produit aucun paiement."
+              : "The amount is rounded up to a whole unit. Zero or negative cash produces no charge.",
+          );
+          expect(card.text).not.toContain("760 k");
+        }
+      }
+    },
+  );
+
   it.each(["Guardian Angel", "Coupon"] as const)(
     "explains %s as usable in help and retains duplicate draw feedback",
     (card) => {
