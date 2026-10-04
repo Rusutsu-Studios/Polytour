@@ -9,6 +9,8 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-04
+
 ### Added
 
 - A small bank is printed on Start. Salaries, taxes, fees and card payments fly
