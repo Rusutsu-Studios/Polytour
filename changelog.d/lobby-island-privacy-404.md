@@ -20,5 +20,8 @@
   bots fill the first open seat (#94).
 - Lost Island displays its title once, uses an island icon and keeps unavailable
   escape choices visible with explanations (#48).
+- Lost Island descriptions include the Escape card when available under the
+  room’s rules, and the turn decision shows how many failed rolls remain until
+  automatic release (#87).
 - Regression coverage confirms Championship choices work during the first lap,
   including a city acquired during doubles in the same turn (#83).

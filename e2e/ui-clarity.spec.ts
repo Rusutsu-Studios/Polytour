@@ -1,7 +1,9 @@
 import { expect, type Page, test, type WebSocketRoute } from "@playwright/test";
+import { ruleEconomy } from "../src/shared/board/index.js";
 import {
   createGame,
   DEFAULT_GAME_CONFIG,
+  economyRule,
   type GameEvent,
   type PublicState,
   toPublic,
@@ -177,7 +179,7 @@ function islandDecision(state: PublicState): PublicState {
     pending: {
       kind: "island",
       seat: 0,
-      fee: 100_000,
+      fee: ruleEconomy(economyRule(state.config)).islandReleaseFee,
       deadline: Date.now() + 60_000,
     },
   };
@@ -200,6 +202,12 @@ for (const size of [
     await expect(dialog.getByRole("heading")).toHaveCount(1);
     await expect(dialog.locator(".decision-island-art svg")).toBeVisible();
     await expect(dialog.locator(".city-art")).toHaveCount(0);
+    await expect(dialog.locator("#decision-description")).toContainText(
+      "utilisez votre carte d’évasion ou payez 200 k",
+    );
+    await expect(dialog.locator("#decision-description")).toContainText(
+      "3 lancers ratés supplémentaires",
+    );
     const escapeButton = dialog.getByRole("button", {
       name: "Utiliser la carte d’évasion",
       exact: true,
@@ -229,6 +237,79 @@ for (const size of [
     await page.screenshot({
       path: `.local/verification/island-escape-${size.width}.png`,
     });
+  });
+}
+
+for (const scenario of [
+  {
+    locale: "en",
+    economy: "reference",
+    escapeCard: true,
+    failures: 3,
+    fee: "200 k",
+  },
+  {
+    locale: "fr",
+    economy: "prototype",
+    escapeCard: false,
+    failures: 2,
+    fee: "100 k",
+  },
+] as const) {
+  test(`Island remaining rolls and description respect ${scenario.economy} rules in ${scenario.locale}`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      (locale) => localStorage.setItem("polytour.locale", locale),
+      scenario.locale,
+    );
+    const room = await decisionRoom(page, 2_000_000, (state) =>
+      islandDecision({
+        ...state,
+        config: {
+          ...state.config,
+          economyRule: scenario.economy,
+          escapeCard: scenario.escapeCard,
+        },
+      }),
+    );
+    const dialog = page.locator('.decision-popup[data-kind="island"][open]');
+    const description = dialog.locator("#decision-description");
+    const choices = dialog.locator(".decision-other-choices");
+    await expect(choices.getByRole("button")).toHaveCount(3);
+    await expect(
+      choices.getByRole("button", {
+        name:
+          scenario.locale === "en"
+            ? "Use the escape card"
+            : "Utiliser la carte d’évasion",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await expect(description).toContainText(scenario.fee);
+    for (let failed = 0; failed < scenario.failures; failed++) {
+      if (failed > 0)
+        room.send([
+          { type: "IslandEscapeFailed", seat: 0, islandTurns: failed },
+        ]);
+      const remaining = scenario.failures - failed;
+      await expect(description).toContainText(
+        scenario.locale === "en"
+          ? `${remaining} more failed roll${remaining === 1 ? "" : "s"}`
+          : `${remaining} lancer${remaining === 1 ? "" : "s"} raté${remaining === 1 ? "" : "s"} supplémentaire${remaining === 1 ? "" : "s"}`,
+      );
+    }
+    await page.keyboard.press("Escape");
+    await clickBoardSpace(page, 8);
+    const rule = page.locator(".city-card .tile-rule");
+    await expect(rule).toContainText(scenario.fee);
+    if (scenario.escapeCard) {
+      await expect(rule).toContainText("use your escape card");
+      await expect(rule).toContainText("3 failed rolls");
+    } else {
+      await expect(rule).not.toContainText("carte d’évasion");
+      await expect(rule).toContainText("2 lancers ratés");
+    }
   });
 }
 

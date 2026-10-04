@@ -72,12 +72,7 @@ const COPY = {
     "Settle your debt",
     "Choose a property to sell and raise cash for your debt.",
   ],
-  island: [
-    "Quitter l’île",
-    "Tentez un double pour repartir, ou payez la traversée.",
-    "Leave the Island",
-    "Roll doubles to leave, or pay the fare.",
-  ],
+  island: ["Quitter l’île", "", "Leave the Island", ""],
   travel: [
     "Choisissez votre destination",
     "Cliquez une case en surbrillance ou utilisez la liste.",
@@ -522,36 +517,59 @@ export default function DecisionPanel({
         ),
       )
     : 0;
+  const islandRollsLeft = Math.max(
+    0,
+    ruleEconomy(economyRule(state.config)).islandMaxFailedEscapes -
+      (active?.islandTurns ?? 0),
+  );
   const copy: readonly [string, string] =
-    pending?.kind === "card-target"
+    pending?.kind === "island"
       ? [
-          cardName(pending.card),
-          pending.card === "Land Swap" && pending.sourceTile !== undefined
-            ? t(
-                `Votre ville de ${tileName(pending.sourceTile, state.config)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
-                `Your city of ${tileName(pending.sourceTile, state.config)} will be swapped for the selected city. Buildings stay on each property.`,
-              )
-            : pending.card === "Contractor"
+          decisionCopy("island")[0],
+          `${
+            state.config.escapeCard === true
               ? t(
-                  "Choisissez votre ville qui recevra un niveau de construction offert.",
-                  "Choose one of your cities to receive a free building level.",
+                  `Faites un double, utilisez votre carte d’évasion ou payez ${money(pending.fee)} pour repartir.`,
+                  `Roll doubles, use your escape card or pay ${money(pending.fee)} to leave.`,
                 )
               : t(
-                  "Choisissez la ville adverse qui perdra un niveau de construction.",
-                  "Choose the opponent’s city that will lose a building level.",
-                ),
+                  `Faites un double ou payez ${money(pending.fee)} pour repartir.`,
+                  `Roll doubles or pay ${money(pending.fee)} to leave.`,
+                )
+          } ${t(
+            `Vous serez libéré après ${islandRollsLeft} lancer${islandRollsLeft === 1 ? "" : "s"} raté${islandRollsLeft === 1 ? "" : "s"} supplémentaire${islandRollsLeft === 1 ? "" : "s"}.`,
+            `You are released after ${islandRollsLeft} more failed roll${islandRollsLeft === 1 ? "" : "s"}.`,
+          )}`,
         ]
-      : pending?.kind === "buy" && resort
-        ? [t("Acheter une plage", "Buy a beach"), ""]
-        : pending?.kind === "host" && decline
-          ? [
-              decisionCopy("host")[0],
-              t(
-                `Déplacer le championnat coûte ${money(ruleEconomy(economyRule(state.config)).championshipFee)}, le renouveler est gratuit. Chaque édition ajoute ×1 au loyer de la ville hôte.`,
-                `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
-              ),
-            ]
-          : decisionCopy(pending?.kind ?? "roll");
+      : pending?.kind === "card-target"
+        ? [
+            cardName(pending.card),
+            pending.card === "Land Swap" && pending.sourceTile !== undefined
+              ? t(
+                  `Votre ville de ${tileName(pending.sourceTile, state.config)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
+                  `Your city of ${tileName(pending.sourceTile, state.config)} will be swapped for the selected city. Buildings stay on each property.`,
+                )
+              : pending.card === "Contractor"
+                ? t(
+                    "Choisissez votre ville qui recevra un niveau de construction offert.",
+                    "Choose one of your cities to receive a free building level.",
+                  )
+                : t(
+                    "Choisissez la ville adverse qui perdra un niveau de construction.",
+                    "Choose the opponent’s city that will lose a building level.",
+                  ),
+          ]
+        : pending?.kind === "buy" && resort
+          ? [t("Acheter une plage", "Buy a beach"), ""]
+          : pending?.kind === "host" && decline
+            ? [
+                decisionCopy("host")[0],
+                t(
+                  `Déplacer le championnat coûte ${money(ruleEconomy(economyRule(state.config)).championshipFee)}, le renouveler est gratuit. Chaque édition ajoute ×1 au loyer de la ville hôte.`,
+                  `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
+                ),
+              ]
+            : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {

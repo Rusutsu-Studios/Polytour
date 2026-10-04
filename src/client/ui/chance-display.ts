@@ -87,8 +87,8 @@ export function describeChanceCardDetails(
     case "Stranded":
       return [
         t(
-          `Ce transfert termine votre tour, sans salaire ni tour complet. La traversée coûte ${money(rules.islandReleaseFee)} ; vous êtes aussi libéré après ${rules.islandMaxFailedEscapes} tentatives de double ratées.`,
-          `This transfer ends your turn, without salary or lap credit. The fare is ${money(rules.islandReleaseFee)}; you are also released after ${rules.islandMaxFailedEscapes} failed doubles attempts.`,
+          `Ce transfert termine votre tour, sans salaire ni tour complet. La traversée coûte ${money(rules.islandReleaseFee)} ; vous êtes aussi libéré après ${rules.islandMaxFailedEscapes} tentatives de double ratées.${config.escapeCard === true ? " Une carte d’évasion permet aussi de repartir sans payer." : ""}`,
+          `This transfer ends your turn, without salary or lap credit. The fare is ${money(rules.islandReleaseFee)}; you are also released after ${rules.islandMaxFailedEscapes} failed doubles attempts.${config.escapeCard === true ? " An escape card also lets you leave without paying." : ""}`,
         ),
       ];
     case "Jet Set":
@@ -311,8 +311,8 @@ export function describeChanceCard(
         tone: "cost",
         badge: t("Escale sur l’île", "Go to the Island"),
         text: t(
-          "Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée ou avec une libération.",
-          "Move to the Island. Leave by rolling doubles, paying the fare or being released.",
+          `Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée${config.escapeCard === true ? ", avec une carte d’évasion" : ""} ou avec une libération.`,
+          `Move to the Island. Leave by rolling doubles, paying the fare${config.escapeCard === true ? ", using an escape card" : ""} or being released.`,
         ),
       };
     case "Jet Set":

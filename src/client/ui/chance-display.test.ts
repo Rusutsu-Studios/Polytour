@@ -106,6 +106,52 @@ describe("luck-card descriptions without a draw", () => {
   );
 
   it.each(["fr", "en"] as const)(
+    "keeps Stranded departure help aligned with reference and saved room rules in %s",
+    (locale) => {
+      setLocale(locale);
+      for (const { config, fee, failures, escapeCard } of [
+        {
+          config: DEFAULT_GAME_CONFIG,
+          fee: "200 k",
+          failures: 3,
+          escapeCard: true,
+        },
+        {
+          config: { ...DEFAULT_GAME_CONFIG, escapeCard: false },
+          fee: "200 k",
+          failures: 3,
+          escapeCard: false,
+        },
+        {
+          config: {
+            ...DEFAULT_GAME_CONFIG,
+            economyRule: undefined,
+            escapeCard: undefined,
+          },
+          fee: "100 k",
+          failures: 2,
+          escapeCard: false,
+        },
+      ]) {
+        const summary = describeChanceCard("Stranded", config).text;
+        const details = describeChanceCardDetails("Stranded", config).join(" ");
+        const cardName = locale === "fr" ? "carte d’évasion" : "escape card";
+        expect(summary.includes(cardName)).toBe(escapeCard);
+        expect(details.includes(cardName)).toBe(escapeCard);
+        expect(details).toContain(fee);
+        expect(details).toContain(
+          `${failures} ${locale === "fr" ? "tentatives de double ratées" : "failed doubles attempts"}`,
+        );
+        expect(details).toContain(
+          locale === "fr"
+            ? "termine votre tour, sans salaire ni tour complet"
+            : "ends your turn, without salary or lap credit",
+        );
+      }
+    },
+  );
+
+  it.each(["fr", "en"] as const)(
     "shows when the retained escape card can be used in %s",
     (locale) => {
       setLocale(locale);
