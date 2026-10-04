@@ -81,6 +81,7 @@ import {
 } from "./ui/RoomPeople.js";
 import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
+import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
 
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
@@ -817,6 +818,8 @@ function MatchView({
   onZoom,
   lowGraphics,
   onGraphicsChange,
+  streamer,
+  onStreamerChange,
   copied,
   copyRoom,
   onLeave,
@@ -833,6 +836,8 @@ function MatchView({
   onZoom: (zoom: number) => void;
   lowGraphics: boolean;
   onGraphicsChange: (low: boolean) => void;
+  streamer: boolean;
+  onStreamerChange: (enabled: boolean) => void;
   copied: boolean;
   copyRoom: () => Promise<void>;
   onLeave: () => void;
@@ -1222,6 +1227,11 @@ function MatchView({
         className="game-tools"
         aria-label={t("Outils de la partie", "Game tools")}
       >
+        <StreamerToggle
+          enabled={streamer}
+          onChange={onStreamerChange}
+          compact
+        />
         <button
           type="button"
           className="game-tool-button"
@@ -1572,7 +1582,11 @@ function MatchView({
                   {t("Code de votre salle", "Room code")}
                 </span>
                 <div className="room-tool-code">
-                  <strong>{credentials.roomCode}</strong>
+                  <strong>
+                    {streamer
+                      ? t("Code masqué", "Code hidden")
+                      : credentials.roomCode}
+                  </strong>
                   <button
                     type="button"
                     className="button secondary"
@@ -1745,6 +1759,34 @@ function App() {
     () => localStorage.getItem("polytour-name") ?? "",
   );
   const [joinCode, setJoinCode] = useState("");
+  const [streamer, setStreamer] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.streamer") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const streamerRef = useRef(streamer);
+  function changeStreamer(enabled: boolean) {
+    streamerRef.current = enabled;
+    setStreamer(enabled);
+    try {
+      localStorage.setItem("polytour.streamer", String(enabled));
+    } catch {
+      // Keep the preference working for this session without browser storage.
+    }
+  }
+  useEffect(() => {
+    if (!streamer) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    if (/^\/rooms\//.test(url.pathname)) url.pathname = "/";
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [streamer]);
   const [config, setConfig] = useState<RoomConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const entering = useRef(false);
@@ -1821,7 +1863,9 @@ function App() {
       window.history.replaceState(
         null,
         "",
-        `${window.location.pathname}?room=${entered.roomCode}`,
+        streamerRef.current
+          ? window.location.pathname
+          : `${window.location.pathname}?room=${entered.roomCode}`,
       );
     } catch (error) {
       setFormError(
@@ -1854,7 +1898,7 @@ function App() {
     if (!credentials) return;
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}${window.location.pathname}?room=${credentials.roomCode}`,
+        `${window.location.origin}/?room=${credentials.roomCode}`,
       );
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -1880,6 +1924,7 @@ function App() {
     fourResortRent: room.lobby?.fourResortRent ?? true,
     buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
+    escapeCard: room.lobby ? room.lobby.escapeCard === true : true,
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;
@@ -1900,6 +1945,7 @@ function App() {
           </span>
           <div className="topbar-right">
             <span className="prototype-tag">Prototype</span>
+            <StreamerToggle enabled={streamer} onChange={changeStreamer} />
             <GraphicsToggle
               lowGraphics={lowGraphics}
               onChange={changeGraphics}
@@ -1994,9 +2040,11 @@ function App() {
                     <input
                       id="room-code"
                       className="code-input"
+                      type={streamer ? "password" : "text"}
                       value={joinCode}
                       maxLength={6}
-                      placeholder="ABCD23"
+                      placeholder={streamer ? "••••••" : "ABCD23"}
+                      autoComplete="off"
                       autoCapitalize="characters"
                       spellCheck={false}
                       onChange={(event) =>
@@ -2082,7 +2130,11 @@ function App() {
             <div className="room-code-block">
               <div>
                 <span>{t("Code de la salle", "Room code")}</span>
-                <strong>{credentials.roomCode}</strong>
+                <strong>
+                  {streamer
+                    ? t("Code masqué", "Code hidden")
+                    : credentials.roomCode}
+                </strong>
               </div>
               <button
                 type="button"
@@ -2241,6 +2293,8 @@ function App() {
           onZoom={setZoom}
           lowGraphics={lowGraphics}
           onGraphicsChange={changeGraphics}
+          streamer={streamer}
+          onStreamerChange={changeStreamer}
           copied={copied}
           copyRoom={copyRoom}
           onLeave={() => void leave()}

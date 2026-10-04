@@ -60,7 +60,11 @@ for (const entry of ["play", "join", "invitation"] as const) {
   });
 }
 
-async function decisionRoom(page: Page, cash = 2_000_000) {
+async function decisionRoom(
+  page: Page,
+  cash = 2_000_000,
+  setup?: (state: PublicState) => PublicState,
+) {
   const now = Date.now();
   const base = toPublic(
     createGame(
@@ -73,7 +77,7 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
       { now },
     ).state,
   );
-  const snapshot: PublicState = {
+  const initial: PublicState = {
     ...base,
     activeSeat: 0,
     players: base.players.map((player) =>
@@ -87,6 +91,7 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
       deadline: now + 60_000,
     },
   };
+  const snapshot = setup?.(initial) ?? initial;
   let socket: WebSocketRoute | undefined;
   let seq = 0;
   const intents: string[] = [];
@@ -147,8 +152,8 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
     });
   });
   await page.goto("/");
-  await page.getByLabel("Votre nom de joueur").fill("Camille");
-  await page.getByRole("button", { name: "Jouer", exact: true }).click();
+  await page.getByLabel(/Votre nom de joueur|Player name/).fill("Camille");
+  await page.getByRole("button", { name: /^(Jouer|Play)$/ }).click();
   await expect(page.locator(".decision-popup[open]")).toBeVisible();
   return {
     intents,
@@ -162,6 +167,111 @@ async function decisionRoom(page: Page, cash = 2_000_000) {
     },
   };
 }
+
+function islandDecision(state: PublicState): PublicState {
+  return {
+    ...state,
+    players: state.players.map((player) =>
+      player.seat === 0 ? { ...player, position: 8, onIsland: true } : player,
+    ),
+    pending: {
+      kind: "island",
+      seat: 0,
+      fee: 100_000,
+      deadline: Date.now() + 60_000,
+    },
+  };
+}
+
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`Island title, art and unavailable escape card at ${size.width}×${size.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    const room = await decisionRoom(page, 2_000_000, islandDecision);
+    const dialog = page.locator('.decision-popup[data-kind="island"][open]');
+    await expect(
+      dialog.getByText("Quitter l’île", { exact: true }),
+    ).toHaveCount(1);
+    await expect(dialog.getByRole("heading")).toHaveCount(1);
+    await expect(dialog.locator(".decision-island-art svg")).toBeVisible();
+    await expect(dialog.locator(".city-art")).toHaveCount(0);
+    const escapeButton = dialog.getByRole("button", {
+      name: "Utiliser la carte d’évasion",
+      exact: true,
+    });
+    await expect(escapeButton).toBeDisabled();
+    await escapeButton.hover();
+    await expect(page.getByRole("tooltip")).toContainText(
+      "Vous n’avez pas de carte d’évasion",
+    );
+    await page.mouse.move(0, 0);
+    await dialog.getByRole("heading").focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(escapeButton).toBeFocused();
+    await expect(page.getByRole("tooltip")).toContainText(
+      "Obtenez-la sur une case Surprise",
+    );
+    await escapeButton.press("Enter");
+    expect(room.intents).toEqual([]);
+    const bounds = await dialog.boundingBox();
+    expect(bounds?.y).toBeGreaterThanOrEqual(0);
+    expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeLessThanOrEqual(
+      size.height,
+    );
+    await page.screenshot({
+      path: `.local/verification/island-escape-${size.width}.png`,
+    });
+  });
+}
+
+test("a drawn escape card explains its use and becomes available on the Island", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("polytour.locale", "en"));
+  const room = await decisionRoom(page);
+  room.send([
+    { type: "CardDrawn", seat: 0, card: "Escape", kept: true },
+    { type: "SentToIsland", seat: 0, reason: "card" },
+    {
+      type: "DecisionOpened",
+      pending: {
+        kind: "island",
+        seat: 0,
+        fee: 100_000,
+        deadline: Date.now() + 60_000,
+      },
+    },
+  ]);
+  await expect(page.locator("#chance-title")).toHaveText("Escape card");
+  await expect(page.locator("#chance-description")).toContainText(
+    "At the start of one of your turns on the Island",
+  );
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  const dialog = page.locator('.decision-popup[data-kind="island"][open]');
+  await expect(dialog.getByRole("heading")).toHaveText("Leave the Island");
+  const escapeButton = dialog
+    .getByRole("group", { name: "Choose how to leave the Island" })
+    .getByRole("button", {
+      name: "Use the escape card",
+      exact: true,
+    });
+  await expect(escapeButton).toBeEnabled();
+  await escapeButton.click();
+  await expect(escapeButton).toHaveAttribute("aria-pressed", "true");
+  const confirm = dialog.locator(".decision-confirm");
+  await expect(confirm).toHaveText("Use the escape card");
+  await confirm.click();
+  expect(room.intents).toHaveLength(1);
+  expect(JSON.parse(room.intents[0]).action).toEqual({ type: "UseEscapeCard" });
+});
 
 for (const size of [
   { width: 1280, height: 720 },

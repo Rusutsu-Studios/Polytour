@@ -39,13 +39,14 @@ import type {
   PlayerState,
   PropertyState,
   PublicState,
+  RentCard,
   ResolutionTask,
   Seat,
   SeatInfo,
   Standing,
   WinKind,
 } from "./types.js";
-import { CHANCE_CARDS } from "./types.js";
+import { CHANCE_CARDS, LEGACY_CHANCE_CARDS } from "./types.js";
 
 export { applyEvent, toPublic } from "./reducer.js";
 export const DEFAULT_GAME_CONFIG = {
@@ -66,12 +67,17 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  escapeCard: true,
   sellBackPercent: 100,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
   botCanBuild: true,
   giftCanBankrupt: true,
 } as const satisfies GameConfig;
+/** Saved rooms retain their original deck; only new rooms can draw Escape. */
+export function chanceCards(config: Pick<GameConfig, "escapeCard">) {
+  return config.escapeCard === true ? CHANCE_CARDS : LEGACY_CHANCE_CARDS;
+}
 /** Saves made before rules version 4 carry no marker: keep the prototype economy. */
 export function economyRule(config: GameConfig): EconomyRule {
   return config.economyRule ?? "prototype";
@@ -472,9 +478,13 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
     case "roll":
       return [{ type: "Roll" }];
     case "island":
-      return player.cash >= pending.fee
-        ? [{ type: "Roll" }, { type: "PayIsland" }]
-        : [{ type: "Roll" }];
+      return [
+        { type: "Roll" },
+        ...(player.cash >= pending.fee ? [{ type: "PayIsland" as const }] : []),
+        ...(player.heldCards.includes("Escape")
+          ? [{ type: "UseEscapeCard" as const }]
+          : []),
+      ];
     case "travel":
       return player.cash >= pending.fee
         ? [
@@ -991,7 +1001,8 @@ function resolver(initial: GameState, context: ResolutionContext) {
     secrets({
       deck: [...state.deck.slice(0, index), ...state.deck.slice(index + 1)],
     });
-    const keep = card === "Guardian Angel" || card === "Coupon";
+    const keep =
+      card === "Guardian Angel" || card === "Coupon" || card === "Escape";
     const kept =
       keep && !getPlayer(state, seat).heldCards.includes(card as KeepCard);
     emit({ type: "CardDrawn", seat, card, kept });
@@ -1125,6 +1136,8 @@ function resolver(initial: GameState, context: ResolutionContext) {
           if (player.onIsland)
             emit({ type: "LeftIsland", seat: player.seat, method: "card" });
         break;
+      case "Escape":
+        break;
       case "Charity": {
         const poorest = state.turnOrder
           .filter((other) => other !== seat)
@@ -1180,14 +1193,17 @@ function resolver(initial: GameState, context: ResolutionContext) {
         } else {
           const amount = propertyRent(state, tile.index);
           prepend({ kind: "buyout", seat, tile: tile.index });
-          if (player.heldCards.length > 0 && amount > 0)
+          const cards = player.heldCards.filter(
+            (card): card is RentCard => card !== "Escape",
+          );
+          if (cards.length > 0 && amount > 0)
             open({
               kind: "rent-card",
               seat,
               tile: tile.index,
               owner: property.owner,
               amount,
-              cards: player.heldCards,
+              cards,
             });
           else
             prepend({
@@ -1305,6 +1321,12 @@ function resolver(initial: GameState, context: ResolutionContext) {
         if (pending.kind === "island")
           payment(seat, null, pending.fee, "Island release");
         emit({ type: "LeftIsland", seat, method: "paid" });
+        startDecision();
+        break;
+      case "UseEscapeCard":
+        emit({ type: "CardUsed", seat, card: "Escape" });
+        secrets({ discard: [...state.discard, "Escape"] });
+        emit({ type: "LeftIsland", seat, method: "card" });
         startDecision();
         break;
       case "Travel":
@@ -1898,9 +1920,11 @@ export function botAction(
   switch (pending.kind) {
     case "island":
       return (
+        actions.find((action) => action.type === "UseEscapeCard") ??
         actions.find(
           (action) => action.type === "PayIsland" && cash > pending.fee * 3,
-        ) ?? actions[0]
+        ) ??
+        actions[0]
       );
     case "travel": {
       const travel = actions
@@ -2044,6 +2068,8 @@ export function createGame(
   for (const marker of [config.fourResortRent, config.buildAfterBuyout])
     if (marker !== undefined && typeof marker !== "boolean")
       throw new RangeError("Unsupported rules version 8 marker");
+  if (config.escapeCard !== undefined && typeof config.escapeCard !== "boolean")
+    throw new RangeError("Escape card rule must be a boolean");
   if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
@@ -2097,7 +2123,10 @@ export function createGame(
     players.map((player) => player.seat),
     seed,
   );
-  const deck = shuffle(CHANCE_CARDS, order.state);
+  const deck = shuffle(
+    chanceCards({ escapeCard: config.escapeCard ?? true }),
+    order.state,
+  );
   const festivals = shuffle(
     board
       .filter(
@@ -2119,6 +2148,7 @@ export function createGame(
       worldTourRule: config.worldTourRule ?? "free-and-own",
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
+      escapeCard: config.escapeCard ?? true,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,

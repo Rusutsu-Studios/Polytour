@@ -238,7 +238,7 @@ New rooms freeze `rulesVersion: 8` with `fourResortRent: true` and
 | Buildings | Every level's incremental price and rent | Reference rent table adopted in rules version 5; hotel costs interpolated |
 | Buyout | Cost formula, protection, payout recipient | 2× to the owner; Hotels protected in rules version 5 |
 | Specials | Island, travel, championship, resorts, tax | Reference values adopted in rules version 5 (see above) |
-| Cards | Deck contents, targeting, held cards | Original 16-card deck; reference comparison pending |
+| Cards | Deck contents, targeting, held cards | Original 16-card deck; new rules version 9 adds a retained Escape card as Polytour behavior, reference comparison pending |
 | End conditions | Monopolies, bankruptcy, duration tie-breaks | User monopoly switches plus last standing/resorts and real-time/round limits |
 
 Use the actual settings screen and tile tooltips to capture this matrix, then

@@ -4,8 +4,8 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 5 adds authoritative pause state, votes and resume events; stale clients reload.
-export const PROTOCOL_VERSION = 5;
+// Version 6 adds the retained Escape card and island action; stale clients reload.
+export const PROTOCOL_VERSION = 6;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -53,6 +53,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ResumeGame") }).strict(),
   z.object({ type: z.literal("Roll") }).strict(),
   z.object({ type: z.literal("PayIsland") }).strict(),
+  z.object({ type: z.literal("UseEscapeCard") }).strict(),
   z.object({ type: z.literal("Decline") }).strict(),
   z.object({ type: z.literal("Buyout") }).strict(),
   z.object({ type: z.literal("Travel"), tile }).strict(),
@@ -197,6 +198,8 @@ export type LobbyState = {
   readonly worldTourRule: WorldTourRule;
   readonly fourResortRent: boolean;
   readonly buildAfterBuyout: boolean;
+  /** Omitted by older servers; those rooms retain their original Chance deck. */
+  readonly escapeCard?: boolean;
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

@@ -15,6 +15,7 @@ export {
   buyoutPrice,
   buyoutPriceAt,
   championshipCost,
+  chanceCards,
   changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,

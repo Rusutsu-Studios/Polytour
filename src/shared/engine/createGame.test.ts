@@ -3,6 +3,7 @@ import { getBoard, isCityTile } from "../board/index.js";
 import type { SeatInfo } from "./index.js";
 import {
   applyEvent,
+  chanceCards,
   createGame,
   DEFAULT_GAME_CONFIG,
   toPublic,
@@ -64,9 +65,33 @@ describe("createGame", () => {
         heldCards: [],
         travelPending: false,
       });
-    expect(state.deck).toHaveLength(16);
+    expect(state.deck).toHaveLength(17);
     expect(events).toHaveLength(1);
     expect(events.reduce(applyEvent, toPublic(state))).toEqual(toPublic(state));
+  });
+  it("includes Escape only in the new-room deck and freezes its marker", () => {
+    for (const escapeCard of [true, false, undefined]) {
+      const { state } = createGame(
+        { ...DEFAULT_GAME_CONFIG, escapeCard },
+        SEATS,
+        42,
+        { now: 0 },
+      );
+      expect(state.config.escapeCard).toBe(escapeCard ?? true);
+      expect([...state.deck].sort()).toEqual(
+        [...chanceCards(state.config)].sort(),
+      );
+      expect(state.deck.includes("Escape")).toBe(escapeCard ?? true);
+    }
+    expect(chanceCards({})).not.toContain("Escape");
+    expect(() =>
+      createGame(
+        { ...DEFAULT_GAME_CONFIG, escapeCard: "yes" as unknown as boolean },
+        SEATS,
+        42,
+        { now: 0 },
+      ),
+    ).toThrow("Escape card rule");
   });
   it("is deterministic for seed and time, including private deck and neutral festivals", () => {
     const first = createGame(DEFAULT_GAME_CONFIG, SEATS, 42, { now: 100 });

@@ -40,8 +40,12 @@ audience: with only them connected, the room sleeps like an abandoned match.
 Explicit departure uses a capability-authenticated HTTP request, even while the
 socket reconnects. In a lobby it releases the device's own and local places,
 revokes its capability, closes all its sockets and transfers the persisted leader
-to another person with their own device. Waiting members may leave too. Released
-places admit connected, approved members; with no devices left, the room unlocks
+to another person with their own device. Remaining occupied lobby places shift
+left after departure or removal of a bot/local player. Capabilities remain valid;
+the leader, local controllers, commands and socket attachments follow their
+players, and connected devices receive a new welcome with their current seat.
+Bots and local players can only be added in the first open place. Waiting members
+may leave too. Released places admit connected, approved members; with no devices left, the room unlocks
 and its next seated person becomes leader. Ordinary socket disconnection keeps
 places and leadership for recovery. During a match, departure closes the device's
 sockets but preserves its places, match state and usual reconnect grace.
@@ -85,9 +89,11 @@ Pending legacy dice block all pause intents. While a commitment is unresolved,
 vote expiry waits as well, keeping the committed event sequence unchanged. Dice
 resolution clears an expired vote in the same persisted event batch as its result;
 no late acceptance can count and the commitment/proof remains unchanged.
-New rooms freeze rules version 8: country-grouped board, reference economy,
+New rooms freeze rules version 9: country-grouped board, reference economy,
 staged hotels, World Tour flights to free or own properties, a 200 k rent for
-four resorts and a build offer after a buyout. Version-6 rooms pay four resorts
+four resorts, a build offer after a buyout and a keepable Island Escape card.
+Version-8 and older rooms retain their original sixteen-card Chance deck, without
+that card. Version-6 rooms pay four resorts
 like three and offer no build after a buyout; version-5 rooms also keep flights
 to own properties only when none is free.
 Existing version-2/3 rooms retain the original board, prototype

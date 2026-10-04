@@ -11,7 +11,7 @@ import {
   applyEvent,
   boardRule,
   botAction,
-  CHANCE_CARDS,
+  chanceCards,
   createGame,
   DEFAULT_GAME_CONFIG,
   economyRule,
@@ -66,9 +66,10 @@ export function assertInvariants(state: GameState, expectedCash: number): void {
     ...state.discard,
     ...state.players.flatMap((player) => player.heldCards),
   ];
+  const deck = chanceCards(state.config);
   if (
-    remaining.length !== CHANCE_CARDS.length ||
-    CHANCE_CARDS.some(
+    remaining.length !== deck.length ||
+    deck.some(
       (card) =>
         remaining.filter((candidate) => candidate === card).length !== 1,
     )

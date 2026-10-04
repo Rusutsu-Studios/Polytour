@@ -62,7 +62,7 @@ describe("luck-card descriptions without a draw", () => {
     },
   );
 
-  it.each(["Guardian Angel", "Coupon"] as const)(
+  it.each(["Guardian Angel", "Coupon", "Escape"] as const)(
     "explains %s as usable in help and retains duplicate draw feedback",
     (card) => {
       const state = toPublic(
@@ -102,6 +102,33 @@ describe("luck-card descriptions without a draw", () => {
             : "The duplicate is not added to your hand",
         );
       }
+    },
+  );
+
+  it.each(["fr", "en"] as const)(
+    "shows when the retained escape card can be used in %s",
+    (locale) => {
+      setLocale(locale);
+      const card = describeChanceCard("Escape", DEFAULT_GAME_CONFIG);
+      expect(card.tone).toBe("keep");
+      expect(card.text).toContain(
+        locale === "fr"
+          ? "Au début d’un de vos tours sur l’île"
+          : "At the start of one of your turns on the Island",
+      );
+      expect(card.text).toContain(
+        locale === "fr"
+          ? "Lancez ensuite les dés normalement"
+          : "Then roll normally",
+      );
+      expect(
+        describeChanceCardDetails("Escape", DEFAULT_GAME_CONFIG).join(" "),
+      ).toContain(
+        locale === "fr" ? "défaussée après usage" : "Discard it after use",
+      );
+      expect(
+        describeChanceCard("Jailbreak", DEFAULT_GAME_CONFIG).text,
+      ).toContain(locale === "fr" ? "Tous les joueurs" : "All players");
     },
   );
 

@@ -225,7 +225,9 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
           ...player,
           heldCards:
             event.kept &&
-            (event.card === "Guardian Angel" || event.card === "Coupon")
+            (event.card === "Guardian Angel" ||
+              event.card === "Coupon" ||
+              event.card === "Escape")
               ? [...player.heldCards, event.card]
               : player.heldCards,
         })),

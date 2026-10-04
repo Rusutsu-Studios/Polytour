@@ -43,6 +43,8 @@ export type GameConfig = {
   readonly fourResortRent?: boolean;
   /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
+  /** Missing on saves before rules version 9: retain the original Chance deck. */
+  readonly escapeCard?: boolean;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
@@ -52,7 +54,7 @@ export type GameConfig = {
   readonly giftCanBankrupt?: boolean;
 };
 export type BotDifficulty = "easy" | "medium" | "hard";
-export const CHANCE_CARDS = [
+export const LEGACY_CHANCE_CARDS = [
   "Grand Tour",
   "Stranded",
   "Jet Set",
@@ -70,8 +72,10 @@ export const CHANCE_CARDS = [
   "Jailbreak",
   "Charity",
 ] as const;
+export const CHANCE_CARDS = [...LEGACY_CHANCE_CARDS, "Escape"] as const;
 export type ChanceCard = (typeof CHANCE_CARDS)[number];
-export type KeepCard = "Guardian Angel" | "Coupon";
+export type RentCard = "Guardian Angel" | "Coupon";
+export type KeepCard = RentCard | "Escape";
 export type TargetCard = "Earthquake" | "Land Swap" | "Contractor";
 export type PlayerState = {
   readonly playerId: string;
@@ -119,7 +123,7 @@ export type PendingDecision = DecisionBase &
         readonly tile: number;
         readonly owner: Seat;
         readonly amount: number;
-        readonly cards: readonly KeepCard[];
+        readonly cards: readonly RentCard[];
       }
     | { readonly kind: "host"; readonly targets: readonly number[] }
     | {
@@ -396,6 +400,7 @@ export type Action =
   | { readonly type: "VotePause"; readonly accept: boolean }
   | { readonly type: "ResumeGame" }
   | { readonly type: "PayIsland" }
+  | { readonly type: "UseEscapeCard" }
   | { readonly type: "Travel"; readonly tile: number }
   | { readonly type: "Decline" }
   | { readonly type: "Buy"; readonly level: BuildLevel }
@@ -404,7 +409,7 @@ export type Action =
   | { readonly type: "Sell"; readonly tile: number }
   | { readonly type: "ChooseHost"; readonly tile: number }
   | { readonly type: "ChooseTarget"; readonly tile: number }
-  | { readonly type: "UseRentCard"; readonly card: KeepCard };
+  | { readonly type: "UseRentCard"; readonly card: RentCard };
 export type RuleError = {
   readonly code:
     | "not-active-seat"

@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 8, `economyRule: "reference"`) follow the reference
+New rooms (rules version 9, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -203,6 +203,9 @@ it to the bank.
     those same dice move it - there is no second roll, and an escape roll never
     grants an extra roll. A non-double increments `islandTurns` and ends the turn
     without moving.
+  - **Escape card** (when held): consume it for a free release, then take a normal
+    roll. Its doubles follow the normal extra-roll rule. This retained Chance card
+    exists only in new rules-version-9 rooms; saved rooms keep their original deck.
 
   After the third failed escape roll (`islandTurns = 3`; prototype: the second)
   the player is released on the spot; their next turn is a normal turn.
@@ -229,7 +232,7 @@ it to the bank.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
-- **Chance:** draw uniformly from the remaining cards in a 16-card deck, without
+- **Chance:** draw uniformly from the remaining cards in a 17-card deck (saved rooms: 16), without
   replacement. When its draw pile is empty, discarded cards form the next draw
   pile; held keep cards remain unavailable.
 
@@ -327,7 +330,7 @@ the same ordering picks the winner, so every match has exactly one winner.
 Instant wins are the dramatic core: they force players to buy out opponents'
 properties to *block* a monopoly, which is where the tension comes from.
 
-## Chance deck (16 cards)
+## Chance deck (17 cards; saved rooms retain 16)
 
 | Card | Effect | Keep? |
 | --- | --- | --- |
@@ -347,12 +350,15 @@ properties to *block* a monopoly, which is where the tension comes from.
 | Contractor | Upgrade one of your cities by 1 level for free | |
 | Jailbreak | Everyone on the Island is released | |
 | Charity | Give 100,000 to the poorest player | |
+| Escape | Leave the Island for free at the start of your trapped turn, then roll normally | ✅ |
 
 ### Chance resolution details
 
 - Drawn, non-keep cards resolve immediately, then enter the discard pile. Keep cards
-  leave the deck until used; a player can hold at most one Guardian Angel and one
-  Coupon. When used, they enter the discard pile. When the draw pile is empty, its
+  leave the deck until used; a player can hold at most one Guardian Angel, one
+  Coupon and one Escape card. Escape is added only when `escapeCard: true`, frozen
+  in new rules-version-9 rooms; saved decks and Jailbreak's immediate effect remain
+  unchanged. When used, kept cards enter the discard pile. When the draw pile is empty, its
   discard pile replenishes it; held cards remain out of the draw. Each live draw
   uses fresh cryptographic rejection sampling, including from previously saved
   seeded decks. Seeded simulations shuffle on refill and remain reproducible.

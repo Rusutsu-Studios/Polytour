@@ -197,7 +197,27 @@ app.get("/api/rooms/:roomCode/health", (context) => {
 app.get("/api/queues/:mode/health", (context) =>
   context.json({ kind: "matchmaker", status: "ok" }),
 );
-app.notFound((context) => context.json({ error: "Not found" }, 404));
+app.notFound(async (context) => {
+  const path = new URL(context.req.url).pathname;
+  if (
+    (context.req.method === "GET" || context.req.method === "HEAD") &&
+    context.req.header("Accept")?.includes("text/html") &&
+    !/^\/(?:api|ws)(?:\/|$)/.test(path)
+  ) {
+    const url = new URL(context.req.url);
+    url.pathname = "/";
+    url.search = "";
+    const shell = await context.env.ASSETS.fetch(new Request(url));
+    return new Response(context.req.method === "HEAD" ? null : shell.body, {
+      status: 404,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+  return context.json({ error: "Not found" }, 404);
+});
 
 export default {
   async fetch(request, env, executionContext) {

@@ -2,8 +2,8 @@ import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  CHANCE_CARDS,
   type ChanceCard,
+  chanceCards,
   type GameConfig,
 } from "../../shared/engine/index.js";
 import { useDirector } from "../director/director.js";
@@ -52,7 +52,7 @@ export default function LuckCardHelp({ config }: { config: GameConfig }) {
           )}
         </p>
         <ul className="luck-card-list">
-          {CHANCE_CARDS.map((entry) => {
+          {chanceCards(config).map((entry) => {
             const presentation = describeChanceCard(entry, config);
             return (
               <li key={entry}>

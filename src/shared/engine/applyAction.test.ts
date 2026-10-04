@@ -54,6 +54,7 @@ const CONFIG: GameConfig = {
   sellBackPercent: 100,
   fourResortRent: false,
   buildAfterBuyout: false,
+  escapeCard: false,
   roundLimit: 20,
   timeLimitMinutes: undefined,
   festivalCount: 0,
@@ -458,6 +459,97 @@ describe("dice, Island, laps and World Tour", () => {
     const paid = act(trapped, { type: "PayIsland" }).state;
     expect(paid.pending).toMatchObject({ kind: "roll", seat });
     expect(getPlayer(paid, seat).cash).toBe(1_900_000);
+  });
+  it("keeps Escape until an Island turn, consumes it for a free release and then rolls normally", () => {
+    const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = initial.activeSeat;
+    const drawn = draw(initial, "Escape").state;
+    expect(getPlayer(drawn, seat).heldCards).toEqual(["Escape"]);
+    expect(drawn.discard).not.toContain("Escape");
+    const trapped = {
+      ...setPlayer(withActive(drawn, seat), seat, {
+        position: 8,
+        onIsland: true,
+        islandTurns: 2,
+        cash: 0,
+      }),
+      pending: { kind: "island" as const, seat, fee: 200_000, deadline: 100 },
+    };
+    expect(legalActions(trapped, seat)).toEqual([
+      { type: "Roll" },
+      { type: "UseEscapeCard" },
+    ]);
+    expect(botAction(trapped, seat)).toEqual({ type: "UseEscapeCard" });
+    const escaped = act(trapped, { type: "UseEscapeCard" });
+    expect(escaped.events).toContainEqual({
+      type: "CardUsed",
+      seat,
+      card: "Escape",
+    });
+    expect(escaped.events).toContainEqual({
+      type: "LeftIsland",
+      seat,
+      method: "card",
+    });
+    expect(getPlayer(escaped.state, seat)).toMatchObject({
+      position: 8,
+      cash: 0,
+      onIsland: false,
+      islandTurns: 0,
+      heldCards: [],
+    });
+    expect(escaped.state.pending).toMatchObject({ kind: "roll", seat });
+    expect(
+      escaped.state.discard.filter((card) => card === "Escape"),
+    ).toHaveLength(1);
+    const rolled = act(escaped.state, { type: "Roll" }, [1, 1]).state;
+    expect(getPlayer(rolled, seat).position).toBe(10);
+    expect(act(rolled, { type: "Decline" }).state.pending).toMatchObject({
+      kind: "roll",
+      seat,
+    });
+    for (const invalid of [
+      setPlayer(trapped, seat, { heldCards: [] }),
+      { ...trapped, pending: { kind: "roll" as const, seat, deadline: 100 } },
+    ])
+      expect(
+        applyAction(invalid, seat, { type: "UseEscapeCard" }, { now: 1 }).ok,
+      ).toBe(false);
+    expect(
+      applyAction(
+        trapped,
+        other(trapped),
+        { type: "UseEscapeCard" },
+        { now: 1 },
+      ).ok,
+    ).toBe(false);
+  });
+  it("does not offer Escape as a rent card and preserves the automatic Jailbreak effect", () => {
+    const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = initial.activeSeat;
+    const owner = other(initial);
+    const withCard = setPlayer(grant(initial, 1, owner, 1), seat, {
+      heldCards: ["Escape"],
+    });
+    const rented = land(withCard, 1).state;
+    expect(rented.pending?.kind).not.toBe("rent-card");
+    expect(getPlayer(rented, seat).heldCards).toEqual(["Escape"]);
+    const mixed = land(
+      setPlayer(withCard, seat, { heldCards: ["Escape", "Coupon"] }),
+      1,
+    ).state;
+    expect(mixed.pending).toMatchObject({
+      kind: "rent-card",
+      cards: ["Coupon"],
+    });
+    expect(legalActions(mixed, seat)).not.toContainEqual({
+      type: "UseRentCard",
+      card: "Escape",
+    });
+    const saved = setPlayer(newGame(), owner, { position: 8, onIsland: true });
+    expect(getPlayer(draw(saved, "Jailbreak").state, owner).onIsland).toBe(
+      false,
+    );
   });
   it("World Tour ends doubles, grants a next-turn option and clockwise travel resolves salary", () => {
     const state = newGame();
@@ -1902,6 +1994,51 @@ describe("reference economy on the original board", () => {
       { type: "Decline" },
       { type: "ChooseHost", tile: 6 },
     ]);
+  });
+  it.each([true, false])(
+    "hosts during the first turn before a completed lap with escape deck %s",
+    (escapeCard) => {
+      const initial = newGame(4, {
+        ...DEFAULT_GAME_CONFIG,
+        festivalCount: 0,
+        escapeCard,
+      });
+      const seat = initial.activeSeat;
+      const city = act(initial, { type: "Roll" }, [3, 3]).state;
+      const bought = act(city, { type: "Buy", level: 2 }).state;
+      expect(bought.pending).toMatchObject({ kind: "roll", seat });
+      const firstVisit = act(bought, { type: "Roll" }, [4, 6]).state;
+      expect(firstVisit.round).toBe(1);
+      expect(getPlayer(firstVisit, seat).laps).toBe(0);
+      expect(firstVisit.pending).toMatchObject({
+        kind: "host",
+        seat,
+        targets: [6],
+      });
+      const hosted = act(firstVisit, { type: "ChooseHost", tile: 6 }).state;
+      expect(hosted.championshipHost).toEqual({ tile: 6, multiplier: 2 });
+      expect(getPlayer(hosted, seat).cash).toBe(
+        2_000_000 - getTileInvestedValue(6, 2, "reference", "country") - 50_000,
+      );
+      expect(hosted.activeSeat).not.toBe(seat);
+    },
+  );
+  it("offers Championship hosting when Stadium Call arrives during the first turn", () => {
+    const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = initial.activeSeat;
+    const city = act(initial, { type: "Roll" }, [3, 3]).state;
+    const bought = act(city, { type: "Buy", level: 2 }).state;
+    const call = act(
+      { ...bought, deck: ["Stadium Call"] },
+      { type: "Roll" },
+      [3, 3],
+    ).state;
+    expect(call.round).toBe(1);
+    expect(getPlayer(call, seat)).toMatchObject({ position: 16, laps: 0 });
+    expect(call.pending).toMatchObject({ kind: "host", seat, targets: [6] });
+    expect(
+      act(call, { type: "ChooseHost", tile: 6 }).state.championshipHost,
+    ).toEqual({ tile: 6, multiplier: 2 });
   });
   it("times a paid championship out to a free renewal or a decline", () => {
     let state = reference();

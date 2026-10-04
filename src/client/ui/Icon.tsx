@@ -19,6 +19,7 @@ type IconName =
   | "pause"
   | "fullscreen"
   | "graphics"
+  | "island"
   | "lock"
   | "pin"
   | "crown"
@@ -49,6 +50,8 @@ const paths: Record<IconName, string> = {
   fullscreen: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
   graphics:
     "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm4 18h8m-4-4v4",
+  island:
+    "M3 18c2-4 15-4 18 0M2 21c2 1 4-1 6 0s4 1 6 0 4 1 8 0M12 16c0-4 0-7 2-10m0 0c-3-3-6-2-8 0 4-1 5 1 8 0Zm0 0c0-4 4-4 5-3-2 0-3 2-5 3Zm0 0c4-2 7 0 7 3-2-2-4-2-7-3Zm0 0c-3 0-5 2-5 5 2-2 3-2 5-5Z",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5V11Zm7 4v2",
   pin: "M12 22s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12Zm0-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   crown: "M4 18h16M4 7l4 4 4-6 4 6 4-4-1.5 11h-13L4 7Z",

@@ -140,6 +140,12 @@
   font-size: 20px;
   flex-shrink: 0;
 }
+.streamer-toggle[aria-pressed="true"] {
+  background: #fffaf0;
+  color: #98291a;
+  box-shadow: 0 2px 0 #4fa6bb;
+  border-radius: 7px;
+}
 .icon-button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fff;
 }

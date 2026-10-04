@@ -130,6 +130,8 @@ function actionLabel(action: Action, state: PublicState): string {
         `Payer la traversée · ${money(actionCost(state, action))}`,
         `Pay the fare · ${money(actionCost(state, action))}`,
       );
+    case "UseEscapeCard":
+      return t("Utiliser la carte d’évasion", "Use the escape card");
     case "Buyout":
       return t(
         `Racheter · ${money(actionCost(state, action))}`,
@@ -338,6 +340,11 @@ export default function DecisionPanel({
     (action): action is DestinationAction => "tile" in action,
   );
   const freeRoll = actions.find((action) => action.type === "Roll");
+  const islandChoices: readonly Action[] = [
+    { type: "Roll" },
+    { type: "PayIsland" },
+    { type: "UseEscapeCard" },
+  ];
   const boardPick = ownTurn && isBoardPick(state);
   const pickActions = boardPick ? boardPickActions(state, seat) : [];
   const pickedAction = pickActions.find((action) => action.tile === picked);
@@ -1092,7 +1099,13 @@ export default function DecisionPanel({
       }}
     >
       <div className="decision-popup-ribbon">
-        <span>{named(copy[0])}</span>
+        {pending?.kind === "island" ? (
+          <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
+            {named(copy[0])}
+          </h2>
+        ) : (
+          <span>{named(copy[0])}</span>
+        )}
       </div>
       <motion.div
         className="decision-popup-inner"
@@ -1114,13 +1127,15 @@ export default function DecisionPanel({
             <Icon name="minimize" size={17} />
           </button>
         </div>
-        <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
-          {bankruptcy
-            ? t("Déclarer faillite ?", "Declare bankruptcy?")
-            : decisionTile !== undefined
-              ? tileName(decisionTile, state.config)
-              : copy[0]}
-        </h2>
+        {pending?.kind !== "island" && (
+          <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
+            {bankruptcy
+              ? t("Déclarer faillite ?", "Declare bankruptcy?")
+              : decisionTile !== undefined
+                ? tileName(decisionTile, state.config)
+                : copy[0]}
+          </h2>
+        )}
         {(bankruptcy || copy[1]) && (
           <p id="decision-description">
             {bankruptcy
@@ -1134,12 +1149,20 @@ export default function DecisionPanel({
 
         <div className="decision-popup-story">
           <div className="decision-illustration">
-            <CityIllustration
-              level={selectedLevel}
-              color={PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]}
-              resort={resort}
-              flag
-            />
+            {pending?.kind === "island" ? (
+              <div className="decision-island-art">
+                <Icon name="island" size={142} />
+              </div>
+            ) : (
+              <CityIllustration
+                level={selectedLevel}
+                color={
+                  PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]
+                }
+                resort={resort}
+                flag
+              />
+            )}
             {owner && (
               <span className="decision-property">
                 <span style={{ color: PLAYER_COLORS[owner.seat] }}>
@@ -1406,6 +1429,55 @@ export default function DecisionPanel({
                 </fieldset>
               )}
             </div>
+          ) : pending?.kind === "island" ? (
+            <fieldset
+              className="decision-other-choices"
+              aria-label={t(
+                "Choisir comment quitter l’île",
+                "Choose how to leave the Island",
+              )}
+            >
+              {islandChoices.map((action) => {
+                const legal = actions.find(
+                  (choice) => choice.type === action.type,
+                );
+                const reason = blocked
+                  ? unavailableReason
+                  : action.type === "UseEscapeCard"
+                    ? active?.heldCards.includes("Escape")
+                      ? t(
+                          "Cette carte ne peut pas être utilisée maintenant.",
+                          "This card cannot be used right now.",
+                        )
+                      : state.config.escapeCard === true
+                        ? t(
+                            "Vous n’avez pas de carte d’évasion. Obtenez-la sur une case Surprise.",
+                            "You do not have an escape card. Draw one on a Chance space.",
+                          )
+                        : t(
+                            "Les cartes d’évasion ne font pas partie des règles de cette salle.",
+                            "Escape cards are not part of this room’s rules.",
+                          )
+                    : t("Pas assez d’argent", "Not enough cash");
+                return (
+                  <ActionButton
+                    type="button"
+                    key={actionKey(action)}
+                    className="button secondary"
+                    data-locked={!legal}
+                    aria-pressed={
+                      legal ? selectedAction?.type === action.type : undefined
+                    }
+                    disabled={blocked || !legal}
+                    disabledReason={reason}
+                    onClick={() => legal && choose(legal)}
+                  >
+                    {!legal && <Icon name="lock" size={16} />}
+                    {actionLabel(action, state)}
+                  </ActionButton>
+                );
+              })}
+            </fieldset>
           ) : choices.length > 1 && !bankruptcy ? (
             <fieldset
               className="decision-other-choices"

@@ -337,6 +337,10 @@ export function useRoom(credentials: RoomCredentials | null) {
                   "Cette place vient d’être prise. La salle est à jour.",
                   "That seat was just taken. The room is up to date.",
                 ],
+                "seat-order": [
+                  "Remplissez d’abord la première place libre.",
+                  "Fill the first open seat first.",
+                ],
                 "not-a-bot": [
                   "Cette place n’est plus occupée par un bot.",
                   "That seat is no longer held by a bot.",
