@@ -8,6 +8,7 @@
     radial-gradient(120% 95% at 50% 44%, #b7edfa 0%, #86d9f0 45%, #5bc3e5 100%);
 }
 .lobby-shell {
+  --lobby-width: 1510px;
   min-height: 100svh;
   overflow: hidden;
 }
@@ -1306,12 +1307,15 @@
 :is(.topbar, .welcome-copy, .welcome-quick-settings, .lobby-footer) {
   zoom: var(--ui-zoom);
 }
+.lobby-shell :is(.topbar, .lobby-footer) {
+  max-width: var(--lobby-width);
+}
 .welcome-grid {
   display: grid;
   grid-template-columns: calc(360px * var(--ui-zoom)) minmax(0, 1fr);
   gap: calc(28px * var(--ui-zoom));
   min-height: calc(100svh - 122px * var(--ui-zoom));
-  max-width: calc(1510px * var(--ui-zoom));
+  max-width: calc(var(--lobby-width) * var(--ui-zoom));
   margin: auto;
   padding: calc(8px * var(--ui-zoom)) calc(48px * var(--ui-zoom))
     calc(24px * var(--ui-zoom));
@@ -1651,18 +1655,22 @@ input::placeholder {
   }
 }
 .room-lobby {
-  max-width: 1400px;
-  margin: 30px auto 45px;
-  padding: 0 48px;
+  max-width: calc(var(--lobby-width) * var(--ui-zoom));
+  margin: calc(30px * var(--ui-zoom)) auto calc(45px * var(--ui-zoom));
+  padding: 0 calc(48px * var(--ui-zoom));
   display: grid;
-  grid-template-columns: minmax(350px, 0.9fr) minmax(0, 1.1fr);
-  gap: 70px;
+  grid-template-columns: minmax(calc(350px * var(--ui-zoom)), 0.9fr) minmax(
+      0,
+      1.1fr
+    );
+  gap: calc(70px * var(--ui-zoom));
 }
 .room-lobby h1 {
   font-size: clamp(3rem, 4.2vw, 4.4rem);
 }
 .room-lobby-main {
   max-width: 450px;
+  zoom: var(--ui-zoom);
 }
 .room-code-block {
   display: flex;
@@ -1840,8 +1848,8 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   flex-shrink: 0;
 }
 .room-preview {
-  height: 630px;
-  margin-top: 40px;
+  height: calc(630px * var(--ui-zoom));
+  margin-top: calc(40px * var(--ui-zoom));
 }
 .room-preview > .canvas-layer {
   height: 100%;
@@ -1857,9 +1865,10 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   align-items: center;
   gap: 8px;
   padding: 0 48px 22px;
-  max-width: 1400px;
+  max-width: var(--lobby-width);
   margin: auto;
   font-size: 12px;
+  zoom: var(--ui-zoom);
 }
 .connection-dot {
   width: 7px;

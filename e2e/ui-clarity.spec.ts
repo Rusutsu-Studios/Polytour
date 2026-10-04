@@ -476,10 +476,12 @@ test("globe and language text switch directly on click and keyboard and persist"
 test("own and opponent cards and taxes keep readable holds and cancel on recovery", async ({
   page,
 }) => {
-  await page.clock.install();
+  // Install and freeze on the empty page, before the app creates any timers.
+  const clockTime = Date.now();
+  await page.clock.install({ time: clockTime - 60 * 60_000 });
+  await page.clock.pauseAt(clockTime);
   const room = await decisionRoom(page);
   await page.keyboard.press("Escape");
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   for (const seat of [0, 1] as const) {
     room.send([{ type: "CardDrawn", seat, card: "Windfall", kept: false }]);
     await expect(page.locator(".chance-dialog[open]")).toBeVisible();

@@ -90,6 +90,14 @@ export default function PauseMenu({
       mySeats.includes(player.seat),
   );
   const canResume = paused && eligible.length > 0;
+  const pauseNote = paused
+    ? t(
+        "La partie est en pause. Les tours et les chronomètres sont arrêtés.",
+        "The game is paused. Turns and clocks are stopped.",
+      )
+    : solo && eligible.length > 0 && game.status === "active"
+      ? t("Mise en pause de la partie…", "Pausing the game…")
+      : null;
   const cooldown = Math.max(
     0,
     Math.ceil((game.pauseCooldownUntil - now) / 1000),
@@ -226,7 +234,7 @@ export default function PauseMenu({
       className="pause-dialog"
       data-debug={debugActive}
       aria-labelledby={`${id}-title`}
-      aria-describedby={`${id}-note`}
+      aria-describedby={pauseNote ? `${id}-note` : undefined}
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -269,19 +277,11 @@ export default function PauseMenu({
           </button>
         </header>
         <div className="pause-dialog-body">
-          <p className="pause-note" id={`${id}-note`}>
-            {paused
-              ? t(
-                  "La partie est en pause. Les tours et les chronomètres sont arrêtés.",
-                  "The game is paused. Turns and clocks are stopped.",
-                )
-              : solo && eligible.length > 0 && game.status === "active"
-                ? t("Mise en pause de la partie…", "Pausing the game…")
-                : t(
-                    "La partie continue pendant que ce menu est ouvert.",
-                    "The game keeps running while this menu is open.",
-                  )}
-          </p>
+          {pauseNote && (
+            <p className="pause-note" id={`${id}-note`}>
+              {pauseNote}
+            </p>
+          )}
           {error && (
             <p className="pause-error" role="alert">
               {error}

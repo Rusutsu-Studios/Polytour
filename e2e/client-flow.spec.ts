@@ -385,6 +385,23 @@ test("room lobby board fills its preview across desktop sizes", async ({
     expect((canvas?.x ?? 0) + (canvas?.width ?? 0)).toBeLessThanOrEqual(
       size.width,
     );
+    const alignment = await page.evaluate(() => {
+      const left = (selector: string) => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`${selector} missing`);
+        const style = getComputedStyle(element);
+        const zoom = Number.parseFloat(style.zoom) || 1;
+        return (
+          element.getBoundingClientRect().x +
+          Number.parseFloat(style.paddingLeft) * zoom
+        );
+      };
+      const brand = left(".topbar .brand");
+      return [".room-lobby", ".lobby-connection", ".lobby-footer"].map(
+        (selector) => Math.abs(left(selector) - brand),
+      );
+    });
+    for (const offset of alignment) expect(offset).toBeLessThan(2);
     await page.screenshot({
       path: `.local/verification/lobby-board-${size.width}.png`,
       fullPage: true,
