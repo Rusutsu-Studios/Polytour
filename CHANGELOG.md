@@ -14,6 +14,20 @@ has been published, and it does not reconstruct earlier development history.
 - The four-resort win is now an optional room setting, off by default. Saved
   matches made before the option keep the win enabled.
 
+## [0.5.0] - 2026-10-03
+
+### Added
+
+- A French/English win-condition summary above Save settings, updated from the
+  current room settings and available in the fixed rules during a match.
+- An explanation of Birthday/Charity payments and how gift bankruptcy changes
+  forced sales and payment limits.
+
+### Fixed
+
+- Keep the settings footer within short desktop viewports while longer settings
+  content scrolls.
+
 ## [0.4.4] - 2026-10-03
 
 ### Changed
