@@ -376,6 +376,17 @@ describe("dice, Island, laps and World Tour", () => {
     });
     expect(third.activeSeat).not.toBe(seat);
   });
+  it("keeps a third double moving when the triple-double island rule is off", () => {
+    const state = newGame(4, { ...CONFIG, tripleDoubleToIsland: false });
+    const seat = state.activeSeat;
+    const third = act(
+      { ...state, doublesInTurn: 2 },
+      { type: "Roll" },
+      [1, 1],
+    ).state;
+    expect(getPlayer(third, seat).onIsland).toBe(false);
+    expect(getPlayer(third, seat).position).not.toBe(8);
+  });
   it("Island escapes use the same double without an extra roll; two failures release", () => {
     const state = newGame();
     const seat = state.activeSeat;

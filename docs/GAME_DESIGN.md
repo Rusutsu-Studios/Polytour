@@ -387,6 +387,8 @@ they are legal and relevant.
   fully resolved, unless that landing ended the turn (Island, World Tour). Island
   escape rolls never grant one. A third consecutive double sends the player to
   Island instead of moving; the counter resets whenever the turn ends.
+  The room option `tripleDoubleToIsland` (default on; missing on older saves counts
+  as on) can switch this off: the third double then moves normally.
 - **No biased power gauge.** The user explicitly requires genuinely random dice.
   Holding a button, account history, spending, cosmetics, or bot difficulty must
   never change the dice distribution. Any future throwing gesture is cosmetic.

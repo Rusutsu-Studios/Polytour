@@ -38,6 +38,8 @@ export type GameConfig = {
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
+  /** Missing on existing saves: the third consecutive double sends you to the island. */
+  readonly tripleDoubleToIsland?: boolean;
   readonly botCanBuild?: boolean;
   readonly giftCanBankrupt?: boolean;
 };
