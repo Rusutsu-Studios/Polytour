@@ -284,7 +284,7 @@ export function describeChanceCard(
         tone: "travel",
         badge: t("Retour au départ", "Back to Start"),
         text: t(
-          `Rejoignez le Grand départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
+          `Rejoignez le Départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
           `Move to Start. Collect ${money(config.startSalary)} salary if you pass it.`,
         ),
       };

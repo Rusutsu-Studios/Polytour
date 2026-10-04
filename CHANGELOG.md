@@ -19,6 +19,7 @@ has been published, and it does not reconstruct earlier development history.
 - The room settings dialog saves the leader's changes when it closes; the Save
   settings button is gone.
 - The arrow on the Start tile has a longer, clearer arrowhead on its left end.
+- The French Start tile is named "Départ" instead of "Grand départ".
 
 ## [0.7.0] - 2026-10-04
 

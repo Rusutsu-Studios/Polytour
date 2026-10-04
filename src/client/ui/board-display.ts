@@ -36,7 +36,7 @@ export const REGION_COLORS = {
 } as const;
 // One country per colour group, from France to Japan; resorts sit between.
 export const TILE_NAMES = [
-  "Grand départ",
+  "Départ",
   "Roubaix",
   "Saint-Étienne",
   "Le Havre",
@@ -120,7 +120,7 @@ const ENGLISH_LEVEL_NAMES = [
   "Landmark",
 ] as const;
 const LEGACY_TILE_NAMES = [
-  "Grand départ",
+  "Départ",
   "Roubaix",
   "Saint-Étienne",
   "Surprise",
