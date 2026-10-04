@@ -1650,7 +1650,11 @@ export class GameRoom extends DurableObject<Env> {
         continue;
       if (timer.kind === "bot") {
         const seat = saved.state.pending?.seat ?? saved.state.activeSeat;
-        const action = botAction(toPublic(saved.state), seat);
+        const action = botAction(
+          toPublic(saved.state),
+          seat,
+          saved.state.config.botDifficulty ?? "medium",
+        );
         if (action.type === "Roll")
           await this.beginDice(seat, action, null, saved.seq);
         else {

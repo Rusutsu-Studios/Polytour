@@ -4,8 +4,8 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 4 adds room leaders, waiting members and local players; stale clients reload.
-export const PROTOCOL_VERSION = 4;
+// Version 5 adds bot difficulty to strict room configs; stale clients reload.
+export const PROTOCOL_VERSION = 5;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -26,6 +26,7 @@ export const RoomConfigSchema = z
     extraRollOnDouble: z.boolean().default(true),
     tripleDoubleToIsland: z.boolean().default(true),
     botCanBuild: z.boolean().default(true),
+    botDifficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),
     randomnessMode: z.enum(["secure", "drand"]).default("secure"),

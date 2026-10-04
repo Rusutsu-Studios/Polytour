@@ -173,7 +173,6 @@ export default function PauseMenu({
       className="pause-dialog"
       data-debug={debugActive}
       aria-labelledby={`${id}-title`}
-      aria-describedby={`${id}-note`}
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -216,12 +215,6 @@ export default function PauseMenu({
           </button>
         </header>
         <div className="pause-dialog-body">
-          <p className="pause-note" id={`${id}-note`}>
-            {t(
-              "La partie continue pendant que ce menu est ouvert.",
-              "The game keeps running while this menu is open.",
-            )}
-          </p>
           {page === "menu" && (
             <div className="pause-menu-actions">
               <button

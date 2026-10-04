@@ -339,6 +339,38 @@ export function RoomSettings({
           disabled={disabled}
           onChange={(decisionSeconds) => update({ decisionSeconds })}
         />
+        <fieldset
+          className="room-setting-choice room-setting--wide"
+          disabled={disabled}
+        >
+          <legend>{t("Difficulté des bots", "Bot difficulty")}</legend>
+          <div className="room-setting-pills">
+            {(["easy", "medium", "hard"] as const).map((level) => (
+              <label className="room-setting-pill" key={level}>
+                <input
+                  type="radio"
+                  name={`${winsHeadingId}-difficulty`}
+                  value={level}
+                  checked={(config.botDifficulty ?? "medium") === level}
+                  onChange={() => update({ botDifficulty: level })}
+                />
+                <span>
+                  {level === "easy"
+                    ? t("Facile", "Easy")
+                    : level === "medium"
+                      ? t("Moyen", "Medium")
+                      : t("Difficile", "Hard")}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p>
+            {t(
+              "Même difficulté pour tous les bots de la partie.",
+              "Applies to every bot in the match.",
+            )}
+          </p>
+        </fieldset>
       </div>
       <fieldset className="room-settings-rules" disabled={disabled}>
         <legend>{t("Règles personnalisées", "Custom rules")}</legend>

@@ -487,6 +487,21 @@ choice; neither the UI nor a bot may infer it from board state.
 
 ## Balancing with the simulator
 
+The room leader chooses Easy, Medium (default) or Hard for all server bots before
+starting. The selection is frozen in the match config and also applies to seats
+that become bots after disconnecting. Saved matches without `botDifficulty`
+retain Medium. This changes bot choices, not legal moves or frozen game rules.
+Easy buys bare land and declines construction and buyouts. Medium keeps the
+original policy. Hard values completed countries, instant wins and blocking an
+opponent's instant win, reserves cash for likely next-roll rent, and sells the
+lowest strategic value per unit of refund first. Every level sees public state
+only and receives the same dice and money rules as people.
+
+Use `pnpm sim -- --games 300 --difficulty hard` for a single level, or
+`pnpm sim -- --games 300 --players 3 --levels easy,medium,hard` to compare them.
+Mixed levels rotate across table seats on successive seeds; `difficultyWins`
+reports wins per level. Results measure these seeded scenarios, not human skill.
+
 `tools/sim` runs thousands of bot-vs-bot games in Node using the same engine. Track:
 
 - Median and p90 game length (target: 14–18 rounds median, few games hitting the limit).
