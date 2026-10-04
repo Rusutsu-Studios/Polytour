@@ -28,7 +28,12 @@ export {
   roundPayout,
   ruleEconomy,
 } from "./economy.js";
-export { BOT_TIMING, CHANCE_AMOUNTS, DECISION_TIMING } from "./timing.js";
+export {
+  BOT_TIMING,
+  CHANCE_AMOUNTS,
+  DECISION_TIMING,
+  PAUSE_TIMING,
+} from "./timing.js";
 export type {
   BoardRule,
   BoardSide,

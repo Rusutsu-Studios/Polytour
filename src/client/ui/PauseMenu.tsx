@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import type { Seat } from "../../shared/engine/index.js";
+import type { PublicState, Seat } from "../../shared/engine/index.js";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
@@ -25,6 +25,14 @@ type SettingsTab = "game" | "video" | "audio" | "debug";
 const TABS: readonly SettingsTab[] = ["game", "video", "audio", "debug"];
 
 export type PauseMenuProps = {
+  game: PublicState;
+  mySeats: readonly Seat[];
+  blocked: boolean;
+  solo: boolean;
+  onRequestPause: () => void;
+  onVote: (seat: Seat, accept: boolean) => void;
+  onResume: () => void;
+  error: string | null;
   onClose: () => void;
   onLeave: () => void;
   zoom: number;
@@ -45,8 +53,16 @@ export type PauseMenuProps = {
 // OWN-WORLD: Ivory paper, a blue ribbon and pressed toy buttons match the board.
 // STORY: Continue first; settings stay one step away, and leaving is deliberate.
 // FIRST VIEWPORT: A quiet three-action menu; tabs replace its body on request.
-// FORM: Native dialog focus protects the menu while the live match keeps running.
+// FORM: Native dialog focus protects settings and each human's pause consent.
 export default function PauseMenu({
+  game,
+  mySeats,
+  blocked,
+  solo,
+  onRequestPause,
+  onVote,
+  onResume,
+  error,
   onClose,
   onLeave,
   zoom,
@@ -64,6 +80,27 @@ export default function PauseMenu({
   const { reducedMotion } = useDirector();
   const [page, setPage] = useState<Page>("menu");
   const [tab, setTab] = useState<SettingsTab>("game");
+  const [now, setNow] = useState(Date.now());
+  const paused = game.pause?.kind === "paused";
+  const vote = game.pause?.kind === "vote" ? game.pause : null;
+  const eligible = game.players.filter(
+    (player) =>
+      player.control === "human" &&
+      !player.bankrupt &&
+      mySeats.includes(player.seat),
+  );
+  const canResume = paused && eligible.length > 0;
+  const cooldown = Math.max(
+    0,
+    Math.ceil((game.pauseCooldownUntil - now) / 1000),
+  );
+  const countdown = (seconds: number) =>
+    `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  useEffect(() => {
+    if (!vote && cooldown === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [vote, cooldown]);
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -118,6 +155,22 @@ export default function PauseMenu({
       target?.focus();
     }
   }, [page]);
+
+  useEffect(() => {
+    // A pause acknowledgement can disable Continue or remove a vote button.
+    // Restore Resume without overriding focus returned from settings or Leave.
+    const focusLost =
+      document.activeElement === document.body ||
+      document.activeElement === dialogRef.current;
+    if (
+      paused &&
+      !blocked &&
+      page === "menu" &&
+      (returnTo.current === "continue" || focusLost)
+    ) {
+      continueRef.current?.focus();
+    }
+  }, [paused, blocked, page]);
 
   const backToMenu = () => {
     returnTo.current = page === "settings" ? "settings" : "leave";
@@ -217,20 +270,132 @@ export default function PauseMenu({
         </header>
         <div className="pause-dialog-body">
           <p className="pause-note" id={`${id}-note`}>
-            {t(
-              "La partie continue pendant que ce menu est ouvert.",
-              "The game keeps running while this menu is open.",
-            )}
+            {paused
+              ? t(
+                  "La partie est en pause. Les tours et les chronomètres sont arrêtés.",
+                  "The game is paused. Turns and clocks are stopped.",
+                )
+              : solo && eligible.length > 0 && game.status === "active"
+                ? t("Mise en pause de la partie…", "Pausing the game…")
+                : t(
+                    "La partie continue pendant que ce menu est ouvert.",
+                    "The game keeps running while this menu is open.",
+                  )}
           </p>
+          {error && (
+            <p className="pause-error" role="alert">
+              {error}
+            </p>
+          )}
+          {vote && (
+            <section
+              className="pause-vote"
+              aria-label={t("Vote de pause", "Pause vote")}
+            >
+              <p role="status">
+                {t("Pause demandée par ", "Pause requested by ")}
+                <strong>
+                  {
+                    game.players.find(
+                      (player) => player.seat === vote.requestedBy,
+                    )?.name
+                  }
+                </strong>
+                {` · ${vote.acceptedSeats.length}/${vote.requiredSeats.length} · ${countdown(Math.max(0, Math.ceil((vote.deadline - now) / 1000)))}`}
+              </p>
+              <p>
+                {t(
+                  "Tous les joueurs humains doivent accepter. La partie continue pendant le vote.",
+                  "Every human player must agree. Play continues during the vote.",
+                )}
+              </p>
+              <ul>
+                {vote.requiredSeats.map((seat) => {
+                  const player = game.players.find(
+                    (entry) => entry.seat === seat,
+                  );
+                  const accepted = vote.acceptedSeats.includes(seat);
+                  return (
+                    <li key={seat}>
+                      <span>{player?.name}</span>
+                      <strong>
+                        {accepted
+                          ? t("D’accord", "Agreed")
+                          : t("En attente", "Waiting")}
+                      </strong>
+                      {mySeats.includes(seat) && !accepted && (
+                        <div className="pause-vote-actions">
+                          <button
+                            type="button"
+                            className="pause-action pause-primary"
+                            disabled={blocked}
+                            aria-label={t(
+                              `Accepter la pause pour ${player?.name}`,
+                              `Accept pause for ${player?.name}`,
+                            )}
+                            onClick={() => onVote(seat, true)}
+                          >
+                            {t("Accepter", "Accept")}
+                          </button>
+                          <button
+                            type="button"
+                            className="pause-action pause-secondary"
+                            disabled={blocked}
+                            aria-label={t(
+                              `Refuser la pause pour ${player?.name}`,
+                              `Decline pause for ${player?.name}`,
+                            )}
+                            onClick={() => onVote(seat, false)}
+                          >
+                            {t("Refuser", "Decline")}
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+          {!solo &&
+            !game.pause &&
+            game.status === "active" &&
+            eligible.length > 0 && (
+              <div className="pause-request">
+                <button
+                  type="button"
+                  className="pause-action pause-secondary"
+                  disabled={blocked || cooldown > 0}
+                  onClick={onRequestPause}
+                >
+                  <Icon name="pause" size={18} />
+                  {t("Demander une pause", "Request pause")}
+                </button>
+                <p>
+                  {cooldown > 0
+                    ? t(
+                        `Nouvelle demande dans ${countdown(cooldown)}.`,
+                        `Next request in ${countdown(cooldown)}.`,
+                      )
+                    : t(
+                        "Une demande toutes les 5 minutes pour la salle.",
+                        "One request every 5 minutes for the room.",
+                      )}
+                </p>
+              </div>
+            )}
           {page === "menu" && (
             <div className="pause-menu-actions">
               <button
                 ref={continueRef}
                 type="button"
                 className="pause-action pause-primary"
-                onClick={onClose}
+                onClick={canResume ? onResume : onClose}
+                disabled={canResume && blocked}
               >
-                {t("Continuer", "Continue")}
+                {canResume
+                  ? t("Reprendre la partie", "Resume game")
+                  : t("Continuer", "Continue")}
                 <Icon name="arrow" size={20} />
               </button>
               <button

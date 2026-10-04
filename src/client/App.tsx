@@ -736,20 +736,22 @@ function Help({
 function MatchClock({
   deadline,
   finished,
+  pausedAt,
 }: {
   deadline: number | null;
   finished: boolean;
+  pausedAt: number | null;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    if (finished || deadline === null) return;
+    if (finished || deadline === null || pausedAt !== null) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [deadline, finished]);
+  }, [deadline, finished, pausedAt]);
   if (deadline === null) return null;
   const seconds = finished
     ? 0
-    : Math.max(0, Math.ceil((deadline - now) / 1000));
+    : Math.max(0, Math.ceil((deadline - (pausedAt ?? now)) / 1000));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const text = `${hours ? `${hours}:` : ""}${hours ? String(minutes).padStart(2, "0") : minutes}:${String(seconds % 60).padStart(2, "0")}`;
@@ -771,11 +773,13 @@ function MatchClock({
 function TurnTimer({
   pending,
   config,
+  pausedAt,
 }: {
   pending: PublicState["pending"];
   config: GameConfig;
+  pausedAt: number | null;
 }) {
-  const startedAt = useRef(Date.now());
+  const startedAt = useRef(pausedAt ?? Date.now());
   if (!pending) return <div className="player-timer" aria-hidden="true" />;
   const windowMs = decisionWindow(config, pending.kind);
   const delay = pending.deadline - windowMs - startedAt.current;
@@ -787,6 +791,7 @@ function TurnTimer({
           {
             "--timer-window": `${windowMs}ms`,
             "--timer-delay": `${delay}ms`,
+            animationPlayState: pausedAt !== null ? "paused" : "running",
           } as CSSProperties
         }
       />
@@ -835,7 +840,9 @@ function MatchView({
   debug: boolean;
 }) {
   const { serverState, busy, history, reducedMotion } = useDirector();
-  const [pauseOpen, setPauseOpen] = useState(false);
+  const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
+  const soloMenuPause = useRef(game.pause?.kind === "paused");
+  const soloObservedPause = useRef(game.pause?.kind === "paused");
   const cloudflarePing = useCloudflarePing(
     room.connection === "online",
     room.connection,
@@ -870,6 +877,68 @@ function MatchView({
   // of them decides now is the seat it acts for; someone waiting acts for none.
   const own = room.you?.seat ?? null;
   const mySeats = deviceSeats(room.lobby, own);
+  const humans = authoritative.players.filter(
+    (player) => player.control === "human" && !player.bankrupt,
+  );
+  const pauseSeats = humans.filter((player) => mySeats.includes(player.seat));
+  const pauseSeat = pauseSeats[0]?.seat ?? null;
+  const solo = humans.length === 1;
+  const pausedAt =
+    authoritative.pause?.kind === "paused"
+      ? authoritative.pause.startedAt
+      : null;
+  const pauseBlocked =
+    room.pending ||
+    room.leaving ||
+    room.connection !== "online" ||
+    (room.randomness !== null && room.randomness.status !== "resolved");
+  const pauseAnnouncement = authoritative.pause
+    ? `${authoritative.pause.kind}:${authoritative.pause.kind === "vote" ? authoritative.pause.deadline : authoritative.pause.startedAt}`
+    : null;
+  useEffect(() => {
+    if (pauseAnnouncement && !solo) {
+      setTool(null);
+      setInspectorOpen(false);
+      setPauseOpen(true);
+    }
+  }, [pauseAnnouncement, solo]);
+  // Only this tab's menu lifecycle can automatically resume its solo pause.
+  // Another tab may keep its menu closed without undoing the shared pause.
+  useEffect(() => {
+    if (
+      !solo ||
+      pauseSeat === null ||
+      pauseBlocked ||
+      authoritative.status !== "active"
+    )
+      return;
+    if (authoritative.pause?.kind === "paused") {
+      if (!soloMenuPause.current) return;
+      soloObservedPause.current = true;
+      if (!pauseOpen) {
+        soloMenuPause.current = false;
+        room.act({ type: "ResumeGame" }, pauseSeat);
+      }
+    } else if (soloObservedPause.current && !authoritative.pause) {
+      soloObservedPause.current = false;
+      soloMenuPause.current = false;
+      setPauseOpen(false);
+    } else if (
+      pauseOpen &&
+      !authoritative.pause &&
+      authoritative.pending &&
+      authoritative.pending.deadline > Date.now()
+    ) {
+      soloMenuPause.current = true;
+      room.act({ type: "RequestPause" }, pauseSeat);
+    }
+  }, [solo, pauseSeat, pauseBlocked, pauseOpen, authoritative, room.act]);
+  const openPauseMenu = () => {
+    soloMenuPause.current = solo;
+    setTool(null);
+    setInspectorOpen(false);
+    setPauseOpen(true);
+  };
   const authoritativeSeat =
     authoritative.pending?.seat ?? authoritative.activeSeat;
   const controlSeat = mySeats.includes(authoritativeSeat)
@@ -899,6 +968,7 @@ function MatchView({
       )
     : [];
   const saleBlocked =
+    pausedAt !== null ||
     busy ||
     room.pending ||
     room.leaving ||
@@ -918,6 +988,7 @@ function MatchView({
   // Travel, festival and card choices are answered by clicking the board.
   const decisionState = serverState ?? game;
   const picking =
+    pausedAt === null &&
     !busy &&
     controlSeat !== null &&
     (room.randomness === null || room.randomness.status === "resolved") &&
@@ -1116,9 +1187,19 @@ function MatchView({
             </span>
           )}
           <MatchClock
-            deadline={game.matchDeadline}
-            finished={game.status === "finished"}
+            deadline={authoritative.matchDeadline}
+            finished={authoritative.status === "finished"}
+            pausedAt={pausedAt}
           />
+          {pausedAt !== null && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={openPauseMenu}
+            >
+              {t("Partie en pause", "Game paused")}
+            </button>
+          )}
         </div>
         {/* Only a problem is worth reading: a healthy connection stays silent. */}
         <span
@@ -1230,11 +1311,7 @@ function MatchView({
           title={t("Menu pause", "Pause menu")}
           aria-haspopup="dialog"
           aria-expanded={pauseOpen}
-          onClick={() => {
-            setTool(null);
-            setInspectorOpen(false);
-            setPauseOpen(true);
-          }}
+          onClick={openPauseMenu}
         >
           <Icon name="pause" size={18} />
         </button>
@@ -1289,6 +1366,7 @@ function MatchView({
                   key={active ? game.pending?.deadline : "idle"}
                   pending={active ? game.pending : null}
                   config={game.config}
+                  pausedAt={pausedAt}
                 />
                 <div
                   className="player-cash"
@@ -1385,7 +1463,7 @@ function MatchView({
               }
               blocked={saleBlocked}
               randomness={room.randomness}
-              obscured={pauseOpen}
+              obscured={pauseOpen || pausedAt !== null}
               selected={decisionSelected}
               onSelect={salePending ? inspectTile : onSelect}
               picked={picked}
@@ -1592,6 +1670,23 @@ function MatchView({
       </span>
       {pauseOpen && (
         <PauseMenu
+          game={authoritative}
+          mySeats={mySeats}
+          blocked={pauseBlocked}
+          solo={solo}
+          error={room.error}
+          onRequestPause={() => {
+            if (pauseSeat !== null)
+              room.act({ type: "RequestPause" }, pauseSeat);
+          }}
+          onVote={(seat, accept) =>
+            room.act({ type: "VotePause", accept }, seat)
+          }
+          onResume={() => {
+            if (pauseSeat !== null) room.act({ type: "ResumeGame" }, pauseSeat);
+            setPauseOpen(false);
+            pauseTrigger.current?.focus();
+          }}
           onClose={() => {
             setPauseOpen(false);
             pauseTrigger.current?.focus();

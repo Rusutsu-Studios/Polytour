@@ -269,6 +269,14 @@ export function useRoom(credentials: RoomCredentials | null) {
             }
             if (message.type === "reject") {
               const reasons: Record<string, readonly [string, string]> = {
+                "game-paused": [
+                  "La partie est en pause. Reprenez-la depuis le menu pause.",
+                  "The game is paused. Resume it from the pause menu.",
+                ],
+                "pause-cooldown": [
+                  "La salle peut demander une pause toutes les 5 minutes. Le menu indique le temps restant.",
+                  "The room can request a pause every 5 minutes. The menu shows the time remaining.",
+                ],
                 "decision-expired": [
                   "Le temps de décision est écoulé. Le jeu applique le choix automatique.",
                   "The decision time has expired. The game applies the automatic choice.",

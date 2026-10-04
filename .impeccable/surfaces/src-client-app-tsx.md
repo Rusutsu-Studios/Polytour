@@ -43,8 +43,12 @@ it updates board labels, cards, decisions and tools without reconnecting the roo
 
 ## Match menu
 
-The toolbar's pause icon opens Continue, Settings and Leave while the match
-continues. Personal settings use Game, Video, Audio and Debug tabs. Game holds
+The toolbar's pause icon opens Continue, Settings and Leave. Solo play pauses
+immediately and resumes on closing. Multiplayer requires every human's consent,
+including local players, with a 30-second vote and one request per room every five
+minutes. Any human can resume an agreed pause; dismissing the menu keeps multiplayer
+paused and its visible status reopens the menu. Personal settings use Game, Video,
+Audio and Debug tabs. Game holds
 language; Video holds High/Low graphics choices side by side, reduced motion and
 board size; Audio is marked coming soon. Graphics quality has no match-toolbar
 control. Board inspection opens only from a clicked space, without step arrows.

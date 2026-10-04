@@ -104,7 +104,11 @@ class Director {
     });
     this.batch += 1;
     for (const event of events) this.queue.push({ event, batch: this.batch });
-    if (this.queue.length > RECOVERY_BACKLOG || document.hidden)
+    if (
+      state?.pause?.kind === "paused" ||
+      this.queue.length > RECOVERY_BACKLOG ||
+      document.hidden
+    )
       this.recoverToServer();
     else if (!this.value.busy) void this.drain(this.generation);
   }
