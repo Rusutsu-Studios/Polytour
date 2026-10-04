@@ -1145,6 +1145,19 @@ export function scoreTexture(total: number, double: boolean) {
   });
 }
 
+/** A floating "+400K" for money gained on a tile, readable on any lot. */
+export function gainTexture(text: string) {
+  return canvasTexture(384, 128, (context) => {
+    context.font = `900 88px ${DISPLAY_FONT}`;
+    context.lineJoin = "round";
+    context.lineWidth = 16;
+    context.strokeStyle = "#8a5a00";
+    context.strokeText(text, 192, 68);
+    context.fillStyle = "#fff2a6";
+    context.fillText(text, 192, 68);
+  });
+}
+
 export function markerTexture(
   text: string,
   background: string,
