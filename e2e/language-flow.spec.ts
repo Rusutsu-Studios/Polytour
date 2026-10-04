@@ -163,7 +163,7 @@ test("English local match switches language without rejoining or changing game s
   const card = page.locator(".city-card");
   await expect(card).toBeVisible();
   await expect(card).toHaveAttribute("data-space", "0");
-  await expect(page.locator("#city-card-title")).toHaveText("Grand départ");
+  await expect(page.locator("#city-card-title")).toHaveText("Départ");
   await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Lancer les dés", exact: true })
