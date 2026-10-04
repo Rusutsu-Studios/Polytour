@@ -378,80 +378,174 @@ function BoardFallback({
   );
 }
 
-function eventText(event: GameEvent, state: PublicState): string | null {
-  const name =
-    "seat" in event
-      ? (state.players.find((player) => player.seat === event.seat)?.name ??
-        t("Un joueur", "A player"))
-      : "";
+function eventText(event: GameEvent, state: PublicState): ReactNode | null {
+  const name = (seat: PlayerState["seat"]) => (
+    <strong
+      className="journal-player"
+      data-seat={seat}
+      style={{ color: PLAYER_COLORS[seat] }}
+    >
+      {state.players.find((player) => player.seat === seat)?.name ??
+        t("Un joueur", "A player")}
+    </strong>
+  );
+  const entry = (
+    icon: Parameters<typeof Icon>[0]["name"],
+    content: ReactNode,
+  ) => (
+    <>
+      <Icon name={icon} size={16} />
+      <span className="journal-event-text">{content}</span>
+    </>
+  );
   switch (event.type) {
     case "DiceRolled":
-      return t(
-        `${name} lance ${event.dice[0]} + ${event.dice[1]}${event.isDouble ? " · double !" : ""}`,
-        `${name} rolls ${event.dice[0]} + ${event.dice[1]}${event.isDouble ? " · doubles!" : ""}`,
+      return entry(
+        "dice",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `lance ${event.dice[0]} + ${event.dice[1]} = ${event.dice[0] + event.dice[1]}${event.isDouble ? " · Double !" : ""}`,
+            `rolls ${event.dice[0]} + ${event.dice[1]} = ${event.dice[0] + event.dice[1]}${event.isDouble ? " · Doubles!" : ""}`,
+          )}
+        </>,
       );
     case "PropertyBought":
-      return t(
-        `${name} achète ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
-        `${name} buys ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+      return entry(
+        "buy",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `achète ${tileName(event.tile, state.config)} · ${money(event.amount)}`,
+            `buys ${tileName(event.tile, state.config)} · ${money(event.amount)}`,
+          )}
+        </>,
       );
     case "PropertyUpgraded":
-      return t(
-        `${name} construit à ${tileName(event.tile, state?.config)} · ${levelName(event.level)}`,
-        `${name} builds in ${tileName(event.tile, state?.config)} · ${levelName(event.level)}`,
+      return entry(
+        "build",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `construit à ${tileName(event.tile, state.config)} · ${levelName(event.level)}`,
+            `builds in ${tileName(event.tile, state.config)} · ${levelName(event.level)}`,
+          )}
+        </>,
       );
     case "BoughtOut":
-      return t(
-        `${name} rachète ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
-        `${name} buys out ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+      return entry(
+        "buy",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `rachète ${tileName(event.tile, state.config)} à`,
+            `buys out ${tileName(event.tile, state.config)} from`,
+          )}{" "}
+          {name(event.previousOwner)} · {money(event.amount)}
+        </>,
       );
     case "PropertySold":
-      return t(
-        `${name} vend ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
-        `${name} sells ${tileName(event.tile, state?.config)} · ${money(event.amount)}`,
+      return entry(
+        "sell",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `vend ${tileName(event.tile, state.config)} · ${money(event.amount)}`,
+            `sells ${tileName(event.tile, state.config)} · ${money(event.amount)}`,
+          )}
+        </>,
       );
     case "RentPaid":
-      return t(
-        `${name} paie ${money(event.amount)} à ${state.players.find((player) => player.seat === event.owner)?.name}`,
-        `${name} pays ${money(event.amount)} to ${state.players.find((player) => player.seat === event.owner)?.name}`,
+      return entry(
+        "people",
+        <>
+          {name(event.seat)}{" "}
+          {t(`paie ${money(event.amount)} à`, `pays ${money(event.amount)} to`)}{" "}
+          {name(event.owner)}
+        </>,
       );
     case "SalaryPaid":
-      return t(
-        `${name} reçoit ${money(event.amount)} au départ`,
-        `${name} receives ${money(event.amount)} at Start`,
+      return entry(
+        "bank",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `reçoit ${money(event.amount)} au départ`,
+            `receives ${money(event.amount)} at Start`,
+          )}
+        </>,
       );
     case "CardDrawn":
-      return t(
-        `${name} tire « ${cardName(event.card)} »`,
-        `${name} draws “${cardName(event.card)}”`,
+      return entry(
+        "journal",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `tire « ${cardName(event.card)} »`,
+            `draws “${cardName(event.card)}”`,
+          )}
+        </>,
       );
     case "CardUsed":
-      return t(
-        `${name} joue « ${cardName(event.card)} »`,
-        `${name} plays “${cardName(event.card)}”`,
+      return entry(
+        "journal",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `joue « ${cardName(event.card)} »`,
+            `plays “${cardName(event.card)}”`,
+          )}
+        </>,
       );
     case "PlayerBankrupt":
-      return t(`${name} fait faillite`, `${name} goes bankrupt`);
+      return entry(
+        "bank",
+        <>
+          {name(event.seat)} {t("fait faillite", "goes bankrupt")}
+        </>,
+      );
     case "SentToIsland":
-      return t(`${name} séjourne sur l’île`, `${name} arrives on the island`);
+      return entry(
+        "pin",
+        <>
+          {name(event.seat)} {t("séjourne sur l’île", "arrives on the island")}
+        </>,
+      );
     case "LeftIsland":
-      return t(`${name} quitte l’île`, `${name} leaves the island`);
+      return entry(
+        "exit",
+        <>
+          {name(event.seat)} {t("quitte l’île", "leaves the island")}
+        </>,
+      );
     case "ChampionshipChanged":
       return event.host
-        ? t(
-            `Championnat à ${tileName(event.host.tile, state?.config)} · loyers ×${event.host.multiplier}`,
-            `Championship in ${tileName(event.host.tile, state?.config)} · rent ×${event.host.multiplier}`,
+        ? entry(
+            "crown",
+            t(
+              `Championnat à ${tileName(event.host.tile, state.config)} · loyers ×${event.host.multiplier}`,
+              `Championship in ${tileName(event.host.tile, state.config)} · rent ×${event.host.multiplier}`,
+            ),
           )
         : null;
     case "MoneyTransferred":
-      return t(
-        `${event.from === null ? "La banque" : state.players.find((player) => player.seat === event.from)?.name} verse ${money(event.amount)} à ${event.to === null ? "la banque" : state.players.find((player) => player.seat === event.to)?.name}`,
-        `${event.from === null ? "The bank" : state.players.find((player) => player.seat === event.from)?.name} pays ${money(event.amount)} to ${event.to === null ? "the bank" : state.players.find((player) => player.seat === event.to)?.name}`,
+      return entry(
+        event.from === null || event.to === null ? "bank" : "people",
+        <>
+          {event.from === null ? t("La banque", "The bank") : name(event.from)}{" "}
+          {t(
+            `verse ${money(event.amount)} à`,
+            `pays ${money(event.amount)} to`,
+          )}{" "}
+          {event.to === null ? t("la banque", "the bank") : name(event.to)}
+        </>,
       );
     case "GameOver":
-      return t(
-        `${state.players.find((player) => player.seat === event.winner)?.name} remporte la partie`,
-        `${state.players.find((player) => player.seat === event.winner)?.name} wins the game`,
+      return entry(
+        "trophy",
+        <>
+          {name(event.winner)} {t("remporte la partie", "wins the game")}
+        </>,
       );
     default:
       return null;
@@ -1036,10 +1130,11 @@ function MatchView({
         : tool === "rules"
           ? t("Réglages de la partie", "Game settings")
           : t("Votre salle", "Your room");
-  const latestAction = history
-    .map((event) => eventText(event, game))
-    .filter((text): text is string => text !== null)
-    .at(-1);
+  const journalEntries = history
+    .map((event, index) => ({ content: eventText(event, game), key: index }))
+    .filter((item) => item.content !== null)
+    .slice(-40)
+    .reverse();
   function showTool(
     next: Exclude<GameTool, null>,
     trigger?: HTMLButtonElement,
@@ -1238,6 +1333,7 @@ function MatchView({
           aria-label={t("Carnet de voyage", "Game log")}
           title={t("Carnet de voyage", "Game log")}
           aria-expanded={tool === "journal"}
+          aria-controls="game-tool-panel"
           onClick={(event) => showTool("journal", event.currentTarget)}
         >
           <Icon name="journal" size={18} />
@@ -1494,9 +1590,10 @@ function MatchView({
       <AnimatePresence>
         {tool && (
           <motion.section
+            id="game-tool-panel"
             ref={toolRef}
             key={tool}
-            className={`tool-drawer${tool === "rules" ? " tool-drawer--rules" : ""}`}
+            className={`tool-drawer${tool === "journal" ? " tool-drawer--journal" : tool === "rules" ? " tool-drawer--rules" : ""}`}
             aria-labelledby="tool-title"
             initial={reducedMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1528,19 +1625,11 @@ function MatchView({
                       )}
                 </p>
                 <ol>
-                  {history
-                    .map((event, index) => ({
-                      text: eventText(event, game),
-                      key: index,
-                    }))
-                    .filter((item) => item.text)
-                    .slice(-40)
-                    .reverse()
-                    .map((item) => (
-                      <li key={item.key}>{item.text}</li>
-                    ))}
+                  {journalEntries.map((item) => (
+                    <li key={item.key}>{item.content}</li>
+                  ))}
                 </ol>
-                {!latestAction && (
+                {journalEntries.length === 0 && (
                   <p>
                     {t(
                       "Lancez les dés pour commencer.",
@@ -1661,9 +1750,6 @@ function MatchView({
         )}
       </AnimatePresence>
 
-      <div className="match-caption">
-        <span>{latestAction}</span>
-      </div>
       <span
         className="match-network"
         role="status"
