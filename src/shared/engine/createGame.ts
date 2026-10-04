@@ -66,6 +66,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  taxCardMovement: true,
   sellBackPercent: 100,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
@@ -1047,6 +1048,14 @@ function resolver(initial: GameState, context: ResolutionContext) {
         );
         break;
       case "Audit":
+        if (state.config.taxCardMovement === true) {
+          const tax = getBoard(state.config).find(
+            (tile) => tile.kind === "tax",
+          );
+          if (!tax) throw new Error("The board has no tax tile");
+          relocate(tax.index);
+          break;
+        }
         prepend({
           kind: "payment",
           from: seat,
@@ -1988,6 +1997,11 @@ export function createGame(
     if (marker !== undefined && typeof marker !== "boolean")
       throw new RangeError("Unsupported rules version 8 marker");
   if (
+    config.taxCardMovement !== undefined &&
+    typeof config.taxCardMovement !== "boolean"
+  )
+    throw new RangeError("Unsupported tax card movement rule");
+  if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
     config.sellBackPercent !== 100
@@ -2062,6 +2076,7 @@ export function createGame(
       worldTourRule: config.worldTourRule ?? "free-and-own",
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
+      taxCardMovement: config.taxCardMovement ?? false,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,

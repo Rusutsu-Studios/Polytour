@@ -1784,6 +1784,7 @@ function App() {
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
     fourResortRent: room.lobby?.fourResortRent ?? true,
     buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
+    taxCardMovement: room.lobby ? room.lobby.taxCardMovement === true : true,
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
   };
   const you = room.you?.seat ?? null;

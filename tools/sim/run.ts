@@ -27,6 +27,7 @@ if (rules !== "reference" && rules !== "prototype")
 const config = {
   ...SIM_CONFIG,
   economyRule: rules,
+  taxCardMovement: rules === "reference",
   boardRule: rules === "reference" ? ("country" as const) : ("legacy" as const),
   sellBackPercent: rules === "reference" ? (100 as const) : (50 as const),
   roundLimit,

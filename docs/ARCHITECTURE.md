@@ -61,8 +61,9 @@ either deadline. Clock sync reads no SQL, unchanged timers are not rewritten and
 an unchanged platform alarm is not reset. See [CLOUDFLARE_OPERATIONS.md](CLOUDFLARE_OPERATIONS.md)
 for the write-quota incident and measured regressions.
 State version 1 is retained, with the explicit migration ladder from PR #19.
-New rooms freeze rules version 8: country-grouped board, reference economy,
-staged hotels, World Tour flights to free or own properties, a 200 k rent for
+New rooms freeze rules version 9: Audit moves clockwise to Tax; older rooms keep
+its cash charge. Other frozen rules retain the country-grouped board and reference
+economy, staged hotels, World Tour flights to free or own properties, a 200 k rent for
 four resorts and a build offer after a buyout. Version-6 rooms pay four resorts
 like three and offer no build after a buyout; version-5 rooms also keep flights
 to own properties only when none is free.

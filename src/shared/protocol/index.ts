@@ -195,6 +195,8 @@ export type LobbyState = {
   readonly worldTourRule: WorldTourRule;
   readonly fourResortRent: boolean;
   readonly buildAfterBuyout: boolean;
+  /** Omitted by older servers; Audit retains its cash charge. */
+  readonly taxCardMovement?: boolean;
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

@@ -117,7 +117,7 @@ debug socket has been removed; `/api/health` remains.
 - Protocol version 4 adds leaders, waiting members and local players (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 8 with `boardRule: "country"`,
+  New rooms freeze rules version 9 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
   `fourResortRent: true` and `buildAfterBuyout: true`; version-7 lobbies report both
@@ -126,6 +126,9 @@ debug socket has been removed; `/api/health` remains.
   version 6 report `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
   Lobby snapshots expose their frozen rule markers separately from room settings.
+  The optional `taxCardMovement` selector describes Audit for card help. Only
+  `true` means movement to Tax; false or omission retains the cash charge.
+  Older clients ignore this additive field; Audit adds no further bump to current protocol 5.
   The strict room-setting schema never accepts internal rule markers; clients
   derive legal construction, travel and sale choices from the shared engine.
 - Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,

@@ -166,6 +166,7 @@ const lobby = z.object({
   worldTourRule: z.enum(["free-and-own", "free-first"]).default("free-and-own"),
   fourResortRent: z.boolean().default(true),
   buildAfterBuyout: z.boolean().default(true),
+  taxCardMovement: z.boolean().optional(),
   resortFestivals: z.boolean().optional(),
   seats: z
     .array(

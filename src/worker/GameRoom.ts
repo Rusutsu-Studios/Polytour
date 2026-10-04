@@ -93,9 +93,10 @@ type LobbyBudget = { tokens: number; at: number };
  * 2–3 are original production rooms; 5 combines the board and reference rules;
  * 6 lets World Tour reach the traveller's own properties as well as free ones;
  * 7 restricts initial festivals to cities;
- * 8 pays four resorts double the third's rent and lets a buyout be built on.
+ * 8 pays four resorts double the third's rent and lets a buyout be built on;
+ * 9 moves Audit to Tax, with salary when passing Start.
  */
-const RULES_VERSION = 8;
+const RULES_VERSION = 9;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -104,7 +105,8 @@ function frozenRules(version: number | null) {
     version !== 5 &&
     version !== 6 &&
     version !== 7 &&
-    version !== 8
+    version !== 8 &&
+    version !== 9
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -117,6 +119,7 @@ function frozenRules(version: number | null) {
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
     fourResortRent: version >= 8,
     buildAfterBuyout: version >= 8,
+    taxCardMovement: version >= 9,
     resortFestivals: version >= 4 && version < 7,
   };
 }
@@ -292,7 +295,10 @@ export class GameRoom extends DurableObject<Env> {
     const fourResorts = state.config.fourResortRent;
     const buyoutBuild = state.config.buildAfterBuyout;
     const festivals = state.config.resortFestivals;
+    const taxCardMovement = state.config.taxCardMovement;
     if (
+      (taxCardMovement !== frozen.taxCardMovement &&
+        (rulesVersion === 9 || taxCardMovement !== undefined)) ||
       // Version-7 matches require the marker; older unmarked saves keep their rules.
       (rulesVersion !== null &&
         festivals !== frozen.resortFestivals &&
