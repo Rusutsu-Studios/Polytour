@@ -150,7 +150,7 @@ function victoryReason(kind: WinKind) {
     ),
     "resort-monopoly": t(
       "Toutes les destinations de vacances réunies.",
-      "You own all four resorts.",
+      "You own all four beaches.",
     ),
     "round-limit": t(
       "La plus grande fortune à la fin des manches.",
@@ -703,8 +703,8 @@ function Help({
           <b>{t("Visez la victoire", "Winning the game")}</b>
           <span>
             {t(
-              "Dernier joueur debout, trois collections complètes, une ligne complète ou les quatre stations : plusieurs routes mènent à la victoire selon les réglages. À la fin du temps, la fortune totale départage les joueurs.",
-              "Win by being the last player standing, completing three city groups, owning a whole side or all four resorts, depending on the room settings. When time runs out, highest net worth wins.",
+              "Dernier joueur debout, trois collections complètes, une ligne complète ou les quatre plages : plusieurs routes mènent à la victoire selon les réglages. À la fin du temps, la fortune totale départage les joueurs.",
+              "Win by being the last player standing, completing three city groups, owning a whole side or all four beaches, depending on the room settings. When time runs out, highest net worth wins.",
             )}
           </span>
         </li>
@@ -1782,6 +1782,8 @@ function App() {
     hotelPurchaseRule: room.lobby?.hotelPurchaseRule ?? "staged-hotels",
     sellBackPercent: room.lobby?.sellBackPercent ?? 100,
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
+    fourResortRent: room.lobby?.fourResortRent ?? true,
+    buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
   };
   const you = room.you?.seat ?? null;
@@ -2053,8 +2055,8 @@ function App() {
                           )
                         : settingsDirty
                           ? t(
-                              "Enregistrez les réglages avant de démarrer.",
-                              "Save the settings before starting.",
+                              "Les réglages s’enregistrent à la fermeture de leur fenêtre.",
+                              "Settings save when their window closes.",
                             )
                           : t(
                               "Ajoutez un bot ou invitez un ami : il faut au moins 2 joueurs.",
@@ -2102,14 +2104,6 @@ function App() {
                   : undefined
               }
             />
-            {leader && settingsDirty && (
-              <p className="field-note settings-unsaved" role="status">
-                {t(
-                  "Enregistrez vos réglages ci-dessus avant de démarrer. Vos modifications restent un brouillon jusque-là.",
-                  "Save your settings before starting. Changes remain a draft until saved.",
-                )}
-              </p>
-            )}
           </div>
           <div className="room-preview">
             <SceneBoundary

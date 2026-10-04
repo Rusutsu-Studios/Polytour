@@ -16,13 +16,14 @@ a stylized 3D board with juicy, choreographed animations.
 > with a transferable leader, a waiting room and players sharing one screen,
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
-> The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins and
+> The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins (four-beach win optional, off) and
 > 120 minutes. New rooms (rules version 7) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
 > championship, Hotels that cannot be bought out and no Landmark. Festivals are
 > cities only; saved version-4/5/6 rooms keep resort festivals. World Tour
 > reaches free properties and the traveller's own (version 5: own only when none
-> is free). Two houses
+> is free). Four resorts pay 200 k rent, and a bought-out city can be built on
+> at once. Two houses
 > before a first completed lap, three after; the Hotel follows on a later
 > visit to a three-house city. Direct
 > hotels are an explicit custom exception; saved version-2/3 rooms keep their original board and the

@@ -21,6 +21,7 @@ export const RoomConfigSchema = z
     festivalCount: z.number().int().min(0).max(20).default(3),
     lineMonopoly: z.boolean().default(true),
     tripleMonopoly: z.boolean().default(true),
+    resortMonopoly: z.boolean().default(false),
     hotelsDirectly: z.boolean().default(false),
     extraRollOnDouble: z.boolean().default(true),
     tripleDoubleToIsland: z.boolean().default(true),
@@ -191,6 +192,8 @@ export type LobbyState = {
   readonly hotelPurchaseRule: "staged-hotels" | "legacy-lap";
   readonly sellBackPercent: 50 | 100;
   readonly worldTourRule: WorldTourRule;
+  readonly fourResortRent: boolean;
+  readonly buildAfterBuyout: boolean;
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

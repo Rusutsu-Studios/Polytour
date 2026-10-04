@@ -172,16 +172,16 @@ export function describeChanceCardDetails(
     case "Earthquake":
       return [
         t(
-          "Choisissez une ville adverse construite, hôtels compris. Les terrains nus et les stations sont exclus. Le niveau retiré n’est pas remboursé.",
-          "Choose an opponent’s built city, including Hotels. Bare land and resorts are excluded. The removed level is not refunded.",
+          "Choisissez une ville adverse construite, hôtels compris. Les terrains nus et les plages sont exclus. Le niveau retiré n’est pas remboursé.",
+          "Choose an opponent’s built city, including Hotels. Bare land and beaches are excluded. The removed level is not refunded.",
         ),
         noTarget,
       ];
     case "Land Swap":
       return [
         t(
-          "Votre ville est choisie automatiquement selon le prix du terrain, sans ses bâtiments. Vous pouvez refuser l’échange. Les deux villes conservent leurs bâtiments ; les stations sont exclues.",
-          "Your city is selected automatically by land price, excluding buildings. You may decline the swap. Both cities keep their buildings; resorts are excluded.",
+          "Votre ville est choisie automatiquement selon le prix du terrain, sans ses bâtiments. Vous pouvez refuser l’échange. Les deux villes conservent leurs bâtiments ; les plages sont exclues.",
+          "Your city is selected automatically by land price, excluding buildings. You may decline the swap. Both cities keep their buildings; beaches are excluded.",
         ),
         noTarget,
       ];
@@ -204,8 +204,8 @@ export function describeChanceCardDetails(
               `Before your first completed lap, the limit is ${rules.firstLapHouseCap} houses. After a lap, this card can grant a Hotel without waiting to revisit the city.`,
             ),
         t(
-          "Les stations, les hôtels et les monuments ne sont pas des cibles éligibles.",
-          "Resorts, Hotels and Landmarks are not eligible targets.",
+          "Les plages, les hôtels et les monuments ne sont pas des cibles éligibles.",
+          "Beaches, Hotels and Landmarks are not eligible targets.",
         ),
         noTarget,
       ];
@@ -284,7 +284,7 @@ export function describeChanceCard(
         tone: "travel",
         badge: t("Retour au départ", "Back to Start"),
         text: t(
-          `Rejoignez le Grand départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
+          `Rejoignez le Départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
           `Move to Start. Collect ${money(config.startSalary)} salary if you pass it.`,
         ),
       };

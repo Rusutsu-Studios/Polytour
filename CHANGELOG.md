@@ -9,12 +9,42 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
-## [0.6.2] - 2026-10-04
-
 ### Added
 
 - Shared Codex marketplace and project configuration to install and enable the
   Ponytail plugin for trusted Polytour checkouts.
+
+## [0.7.1] - 2026-10-04
+
+### Changed
+
+- The four-resort win is now an optional room setting, off by default, and is
+  called the four-beach win in the interface (French: plages). Saved matches made
+  before the option keep the win enabled.
+- The room settings dialog saves the leader's changes when it closes; the Save
+  settings button is gone.
+- The arrow on the Start tile has a longer, clearer arrowhead on its left end.
+- The French Start tile is named "Départ" instead of "Grand départ".
+
+## [0.7.0] - 2026-10-04
+
+### Added
+
+- The player who buys out another player's city can build on it at once: up to
+  three houses (two before a first completed lap), or the Hotel on a three-house
+  city once the first lap is complete (#101).
+
+### Changed
+
+- Owning all four resorts pays 200 k rent instead of the third resort's 100 k,
+  and the resort card lists the fourth row (#99).
+- New rooms freeze rules version 7 for these two rules; rooms already created
+  keep the rules they started with.
+
+### Fixed
+
+- Once the dice show their total, the space the pawn is about to reach is
+  outlined in the roller's colour, through the walk and the decision there (#97).
 
 ## [0.6.1] - 2026-10-04
 

@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 7, `economyRule: "reference"`) follow the reference
+New rooms (rules version 8, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -181,9 +181,11 @@ apply only the single largest modifier, and none to a Landmark.
 > rooms remove the Landmark and protect the Hotel instead.
 
 **Resorts:** price 200,000, no building. Rent per resort by resorts owned:
-1 → 25,000, 2 → 50,000, 3 → 100,000 (prototype: 50,000 / 100,000 / 200,000),
-4 → instant win. Resorts cannot receive festivals in new matches. Saved reference
-rooms retain their resort festivals and doubled rent. Resorts are not cities: they
+1 → 25,000, 2 → 50,000, 3 → 100,000, 4 → 200,000 (prototype: 50,000 / 100,000 /
+200,000, with four paying like three; rooms before rules version 8 also pay four
+like three). Four resorts are also an instant win when that condition is on.
+Resorts cannot receive festivals in new matches; saved reference rooms retain
+their resort festivals and doubled rent. Resorts are not cities: they
 cannot be bought out, hosted, targeted by Earthquake or Land Swap, or upgraded. The
 only ways a resort changes hands are buying it while unowned and its owner selling
 it to the bank.
@@ -241,8 +243,11 @@ it to the bank.
    `2 × invested value`, paid directly to the current owner. The city, its level,
    and its invested value then transfer to the buyer. It is legal only if the buyer
    can pay without going negative. The championship stays on a bought-out city
-   (prototype: the transfer clears it). Resorts cannot be bought out. A buyout ends
-   that landing's resolution; the buyer can upgrade the city on a later landing.
+   (prototype: the transfer clears it). Resorts cannot be bought out. From rules
+   version 8 the buyer may then build on the city at once, under the usual limits
+   (two houses before a first completed lap, three after, and the Hotel on a
+   three-house city once the first lap is complete); earlier rooms wait for a
+   later landing.
 3. Cash may become negative only after a mandatory payment. This immediately opens
    a forced-sell phase. The debtor may sell any owned cities or resorts to the bank;
    each sale returns 100% of that property's invested value (prototype: 50%,
@@ -300,7 +305,7 @@ lands it on World Tour, even in the middle of a doubles streak.
 1. **Last standing** - every other player is bankrupt.
 2. **Triple Monopoly** - own every city of any 3 countries; enabled by default, configurable.
 3. **Line Monopoly** - own every city and resort on one side; enabled by default, configurable.
-4. **Resort Monopoly** - own all 4 resorts.
+4. **Resort Monopoly** (shown as "beaches" in the interface) - own all 4 resorts; disabled by default, a room option (saves made before the option keep it enabled).
 5. **Time limit / round cap** - highest net worth (cash + invested value) wins.
 
 Check instant wins after any change of ownership (purchase, buyout, Land Swap, sale)

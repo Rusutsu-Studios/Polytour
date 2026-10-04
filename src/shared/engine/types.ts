@@ -28,6 +28,8 @@ export type GameConfig = {
   readonly resortFestivals?: boolean;
   readonly lineMonopoly?: boolean;
   readonly tripleMonopoly?: boolean;
+  /** Missing on saved matches made before the option: they keep the win enabled. */
+  readonly resortMonopoly?: boolean;
   readonly hotelsDirectly?: boolean;
   /** Missing on existing saves: preserve the original lap-only hotel rule. */
   readonly hotelPurchaseRule?: "staged-hotels" | "legacy-lap";
@@ -37,6 +39,10 @@ export type GameConfig = {
   readonly boardRule?: BoardRule;
   /** Missing on saves before rules version 6: own properties only when none is free. */
   readonly worldTourRule?: WorldTourRule;
+  /** Missing on saves before rules version 8: four resorts pay what three do. */
+  readonly fourResortRent?: boolean;
+  /** Missing on saves before rules version 8: a bought-out city is not built on. */
+  readonly buildAfterBuyout?: boolean;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;
@@ -196,6 +202,8 @@ export type ResolutionTask =
       readonly tile: number;
     }
   | { readonly kind: "buyout"; readonly seat: Seat; readonly tile: number }
+  /** Offers the new owner of a bought-out city the chance to build on it. */
+  | { readonly kind: "improve"; readonly seat: Seat; readonly tile: number }
   | { readonly kind: "wins" };
 export type GameState = PublicState & {
   readonly rngState: number;
