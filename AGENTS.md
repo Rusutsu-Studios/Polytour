@@ -95,8 +95,9 @@ pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
 pnpm check:version # package version/changelog agreement; --tag vX.Y.Z; --base <git-ref>
 pnpm test:version  # focused release-tooling tests
-pnpm version:prepare patch --base origin/main # patch is the default; prepare this PR's version and notes
-pnpm version:bump patch # low-level manual bump; use version:prepare for pull requests
+pnpm check:fragments # validate changelog.d/ fragments; --base <git-ref> also checks a PR's notes
+pnpm release:prepare # release only: fold changelog.d/ fragments into CHANGELOG.md and bump the version
+pnpm version:bump patch # low-level manual bump; releases normally use release:prepare
 pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4;
                     # --rules reference|prototype, default reference; --rounds N, default 20)
 pnpm check:drand    # live future-round verification; local proof evidence
@@ -258,8 +259,8 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 
 ## Verification before calling something done
 
-- Prepare the application version and changelog for every pull request using the
-  workflow below, including documentation-only and maintenance changes.
+- Add a changelog fragment to every pull request using the workflow below,
+  including documentation-only and maintenance changes.
 - `pnpm typecheck && pnpm lint && pnpm test` pass.
 - Engine/rules change → engine tests + a quick `pnpm sim` run to catch balance/termination regressions.
 - DO/protocol change → a `@cloudflare/vitest-plugin` test covering the message flow

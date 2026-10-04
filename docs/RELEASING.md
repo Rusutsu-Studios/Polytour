@@ -9,15 +9,17 @@ and Worker import it through `src/shared/version.ts`; the welcome footer display
 
 The initial `0.1.0` entry records the playable prototype and workflow adoption on
 3 October 2026; it is a starting record, not a published release. Every pull
-request, including documentation-only and maintenance changes, advances the
-application version above its current base. Codex and Claude Code prepare it
-automatically as part of their required [shared workflow](../AGENTS.md#application-version-required-for-every-pull-request).
-CI rejects a pull request or merge-queue entry whose version has not advanced.
+request, including documentation-only and maintenance changes, adds a changelog
+fragment in `changelog.d/` and does not touch the version or `CHANGELOG.md`.
+The version advances only when a release is prepared (see below). Codex and
+Claude Code follow the same [shared workflow](../AGENTS.md#release-notes-required-for-every-pull-request).
+CI rejects a pull request or merge-queue entry without a valid fragment, or that
+edits the version or changelog outside a release.
 
-Iterations of the same open pull request may share its prepared version. Include
-the Git commit and deployment URL in bug reports and verification records to
-identify the exact build. A prepared version alone does not establish a production
-deployment or a published GitHub Release.
+Include the Git commit and deployment URL in bug reports and verification
+records to identify the exact build, because several merged pull requests can
+share one release version. A prepared version alone does not establish a
+production deployment or a published GitHub Release.
 
 ## Choosing a version
 
@@ -50,54 +52,61 @@ Saved rooms retain their earlier rules; new releases must load their state and
 preserve those rules. See [ARCHITECTURE.md](ARCHITECTURE.md#deploys-and-games-in-progress)
 and [PROTOCOL.md](PROTOCOL.md).
 
-## Preparing every pull request
+## Release notes for every pull request
 
-1. Add concrete changes and useful issue or pull request references under `## [Unreleased]`
-   in [CHANGELOG.md](../CHANGELOG.md), using `### Added`, `### Changed` or
-   `### Fixed`. Keep exactly one first `Unreleased` section and dated
-   `## [X.Y.Z] - YYYY-MM-DD` entries in descending version order. Preserve every
-   dated entry inherited from the base; put corrections to earlier records in
-   the new notes.
-2. Fetch the latest base, choose the bump, and run:
+A pull request never edits `CHANGELOG.md` or the `package.json` version. Those
+two spots are the same for every open pull request, so editing them made
+concurrent pull requests conflict whenever another one merged. Each pull request
+instead adds one fragment file, so nothing collides.
+
+1. Create `changelog.d/<short-name>.md`, unique to the pull request. Use `### Added`,
+   `### Changed` or `### Fixed` headings with concrete bullet notes and useful
+   issue or pull request references. Wrap a long note by indenting its
+   continuation lines. A first line `<!-- bump: minor -->` (or `major`) asks for
+   that bump at the next release; patch is the default. Choose the bump with the
+   table above. See [changelog.d/README.md](../changelog.d/README.md).
+2. Run:
 
    ```sh
-   git fetch origin main
-   pnpm version:prepare patch --base origin/main
-   pnpm check:version --base origin/main --require-bump
+   pnpm check:fragments
    pnpm test:version
    ```
 
-   `patch` is optional and is the default; use `minor` or `major` according to the
-   table above. The helper reads the fetched base. For a fresh bump, it requires
-   actual `Unreleased` notes, moves them to a new section with the current UTC
-   date, updates `package.json` and leaves `Unreleased` empty. It performs no Git
-   commits, tags, publication or deployment. Review both changed files.
+   `pnpm check:fragments --base origin/main` runs the same check CI does: it adds
+   the rule that the pull request contains a new fragment and does not edit
+   `CHANGELOG.md` or the version.
+3. Complete [the checks required for the changes](../AGENTS.md#verification-before-calling-something-done),
+   then review and merge the pull request. Iterations of the same pull request
+   edit its fragment. Wait for the exact `main` commit's required CI checks and
+   production deployment, and record the commit, deployment URL and results.
 
-   Rerunning preparation keeps an already prepared version above the base and
-   folds new `Unreleased` notes into this pull request's existing release section.
-   If the scope grows, explicitly preparing `minor` or `major` promotes that
-   section to at least the corresponding next version of the base, preserving
-   its date and notes; it never downgrades a higher prepared version. Use a
-   different fetched remote ref with `--base` when targeting another branch.
-   The lower-level `pnpm version:bump patch` remains available for manual use;
-   `version:prepare` is the normal pull request command.
-3. Complete the preparation before the final commit or creating/updating the
-   pull request, and include both files in that pull request. If another merged
-   pull request makes the version stale, rebase or merge the latest base, resolve
-   conflicts, and rerun preparation and the relevant checks before merging.
+CI checks fragment syntax everywhere, and on pull requests and the merge queue
+requires a new fragment, rejects edits to the version or changelog, and checks
+that dated base history is unchanged. Pushed `v*` tags must exactly match the
+package version. The existing test job also runs the focused tooling tests. Keep
+`main` protected with required `verify` checks and an up-to-date base, including
+for administrators. Require pull requests with zero mandatory review approvals so
+agents can still complete the normal workflow themselves.
 
-   CI checks package/changelog consistency and unchanged dated base history on
-   pushes and tags. Pull requests and merge-queue runs additionally require a
-   version strictly greater than their base. Pushed `v*` tags must exactly match
-   the package version. The existing test job also runs the focused tooling tests.
-   Keep `main` protected with required `verify` checks and an up-to-date base,
-   including for administrators. Require pull requests with zero mandatory
-   review approvals so agents can still complete the normal workflow themselves.
-4. Complete [the checks required for the changes](../AGENTS.md#verification-before-calling-something-done),
-   then review and merge the pull request. Wait for the
-   exact `main` commit's required CI checks and production deployment. Verify its
-   version endpoint, visible version and gameplay; record the commit, deployment
-   URL and results.
+## Preparing a release
+
+A release is its own small pull request, opened when you decide to ship:
+
+```sh
+pnpm release:prepare            # bump = the highest one requested by the fragments
+pnpm release:prepare minor      # or force patch, minor or major
+pnpm check:version --base origin/main
+pnpm test:version
+```
+
+`release:prepare` groups every fragment's notes under `### Added`, `### Changed`
+and `### Fixed` in a new dated `CHANGELOG.md` section, updates `package.json`,
+deletes the fragments it consumed and leaves `## [Unreleased]` empty. It refuses
+to run with no fragments or with notes left under `Unreleased`. It performs no Git
+commits, tags, publication or deployment; review both changed files, commit them
+and merge the release pull request, which is the only kind allowed to change the
+version and changelog.
+The lower-level `pnpm version:bump patch` remains for manual use.
 
 ## Tagging and publishing
 

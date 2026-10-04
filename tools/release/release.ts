@@ -188,7 +188,6 @@ export function validateBase(
   directory: string,
   release: Release,
   ref: string,
-  requireBump = false,
 ): string {
   let revision: string;
   try {
@@ -210,11 +209,6 @@ export function validateBase(
   if (compareVersions(release.version, baseVersion) < 0) {
     throw new Error(
       `Release version cannot decrease from ${baseVersion} to ${release.version}.`,
-    );
-  }
-  if (requireBump && compareVersions(release.version, baseVersion) === 0) {
-    throw new Error(
-      `Every pull request must advance application version ${baseVersion}. Add CHANGELOG.md notes and run pnpm version:prepare --base ${ref}. If main advanced, update your branch first.`,
     );
   }
   // The initial adoption of this release workflow can add a changelog to a
@@ -291,47 +285,7 @@ export function bumpVersion(
   return version;
 }
 
-/** Prepare once per PR; later runs fold new notes into that PR's release. */
-export function prepareVersion(
-  directory: string,
-  bump: Bump = "patch",
-  ref = "origin/main",
-  now = new Date(),
-): string {
-  const release = readRelease(directory);
-  validateRelease(release);
-  const baseVersion = validateBase(directory, release, ref);
-  if (release.version === baseVersion) {
-    return bumpVersion(directory, bump, now);
-  }
-
-  const minimumVersion = nextVersion(baseVersion, bump);
-  const version =
-    compareVersions(release.version, minimumVersion) < 0
-      ? minimumVersion
-      : release.version;
-  const unreleased = release.sections[0];
-  const prepared = release.sections[1];
-  const hasNewNotes = hasNotes(unreleased.body);
-  if (!hasNewNotes && version === release.version) return version;
-
-  const notes = hasNewNotes
-    ? `${prepared.body}\n\n${unreleased.body}`
-    : prepared.body;
-  const heading = prepared.heading.replace(
-    `[${release.version}]`,
-    `[${version}]`,
-  );
-  const changelog = `${release.changelog.slice(0, unreleased.start)}## [Unreleased]\n\n${heading}\n\n${notes}\n\n${release.changelog.slice(prepared.end)}`;
-  const packageText =
-    version === release.version
-      ? release.packageText
-      : `${JSON.stringify({ ...release.packageData, version }, null, 2)}\n`;
-  writeRelease(directory, release, packageText, changelog);
-  return version;
-}
-
-function writeRelease(
+export function writeRelease(
   directory: string,
   release: Release,
   packageText: string,
