@@ -5,6 +5,7 @@ import type {
   Action,
   ChanceCard,
   GameConfig,
+  GameEvent,
   GameState,
   PlayerState,
   Seat,
@@ -196,6 +197,43 @@ describe("salary event reducer", () => {
       getPlayer(state, seat).cash + 600_000,
     );
     expect(replay.bankLedger).toBe(state.bankLedger - 600_000);
+  });
+
+  it("counts what the bank receives and pays out alongside its net ledger", () => {
+    const state = toPublic(newGame());
+    const [first, second] = state.turnOrder;
+    const events: GameEvent[] = [
+      { type: "SalaryPaid", seat: first, amount: 400_000, cash: 1 },
+      {
+        type: "MoneyTransferred",
+        from: first,
+        to: null,
+        amount: 150_000,
+        reason: "tax",
+      },
+      {
+        type: "MoneyTransferred",
+        from: null,
+        to: second,
+        amount: 50_000,
+        reason: "card",
+      },
+      {
+        type: "MoneyTransferred",
+        from: first,
+        to: second,
+        amount: 70_000,
+        reason: "card",
+      },
+    ];
+    const replay = events.reduce(applyEvent, state);
+
+    expect(replay.bankReceived).toBe(150_000);
+    expect(replay.bankPaidOut).toBe(450_000);
+    expect(replay.bankLedger).toBe(
+      state.bankLedger + replay.bankReceived - replay.bankPaidOut,
+    );
+    expect(money(replay)).toBe(money(state));
   });
 });
 

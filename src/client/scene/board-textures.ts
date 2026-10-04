@@ -735,15 +735,15 @@ export function cornerTexture(
       context.fillStyle = mix(PAPER, "#3a9a57", 0.1);
       context.fillRect(square * 2, 0, size - square * 2, size);
       // Arrow pointing in the direction of play.
-      const y = size * 0.7;
+      const y = size * 0.76;
       context.fillStyle = "#2f8a4c";
       context.beginPath();
-      context.moveTo(size * 0.2, y - size * 0.2);
-      context.lineTo(size * 0.2, y - size * 0.09);
-      context.lineTo(size * 0.9, y - size * 0.09);
-      context.lineTo(size * 0.9, y + size * 0.09);
-      context.lineTo(size * 0.2, y + size * 0.09);
-      context.lineTo(size * 0.2, y + size * 0.2);
+      context.moveTo(size * 0.2, y - size * 0.17);
+      context.lineTo(size * 0.2, y - size * 0.085);
+      context.lineTo(size * 0.9, y - size * 0.085);
+      context.lineTo(size * 0.9, y + size * 0.085);
+      context.lineTo(size * 0.2, y + size * 0.085);
+      context.lineTo(size * 0.2, y + size * 0.17);
       context.lineTo(size * 0.03 + square * 2, y);
       context.closePath();
       context.fill();
@@ -758,14 +758,15 @@ export function cornerTexture(
         900,
         DISPLAY_FONT,
       );
+      // The salary sits just in front of the bank standing on the top right.
       context.fillStyle = "#2f8a4c";
       fitText(
         context,
         `+${boardAmount(salary, locale)}`,
-        size * 0.7,
-        size * 0.3,
+        size * 0.74,
         size * 0.5,
-        64,
+        size * 0.44,
+        52,
         900,
         DISPLAY_FONT,
       );

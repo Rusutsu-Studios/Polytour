@@ -6,8 +6,8 @@ import {
   STATE_MIGRATIONS,
 } from "./state-migrations.js";
 
-// A stand-in ladder: the shipped one is empty until the first shape change, and
-// the rungs below have to be proven before a deploy depends on them mid-match.
+// A stand-in ladder that exercises the walker itself; the shipped rungs are
+// proven separately below before a deploy depends on them mid-match.
 const LADDER: readonly StateMigration[] = [
   {
     to: 2,
@@ -30,6 +30,22 @@ describe("Saved state migrations", () => {
     expect((STATE_MIGRATIONS.at(-1)?.to ?? 1) === CURRENT_STATE_VERSION).toBe(
       true,
     );
+  });
+
+  it("splits a version-1 bank ledger into bank totals that agree with it", () => {
+    const climb = (bankLedger: number) =>
+      migrateSavedState({ bankLedger, round: 3 }, 1, 2).state;
+    expect(climb(250_000)).toEqual({
+      bankLedger: 250_000,
+      round: 3,
+      bankReceived: 250_000,
+      bankPaidOut: 0,
+    });
+    expect(climb(-400_000)).toMatchObject({
+      bankReceived: 0,
+      bankPaidOut: 400_000,
+    });
+    expect(climb(0)).toMatchObject({ bankReceived: 0, bankPaidOut: 0 });
   });
 
   it("leaves a save already at the current version untouched and unwritten", () => {

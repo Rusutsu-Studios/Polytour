@@ -1913,6 +1913,8 @@ export function createGame(
     lastRoll: null,
     lastCard: null,
     bankLedger: 0,
+    bankReceived: 0,
+    bankPaidOut: 0,
     championshipHost: null,
     status: "active",
     result: null,

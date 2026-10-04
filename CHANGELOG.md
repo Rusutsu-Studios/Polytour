@@ -9,6 +9,20 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+### Added
+
+- A small toy bank stands on Start, and money paid to or by the bank flies to and
+  from it instead of the bare tile; the Start salary is printed just in front of
+  it (#60).
+- Pause > Settings > Debug shows the bank's totals: paid to players, received
+  from players and its account balance, which starts at 0 (#60).
+
+### Changed
+
+- Match state version 2 records the bank's gross received and paid-out totals.
+  Saved version-1 matches load with their net ledger booked as received or paid
+  out, so their totals start from the balance (#60).
+
 ## [0.4.3] - 2026-10-03
 
 ### Fixed

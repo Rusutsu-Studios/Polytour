@@ -13,6 +13,7 @@ import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
+import { fullMoney } from "./board-display.js";
 import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
 import RoomDebug, { translatedRegion } from "./RoomDebug.js";
@@ -35,6 +36,8 @@ export type PauseMenuProps = {
   /** Null while this screen waits for a place in the room. */
   ownSeat: Seat | null;
   onDebugActiveChange: (active: boolean) => void;
+  /** The bank's running totals, from the authoritative match state. */
+  bank: { received: number; paidOut: number; balance: number };
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -54,6 +57,7 @@ export default function PauseMenu({
   roomDebug,
   ownSeat,
   onDebugActiveChange,
+  bank,
 }: PauseMenuProps) {
   const { locale, setLocale, t } = useLocale();
   const { reducedMotion } = useDirector();
@@ -487,6 +491,39 @@ export default function PauseMenu({
                             {t(
                               "Ping HTTP vers Cloudflare, distinct de la latence de la partie.",
                               "HTTP ping to Cloudflare, separate from the game’s latency.",
+                            )}
+                          </p>
+                        </section>
+                        <section
+                          className="pause-debug-bank"
+                          aria-labelledby={`${id}-bank-title`}
+                        >
+                          <h3 id={`${id}-bank-title`}>{t("Banque", "Bank")}</h3>
+                          <dl>
+                            <div>
+                              <dt>
+                                {t("Versé aux joueurs", "Paid to players")}
+                              </dt>
+                              <dd>{fullMoney(bank.paidOut)}</dd>
+                            </div>
+                            <div>
+                              <dt>
+                                {t("Reçu des joueurs", "Received from players")}
+                              </dt>
+                              <dd>{fullMoney(bank.received)}</dd>
+                            </div>
+                            <div>
+                              <dt>{t("Solde du compte", "Account balance")}</dt>
+                              <dd data-negative={bank.balance < 0}>
+                                {bank.balance > 0 ? "+" : ""}
+                                {fullMoney(bank.balance)}
+                              </dd>
+                            </div>
+                          </dl>
+                          <p className="pause-debug-note">
+                            {t(
+                              "Le compte de la banque démarre à 0. Salaires, primes et ventes le font baisser ; achats, constructions et taxes le font monter.",
+                              "The bank account starts at 0. Salaries, bonuses and sales lower it; purchases, building and taxes raise it.",
                             )}
                           </p>
                         </section>

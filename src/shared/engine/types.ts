@@ -144,6 +144,9 @@ export type PublicState = {
   } | null;
   readonly lastCard: { readonly seat: Seat; readonly card: ChanceCard } | null;
   readonly bankLedger: number;
+  /** Totals the bank ever received from and paid to players; their difference is `bankLedger`. */
+  readonly bankReceived: number;
+  readonly bankPaidOut: number;
   readonly championshipHost: {
     readonly tile: number;
     readonly multiplier: number;

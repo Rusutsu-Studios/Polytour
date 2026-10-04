@@ -73,7 +73,13 @@ import {
   scoreTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
-import { BeachUmbrella, LANDMARK_PEAKS, Landmarks } from "./Landmarks.js";
+import {
+  BANK_SPOT,
+  BANK_TOP,
+  BeachUmbrella,
+  LANDMARK_PEAKS,
+  Landmarks,
+} from "./Landmarks.js";
 
 type BoardProps = {
   state: PublicState | null;
@@ -132,8 +138,11 @@ const ROLL_SPOT: readonly [number, number, number] = [1.05, LAWN_TOP, 1.05];
 const DICE_DEFAULT_COLOR = "#d9473a";
 // The dice take the roller's color, brighter than the pawn so pips stay crisp.
 const DICE_COLORS = ["#e0533b", "#3a87e2", "#9564d3", "#2f9b5f"] as const;
-const [BANK_X, BANK_Z] = tileCenter(0);
-const BANK_POSITION: readonly [number, number, number] = [BANK_X, 0.7, BANK_Z];
+const BANK_POSITION: readonly [number, number, number] = [
+  BANK_SPOT[0],
+  BANK_TOP,
+  BANK_SPOT[2],
+];
 
 function pawnPosition(seat: Seat, tile: number): [number, number, number] {
   const [x, z] = pawnSpot(seat, tile);

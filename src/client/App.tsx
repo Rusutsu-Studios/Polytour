@@ -1608,6 +1608,11 @@ function MatchView({
           roomDebug={room.roomDebug}
           ownSeat={own}
           onDebugActiveChange={room.setDebugActive}
+          bank={{
+            received: authoritative.bankReceived,
+            paidOut: authoritative.bankPaidOut,
+            balance: authoritative.bankLedger,
+          }}
         />
       )}
       {debug && (
