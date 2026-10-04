@@ -112,6 +112,61 @@
   gap: 14px;
 }
 
+.pause-vote,
+.pause-request {
+  margin-bottom: 24px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pause-vote p,
+.pause-request p {
+  margin: 8px 0 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pause-vote ul {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.pause-vote li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.pause-vote :where(li > span) {
+  overflow-wrap: anywhere;
+}
+
+.pause-vote-actions {
+  display: flex;
+  gap: 12px;
+  grid-column: 1 / -1;
+}
+
+.pause-vote-actions :where(.pause-action) {
+  flex: 1;
+  padding-inline: 12px;
+}
+
+.pause-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pause-error {
+  color: #98291a;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .pause-action {
   display: flex;
   align-items: center;

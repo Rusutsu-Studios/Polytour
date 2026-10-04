@@ -68,6 +68,10 @@ flowchart LR
   behind the server plays at 2.5×; beyond 40 queued events, or when the tab was
   hidden, it snaps straight to `serverState`.
 - **Tab hidden:** `document.visibilitychange` → snap on return, don't queue minutes of animation.
+- **Confirmed pause:** the Director cancels unfinished choreography and snaps to
+  the authoritative state immediately. Decorative town motion and the decision
+  bars stop; settings remain interactive. On resume, clocks use the engine's
+  shifted deadlines. The multiplayer vote itself leaves normal playback running.
 - **Decision UI** appears only when the Director has drained the events that led to
   the decision - so the purchase panel never appears before the pawn lands.
   Identify the actual `pending.seat`, including off-turn forced payments, and

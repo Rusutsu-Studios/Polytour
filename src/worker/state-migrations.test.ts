@@ -43,6 +43,32 @@ describe("Saved state migrations", () => {
     });
   });
 
+  it("adds unpaused state to version-2 saves and keeps their rules and timers", () => {
+    const saved = {
+      config: { economyRule: "prototype", boardRule: "legacy" },
+      rulesVersion: 2,
+      pending: { kind: "roll", seat: 1, deadline: 30_000 },
+      matchDeadline: 1_200_000,
+      bankLedger: 250_000,
+      bankReceived: 50_000,
+      bankPaidOut: 100_000,
+      rngState: 17,
+      deck: ["Coupon"],
+    };
+    expect(migrateSavedState(saved, 2)).toEqual({
+      state: { ...saved, pause: null, pauseCooldownUntil: 0 },
+      changed: true,
+    });
+    expect(saved).not.toHaveProperty("pause");
+    expect(migrateSavedState({ bankLedger: 7 }, 1).state).toEqual({
+      bankLedger: 7,
+      bankReceived: 0,
+      bankPaidOut: 0,
+      pause: null,
+      pauseCooldownUntil: 0,
+    });
+  });
+
   it("leaves a save already at the current version untouched and unwritten", () => {
     const saved = { cash: 2_000_000 };
     const migrated = migrateSavedState(saved, 3, 3, LADDER);

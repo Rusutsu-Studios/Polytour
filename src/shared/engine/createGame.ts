@@ -20,6 +20,7 @@ import {
   getTileLandPrice,
   isCityTile,
   isResortTile,
+  PAUSE_TIMING,
   ruleEconomy,
 } from "../board/index.js";
 import { applyEvent, toPublic } from "./reducer.js";
@@ -460,6 +461,7 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
   const pending = state.pending;
   if (
     state.status !== "active" ||
+    state.pause?.kind === "paused" ||
     !pending ||
     pending.seat !== seat ||
     getPlayer(state, seat).bankrupt
@@ -682,7 +684,7 @@ export function decisionWindow(
  */
 export function botDecisionAt(state: PublicState): number | null {
   const pending = state.pending;
-  if (!pending) return null;
+  if (!pending || state.pause?.kind === "paused") return null;
   const presented =
     pending.deadline - decisionWindow(state.config, pending.kind);
   return (
@@ -1452,6 +1454,138 @@ function landPrice(state: PublicState, tileIndex: number): number {
     : ECONOMY.resortPrice;
 }
 
+function pauseChanged(
+  state: GameState,
+  pause: PublicState["pause"],
+  pauseCooldownUntil = state.pauseCooldownUntil,
+): CreateGameResult {
+  const event: GameEvent = { type: "PauseChanged", pause, pauseCooldownUntil };
+  return {
+    state: { ...state, ...applyEvent(toPublic(state), event) },
+    events: [event],
+  };
+}
+/** Expire just the vote, without rolling dice or applying a player's decision. */
+export function expirePauseVote(
+  state: GameState,
+  now: number,
+): CreateGameResult {
+  return state.status === "active" &&
+    state.pause?.kind === "vote" &&
+    now >= state.pause.deadline
+    ? pauseChanged(state, null)
+    : { state, events: [] };
+}
+function applyPauseAction(
+  state: GameState,
+  seat: Seat,
+  action: Extract<
+    Action,
+    { type: "RequestPause" | "VotePause" | "ResumeGame" }
+  >,
+  context: ResolutionContext,
+): ApplyActionResult {
+  const humanSeats = state.players
+    .filter(
+      (player) =>
+        !player.bankrupt &&
+        (context.pauseSeats === undefined
+          ? player.control === "human"
+          : context.pauseSeats.includes(player.seat)),
+    )
+    .map((player) => player.seat);
+  const reject = (message: string): ApplyActionResult => ({
+    ok: false,
+    error: { code: "illegal-action", message },
+  });
+  if (!humanSeats.includes(seat))
+    return reject("Only a human player still in the game can pause or resume");
+  if (action.type === "ResumeGame") {
+    if (state.pause?.kind !== "paused") return reject("The game is not paused");
+    const duration = context.now - state.pause.startedAt;
+    if (duration < 0) return reject("Invalid resume time");
+    const event: GameEvent = {
+      type: "GameResumed",
+      seat,
+      pending: state.pending
+        ? { ...state.pending, deadline: state.pending.deadline + duration }
+        : null,
+      matchDeadline:
+        state.matchDeadline === null ? null : state.matchDeadline + duration,
+    };
+    return {
+      ok: true,
+      state: { ...state, ...applyEvent(toPublic(state), event) },
+      events: [event],
+    };
+  }
+  if (state.pause?.kind === "paused")
+    return {
+      ok: false,
+      error: { code: "game-paused", message: "The game is paused" },
+    };
+  if (state.matchDeadline !== null && context.now >= state.matchDeadline)
+    return { ok: true, ...finishOnTime(state, context) };
+  if (state.pending && context.now >= state.pending.deadline)
+    return reject("The current decision has expired");
+  if (action.type === "RequestPause") {
+    if (state.pause !== null)
+      return reject("A pause vote is already in progress");
+    if (humanSeats.length === 1)
+      return {
+        ok: true,
+        ...pauseChanged(state, {
+          kind: "paused",
+          requestedBy: seat,
+          startedAt: context.now,
+        }),
+      };
+    if (context.now < state.pauseCooldownUntil)
+      return {
+        ok: false,
+        error: {
+          code: "pause-cooldown",
+          message: "Wait before requesting another pause",
+        },
+      };
+    return {
+      ok: true,
+      ...pauseChanged(
+        state,
+        {
+          kind: "vote",
+          requestedBy: seat,
+          requiredSeats: humanSeats,
+          acceptedSeats: [seat],
+          deadline: context.now + PAUSE_TIMING.vote,
+        },
+        context.now + PAUSE_TIMING.cooldown,
+      ),
+    };
+  }
+  const vote = state.pause;
+  if (vote?.kind !== "vote" || context.now >= vote.deadline)
+    return reject("There is no open pause vote");
+  if (!vote.requiredSeats.includes(seat))
+    return reject("This player is not part of the pause vote");
+  if (vote.acceptedSeats.includes(seat))
+    return reject("This player has already voted");
+  if (!action.accept) return { ok: true, ...pauseChanged(state, null) };
+  const acceptedSeats = [...vote.acceptedSeats, seat];
+  return {
+    ok: true,
+    ...pauseChanged(
+      state,
+      vote.requiredSeats.every((required) => acceptedSeats.includes(required))
+        ? {
+            kind: "paused",
+            requestedBy: vote.requestedBy,
+            startedAt: context.now,
+          }
+        : { ...vote, acceptedSeats },
+    ),
+  };
+}
 export function applyAction(
   state: GameState,
   seat: Seat,
@@ -1476,6 +1610,22 @@ function applyActionWithContext(
       ok: false,
       error: { code: "game-over", message: "The game is over" },
     };
+  if (!Number.isFinite(context.now))
+    return {
+      ok: false,
+      error: { code: "illegal-action", message: "Invalid action time" },
+    };
+  if (
+    action.type === "RequestPause" ||
+    action.type === "VotePause" ||
+    action.type === "ResumeGame"
+  )
+    return applyPauseAction(state, seat, action, context);
+  if (state.pause?.kind === "paused")
+    return {
+      ok: false,
+      error: { code: "game-paused", message: "The game is paused" },
+    };
   if (state.pending?.seat !== seat)
     return {
       ok: false,
@@ -1483,11 +1633,6 @@ function applyActionWithContext(
         code: "not-active-seat",
         message: "It is not this seat's decision",
       },
-    };
-  if (!Number.isFinite(context.now))
-    return {
-      ok: false,
-      error: { code: "illegal-action", message: "Invalid action time" },
     };
   if (state.matchDeadline !== null && context.now >= state.matchDeadline)
     return { ok: true, ...finishOnTime(state, context) };
@@ -1518,7 +1663,21 @@ function applyActionWithContext(
     };
   const resolved = resolver(state, context);
   resolved.act(seat, action);
-  return { ok: true, ...resolved.result() };
+  const result = resolved.result();
+  if (
+    result.state.pause?.kind === "vote" &&
+    result.state.pause.requiredSeats.some(
+      (required) => getPlayer(result.state, required).bankrupt,
+    )
+  ) {
+    const cancelled = pauseChanged(result.state, null);
+    return {
+      ok: true,
+      state: cancelled.state,
+      events: [...result.events, ...cancelled.events],
+    };
+  }
+  return { ok: true, ...result };
 }
 function bestRentTarget(
   state: PublicState,
@@ -1648,12 +1807,20 @@ export function applyTimeout(
   input: EngineContext,
 ): CreateGameResult {
   const context = resolutionContext(input);
-  if (state.status !== "active") return { state, events: [] };
-  if (state.matchDeadline !== null && context.now >= state.matchDeadline)
-    return finishOnTime(state, context);
-  if (!state.pending || context.now < state.pending.deadline)
+  if (state.status !== "active" || state.pause?.kind === "paused")
     return { state, events: [] };
-  const events: GameEvent[] = [];
+  const expiredVote = expirePauseVote(state, context.now);
+  state = expiredVote.state;
+  if (state.matchDeadline !== null && context.now >= state.matchDeadline) {
+    const finished = finishOnTime(state, context);
+    return {
+      state: finished.state,
+      events: [...expiredVote.events, ...finished.events],
+    };
+  }
+  if (!state.pending || context.now < state.pending.deadline)
+    return expiredVote;
+  const events: GameEvent[] = [...expiredVote.events];
   let next = state;
   const forcedSell = state.pending.kind === "sell";
   do {
@@ -1967,6 +2134,8 @@ export function createGame(
     phase: "roll",
     doublesInTurn: 0,
     pending: null,
+    pause: null,
+    pauseCooldownUntil: 0,
     lastRoll: null,
     lastCard: null,
     bankLedger: 0,

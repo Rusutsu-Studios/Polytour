@@ -126,7 +126,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
       [0, 1, 2, 3].map((seat) => ({
         playerId: `fixture-player-${seat}`,
         name: ["Camille", "Milo", "Sora", "Atlas"][seat],
-        control: seat === 0 ? ("human" as const) : ("bot" as const),
+        control: seat < 2 ? ("human" as const) : ("bot" as const),
         seat: seat as Seat,
       })),
       35,
@@ -310,7 +310,7 @@ async function setDocumentVisibility(page: Page, visible: boolean) {
   }, visible);
 }
 
-test("pause keeps the clock and authoritative updates running without losing modal focus", async ({
+test("opening a multiplayer pause menu keeps clocks and authoritative updates running without losing modal focus", async ({
   page,
 }) => {
   const errors: string[] = [];

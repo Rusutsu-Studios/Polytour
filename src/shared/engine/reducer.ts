@@ -81,6 +81,19 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
   switch (event.type) {
     case "GameCreated":
       return event.state;
+    case "PauseChanged":
+      return {
+        ...state,
+        pause: event.pause,
+        pauseCooldownUntil: event.pauseCooldownUntil,
+      };
+    case "GameResumed":
+      return {
+        ...state,
+        pause: null,
+        pending: event.pending,
+        matchDeadline: event.matchDeadline,
+      };
     case "DiceRolled":
       return {
         ...state,
@@ -271,6 +284,7 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
         ...state,
         status: "finished",
         pending: null,
+        pause: null,
         result: {
           winner: event.winner,
           kind: event.kind,
