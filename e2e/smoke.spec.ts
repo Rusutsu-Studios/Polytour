@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import packageMetadata from "../package.json" with { type: "json" };
+import { chooseLanguage } from "./language.js";
 
 test.describe("production app shell", () => {
   test("shows the package release version served by the Worker", async ({
@@ -28,9 +29,7 @@ test.describe("production app shell", () => {
         ),
       ).toBe(true);
     }
-    await page
-      .getByRole("combobox", { name: "Langue / Language" })
-      .selectOption("en");
+    await chooseLanguage(page, "en");
     await expect(version).toHaveText(`v${packageMetadata.version}`);
   });
 

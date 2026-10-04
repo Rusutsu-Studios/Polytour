@@ -7,6 +7,7 @@ import type {
 import { APP_VERSION } from "../src/shared/version.js";
 import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
+import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -198,12 +199,12 @@ test.describe("low graphics", () => {
     await page.reload();
     await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "low");
     await expect(homeGraphics).toHaveAccessibleName(lowLabel);
-    await page.getByLabel("Langue / Language").selectOption("en");
+    await chooseLanguage(page, "en");
     await expect(homeGraphics).toHaveAccessibleName(
       "Graphics: Low. Switch to High.",
     );
     await expect(homeGraphics).toHaveText("Low");
-    await page.getByLabel("Langue / Language").selectOption("fr");
+    await chooseLanguage(page, "fr");
     await page.getByLabel("Votre nom de joueur").fill("Graphics QA");
     await openLobby(page);
     await page.locator(".settings-trigger").click();
@@ -379,6 +380,131 @@ test("room lobby board fills its preview across desktop sizes", async ({
   await expect(page.locator(".settings-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-trigger")).toBeFocused();
+});
+
+test("win conditions follow the settings draft and saved rules in both languages", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.goto("/");
+  await chooseLanguage(page, "en");
+  await page.getByLabel("Player name").fill("Rules check");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.locator(".lobby-seats")).toContainText("Atlas");
+  await page.locator(".settings-trigger").click();
+  const dialog = page.locator(".settings-dialog");
+  const wins = dialog.getByRole("region", {
+    name: "How to win with these settings",
+  });
+  await expect(wins.getByRole("listitem")).toHaveCount(6);
+  await expect(wins).toContainText("Own all four resorts.");
+  await expect(wins).toContainText("Zero cash alone is not bankruptcy");
+  await expect(wins).toContainText("10000-round limit");
+  await dialog.getByLabel("Win with a full side", { exact: true }).uncheck();
+  await expect(wins).not.toContainText("one side of the board");
+  await expect(wins).toContainText("three complete country sets");
+  await dialog
+    .getByLabel("Win with three complete sets", { exact: true })
+    .uncheck();
+  await expect(wins.getByRole("listitem")).toHaveCount(4);
+  await dialog.getByRole("radio", { name: "20 min", exact: true }).check();
+  await expect(wins).toContainText("after 20 min");
+  await expect(wins).not.toContainText("120 min");
+  const gifts = dialog.getByLabel("Gifts can cause bankruptcy", {
+    exact: true,
+  });
+  await expect(gifts).toHaveAccessibleDescription(
+    /Birthday and Charity cards.*full payment/,
+  );
+  await gifts.uncheck();
+  await expect(gifts).toHaveAccessibleDescription(/capped at available cash/);
+  await gifts.check();
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(size);
+    await wins.scrollIntoViewIfNeeded();
+    const layout = await dialog.evaluate((element) => {
+      const body = element.querySelector(
+        ".settings-dialog-body",
+      ) as HTMLElement;
+      const summary = element.querySelector(
+        ".room-settings-wins",
+      ) as HTMLElement;
+      const save = element.querySelector(".room-settings-save") as HTMLElement;
+      const rect = element.getBoundingClientRect();
+      const footer = element.querySelector(
+        ".settings-dialog-footer",
+      ) as HTMLElement;
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        footerBottom: footer.getBoundingClientRect().bottom,
+        overflow: body.scrollWidth > body.clientWidth,
+        ordered:
+          summary.getBoundingClientRect().bottom <=
+          save.getBoundingClientRect().top,
+      };
+    });
+    expect(layout.top).toBeGreaterThanOrEqual(0);
+    expect(layout.bottom).toBeLessThanOrEqual(size.height);
+    expect(layout.footerBottom).toBeLessThanOrEqual(layout.bottom);
+    expect(layout.overflow).toBe(false);
+    expect(layout.ordered).toBe(true);
+    await page.screenshot({
+      path: `.local/verification/win-settings-en-${size.width}.png`,
+    });
+  }
+  await dialog
+    .getByRole("button", { name: "Save settings", exact: true })
+    .click();
+  await expect(dialog.locator(".room-settings-save")).toHaveText(
+    "Settings saved",
+  );
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await expect(page.locator(".lobby-seats")).toBeVisible();
+  await chooseLanguage(page, "fr");
+  await page.locator(".settings-trigger").click();
+  const frenchWins = dialog.getByRole("region", {
+    name: "Comment gagner avec ces réglages",
+  });
+  await expect(frenchWins.getByRole("listitem")).toHaveCount(4);
+  await expect(frenchWins).toContainText("après 20 min");
+  await expect(frenchWins).toContainText("quatre stations touristiques");
+  await dialog
+    .getByLabel("Victoire par ligne complète", { exact: true })
+    .check();
+  await dialog
+    .getByLabel("Victoire par trois collections", { exact: true })
+    .check();
+  await expect(frenchWins.getByRole("listitem")).toHaveCount(6);
+  await expect(frenchWins).toContainText("trois collections de pays complètes");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await frenchWins.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: ".local/verification/win-settings-fr-1280.png",
+  });
+  await saveSettings(page);
+  await page.getByRole("button", { name: "Démarrer la partie" }).click();
+  await expect(page.locator(".player-card")).toHaveCount(4);
+  await page
+    .getByRole("button", { name: "Lancer les dés", exact: true })
+    .waitFor({ state: "visible" });
+  await page
+    .getByRole("button", { name: "Réglages de la partie", exact: true })
+    .click();
+  const matchRules = page.locator(".match-rules");
+  await expect(
+    matchRules
+      .getByRole("region", { name: "Comment gagner avec ces réglages" })
+      .getByRole("listitem"),
+  ).toHaveCount(6);
+  await expect(
+    matchRules.getByLabel("Victoire par ligne complète", { exact: true }),
+  ).toBeDisabled();
 });
 
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
@@ -697,7 +823,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(lockedHotel).toBeDisabled();
   await expect(lockedHotel).toHaveAttribute("data-locked", "true");
   await expect(lockedHotel).toHaveAttribute(
-    "title",
+    "data-disabled-reason",
     /3 maisons, un tour complet, puis revenir ici/,
   );
   await expect(
@@ -1798,7 +1924,7 @@ test("the room leader seats a local player, admits a friend, hands over during p
     const friendPicker = friend.locator(".room-leader-picker");
     await expect(friendPicker.locator(".room-leader-choice")).toHaveCount(4);
     await expect(
-      friendPicker.locator(".room-leader-choice:enabled"),
+      friendPicker.locator('.room-leader-choice:not([aria-disabled="true"])'),
     ).toHaveCount(0);
 
     // Hold the outgoing transfer briefly to observe the pending state, then
@@ -1836,7 +1962,9 @@ test("the room leader seats a local player, admits a friend, hands over during p
       };
     });
     await coraChoice.click();
-    await expect(picker.locator(".room-leader-choice:enabled")).toHaveCount(0);
+    await expect(
+      picker.locator(".room-leader-choice:not([aria-disabled='true'])"),
+    ).toHaveCount(0);
     await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
     await page.evaluate(() => {
       const surface = window as Window & { releaseLeaderTransfer?: () => void };
@@ -1845,7 +1973,9 @@ test("the room leader seats a local player, admits a friend, hands over during p
       surface.releaseLeaderTransfer();
     });
     await expect(coraChoice).toHaveAttribute("aria-pressed", "true");
-    await expect(picker.locator(".room-leader-choice:enabled")).toHaveCount(0);
+    await expect(
+      picker.locator(".room-leader-choice:not([aria-disabled='true'])"),
+    ).toHaveCount(0);
     await expect(page.getByLabel(/Verrouiller la salle/)).toHaveCount(0);
     await expect(
       friendPicker.locator('.room-leader-choice[data-seat="2"]'),
@@ -1859,7 +1989,7 @@ test("the room leader seats a local player, admits a friend, hands over during p
     await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
     await expect(coraChoice).toBeEnabled();
     await expect(
-      friendPicker.locator(".room-leader-choice:enabled"),
+      friendPicker.locator(".room-leader-choice:not([aria-disabled='true'])"),
     ).toHaveCount(0);
     await expect(page.getByLabel(/Verrouiller la salle/)).toBeEnabled();
 
@@ -1943,7 +2073,7 @@ for (const locale of ["fr", "en"] as const) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
-    await page.getByLabel("Langue / Language").selectOption(locale);
+    await chooseLanguage(page, locale);
     const helpTrigger = page.getByRole("button", {
       name: locale === "fr" ? "Comment jouer" : "How to play",
       exact: true,

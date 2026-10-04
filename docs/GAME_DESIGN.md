@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 6, `economyRule: "reference"`) follow the reference
+New rooms (rules version 7, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -61,7 +61,8 @@ the tie.
    applies to short tests/simulations; the timed preset uses a 10,000-round safety
    cap. Twenty rounds are not labelled twenty minutes.
 5. Three initial festivals are selected by the seeded shuffle by default, among
-   cities and resorts (prototype rooms: cities only). Each doubles the rent of its
+   cities only. Saved reference rooms (versions 4–6) retain festivals on cities
+   or resorts; prototype rooms also use cities only. Each doubles the rent of its
    tile for the whole match and combines with the other modifiers (see Economy).
    Festival count is configurable.
 
@@ -99,7 +100,7 @@ Dubai and Bali.
 | Players | 2–4; empty seats stay empty or take a bot |
 | Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
 | Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
-| Initial festivals | 3 (configurable); cities or resorts with ×2 rent |
+| Initial festivals | 3 (configurable); cities only with ×2 rent (saved reference rooms: cities or resorts) |
 | Sell-back to bank | 100% of invested value (prototype: 50%) |
 | Buyout price | 2× invested value (paid to owner) |
 
@@ -163,7 +164,7 @@ is legal only when its full cost leaves the buyer with cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
 The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations; the server only
-creates version-6 rooms and cannot accept an internal rule marker through room
+creates version-7 rooms and cannot accept an internal rule marker through room
 settings. A stale pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
@@ -181,7 +182,8 @@ apply only the single largest modifier, and none to a Landmark.
 
 **Resorts:** price 200,000, no building. Rent per resort by resorts owned:
 1 → 25,000, 2 → 50,000, 3 → 100,000 (prototype: 50,000 / 100,000 / 200,000),
-4 → instant win. A festival doubles a resort's rent. Resorts are not cities: they
+4 → instant win. Resorts cannot receive festivals in new matches. Saved reference
+rooms retain their resort festivals and doubled rent. Resorts are not cities: they
 cannot be bought out, hosted, targeted by Earthquake or Land Swap, or upgraded. The
 only ways a resort changes hands are buying it while unowned and its owner selling
 it to the bank.
@@ -387,6 +389,8 @@ they are legal and relevant.
   fully resolved, unless that landing ended the turn (Island, World Tour). Island
   escape rolls never grant one. A third consecutive double sends the player to
   Island instead of moving; the counter resets whenever the turn ends.
+  The room option `tripleDoubleToIsland` (default on; missing on older saves counts
+  as on) can switch this off: the third double then moves normally.
 - **No biased power gauge.** The user explicitly requires genuinely random dice.
   Holding a button, account history, spending, cosmetics, or bot difficulty must
   never change the dice distribution. Any future throwing gesture is cosmetic.
@@ -485,7 +489,11 @@ choice; neither the UI nor a bot may infer it from board state.
 - Seat advantage (first player win rate should be within ±3% of fair share).
 - Termination: no game ever exceeds the round limit or loops.
 - Money conservation: player cash + bank ledger (including bankruptcy `writtenOff`)
-  is unchanged by every event.
+  is unchanged by every event. Separately, the bank's own account
+  (`bankReceived`, `bankPaidOut`) counts only salaries and money that taxes,
+  fees, fines and cards move between players and the bank; property purchases,
+  building, sales and written-off debts stay out of it. The Debug settings tab
+  shows the account.
 - Per-condition instant-win rates. Resorts can't be bought out, so one resort can
   block Resort Monopoly and its side's Line Monopoly for good; if either rate is
   near zero, revisit that rule.

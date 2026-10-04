@@ -106,6 +106,16 @@
   background: var(--chance-player);
   transform-origin: left;
 }
+.tax-illustration {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  height: clamp(150px, 27vh, 250px);
+  color: #173b45;
+}
+.tax-illustration > svg {
+  color: #47666c;
+}
 @media (max-height: 760px) {
   .chance-card header {
     min-height: 54px;

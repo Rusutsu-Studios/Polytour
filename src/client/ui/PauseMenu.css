@@ -350,11 +350,11 @@
   font-size: 14px;
 }
 
-.pause-zoom button:hover:not(:disabled) {
+.pause-zoom button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #d6eade;
 }
 
-.pause-zoom button:disabled {
+.pause-zoom button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.45;
   cursor: default;
 }
@@ -437,6 +437,37 @@
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
+}
+
+.pause-debug-bank {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+}
+
+.pause-debug-bank dl {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 24px;
+  font-size: 13px;
+}
+
+.pause-debug-bank dl > div {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.pause-debug-bank dd {
+  text-align: left;
+  font-size: 16px;
+}
+
+.pause-debug-bank dd[data-negative="true"] {
+  color: #a3352a;
+}
+
+.pause-debug-bank .pause-debug-note {
+  margin-top: 12px;
+  font-size: 12px;
 }
 
 .pause-debug-edge dl {
@@ -647,9 +678,14 @@
 
   .room-debug-route,
   .room-debug-latency,
-  .pause-debug-edge {
+  .pause-debug-edge,
+  .pause-debug-bank {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  .pause-debug-bank dl {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -147,6 +147,11 @@ or database contents. This metadata is sent
 only to the requesting room member. It is refreshed after reconnection or when an
 initial measurement was interrupted, without continuous metadata polling.
 
+The Debug view also lists the bank's account (paid to players, received from
+players and the balance, which starts at 0). It comes from the public match
+state the client already holds, so it adds no traffic. State version 2 added the
+account; a version-1 save climbs with an empty account.
+
 The route diagram joins those player entry points to one shared `GameRoom` with
 its local SQLite database. A DO's exact execution POP and physical server hostname
 have no documented runtime getters; their unhelpful placeholder rows are omitted
@@ -374,9 +379,11 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 6 with country-grouped tiles, reference economy, staged hotels, full
-  nominal sale refunds and `worldTourRule: "free-and-own"`. A version-4/5 save
-  without that selector keeps World Tour on free properties first. A version-2/3
+  use version 7 with country-grouped tiles, reference economy, staged hotels, full
+  nominal sale refunds, `worldTourRule: "free-and-own"` and `resortFestivals: false`.
+  Version-4/5/6 rooms retain their resort festivals and rent; an absent festival
+  marker on those saved matches follows the original economy. A version-4/5 save
+  without the World Tour selector keeps World Tour on free properties first. A version-2/3
   save without the newer selectors uses
   its original legacy board and prototype economy. Version-2 lobbies start with
   lap-only hotels, while version-3 lobbies retain staged hotels; both keep their

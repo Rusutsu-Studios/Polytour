@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { chooseLanguage } from "./language.js";
 
 const CANONICAL_URL = "https://polytour.fun/";
 const SOCIAL_IMAGE_URL = `${CANONICAL_URL}social-card.png`;
@@ -282,7 +283,7 @@ test("keeps locale metadata and saved language aligned on the same canonical URL
     "/site.webmanifest",
   );
   const originalURL = page.url();
-  await page.getByLabel("Langue / Language").selectOption("en");
+  await chooseLanguage(page, "en");
   await expect(page).toHaveTitle(EN_TITLE);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   for (const selector of [
@@ -332,7 +333,7 @@ test("keeps locale metadata and saved language aligned on the same canonical URL
   await expect(
     page.getByRole("button", { name: "Play", exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Langue / Language").selectOption("fr");
+  await chooseLanguage(page, "fr");
   await expect(page).toHaveTitle(FR_TITLE);
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",

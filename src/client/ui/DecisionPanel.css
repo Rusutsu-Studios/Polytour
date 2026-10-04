@@ -217,7 +217,8 @@
     transform 140ms,
     box-shadow 140ms;
 }
-.decision-popup .construction-choice:hover:not(:disabled) {
+.decision-popup
+  .construction-choice:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #e8eccf;
   transform: translateY(-2px);
 }
@@ -225,7 +226,7 @@
   background: #f8db9b;
   box-shadow: 0 3px 0 #c29336;
 }
-.decision-popup .construction-choice:disabled {
+.decision-popup .construction-choice:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.6;
   cursor: wait;
 }
@@ -330,10 +331,12 @@
   color: #fffaf0;
   box-shadow: 0 4px 0 #98291a;
 }
-.decision-popup .decision-confirm:hover:not(:disabled) {
+.decision-popup
+  .decision-confirm:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #b8331b;
 }
-.decision-popup .decision-confirm:active:not(:disabled) {
+.decision-popup
+  .decision-confirm:active:not(:is(:disabled, [aria-disabled="true"])) {
   transform: translateY(2px);
   box-shadow: none;
 }
@@ -341,12 +344,59 @@
   background: #e9e9d9;
   color: #173b45;
 }
-.decision-popup .decision-confirm:disabled {
+.decision-popup .decision-confirm:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.6;
   box-shadow: none;
 }
 .decision-resume {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.decision-resume > span:first-of-type {
+  flex: 1;
+}
+.decision-resume small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.decision-dock-timer {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.game-shell .decision-compact:has(.decision-resume) h2,
+.game-shell .decision-compact:has(.decision-resume) .decision-kicker {
+  display: none;
+}
+.game-shell .decision-compact:has(.decision-resume) {
+  padding: 0;
+  min-width: 300px;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.contextual-action:has(.decision-resume) {
+  width: min(340px, calc(100vw - 570px));
+}
+.game-shell .decision-compact:has(.decision-resume) .decision-actions {
+  display: block;
+  margin-top: 0;
+}
+.game-shell .decision-compact .decision-resume {
+  width: 100%;
+  padding: 12px 16px;
+  background: #fffaf0;
+  color: #173b45;
+  box-shadow:
+    0 4px 0 #59949780,
+    0 8px 25px #173b451c;
+}
+.game-shell .decision-compact .decision-resume:hover {
+  background: #f8db9b;
 }
 
 /* A two-row dock sits below the board, leaving every sale price clickable. */
@@ -467,7 +517,7 @@
   color: #fffaf0;
   box-shadow: 0 4px 0 #98291a;
 }
-.sale-confirmation .sale-confirm:disabled {
+.sale-confirmation .sale-confirm:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.6;
   box-shadow: none;
 }
