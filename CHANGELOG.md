@@ -9,6 +9,13 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-04
+
+### Added
+
+- Shared Codex marketplace and project configuration to install and enable the
+  Ponytail plugin for trusted Polytour checkouts.
+
 ## [0.6.1] - 2026-10-04
 
 ### Fixed
