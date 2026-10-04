@@ -52,6 +52,8 @@ const CONFIG: GameConfig = {
   economyRule: "prototype",
   boardRule: "legacy",
   sellBackPercent: 100,
+  fourResortRent: false,
+  buildAfterBuyout: false,
   roundLimit: 20,
   timeLimitMinutes: undefined,
   festivalCount: 0,
@@ -1591,6 +1593,8 @@ describe("combined reference rules on the country board", () => {
 const REFERENCE: GameConfig = {
   ...CONFIG,
   economyRule: "reference",
+  fourResortRent: true,
+  buildAfterBuyout: true,
   resortFestivals: true,
 };
 function reference(count = 4, config: GameConfig = REFERENCE): GameState {
@@ -1696,6 +1700,102 @@ describe("reference economy on the original board", () => {
       ).flat();
     expect(festivals("reference").length).toBeGreaterThan(0);
     expect(festivals("prototype")).toEqual([]);
+  });
+  it("pays 200 k for four resorts, and saves without the marker keep the third rent", () => {
+    const owned = (state: GameState) =>
+      [5, 12, 21, 28].reduce(
+        (all, tile) => grant(all, tile, all.activeSeat),
+        state,
+      );
+    const state = owned(reference());
+    expect(resortCount(state, state.activeSeat)).toBe(4);
+    expect(propertyRent(state, 5)).toBe(200_000);
+    expect(propertyRent({ ...state, festivalTiles: [5] }, 5)).toBe(400_000);
+    const saved = owned(reference(4, { ...REFERENCE, fourResortRent: false }));
+    expect(propertyRent(saved, 5)).toBe(100_000);
+    // A save from before rules version 7 carries no marker at all.
+    const { fourResortRent: _marker, ...unmarked } = state.config;
+    expect(propertyRent({ ...state, config: unmarked }, 5)).toBe(100_000);
+  });
+  it.each([
+    { level: 0, offered: [1, 2] },
+    { level: 1, offered: [2] },
+    { level: 2, offered: [3] },
+  ])(
+    "offers the buyer of a level-$level city to build on it at once",
+    ({ level, offered }) => {
+      let state = reference();
+      const seat = state.activeSeat;
+      state = setPlayer(
+        grant(state, 1, other(state), level as BuildLevel),
+        seat,
+        {
+          laps: 1,
+        },
+      );
+      const rented = land(state, 1);
+      expect(rented.state.pending?.kind).toBe("buyout");
+      const bought = act(rented.state, { type: "Buyout" }).state;
+      expect(propertyOwner(bought, 1)).toBe(seat);
+      expect(bought.pending).toMatchObject({
+        kind: "build",
+        seat,
+        tile: 1,
+        maxLevel: 3,
+      });
+      const builds = legalActions(bought, seat)
+        .flatMap((action) => (action.type === "Build" ? [action.level] : []))
+        .filter((next) => next <= 3);
+      expect(builds).toEqual(
+        expect.arrayContaining(offered.filter((next) => next <= 3)),
+      );
+      const built = act(bought, {
+        type: "Build",
+        level: Math.max(...builds) as BuildLevel,
+      }).state;
+      expect(getProperty(built, 1)?.level).toBe(Math.max(...builds));
+      expect(built.pending?.kind).not.toBe("build");
+    },
+  );
+  it("lets the buyer of a three-house city build the Hotel straight away", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    state = setPlayer(grant(state, 1, other(state), 3), seat, { laps: 1 });
+    const bought = act(land(state, 1).state, { type: "Buyout" }).state;
+    expect(bought.pending).toMatchObject({ kind: "build", maxLevel: 4 });
+    const built = act(bought, { type: "Build", level: 4 }).state;
+    expect(getProperty(built, 1)).toMatchObject({ owner: seat, level: 4 });
+  });
+  it("limits a first-lap buyer to two houses and offers nothing on a capped city", () => {
+    let state = reference();
+    const seat = state.activeSeat;
+    state = setPlayer(grant(state, 9, other(state), 1), seat, { laps: 0 });
+    const bought = act(land(state, 9).state, { type: "Buyout" }).state;
+    expect(bought.pending).toMatchObject({ kind: "build", maxLevel: 2 });
+    const full = setPlayer(
+      grant(reference(), 9, nextSeat(reference()), 2),
+      seat,
+      {
+        laps: 0,
+      },
+    );
+    const topped = act(land(full, 9).state, { type: "Buyout" }).state;
+    expect(topped.pending?.kind).not.toBe("build");
+  });
+  it("lets a buyout end the turn without building, and keeps older rooms from offering it", () => {
+    const state = reference();
+    const seat = state.activeSeat;
+    const set = (game: GameState) =>
+      setPlayer(grant(game, 1, other(game), 1), seat, { laps: 1 });
+    const declined = act(
+      act(land(set(state), 1).state, { type: "Buyout" }).state,
+      { type: "Decline" },
+    ).state;
+    expect(declined.activeSeat).not.toBe(seat);
+    expect(getProperty(declined, 1)).toMatchObject({ owner: seat, level: 1 });
+    const older = reference(4, { ...REFERENCE, buildAfterBuyout: false });
+    const bought = act(land(set(older), 1).state, { type: "Buyout" }).state;
+    expect(bought.pending?.kind).not.toBe("build");
   });
   it("ignores beach festivals in new matches and preserves unmarked saved reference rent", () => {
     let state = newGame(4, { ...DEFAULT_GAME_CONFIG, boardRule: "country" });

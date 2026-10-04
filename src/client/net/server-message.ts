@@ -164,6 +164,8 @@ const lobby = z.object({
     .enum(["staged-hotels", "legacy-lap"])
     .default("staged-hotels"),
   worldTourRule: z.enum(["free-and-own", "free-first"]).default("free-and-own"),
+  fourResortRent: z.boolean().default(true),
+  buildAfterBuyout: z.boolean().default(true),
   resortFestivals: z.boolean().optional(),
   seats: z
     .array(

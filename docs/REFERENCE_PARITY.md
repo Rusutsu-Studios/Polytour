@@ -218,6 +218,15 @@ is free. This deliberately departs from the reference rule above. New rooms free
 `rulesVersion: 6` with `worldTourRule: "free-and-own"`; version-4/5 rooms keep
 `"free-first"`, and prototype rooms still fly to any other tile.
 
+### Four resorts and building after a buyout — rules version 8, 4 October 2026
+
+At the user's request (issues #99 and #101), two further departures from the
+reference economy apply to new rooms. Owning all four resorts pays 200 k rent
+instead of the third resort's 100 k, and the player who buys out a city may build
+on it straight away, up to the limit a landing on their own city would allow.
+New rooms freeze `rulesVersion: 8` with `fourResortRent: true` and
+`buildAfterBuyout: true`; version-7 and earlier rooms keep the earlier behaviour.
+
 ## Capture from the running reference before adding an exact preset
 
 | Area | Evidence needed | Current status |

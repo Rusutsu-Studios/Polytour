@@ -199,8 +199,8 @@ describe("economy configuration", () => {
     expect(getResortRent(1, "prototype")).toBe(50_000);
     expect(getResortRent(3, "prototype")).toBe(200_000);
     expect(
-      ([1, 2, 3] as const).map((owned) => getResortRent(owned, "reference")),
-    ).toEqual([25_000, 50_000, 100_000]);
+      ([1, 2, 3, 4] as const).map((owned) => getResortRent(owned, "reference")),
+    ).toEqual([25_000, 50_000, 100_000, 200_000]);
   });
 
   it("takes the reference rents and three-house totals, rising side by side", () => {

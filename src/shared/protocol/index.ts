@@ -192,6 +192,8 @@ export type LobbyState = {
   readonly hotelPurchaseRule: "staged-hotels" | "legacy-lap";
   readonly sellBackPercent: 50 | 100;
   readonly worldTourRule: WorldTourRule;
+  readonly fourResortRent: boolean;
+  readonly buildAfterBuyout: boolean;
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];
