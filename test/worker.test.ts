@@ -1103,6 +1103,81 @@ describe("Authoritative private rooms", () => {
     expect(timers.changes).toBe(0);
   });
 
+  it.each([
+    [2_000_000, "LeftIsland"],
+    [100_000, "DiceRolled"],
+  ] as const)(
+    "a Lost Island bot with %i cash acts before its decision deadline",
+    async (cash, eventType) => {
+      const host = await create("secure", 1);
+      const inbox = await connect(host);
+      await inbox.next("welcome");
+      expect(
+        await roomOp(inbox, "start-island", { type: "start", fillBots: false }),
+      ).toBe("ack");
+      await inbox.next("events");
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      const timing = await runInDurableObject(
+        stub,
+        async (instance, durableState) => {
+          const sql = durableState.storage.sql;
+          const saved = JSON.parse(
+            sql
+              .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+              .toArray()[0].json,
+          ) as GameState;
+          const now = Date.now();
+          const deadline = now + 60_000;
+          sql.exec(
+            "UPDATE state SET json=? WHERE id=1",
+            JSON.stringify({
+              ...saved,
+              config: { ...saved.config, decisionSeconds: 60 },
+              activeSeat: 1,
+              players: saved.players.map((player) =>
+                player.seat === 1
+                  ? {
+                      ...player,
+                      position: 8,
+                      onIsland: true,
+                      islandTurns: 0,
+                      cash,
+                    }
+                  : player,
+              ),
+              pending: { kind: "island", seat: 1, fee: 200_000, deadline },
+            }),
+          );
+          sql.exec("DELETE FROM timers WHERE kind IN ('bot','decision')");
+          const room = instance as unknown as { updateTimers(): Promise<void> };
+          await room.updateTimers();
+          const timers = sql
+            .exec<{ kind: string; fire_at: number }>(
+              "SELECT kind,fire_at FROM timers WHERE kind IN ('bot','decision')",
+            )
+            .toArray();
+          // Keep the platform alarm in the future; invoke it explicitly after only
+          // the SQL timer is due, avoiding a race with workerd's automatic alarm.
+          await durableState.storage.setAlarm(now + 30_000);
+          sql.exec(
+            "UPDATE timers SET fire_at=? WHERE kind='bot'",
+            Date.now() - 1,
+          );
+          return { now, deadline, timers };
+        },
+      );
+      expect(timing.timers).toEqual([
+        { kind: "bot", fire_at: timing.now + BOT_TIMING.choice },
+      ]);
+      expect(timing.timers[0].fire_at).toBeLessThan(timing.deadline);
+      expect(await runDurableObjectAlarm(stub)).toBe(true);
+      const events = await eventsWith(inbox, eventType);
+      expect(events.events).toContainEqual(
+        expect.objectContaining({ type: eventType, seat: 1 }),
+      );
+    },
+  );
+
   it("lets a bot act only after the animations of its previous move", async () => {
     const host = await create();
     const inbox = await connect(host);

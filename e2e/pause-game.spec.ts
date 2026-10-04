@@ -260,6 +260,10 @@ for (const viewport of desktopSizes) {
           (player) => player.seat === actor.state?.pending?.seat,
         )?.control,
       ).toBe("bot");
+      await expect(actor.page.locator(".pause-dialog")).toHaveAttribute(
+        "aria-describedby",
+        /-note$/,
+      );
       await expect(actor.page.locator(".pause-note")).toHaveText(
         pausedNote(actor),
       );

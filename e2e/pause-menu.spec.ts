@@ -324,6 +324,10 @@ test("opening a multiplayer pause menu keeps clocks and authoritative updates ru
     exact: true,
   });
   await expect(modal).toBeVisible();
+  await expect(modal).not.toContainText(
+    /The game keeps running|La partie continue/,
+  );
+  await expect(modal).not.toHaveAttribute("aria-describedby", /.+/);
   await expect(continueButton).toBeFocused();
   await page.screenshot({ path: ".local/verification/pause-menu.png" });
   const previousTime = await page.locator(".match-clock").innerText();
