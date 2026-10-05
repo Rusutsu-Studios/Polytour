@@ -34,14 +34,26 @@ const CATCH_UP_BATCHES = 2;
 const CATCH_UP_PLAYBACK_RATE = 2.5;
 /** Beyond this backlog, snap to the server state instead of replaying it. */
 const RECOVERY_BACKLOG = 40;
+/** The player's own answer to reduced motion, which outlasts a reload. */
+const MOTION_KEY = "polytour.reducedMotion";
+function storedReducedMotion(): boolean | null {
+  try {
+    const stored = localStorage.getItem(MOTION_KEY);
+    return stored === "true" ? true : stored === "false" ? false : null;
+  } catch {
+    return null;
+  }
+}
+function systemReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 class Director {
   private value: DirectorState = {
     serverState: null,
     viewState: null,
     busy: false,
-    reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
-      .matches,
+    reducedMotion: storedReducedMotion() ?? systemReducedMotion(),
     history: [],
   };
   private listeners = new Set<() => void>();
@@ -176,7 +188,14 @@ class Director {
     this.animator?.snap(this.value.serverState);
     this.presenter?.snap(this.value.serverState);
   };
-  setReducedMotion(reducedMotion: boolean) {
+  /** Keep `remember` false for a system change: only the player decides. */
+  setReducedMotion(reducedMotion: boolean, remember = true) {
+    if (remember)
+      try {
+        localStorage.setItem(MOTION_KEY, String(reducedMotion));
+      } catch {
+        // The choice still holds for this match without browser storage.
+      }
     this.update({ reducedMotion });
     if (reducedMotion) this.recoverToServer();
   }
@@ -193,5 +212,7 @@ document.addEventListener("visibilitychange", () => {
 window
   .matchMedia("(prefers-reduced-motion: reduce)")
   .addEventListener("change", (event) => {
-    director.setReducedMotion(event.matches);
+    // A stored answer wins. The system only supplies the first default.
+    if (storedReducedMotion() === null)
+      director.setReducedMotion(event.matches, false);
   });

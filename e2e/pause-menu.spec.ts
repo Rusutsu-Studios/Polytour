@@ -1537,3 +1537,32 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
     match.messages.map((raw) => (JSON.parse(raw) as { type: string }).type),
   ).toEqual(["sync"]);
 });
+
+test("a reduced-motion answer outlasts a reload and outranks the system setting", async ({
+  page,
+}) => {
+  await enterMatch(page);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  const reduce = page.getByLabel("Réduire les animations");
+  // This browser asks for reduced motion, so the box starts checked.
+  await expect(reduce).toBeChecked();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
+  await reduce.uncheck();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("polytour.reducedMotion")),
+  ).toBe("false");
+  await page.reload();
+  // The stored answer wins. The system no longer turns the animations off.
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+});
