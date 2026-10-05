@@ -159,6 +159,8 @@ for (const size of SIZES) {
         "data-seat",
         String(state.activeSeat),
       );
+      // Reconnect timers need real time after the reveal's screenshot pause.
+      await page.clock.resume();
       // Refresh recovers from a snapshot and never spins the starter again.
       await page.reload();
       await expect(page.locator(".player-card")).toHaveCount(size.players);
