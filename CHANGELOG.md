@@ -9,6 +9,14 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-05
+
+### Fixed
+
+- Two Pause end-to-end tests no longer fail on a slow CI runner: the frozen-clock
+  helper retries when the page clock has already passed its target, and the solo
+  pause test waits for a bot decision with more time left.
+
 ## [0.7.4] - 2026-10-05
 
 ### Added
