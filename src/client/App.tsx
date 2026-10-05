@@ -67,6 +67,7 @@ import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
+import HeldCardHand from "./ui/HeldCardHand.js";
 import Icon from "./ui/Icon.js";
 import InvitationEntry from "./ui/InvitationEntry.js";
 import LanguagePicker from "./ui/LanguagePicker.js";
@@ -1554,7 +1555,14 @@ function MatchView({
               <PlayerAvatar seat={player.seat} />
               <div className="player-card-body">
                 <div className="player-name-row">
-                  <strong>{player.name}</strong>
+                  <strong title={player.name}>{player.name}</strong>
+                  {player.heldCards.length > 0 && (
+                    <HeldCardHand
+                      cards={player.heldCards}
+                      config={game.config}
+                      below={player.seat === 1 || player.seat === 2}
+                    />
+                  )}
                   {(mySeats.includes(player.seat) ||
                     player.bankrupt ||
                     player.control === "bot" ||
@@ -1595,12 +1603,14 @@ function MatchView({
               {player.heldCards.length > 0 && (
                 <span
                   className="player-held-cards"
+                  role="img"
                   title={player.heldCards.map(cardName).join(" · ")}
-                >
-                  {t(
+                  aria-label={t(
                     `${player.heldCards.length} carte${player.heldCards.length > 1 ? "s" : ""}`,
                     `${player.heldCards.length} card${player.heldCards.length === 1 ? "" : "s"}`,
                   )}
+                >
+                  ×{player.heldCards.length}
                 </span>
               )}
             </motion.article>

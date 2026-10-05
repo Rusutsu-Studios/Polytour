@@ -13,6 +13,7 @@ import {
 import type {
   GameConfig,
   GameEvent,
+  KeepCard,
   PublicState,
   Seat,
 } from "../../shared/engine/index.js";
@@ -70,6 +71,7 @@ import {
   cornerTexture,
   FESTIVAL_COLORS,
   gainTexture,
+  heldCardTexture,
   lawnTexture,
   lotTexture,
   noteTexture,
@@ -539,7 +541,43 @@ function Towns({
             : preview
               ? 1 + (tile.index % maxLevel)
               : 0;
-        if (level === 0) continue;
+        if (level === 0) {
+          if (owner == null || resort) continue;
+          // Bare land carries a little flag on a stand, so a purchase shows
+          // before any house rises.
+          const rise = growing
+            ? growthEase(
+                THREE.MathUtils.clamp(growing.progress / GROWTH_SPAN, 0, 1),
+              )
+            : 1;
+          if (rise <= 0) continue;
+          const bandZ = buildingBandZ(tile.index);
+          const part = (
+            localX: number,
+            bottom: number,
+            size: [number, number, number],
+            hex: string,
+          ) => {
+            const [x, z] = tilePoint(tile.index, localX, bandZ);
+            dummy.rotation.set(0, tileRotation(tile.index), 0);
+            dummy.position.set(x, LOT_TOP + bottom + size[1] / 2, z);
+            dummy.scale.set(...size);
+            dummy.updateMatrix();
+            details.current?.setMatrixAt(detailCount, dummy.matrix);
+            details.current?.setColorAt(detailCount++, color.set(hex));
+          };
+          const grown = Math.max(0.02, rise);
+          const pole = 0.32 * grown;
+          part(0, 0, [0.24, 0.05, 0.24], "#fffaf4");
+          part(0, 0.05, [0.022, pole, 0.022], "#6d5b4b");
+          part(
+            0.085,
+            0.04 + pole - 0.1 * grown,
+            [0.15, 0.1 * grown, 0.014],
+            PLAYER_COLORS[owner],
+          );
+          continue;
+        }
         const roofColor =
           owner != null
             ? PLAYER_COLORS[owner]
@@ -1234,6 +1272,7 @@ function Pawn({
 }
 
 const CASH_BUNDLES_PER_SEAT = 6;
+const KEEP_CARDS: readonly KeepCard[] = ["Guardian Angel", "Coupon", "Escape"];
 const CASH_TRANSFER_BUNDLES = 3;
 
 function reserveSpot(
@@ -1375,6 +1414,46 @@ function CashReserves({ state }: { state: PublicState }) {
         />
       </instancedMesh>
     </group>
+  );
+}
+
+/** Kept Chance cards lie face up beside their holder's cash, one per card. */
+function HeldCards({ state, card }: { state: PublicState; card: KeepCard }) {
+  const cards = useRef<THREE.InstancedMesh>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const texture = useMemo(() => heldCardTexture(card), [card]);
+  const { invalidate } = useThree();
+  useEffect(() => () => texture.dispose(), [texture]);
+  useEffect(() => {
+    const mesh = cards.current;
+    if (!mesh) return;
+    let count = 0;
+    for (const player of state.players) {
+      const slot = player.heldCards.indexOf(card);
+      if (player.bankrupt || slot < 0) continue;
+      const { rotation } = reserveAnchor(player.seat);
+      transform.position.set(
+        ...reserveSpot(
+          player.seat,
+          -0.86 - slot * 0.14,
+          (slot - 0.3) * 0.44,
+          BOARD_BOTTOM + 0.008 + slot * 0.006,
+        ),
+      );
+      transform.rotation.set(0, rotation + (slot ? -0.16 : 0.07), 0);
+      transform.updateMatrix();
+      mesh.setMatrixAt(count++, transform.matrix);
+    }
+    mesh.count = count;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    invalidate();
+  }, [state, card, transform, invalidate]);
+  return (
+    <instancedMesh ref={cards} args={[undefined, undefined, 4]} castShadow>
+      <boxGeometry args={[0.36, 0.012, 0.5]} />
+      <meshStandardMaterial map={texture} roughness={0.55} />
+    </instancedMesh>
   );
 }
 
@@ -2153,23 +2232,21 @@ function SceneContent(props: BoardProps) {
           const burst = sparks.current;
           if (burst) burst.visible = true;
           const updateSparks = () => drawSparks(x, z);
-          // New houses rise one after another on their plot, and a beach
-          // raises its bungalow the moment it is taken; the view shows the
-          // next state on this tile while it is being built.
-          const builds =
-            getBoard(context.next.config)[event.tile].kind === "resort"
-              ? getProperty(context.next, event.tile)?.owner != null
-              : event.type !== "BoughtOut" &&
-                getBoard(context.next.config)[event.tile].kind === "city" &&
-                (getProperty(context.next, event.tile)?.level ?? 0) >
-                  (context.previous
-                    ? (getProperty(context.previous, event.tile)?.level ?? 0)
-                    : 0);
-          // The town plot answers every change of owner or level.
           const before = context.previous
             ? getProperty(context.previous, event.tile)
             : null;
           const after = getProperty(context.next, event.tile);
+          // New houses rise one after another on their plot, a beach raises
+          // its bungalow the moment it is taken, and bare land its flag; the
+          // view shows the next state on this tile while it is being built.
+          const builds =
+            getBoard(context.next.config)[event.tile].kind === "resort"
+              ? after?.owner != null
+              : event.type !== "BoughtOut" &&
+                getBoard(context.next.config)[event.tile].kind === "city" &&
+                ((after?.level ?? 0) > (before?.level ?? 0) ||
+                  (before?.owner == null && after?.owner != null));
+          // The town plot answers every change of owner or level.
           const rebuilds =
             before?.owner !== after?.owner || before?.level !== after?.level;
           const drawGrowth = () => {
@@ -2405,6 +2482,11 @@ function SceneContent(props: BoardProps) {
         }}
       />
       {!preview && state && <CashReserves state={state} />}
+      {!preview &&
+        state &&
+        KEEP_CARDS.map((card) => (
+          <HeldCards key={card} state={state} card={card} />
+        ))}
       <BoardTiles {...props} />
       <TileFocus {...props} />
       {!preview && props.targets && (
