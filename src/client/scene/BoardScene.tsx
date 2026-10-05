@@ -75,6 +75,7 @@ import {
   noteTexture,
   roadTexture,
   scoreTexture,
+  shieldTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
 import { BeachUmbrella, LANDMARK_PEAKS, Landmarks } from "./Landmarks.js";
@@ -870,6 +871,36 @@ function buntingZ(index: number) {
  * two masts marks the fête, and the championship host adds its searchlights.
  * The rent multiplier lives in the inspector.
  */
+/** A small shield floats over each shielded property until an attack breaks it. */
+function ShieldMarkers({ state }: { state: PublicState | null }) {
+  const texture = useMemo(shieldTexture, []);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return (
+    <>
+      {state?.properties
+        .filter((property) => property.shielded)
+        .map((property) => {
+          const [x, z] = tileCenter(property.tile);
+          return (
+            <sprite
+              key={property.tile}
+              position={[x, LOT_TOP + 0.8, z]}
+              scale={[0.46, 0.52, 1]}
+              renderOrder={4}
+            >
+              <spriteMaterial
+                map={texture}
+                transparent
+                depthTest={false}
+                toneMapped={false}
+              />
+            </sprite>
+          );
+        })}
+    </>
+  );
+}
+
 function FestivalMarkers({ state }: { state: PublicState | null }) {
   const masts = useRef<THREE.InstancedMesh>(null);
   const cords = useRef<THREE.InstancedMesh>(null);
@@ -2277,6 +2308,26 @@ function SceneContent(props: BoardProps) {
             ring.visible = burst.visible = false;
             invalidate();
           }
+        } else if (
+          event.type === "ShieldRaised" ||
+          event.type === "ShieldBroken"
+        ) {
+          await flash(
+            event.tile,
+            "#5cb4e6",
+            event.type === "ShieldRaised" ? "#ffffff" : "#bfe3f7",
+            DECISION_TIMING.propertyAnimation / 1000,
+            context,
+          );
+        } else if (event.type === "PropertyGiven") {
+          towns.current?.draw(context.next, null);
+          await flash(
+            event.tile,
+            PLAYER_COLORS[event.to],
+            "#ffcf59",
+            DECISION_TIMING.propertyAnimation / 1000,
+            context,
+          );
         } else if (event.type === "PowerCut") {
           await flash(
             event.tile,
@@ -2382,6 +2433,7 @@ function SceneContent(props: BoardProps) {
       />
       <ResortProps boardRule={rule} />
       <FestivalMarkers state={state} />
+      {!preview && <ShieldMarkers state={state} />}
       <Landmarks
         boardRule={rule}
         state={state}

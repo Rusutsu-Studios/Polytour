@@ -2075,6 +2075,12 @@ const LUCK_CARD_TITLES = {
     "Solidarité",
     "Vent arrière",
     "Coupure de courant",
+    "Vente forcée",
+    "Bouclier",
+    "Mécène",
+    "Supporters",
+    "Cadeau",
+    "Rejouez",
   ],
   en: [
     "Grand Tour",
@@ -2095,6 +2101,12 @@ const LUCK_CARD_TITLES = {
     "Charity",
     "Tailwind",
     "Power cut",
+    "Forced sale",
+    "Shield",
+    "Patron",
+    "Fan trip",
+    "Gift",
+    "Roll again",
   ],
 } as const;
 
@@ -2119,7 +2131,7 @@ for (const locale of ["fr", "en"] as const) {
         exact: true,
       }),
     ).toBeVisible();
-    await expect(catalogue.locator(".luck-card-button")).toHaveCount(18);
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(24);
     const detail = page.locator(".luck-card-dialog");
     const closeCard = detail.locator(".luck-card-close");
     const backToCards = detail.locator(".luck-card-back");
@@ -2173,7 +2185,7 @@ for (const locale of ["fr", "en"] as const) {
     await helpTrigger.click();
     await expect(help).toBeVisible();
     await expect(detail).not.toBeVisible();
-    await expect(catalogue.locator(".luck-card-button")).toHaveCount(18);
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(24);
     const lastCard = catalogue.locator(".luck-card-button").last();
     await lastCard.click();
     await expect(
@@ -2230,7 +2242,7 @@ test("match card help uses the active salary and saved economy rather than welco
     .click();
   const help = page.locator(".help-dialog");
   const catalogue = help.locator(".help-cards");
-  await expect(catalogue.locator(".luck-card-button")).toHaveCount(18);
+  await expect(catalogue.locator(".luck-card-button")).toHaveCount(24);
   const detail = page.locator(".luck-card-dialog");
   await catalogue
     .locator(".luck-card-button")

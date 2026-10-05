@@ -64,7 +64,7 @@ describe("createGame", () => {
         heldCards: [],
         travelPending: false,
       });
-    expect(state.deck).toHaveLength(24);
+    expect(state.deck).toHaveLength(34);
     expect(events).toHaveLength(1);
     expect(events.reduce(applyEvent, toPublic(state))).toEqual(toPublic(state));
   });

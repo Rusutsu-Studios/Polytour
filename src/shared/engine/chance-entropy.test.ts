@@ -98,7 +98,11 @@ describe("unbiased Chance entropy", () => {
 
 describe("live Chance draws", () => {
   it("changes the card despite identical seed, public setup and saved deck", () => {
-    const initial = newGame();
+    // Distinct, die-free cards: a reworked deck holds duplicates.
+    const initial = {
+      ...newGame(),
+      deck: ["Windfall", "Jailbreak", "Contractor"] as const,
+    };
     const before = JSON.stringify(initial);
     const first = draw(initial, [0]);
     const second = draw(initial, [1]);

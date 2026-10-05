@@ -11,6 +11,7 @@ import {
   type Action,
   actionCost,
   buyoutPriceAt,
+  cashRankedOpponent,
   championshipCost,
   economyRule,
   getProperty,
@@ -107,6 +108,58 @@ const COPY = {
     "Use a protection card or pay the rent.",
   ],
 } as const;
+/** What the chosen city will receive, for each card that asks for one. */
+function cardTargetCopy(
+  state: PublicState,
+  card: Extract<
+    NonNullable<PublicState["pending"]>,
+    { kind: "card-target" }
+  >["card"],
+  seat: Seat,
+): string {
+  const opponent = (most: boolean) =>
+    state.players.find(
+      (player) => player.seat === cashRankedOpponent(state, seat, most),
+    )?.name ?? t("un adversaire", "an opponent");
+  switch (card) {
+    case "Contractor":
+      return t(
+        "Choisissez votre ville qui recevra un niveau de construction offert.",
+        "Choose one of your cities to receive a free building level.",
+      );
+    case "Patron":
+      return t(
+        `Choisissez votre ville qui gagnera un niveau, payé par ${opponent(true)}.`,
+        `Choose your city to gain a level, paid for by ${opponent(true)}.`,
+      );
+    case "Power Cut":
+      return t(
+        `Choisissez la ville adverse privée de loyer pendant ${CHANCE_AMOUNTS.powerCutLaps} tours de son propriétaire.`,
+        `Choose the opponent’s city that earns no rent for its owner’s next ${CHANCE_AMOUNTS.powerCutLaps} laps.`,
+      );
+    case "Forced Sale":
+      return t(
+        "Choisissez la propriété adverse à vendre. Son propriétaire est remboursé ; un hôtel perd seulement un niveau.",
+        "Choose the opponent’s property to sell. Its owner is refunded; a Hotel only loses one level.",
+      );
+    case "Shield":
+      return t(
+        "Choisissez la propriété que le bouclier protégera de la prochaine attaque.",
+        "Choose the property the shield will guard against the next attack.",
+      );
+    case "Gift":
+      return t(
+        `Choisissez la ville que vous offrez à ${opponent(false)}.`,
+        `Choose the city you give to ${opponent(false)}.`,
+      );
+    case "Earthquake":
+    case "Land Swap":
+      return t(
+        "Choisissez la ville adverse qui perdra un niveau de construction.",
+        "Choose the opponent’s city that will lose a building level.",
+      );
+  }
+}
 function decisionCopy(kind: keyof typeof COPY): readonly [string, string] {
   const [frTitle, frDescription, enTitle, enDescription] = COPY[kind];
   return [t(frTitle, enTitle), t(frDescription, enDescription)];
@@ -160,7 +213,13 @@ function actionLabel(action: Action, state: PublicState): string {
             `Échanger ${tileName(pending.sourceTile, state.config)} contre ${tileName(action.tile, state.config)}`,
             `Swap ${tileName(pending.sourceTile, state.config)} for ${tileName(action.tile, state.config)}`,
           );
-        if (pending.card === "Contractor")
+        const city = tileName(action.tile, state.config);
+        if (pending.card === "Forced Sale")
+          return t(`Forcer la vente de ${city}`, `Force the sale of ${city}`);
+        if (pending.card === "Shield")
+          return t(`Protéger ${city}`, `Protect ${city}`);
+        if (pending.card === "Gift") return t(`Offrir ${city}`, `Give ${city}`);
+        if (pending.card === "Contractor" || pending.card === "Patron")
           return t(
             `Offrir un niveau à ${tileName(action.tile, state.config)}`,
             `Add a level to ${tileName(action.tile, state.config)}`,
@@ -533,20 +592,7 @@ export default function DecisionPanel({
                 `Votre ville de ${tileName(pending.sourceTile, state.config)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
                 `Your city of ${tileName(pending.sourceTile, state.config)} will be swapped for the selected city. Buildings stay on each property.`,
               )
-            : pending.card === "Contractor"
-              ? t(
-                  "Choisissez votre ville qui recevra un niveau de construction offert.",
-                  "Choose one of your cities to receive a free building level.",
-                )
-              : pending.card === "Power Cut"
-                ? t(
-                    `Choisissez la ville adverse privée de loyer pendant ${CHANCE_AMOUNTS.powerCutLaps} tours de son propriétaire.`,
-                    `Choose the opponent’s city that earns no rent for its owner’s next ${CHANCE_AMOUNTS.powerCutLaps} laps.`,
-                  )
-                : t(
-                    "Choisissez la ville adverse qui perdra un niveau de construction.",
-                    "Choose the opponent’s city that will lose a building level.",
-                  ),
+            : cardTargetCopy(state, pending.card, pending.seat),
         ]
       : pending?.kind === "buy" && resort
         ? [t("Acheter une plage", "Buy a beach"), ""]

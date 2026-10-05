@@ -48,7 +48,7 @@ import type {
   Standing,
   WinKind,
 } from "./types.js";
-import { CHANCE_CARDS } from "./types.js";
+import { CHANCE_CARDS, SHIELDED_CARDS } from "./types.js";
 
 export { applyEvent, toPublic } from "./reducer.js";
 export const DEFAULT_GAME_CONFIG = {
@@ -103,9 +103,8 @@ export function chanceDeck(
     ? CHANCE_CARDS.flatMap((card) =>
         Array<ChanceCard>(copies[card] ?? 1).fill(card),
       )
-    : CHANCE_CARDS.filter(
-        (card) => card !== "Tailwind" && card !== "Power Cut",
-      );
+    : // The original sixteen precede the reworked-only cards.
+      CHANCE_CARDS.slice(0, CHANCE_CARDS.indexOf("Tailwind"));
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
@@ -140,6 +139,21 @@ export function powerCutActive(
     property.owner !== null &&
     getPlayer(state, property.owner).laps < property.powerCutUntilLap
   );
+}
+/** The opponent still in play with the least (or most) cash; ties keep turn order. */
+export function cashRankedOpponent(
+  state: PublicState,
+  seat: Seat,
+  most: boolean,
+): Seat | undefined {
+  return state.turnOrder
+    .filter((other) => other !== seat)
+    .map((other) => getPlayer(state, other))
+    .sort(
+      (a, b) =>
+        (most ? b.cash - a.cash : a.cash - b.cash) ||
+        state.turnOrder.indexOf(a.seat) - state.turnOrder.indexOf(b.seat),
+    )[0]?.seat;
 }
 export function propertyOwner(state: PublicState, tile: number): Seat | null {
   return getProperty(state, tile)?.owner ?? null;
@@ -694,6 +708,9 @@ function animationBudget(events: readonly GameEvent[]): number {
         return total + DECISION_TIMING.wreckAnimation;
       case "PropertiesSwapped":
       case "PowerCut":
+      case "ShieldRaised":
+      case "ShieldBroken":
+      case "PropertyGiven":
         return total + DECISION_TIMING.propertyAnimation;
       default:
         return total;
@@ -855,7 +872,7 @@ function resolver(initial: GameState, context: ResolutionContext) {
     if (to !== null && getPlayer(state, to).bankrupt) to = null;
     if (
       state.config.giftCanBankrupt === false &&
-      ["Birthday", "Charity"].includes(reason)
+      ["Birthday", "Charity", "Patron"].includes(reason)
     )
       amount = Math.min(amount, Math.max(0, getPlayer(state, from).cash));
     if (tile !== undefined && to !== null)
@@ -1006,6 +1023,16 @@ function resolver(initial: GameState, context: ResolutionContext) {
         getTile(property.tile, state.config)?.kind === "city" &&
         property.level < 5,
     );
+  /** Own cities a free level can still raise: Contractor and Patron. */
+  const upgradeTargets = (seat: Seat) => {
+    const cap =
+      getPlayer(state, seat).laps > 0 || state.config.hotelsDirectly === true
+        ? 4
+        : rules(state).firstLapHouseCap;
+    return eligibleOwnCities(seat)
+      .filter((property) => property.level < cap)
+      .map((property) => property.tile);
+  };
   /** A card's own die: live entropy, or the seeded sequence in simulations. */
   const rollDie = () => {
     if (context.chanceIndex) return context.chanceIndex(6) + 1;
@@ -1187,37 +1214,50 @@ function resolver(initial: GameState, context: ResolutionContext) {
         if (targets.length) open({ kind: "card-target", seat, card, targets });
         break;
       }
-      case "Contractor": {
-        const cap =
-          getPlayer(state, seat).laps > 0 ||
-          state.config.hotelsDirectly === true
-            ? 4
-            : rules(state).firstLapHouseCap;
-        const targets = eligibleOwnCities(seat)
-          .filter((property) => property.level < cap)
+      case "Contractor":
+      case "Patron": {
+        const targets = upgradeTargets(seat);
+        if (targets.length) open({ kind: "card-target", seat, card, targets });
+        break;
+      }
+      case "Forced Sale":
+      case "Shield":
+      case "Gift": {
+        // Forced Sale hits any opponent property; Shield guards one of yours;
+        // Gift gives away one of your cities below the Hotel.
+        const targets = state.properties
+          .filter((property) =>
+            card === "Forced Sale"
+              ? property.owner !== null && property.owner !== seat
+              : property.owner === seat &&
+                (card === "Shield"
+                  ? !property.shielded
+                  : getTile(property.tile, state.config)?.kind === "city" &&
+                    property.level < rules(state).protectedLevel),
+          )
           .map((property) => property.tile);
         if (targets.length) open({ kind: "card-target", seat, card, targets });
         break;
       }
+      case "Fan Trip":
+        // Off to whoever hosts the championship, to pay its rent there.
+        if (state.championshipHost) relocate(state.championshipHost.tile);
+        break;
+      case "Roll Again":
+        secrets({ extraRoll: true });
+        break;
       case "Jailbreak":
         for (const player of state.players)
           if (player.onIsland)
             emit({ type: "LeftIsland", seat: player.seat, method: "card" });
         break;
       case "Charity": {
-        const poorest = state.turnOrder
-          .filter((other) => other !== seat)
-          .map((other) => getPlayer(state, other))
-          .sort(
-            (a, b) =>
-              a.cash - b.cash ||
-              state.turnOrder.indexOf(a.seat) - state.turnOrder.indexOf(b.seat),
-          )[0];
-        if (poorest)
+        const poorest = cashRankedOpponent(state, seat, false);
+        if (poorest !== undefined)
           prepend({
             kind: "payment",
             from: seat,
-            to: poorest.seat,
+            to: poorest,
             amount: CHANCE_AMOUNTS.charity,
             reason: card,
           });
@@ -1463,7 +1503,10 @@ function resolver(initial: GameState, context: ResolutionContext) {
         if (pending.kind === "card-target") {
           const property = getProperty(state, action.tile);
           if (!property) throw new Error("Card target requires property");
-          if (pending.card === "Earthquake")
+          const tile = action.tile;
+          if (SHIELDED_CARDS.includes(pending.card) && property.shielded)
+            emit({ type: "ShieldBroken", seat, tile });
+          else if (pending.card === "Earthquake")
             emit({
               type: "PropertyDowngraded",
               tile: action.tile,
@@ -1478,7 +1521,73 @@ function resolver(initial: GameState, context: ResolutionContext) {
                 getPlayer(state, property.owner).laps +
                 CHANCE_AMOUNTS.powerCutLaps,
             });
-          else if (pending.card === "Contractor")
+          else if (pending.card === "Forced Sale" && property.owner !== null) {
+            // A Hotel loses its top level instead of the whole city.
+            const owner = property.owner;
+            if (property.level >= 4) {
+              const level = (property.level - 1) as BuildLevel;
+              const refund =
+                propertyRefund(state, tile) -
+                propertyRefund(
+                  {
+                    ...state,
+                    properties: state.properties.map((entry) =>
+                      entry.tile === tile ? { ...entry, level } : entry,
+                    ),
+                  },
+                  tile,
+                );
+              emit({ type: "PropertyDowngraded", tile, level });
+              if (refund > 0)
+                emit({
+                  type: "MoneyTransferred",
+                  from: null,
+                  to: owner,
+                  amount: refund,
+                  reason: pending.card,
+                });
+            } else {
+              clearHost([tile]);
+              emit({
+                type: "PropertySold",
+                seat: owner,
+                tile,
+                amount: propertyRefund(state, tile),
+              });
+            }
+          } else if (pending.card === "Shield")
+            emit({ type: "ShieldRaised", seat, tile });
+          else if (pending.card === "Gift") {
+            const to = cashRankedOpponent(state, seat, false);
+            if (to !== undefined) {
+              clearHost([tile]);
+              emit({ type: "PropertyGiven", seat, to, tile });
+              prepend({ kind: "wins" });
+            }
+          } else if (pending.card === "Patron") {
+            // The richest opponent pays the bank for your next level.
+            const payer = cashRankedOpponent(state, seat, true);
+            const level = (property.level + 1) as BuildLevel;
+            const cost =
+              purchaseCost(state, tile, level) -
+              propertyInvestedValue(state, tile);
+            emit({
+              type: "PropertyUpgraded",
+              seat,
+              tile,
+              level,
+              amount: 0,
+              free: true,
+            });
+            if (payer !== undefined)
+              prepend({
+                kind: "payment",
+                from: payer,
+                to: null,
+                amount: cost,
+                reason: pending.card,
+              });
+          } else if (pending.card === "Contractor")
             emit({
               type: "PropertyUpgraded",
               seat,
@@ -1821,20 +1930,36 @@ function timeoutAction(state: PublicState): Action {
         ? { type: "ChooseHost", tile: current }
         : { type: "Decline" };
     }
-    case "card-target":
-      return pending.card === "Land Swap"
-        ? { type: "Decline" }
-        : {
-            type: "ChooseTarget",
-            tile:
-              pending.card === "Earthquake" || pending.card === "Power Cut"
-                ? bestRentTarget(state, pending.targets)
-                : [...pending.targets].sort(
-                    (a, b) =>
-                      nextRentIncrease(state, b) - nextRentIncrease(state, a) ||
-                      a - b,
-                  )[0],
-          };
+    case "card-target": {
+      if (pending.card === "Land Swap") return { type: "Decline" };
+      const targets = pending.targets;
+      // Attacks prefer an unshielded property; a Gift gives the cheapest city.
+      const exposed = targets.filter(
+        (tile) => !getProperty(state, tile)?.shielded,
+      );
+      return {
+        type: "ChooseTarget",
+        tile:
+          pending.card === "Gift"
+            ? [...targets].sort(
+                (a, b) =>
+                  propertyInvestedValue(state, a) -
+                    propertyInvestedValue(state, b) || a - b,
+              )[0]
+            : pending.card === "Contractor" || pending.card === "Patron"
+              ? [...targets].sort(
+                  (a, b) =>
+                    nextRentIncrease(state, b) - nextRentIncrease(state, a) ||
+                    a - b,
+                )[0]
+              : bestRentTarget(
+                  state,
+                  SHIELDED_CARDS.includes(pending.card) && exposed.length
+                    ? exposed
+                    : targets,
+                ),
+      };
+    }
     case "sell":
       return {
         type: "Sell",
@@ -2067,7 +2192,12 @@ export function botAction(
       return timeoutAction(state);
     case "card-target":
       return pending.card === "Land Swap"
-        ? (actions.find((action) => action.type === "ChooseTarget") ??
+        ? (actions.find(
+            (action) =>
+              action.type === "ChooseTarget" &&
+              !getProperty(state, action.tile)?.shielded,
+          ) ??
+            actions.find((action) => action.type === "ChooseTarget") ??
             actions[0])
         : timeoutAction(state);
     case "roll":

@@ -14,6 +14,7 @@ export {
   botDecisionAt,
   buyoutPrice,
   buyoutPriceAt,
+  cashRankedOpponent,
   championshipCost,
   chanceDeck,
   chanceRule,

@@ -34,6 +34,12 @@ export const CARD_NAMES: Record<ChanceCard, string> = {
   Charity: "Solidarité",
   Tailwind: "Vent arrière",
   "Power Cut": "Coupure de courant",
+  "Forced Sale": "Vente forcée",
+  Shield: "Bouclier",
+  Patron: "Mécène",
+  "Fan Trip": "Supporters",
+  Gift: "Cadeau",
+  "Roll Again": "Rejouez",
 };
 const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   "Grand Tour": "Grand Tour",
@@ -54,6 +60,12 @@ const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   Charity: "Charity",
   Tailwind: "Tailwind",
   "Power Cut": "Power cut",
+  "Forced Sale": "Forced sale",
+  Shield: "Shield",
+  Patron: "Patron",
+  "Fan Trip": "Fan trip",
+  Gift: "Gift",
+  "Roll Again": "Roll again",
 };
 export function cardName(card: ChanceCard): string {
   return t(CARD_NAMES[card], ENGLISH_CARD_NAMES[card]);
@@ -65,6 +77,11 @@ export function describeChanceCardDetails(
   config: GameConfig,
 ): readonly string[] {
   const rules = ruleEconomy(economyRule(config));
+  const sale = config.sellBackPercent ?? rules.sellBackPercent;
+  const shielded = t(
+    "Un bouclier sur la propriété choisie bloque l’attaque et se brise.",
+    "A shield on the chosen property blocks the attack and breaks.",
+  );
   const noTarget = t(
     "Sans cible éligible, la carte est défaussée sans effet.",
     "If there is no eligible target, the card is discarded without effect.",
@@ -187,7 +204,56 @@ export function describeChanceCardDetails(
           "Choisissez une ville adverse construite, hôtels compris. Les terrains nus et les plages sont exclus. Le niveau retiré n’est pas remboursé.",
           "Choose an opponent’s built city, including Hotels. Bare land and beaches are excluded. The removed level is not refunded.",
         ),
+        shielded,
         noTarget,
+      ];
+    case "Forced Sale":
+      return [
+        t(
+          `Choisissez une propriété adverse, plages comprises. Son propriétaire la revend à la banque pour ${sale} % de sa valeur. Un hôtel perd seulement son dernier niveau, remboursé de la même façon.`,
+          `Choose an opponent’s property, beaches included. Its owner sells it to the bank for ${sale}% of its value. A Hotel only loses its top level, refunded the same way.`,
+        ),
+        shielded,
+        noTarget,
+      ];
+    case "Shield":
+      return [
+        t(
+          "Choisissez une de vos propriétés. La prochaine attaque visée sur elle (tremblement de terre, coupure de courant, vente forcée, échange de terrain) est bloquée et brise le bouclier. Les rachats ne sont pas bloqués, et un nouveau propriétaire perd le bouclier.",
+          "Choose one of your properties. The next attack aimed at it (earthquake, power cut, forced sale, land swap) is blocked and breaks the shield. Buyouts are not blocked, and a new owner loses the shield.",
+        ),
+        noTarget,
+      ];
+    case "Patron":
+      return [
+        t(
+          "Choisissez une de vos villes, avec les mêmes limites que Coup de pouce. L’adversaire qui a le plus de cash paie ce niveau à la banque ; en cas d’égalité, le premier dans l’ordre des tours.",
+          "Choose one of your cities, with the same limits as Contractor. The opponent with the most cash pays the bank for that level; if tied, the first in turn order.",
+        ),
+        gifts,
+        noTarget,
+      ];
+    case "Fan Trip":
+      return [
+        t(
+          `Le trajet suit le sens du jeu ; franchir le départ rapporte ${money(config.startSalary)}. Payez le loyer de la ville hôte si elle ne vous appartient pas. Sans championnat organisé, la carte n’a aucun effet. Cette carte est rare.`,
+          `Move clockwise; passing Start pays ${money(config.startSalary)}. Pay the host city’s rent unless you own it. With no championship hosted, the card has no effect. This card is rare.`,
+        ),
+      ];
+    case "Gift":
+      return [
+        t(
+          "Choisissez une de vos villes, hors hôtels et plages. Elle revient avec ses bâtiments à l’adversaire qui a le moins de cash ; en cas d’égalité, le premier dans l’ordre des tours.",
+          "Choose one of your cities, except Hotels and beaches. It goes with its buildings to the opponent with the least cash; if tied, the first in turn order.",
+        ),
+        noTarget,
+      ];
+    case "Roll Again":
+      return [
+        t(
+          "Vous relancez les dés après cette carte. Si un double vous donne déjà un lancer, il n’y en a pas un deuxième.",
+          "You roll the dice again after this card. If doubles already give you a roll, you do not get a second one.",
+        ),
       ];
     case "Land Swap":
       return [
@@ -195,6 +261,7 @@ export function describeChanceCardDetails(
           "Votre ville est choisie automatiquement selon le prix du terrain, sans ses bâtiments. Vous pouvez refuser l’échange. Les deux villes conservent leurs bâtiments ; les plages sont exclues.",
           "Your city is selected automatically by land price, excluding buildings. You may decline the swap. Both cities keep their buildings; beaches are excluded.",
         ),
+        shielded,
         noTarget,
       ];
     case "Detour":
@@ -225,6 +292,7 @@ export function describeChanceCardDetails(
           `Choisissez une ville adverse, hôtels compris. Elle ne rapporte aucun loyer tant que son propriétaire n’a pas franchi le départ ${CHANCE_AMOUNTS.powerCutLaps} fois. Un nouveau propriétaire rétablit le courant ; les plages sont exclues.`,
           `Choose an opponent’s city, Hotels included. It earns no rent until its owner has passed Start ${CHANCE_AMOUNTS.powerCutLaps} times. A new owner restores the power; beaches are excluded.`,
         ),
+        shielded,
         noTarget,
       ];
     case "Contractor":
@@ -383,7 +451,7 @@ export function describeChanceCard(
       return {
         ...base,
         tone: "cost",
-        badge: `− ${money(CHANCE_AMOUNTS.fine)}`,
+        badge: `- ${money(CHANCE_AMOUNTS.fine)}`,
         short: t(
           `Payez ${money(CHANCE_AMOUNTS.fine)}.`,
           `Pay ${money(CHANCE_AMOUNTS.fine)}.`,
@@ -527,6 +595,89 @@ export function describeChanceCard(
           "Move forward, then resolve the space you land on.",
         ),
       };
+    case "Forced Sale":
+      return {
+        ...base,
+        tone: "cost",
+        badge: t("Vente forcée adverse", "Force an opponent to sell"),
+        short: t(
+          "Forcez un adversaire à vendre une propriété.",
+          "Force an opponent to sell a property.",
+        ),
+        text: t(
+          "Choisissez une propriété adverse : elle retourne à la banque et son propriétaire est remboursé. Un hôtel perd seulement un niveau.",
+          "Choose an opponent’s property: it returns to the bank and its owner is refunded. A Hotel only loses one level.",
+        ),
+      };
+    case "Shield":
+      return {
+        ...base,
+        tone: "keep",
+        badge: t("Protège une propriété", "Protect a property"),
+        short: t(
+          "Protégez une de vos propriétés.",
+          "Protect one of your properties.",
+        ),
+        text: t(
+          "Un bouclier flotte sur la propriété choisie et bloque la prochaine attaque.",
+          "A shield floats over the chosen property and blocks the next attack.",
+        ),
+      };
+    case "Patron":
+      return {
+        ...base,
+        badge: t(
+          "Un niveau payé par le plus riche",
+          "A level paid by the richest",
+        ),
+        short: t(
+          "Le plus riche paie un niveau de votre ville.",
+          "The richest opponent pays for a level in your city.",
+        ),
+        text: t(
+          "Choisissez une de vos villes : elle gagne un niveau, payé à la banque par l’adversaire le plus riche.",
+          "Choose one of your cities: it gains a level, paid to the bank by the richest opponent.",
+        ),
+      };
+    case "Fan Trip":
+      return {
+        ...base,
+        tone: "cost",
+        badge: t("Direction la ville hôte", "Go to the host city"),
+        short: t(
+          "Allez dans la ville du championnat.",
+          "Go to the championship’s host city.",
+        ),
+        text: t(
+          "Rejoignez la ville qui organise le championnat et payez-y le loyer.",
+          "Move to the city hosting the championship and pay its rent there.",
+        ),
+      };
+    case "Gift":
+      return {
+        ...base,
+        tone: "cost",
+        badge: t("Offrez une ville", "Give away a city"),
+        short: t(
+          "Offrez une ville à l’adversaire le plus pauvre.",
+          "Give a city to the poorest opponent.",
+        ),
+        text: t(
+          "Choisissez une de vos villes : elle revient, avec ses bâtiments, à l’adversaire qui a le moins de cash.",
+          "Choose one of your cities: it goes, with its buildings, to the opponent with the least cash.",
+        ),
+      };
+    case "Roll Again":
+      return {
+        ...base,
+        tone: "travel",
+        badge: t("Un lancer de plus", "One more roll"),
+        short: t("Relancez les dés.", "Roll the dice again."),
+        text: t(
+          "Après cette carte, vous relancez les dés.",
+          "After this card, you roll the dice again.",
+        ),
+      };
     case "Power Cut":
       return {
         ...base,
@@ -572,7 +723,7 @@ export function describeChanceCard(
       return {
         ...base,
         tone: "cost",
-        badge: `− ${money(CHANCE_AMOUNTS.charity)}`,
+        badge: `- ${money(CHANCE_AMOUNTS.charity)}`,
         short: t(
           `Donnez ${money(CHANCE_AMOUNTS.charity)} à l’adversaire le plus pauvre.`,
           `Give ${money(CHANCE_AMOUNTS.charity)} to the poorest opponent.`,

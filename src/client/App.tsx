@@ -513,6 +513,42 @@ function eventText(event: GameEvent, state: PublicState): ReactNode | null {
           ({owner(event.tile)})
         </>,
       );
+    case "ShieldRaised":
+      return entry(
+        "shield",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `protège ${tileName(event.tile, state.config)}`,
+            `shields ${tileName(event.tile, state.config)}`,
+          )}
+        </>,
+      );
+    case "ShieldBroken":
+      return entry(
+        "shield",
+        <>
+          {t(
+            `Le bouclier de ${tileName(event.tile, state.config)}`,
+            `The shield on ${tileName(event.tile, state.config)}`,
+          )}{" "}
+          ({owner(event.tile)}){" "}
+          {t("bloque l’attaque de", "blocks the attack from")}{" "}
+          {name(event.seat)}
+        </>,
+      );
+    case "PropertyGiven":
+      return entry(
+        "people",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `offre ${tileName(event.tile, state.config)} à`,
+            `gives ${tileName(event.tile, state.config)} to`,
+          )}{" "}
+          {name(event.to)}
+        </>,
+      );
     case "PropertiesSwapped":
       return entry(
         "people",

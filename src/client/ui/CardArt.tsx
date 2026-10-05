@@ -287,7 +287,7 @@ const ART: Record<ChanceCard, (roll?: number) => [string, ReactNode]> = {
         fontWeight="900"
         fill="#d04a3a"
       >
-        −50%
+        -50%
       </text>
     </g>,
   ],
@@ -393,6 +393,76 @@ const ART: Record<ChanceCard, (roll?: number) => [string, ReactNode]> = {
         opacity=".7"
       />
       <Die value={roll} />
+    </>,
+  ],
+  "Forced Sale": () => [
+    "#e58a4e",
+    <>
+      <House x={18} roof="#2f6fd0" />
+      <path d="m50 52 22-10" stroke="#fffdf6" strokeWidth="2" />
+      <g transform="rotate(-20 84 40)">
+        <path d="M70 30h26l8 10-8 10H70Z" fill="#ef4f4f" />
+        <circle cx="76" cy="40" r="3" fill="#fffdf6" />
+      </g>
+      <path d="M88 66v28m-10-10 10 10 10-10" {...ARROW} strokeWidth={5} />
+    </>,
+  ],
+  Shield: () => [
+    "#5cb4e6",
+    <>
+      <path
+        d="M60 16 94 29v27c0 23-15 40-34 48-19-8-34-25-34-48V29Z"
+        fill="#2f6fd0"
+      />
+      <path
+        d="M60 27 84 36v20c0 16-10 29-24 36-14-7-24-20-24-36V36Z"
+        fill="#bfe3f7"
+      />
+      <path d="m47 59 9 9 18-20" {...ARROW} stroke="#2f6fd0" strokeWidth={7} />
+    </>,
+  ],
+  Patron: () => [
+    "#9b7fd1",
+    <>
+      <path d="m36 38 2-22 12 11 10-15 10 15 12-11 2 22Z" fill="#ffcf4a" />
+      <rect x="36" y="34" width="48" height="8" rx="3" fill="#e0a92e" />
+      <House x={42} roof="#ef6f5e" />
+      <path d="M98 94V64m-10 10 10-10 10 10" {...ARROW} strokeWidth={5} />
+    </>,
+  ],
+  "Fan Trip": () => [
+    "#c95a4a",
+    <>
+      <path d="M42 18h36v14a18 18 0 0 1-36 0Z" fill="#ffcf4a" />
+      <rect x="56" y="48" width="8" height="8" fill="#e0a92e" />
+      <rect x="46" y="55" width="28" height="7" rx="3" fill="#8a5a3b" />
+      <g transform="rotate(-18 60 86)">
+        <rect x="8" y="76" width="104" height="20" fill="#fffdf6" />
+        {[16, 40, 64, 88].map((x) => (
+          <rect key={x} x={x} y="76" width="12" height="20" fill="#2f6fd0" />
+        ))}
+      </g>
+    </>,
+  ],
+  Gift: () => [
+    "#d9784f",
+    <>
+      <path
+        d="M60 52c-9-14-26-12-22-2 3 6 14 4 22 2Zm0 0c9-14 26-12 22-2-3 6-14 4-22 2Z"
+        fill="#ffcf4a"
+      />
+      <rect x="28" y="60" width="64" height="40" rx="4" fill="#ef6f5e" />
+      <rect x="24" y="52" width="72" height="12" rx="3" fill="#d04a3a" />
+      <rect x="56" y="52" width="8" height="48" fill="#ffcf4a" />
+      <path d="M34 94V80l10-9 10 9v14Z" fill="#fff8e9" />
+    </>,
+  ],
+  "Roll Again": () => [
+    "#7cc98a",
+    <>
+      <path d="M28 52a34 34 0 0 1 60-20" {...ARROW} />
+      <path d="m91 16-2 17-16-4" {...ARROW} />
+      <Die value={5} />
     </>,
   ],
   "Power Cut": () => [

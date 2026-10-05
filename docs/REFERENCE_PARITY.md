@@ -235,7 +235,10 @@ Tax audit card sends the player to the Tax office, like the reference luxury-tax
 card, instead of charging 10% of cash. Power Cut follows the reference power cut:
 no rent from one opponent city until its owner passes Start three times. Detour
 and the new Tailwind roll one die (1–6) instead of moving a fixed three tiles,
-and duplicate bad cards make about 45% of draws bad. These are Polytour choices,
+and duplicate bad cards make half the draws bad. Forced Sale, Shield, Patron,
+Fan Trip, Gift and Roll Again follow the reference forced-sale, shield, queen's
+upgrade, world-championship, royal-gift and croquet cards; a Hotel hit by Forced
+Sale drops to three houses instead of being exempt. These are Polytour choices,
 not reference values. Version-8 and earlier rooms keep the original deck.
 
 ## Capture from the running reference before adding an exact preset

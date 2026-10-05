@@ -1530,7 +1530,7 @@ input::placeholder {
   font-size: 16px;
 }
 .settings-disclosure[open] > summary::before {
-  content: "−";
+  content: "-";
 }
 .settings-disclosure > summary > span {
   margin-left: auto;

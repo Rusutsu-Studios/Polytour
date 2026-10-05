@@ -971,13 +971,14 @@ describe("the reworked Chance deck (rules version 9)", () => {
     );
     return result;
   }
-  it("deals bad cards about 45% of the time and keeps old rooms on sixteen cards", () => {
+  it("deals bad cards half the time, Fan Trip rarely, and keeps old rooms on sixteen cards", () => {
     const deck = chanceDeck(REWORKED);
     const bad = deck.filter((card) => BAD_CHANCE_CARDS.includes(card));
-    expect(deck).toHaveLength(24);
-    expect(bad.length / deck.length).toBeCloseTo(0.45, 1);
+    expect(deck).toHaveLength(34);
+    expect(bad.length / deck.length).toBe(0.5);
+    expect(deck.filter((card) => card === "Fan Trip")).toHaveLength(1);
     expect(new Set(deck)).toEqual(new Set(CHANCE_CARDS));
-    expect(newGame(4, REWORKED).deck).toHaveLength(24);
+    expect(newGame(4, REWORKED).deck).toHaveLength(34);
     expect(chanceDeck(CONFIG)).toHaveLength(16);
     expect(chanceDeck({})).toEqual(chanceDeck(CONFIG));
     expect(chanceDeck(CONFIG)).not.toContain("Power Cut");
@@ -1062,6 +1063,125 @@ describe("the reworked Chance deck (rules version 9)", () => {
       amount: 0,
     });
     expect(getProperty(sold, 1)).not.toHaveProperty("powerCutUntilLap");
+  });
+  it("Forced Sale refunds a rival property to the bank, and only drops a Hotel one level", () => {
+    let state = newGame(4, REWORKED);
+    const rival = other(state);
+    state = grant(grant(grant(state, 1, rival, 2), 2, rival, 4), 4, rival);
+    const offered = draw(state, "Forced Sale").state;
+    expect(offered.pending).toMatchObject({
+      card: "Forced Sale",
+      targets: [1, 2, 4],
+    });
+    const cash = getPlayer(offered, rival).cash;
+    const sold = act(offered, { type: "ChooseTarget", tile: 1 }).state;
+    expect(getProperty(sold, 1)).toMatchObject({ owner: null, level: 0 });
+    expect(getPlayer(sold, rival).cash).toBe(cash + propertyRefund(offered, 1));
+    const hotel = act(offered, { type: "ChooseTarget", tile: 2 }).state;
+    expect(getProperty(hotel, 2)).toMatchObject({ owner: rival, level: 3 });
+    expect(getPlayer(hotel, rival).cash).toBe(
+      cash + propertyRefund(offered, 2) - propertyRefund(hotel, 2),
+    );
+    expect(getPlayer(hotel, rival).cash).toBeGreaterThan(cash);
+  });
+  it("a Shield floats over one of your properties and absorbs the next attack", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const rival = other(state);
+    state = grant(grant(state, 1, seat, 2), 4, seat);
+    const offered = draw(state, "Shield").state;
+    expect(offered.pending).toMatchObject({ card: "Shield", targets: [1, 4] });
+    const shielded = act(offered, { type: "ChooseTarget", tile: 1 }).state;
+    expect(getProperty(shielded, 1)?.shielded).toBe(true);
+    // A rival's Earthquake breaks the shield instead of a house.
+    const attack = draw(withActive(shielded, rival), "Earthquake").state;
+    expect(attack.pending).toMatchObject({ targets: [1] });
+    const blocked = act(attack, { type: "ChooseTarget", tile: 1 });
+    expect(blocked.events).toContainEqual({
+      type: "ShieldBroken",
+      seat: rival,
+      tile: 1,
+    });
+    expect(getProperty(blocked.state, 1)?.level).toBe(2);
+    expect(getProperty(blocked.state, 1)).not.toHaveProperty("shielded");
+    // Attack decisions prefer a city without a shield.
+    const exposed = grant(shielded, 2, seat, 1);
+    const choice = draw(withActive(exposed, rival), "Earthquake").state;
+    expect(botAction(choice, rival)).toEqual({
+      type: "ChooseTarget",
+      tile: 2,
+    });
+  });
+  it("Patron upgrades your city and bills the richest opponent", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const rich = other(state);
+    state = setPlayer(grant(state, 1, seat, 1), rich, { cash: 3_000_000 });
+    const offered = draw(state, "Patron").state;
+    expect(offered.pending).toMatchObject({ card: "Patron", targets: [1] });
+    const built = act(offered, { type: "ChooseTarget", tile: 1 });
+    const bill = built.events.find(
+      (event) => event.type === "MoneyTransferred" && event.reason === "Patron",
+    );
+    expect(bill).toMatchObject({ from: rich, to: null });
+    const amount = bill?.type === "MoneyTransferred" ? bill.amount : 0;
+    expect(amount).toBeGreaterThan(0);
+    expect(getProperty(built.state, 1)?.level).toBe(2);
+    expect(getPlayer(built.state, seat).cash).toBe(2_000_000);
+    expect(getPlayer(built.state, rich).cash).toBe(3_000_000 - amount);
+  });
+  it("Fan Trip sends the drawer to pay rent in the host city, and does nothing without one", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const host = other(state);
+    expect(getPlayer(draw(state, "Fan Trip").state, seat).position).toBe(12);
+    state = {
+      ...grant(state, 13, host, 1),
+      championshipHost: { tile: 13, multiplier: 2 },
+    };
+    const trip = draw(state, "Fan Trip");
+    expect(getPlayer(trip.state, seat).position).toBe(13);
+    expect(trip.events).toContainEqual(
+      expect.objectContaining({
+        type: "RentPaid",
+        seat,
+        owner: host,
+        tile: 13,
+      }),
+    );
+  });
+  it("Gift hands one of your cities, buildings included, to the poorest opponent", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const poor = other(state);
+    state = setPlayer(grant(grant(state, 1, seat, 2), 2, seat, 4), poor, {
+      cash: 10_000,
+    });
+    const offered = draw(state, "Gift").state;
+    // A Hotel never changes hands, and the gift cannot be declined.
+    expect(offered.pending).toMatchObject({ card: "Gift", targets: [1] });
+    expect(legalActions(offered, seat)).not.toContainEqual({
+      type: "Decline",
+    });
+    const given = act(offered, { type: "ChooseTarget", tile: 1 });
+    expect(given.events).toContainEqual({
+      type: "PropertyGiven",
+      seat,
+      to: poor,
+      tile: 1,
+    });
+    expect(getProperty(given.state, 1)).toMatchObject({
+      owner: poor,
+      level: 2,
+    });
+    expect(getPlayer(given.state, poor).properties).toContain(1);
+  });
+  it("Roll Again gives the drawer another roll", () => {
+    const state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const again = draw(state, "Roll Again").state;
+    expect(again.activeSeat).toBe(seat);
+    expect(again.pending).toMatchObject({ kind: "roll", seat });
   });
 });
 describe("wins, rankings and timeouts", () => {

@@ -75,6 +75,12 @@ export const CHANCE_CARDS = [
   // Reworked decks only (rules version 9).
   "Tailwind",
   "Power Cut",
+  "Forced Sale",
+  "Shield",
+  "Patron",
+  "Fan Trip",
+  "Gift",
+  "Roll Again",
 ] as const;
 export type ChanceCard = (typeof CHANCE_CARDS)[number];
 /** Cards that cost the drawer money, a turn or ground; framed as bad cards. */
@@ -84,13 +90,26 @@ export const BAD_CHANCE_CARDS: readonly ChanceCard[] = [
   "Audit",
   "Charity",
   "Detour",
+  "Fan Trip",
+  "Gift",
+];
+/** Attacks a Shield absorbs: the first one aimed at a shielded property. */
+export const SHIELDED_CARDS: readonly ChanceCard[] = [
+  "Earthquake",
+  "Power Cut",
+  "Forced Sale",
+  "Land Swap",
 ];
 export type KeepCard = "Guardian Angel" | "Coupon";
 export type TargetCard =
   | "Earthquake"
   | "Land Swap"
   | "Contractor"
-  | "Power Cut";
+  | "Power Cut"
+  | "Forced Sale"
+  | "Shield"
+  | "Patron"
+  | "Gift";
 export type PlayerState = {
   readonly playerId: string;
   readonly name: string;
@@ -112,6 +131,8 @@ export type PropertyState = {
   readonly level: BuildLevel;
   /** Power Cut: no rent until the owner's lap count reaches this value. */
   readonly powerCutUntilLap?: number;
+  /** Shield: absorbs the next attack card aimed at this property. */
+  readonly shielded?: true;
 };
 type DecisionBase = { readonly seat: Seat; readonly deadline: number };
 export type PendingDecision = DecisionBase &
@@ -388,6 +409,23 @@ export type GameEvent =
       readonly type: "PropertyDowngraded";
       readonly tile: number;
       readonly level: BuildLevel;
+    }
+  | {
+      readonly type: "ShieldRaised";
+      readonly seat: Seat;
+      readonly tile: number;
+    }
+  /** An attack card hit a shield: the shield breaks and the attack is lost. */
+  | {
+      readonly type: "ShieldBroken";
+      readonly seat: Seat;
+      readonly tile: number;
+    }
+  | {
+      readonly type: "PropertyGiven";
+      readonly seat: Seat;
+      readonly to: Seat;
+      readonly tile: number;
     }
   | {
       readonly type: "PowerCut";

@@ -77,10 +77,13 @@ describe("room debug server envelopes", () => {
         parseServerMessage(JSON.stringify({ ...envelope, events: [event] })),
       ).toThrow();
   });
-  it("accepts a Power Cut and a Chance die roll from the reworked deck", () => {
+  it("accepts the reworked deck's die roll, Power Cut, shields and gifts", () => {
     const events = [
       { type: "CardDrawn", seat: 1, card: "Tailwind", kept: false, roll: 4 },
       { type: "PowerCut", seat: 1, tile: 13, untilLap: 3 },
+      { type: "ShieldRaised", seat: 0, tile: 1 },
+      { type: "ShieldBroken", seat: 1, tile: 1 },
+      { type: "PropertyGiven", seat: 0, to: 2, tile: 3 },
     ];
     expect(
       parseServerMessage(

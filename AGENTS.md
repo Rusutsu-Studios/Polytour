@@ -249,6 +249,8 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - Money is integer units (no floats). Economy coefficients are integer percentages
   evaluated with integer math (`1.4 * 90` is `125.99999999999999` in JS); fractions
   of money round up for charges and down for payouts. Tile indices are `0..31`.
+- Use ASCII hyphen-minus (`-`) for minus signs in UI text and formatting, never
+  Unicode minus (U+2212).
 - Names: `PascalCase` components/classes, `camelCase` functions, `SCREAMING_SNAKE`
   constants, kebab-case filenames except React components (`PascalCase.tsx`).
 - Game tuning numbers live in `shared/board/*.ts` config, never inline in logic.

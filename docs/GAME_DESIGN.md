@@ -229,7 +229,7 @@ it to the bank.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
-- **Chance:** draw uniformly from the remaining cards in a 24-card deck (rooms
+- **Chance:** draw uniformly from the remaining cards in a 34-card deck (rooms
   before rules version 9: 16 cards), without replacement. When its draw pile is empty, discarded cards form the next draw
   pile; held keep cards remain unavailable.
 
@@ -327,14 +327,14 @@ the same ordering picks the winner, so every match has exactly one winner.
 Instant wins are the dramatic core: they force players to buy out opponents'
 properties to *block* a monopoly, which is where the tension comes from.
 
-## Chance deck (24 cards)
+## Chance deck (34 cards)
 
-Rules version 9 holds 24 cards: the eighteen below, with extra copies of bad
-cards (Parking Fine ×3; Audit, Charity, Detour and Stranded ×2), so bad cards
-make up 11 of 24 draws, about 45%. Bad cards are those that cost the drawer
+Rules version 9 holds 34 cards: the twenty-four below, with extra copies of bad
+cards (Parking Fine, Audit, Charity and Detour ×3; Stranded and Gift ×2), so bad
+cards make up 17 of 34 draws, exactly half. Fan Trip stays a rare single copy. Bad cards are those that cost the drawer
 (`BAD_CHANCE_CARDS`); the in-game card shows them in a wooden frame, good cards
 in a gold one. Rooms created before version 9 keep sixteen single cards, a
-3-tile Detour and a 10% Audit, and never draw Tailwind or Power Cut.
+3-tile Detour and a 10% Audit, and never draw the cards marked v9.
 
 | Card | Effect | Keep? |
 | --- | --- | --- |
@@ -356,6 +356,12 @@ in a gold one. Rooms created before version 9 keep sixteen single cards, a
 | Charity | Give 100,000 to the poorest player | |
 | Tailwind | Roll one die and move forward that many tiles (v9) | |
 | Power Cut | An opponent's city earns no rent until its owner has passed Start 3 more times; a new owner restores it (v9) | |
+| Forced Sale | An opponent's property returns to the bank and its owner gets the sale refund; a Hotel only loses its top level, refunded the same way (v9) | |
+| Shield | One of your properties absorbs the next Earthquake, Power Cut, Forced Sale or Land Swap aimed at it; the shield then breaks. Buyouts are not blocked (v9) | |
+| Patron | One of your cities gains a level; the opponent with the most cash pays the bank for it (v9) | |
+| Fan Trip | Move clockwise to the championship's host city and resolve it there; no effect without a host. One copy only (v9) | |
+| Gift | Give one of your cities below the Hotel, buildings included, to the opponent with the least cash; no decline (v9) | |
+| Roll Again | Roll the dice again after this card; it does not add to a doubles roll (v9) | |
 
 ### Chance resolution details
 
