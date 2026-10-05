@@ -26,6 +26,7 @@ import {
   propertyRefund,
   propertyRent,
 } from "../../shared/engine/index.js";
+import { clampBoardZoom } from "../board-view.js";
 import type { AnimationContext } from "../director/director.js";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
@@ -38,6 +39,11 @@ import {
 } from "../ui/board-display.js";
 import "./BoardScene.css";
 import { useAmbientMotion } from "./ambient.js";
+import {
+  type BoardPan,
+  frameBoard,
+  initializeBoardCamera,
+} from "./board-framing.js";
 import {
   BOARD_BOTTOM,
   BOARD_HALF,
@@ -80,7 +86,8 @@ import {
   shieldTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
-import { BeachUmbrella, LANDMARK_PEAKS, Landmarks } from "./Landmarks.js";
+import { BeachUmbrella, Landmarks } from "./Landmarks.js";
+import { useBoardView } from "./use-board-view.js";
 
 type BoardProps = {
   state: PublicState | null;
@@ -95,6 +102,11 @@ type BoardProps = {
   pickSeat?: Seat;
   preview?: boolean;
   zoom?: number;
+  onZoom?: (zoom: number) => void;
+  viewResetKey?: number;
+  interactiveZoom?: boolean;
+  onWebGlAvailableChange?: (available: boolean) => void;
+  pan?: BoardPan;
   lowGraphics?: boolean;
   /** Where the roll button sits on screen, in canvas pixels. */
   onRollAnchor?: (point: { x: number; y: number }) => void;
@@ -260,11 +272,12 @@ function TileFace({
   const [x, z] = tileCenter(index);
   const [along, depth] = tileSize(index);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: R3F meshes are inspected with the accessible board controls.
     <mesh
       position={[x, LOT_TOP + 0.0015, z]}
       rotation={[-Math.PI / 2, 0, faceRotation(index)]}
       receiveShadow
-      onPointerDown={(event) => {
+      onClick={(event) => {
         if (preview || !pickable) return;
         event.stopPropagation();
         onSelect(index);
@@ -347,12 +360,13 @@ function BoardTiles({
   const salary = boardConfig?.startSalary ?? ECONOMY.startSalary;
   return (
     <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: R3F meshes are inspected with the accessible board controls. */}
       <instancedMesh
         ref={mesh}
         args={[undefined, undefined, board.length]}
         receiveShadow
         castShadow
-        onPointerDown={(event) => {
+        onClick={(event) => {
           if (
             preview ||
             event.instanceId === undefined ||
@@ -1508,7 +1522,6 @@ function cashTransfer(event: GameEvent): CashTransfer | null {
   }
 }
 
-/** Fit the whole board between the HUD's reserved top and bottom bands. */
 /** The DOM interface zoom set by CSS media steps on large screens. */
 function interfaceZoom() {
   const value = Number.parseFloat(
@@ -1517,62 +1530,8 @@ function interfaceZoom() {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
-function frameBoard(
-  camera: THREE.OrthographicCamera,
-  width: number,
-  height: number,
-  preview: boolean,
-  zoom: number,
-) {
-  // The HUD grows on large screens, so its reserved bands grow with it.
-  const ui = interfaceZoom();
-  const insets = preview
-    ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }
-    : {
-        // The match title and tools above, the current choice below.
-        top: THREE.MathUtils.clamp(height * 0.11, 78 * ui, 118 * ui),
-        bottom: THREE.MathUtils.clamp(height * 0.125, 86 * ui, 134 * ui),
-        side: width * 0.04,
-      };
-  const bounds = new THREE.Box3();
-  const point = new THREE.Vector3();
-  const add = (x: number, y: number, z: number) =>
-    bounds.expandByPoint(
-      point.set(x, y, z).applyMatrix4(camera.matrixWorldInverse),
-    );
-  const edge = BOARD_HALF + 0.08;
-  for (const x of [-edge, edge])
-    for (const z of [-edge, edge]) {
-      add(x, BOARD_BOTTOM, z);
-      add(x, LOT_TOP, z);
-    }
-  // Landmarks and buildings rise above the far corner and the back lots.
-  for (let tile = 0; tile < BOARD_SIZE; tile++) {
-    const [x, z] = tileCenter(tile);
-    add(x, LOT_TOP + (isCorner(tile) ? 0.95 : 0.8), z);
-  }
-  for (const [x, y, z] of LANDMARK_PEAKS) add(x, y, z);
-  const availableWidth = Math.max(1, width - insets.side * 2);
-  const availableHeight = Math.max(1, height - insets.top - insets.bottom);
-  const unitsPerPixel = Math.max(
-    (bounds.max.x - bounds.min.x) / availableWidth,
-    (bounds.max.y - bounds.min.y) / availableHeight,
-  );
-  const centerX = (bounds.min.x + bounds.max.x) / 2;
-  const centerY = (bounds.min.y + bounds.max.y) / 2;
-  // Place the board's center at the center of the free band, in pixels.
-  const pixelX = width / 2;
-  const pixelY = insets.top + availableHeight / 2;
-  camera.left = centerX - pixelX * unitsPerPixel;
-  camera.right = camera.left + width * unitsPerPixel;
-  camera.top = centerY + pixelY * unitsPerPixel;
-  camera.bottom = camera.top - height * unitsPerPixel;
-  camera.zoom = zoom;
-  camera.updateProjectionMatrix();
-}
-
 function SceneContent(props: BoardProps) {
-  const { state, preview, zoom = 1, onRollAnchor } = props;
+  const { state, preview, zoom = 1, pan, onRollAnchor } = props;
   const boardConfig = state?.config ?? props.config;
   const rule = boardConfig ? boardRule(boardConfig) : "country";
   const chosen =
@@ -1640,11 +1599,16 @@ function SceneContent(props: BoardProps) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: R3F resets the orthographic frustum on DPR changes; restore the board framing.
   useEffect(() => {
-    camera.position.set(...CAMERA_OFFSET);
-    camera.lookAt(0, LOT_TOP, 0);
-    camera.updateMatrixWorld();
     if (camera instanceof THREE.OrthographicCamera)
-      frameBoard(camera, size.width, size.height, Boolean(preview), zoom);
+      frameBoard(
+        camera,
+        size.width,
+        size.height,
+        Boolean(preview),
+        zoom,
+        pan,
+        interfaceZoom(),
+      );
     if (onRollAnchor) {
       const spot = new THREE.Vector3(...ROLL_SPOT).project(camera);
       onRollAnchor({
@@ -1659,6 +1623,7 @@ function SceneContent(props: BoardProps) {
     size.height,
     viewport.dpr,
     zoom,
+    pan,
     preview,
     invalidate,
     onRollAnchor,
@@ -2647,19 +2612,17 @@ function SaleLabels({
   saleSeat,
   saleBlocked,
   zoom = 1,
+  pan,
   width,
   height,
 }: BoardProps & { width: number; height: number }) {
   const { t } = useLocale();
   const targets = saleTargets(state, saleSeat);
   const camera = useMemo(() => {
-    const value = new THREE.OrthographicCamera();
-    value.position.set(...CAMERA_OFFSET);
-    value.lookAt(0, LOT_TOP, 0);
-    value.updateMatrixWorld();
-    frameBoard(value, width, height, false, zoom);
+    const value = initializeBoardCamera(new THREE.OrthographicCamera());
+    frameBoard(value, width, height, false, zoom, pan, interfaceZoom());
     return value;
-  }, [width, height, zoom]);
+  }, [width, height, zoom, pan]);
   if (!state || !targets.length || !width || !height) return null;
   return (
     <fieldset
@@ -2704,10 +2667,36 @@ function SaleLabels({
 }
 
 export default function BoardScene(props: BoardProps) {
-  const resolvedProps = { ...props, targets: choiceTargets(props) };
+  const { t } = useLocale();
   const config = props.state?.config ?? props.config;
-  const layer = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const zoom = clampBoardZoom(props.zoom ?? 1);
+  const framing = useMemo(
+    () =>
+      frameBoard(
+        initializeBoardCamera(new THREE.OrthographicCamera()),
+        size.width,
+        size.height,
+        Boolean(props.preview),
+        zoom,
+        undefined,
+        interfaceZoom(),
+      ),
+    [size.width, size.height, props.preview, zoom],
+  );
+  const pan = useBoardView({
+    layer,
+    enabled: Boolean(
+      props.interactiveZoom && !props.preview && size.width && size.height,
+    ),
+    zoom,
+    onZoom: props.onZoom,
+    resetKey: props.viewResetKey,
+    limits: framing.limits,
+    unitsPerPixel: framing.unitsPerPixel,
+  });
+  const resolvedProps = { ...props, zoom, pan, targets: choiceTargets(props) };
   useEffect(() => {
     const element = layer.current;
     if (!element) return;
@@ -2721,9 +2710,15 @@ export default function BoardScene(props: BoardProps) {
     return () => observer.disconnect();
   }, []);
   return (
-    <div
+    <section
       ref={layer}
       className="canvas-layer"
+      aria-label={t("Plateau de jeu", "Game board")}
+      tabIndex={props.interactiveZoom ? 0 : undefined}
+      data-board-zoom={zoom}
+      data-board-pan-x={pan.x}
+      data-board-pan-y={pan.y}
+      data-interactive-zoom={Boolean(props.interactiveZoom && !props.preview)}
       data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
       data-low-graphics={Boolean(props.lowGraphics)}
@@ -2742,10 +2737,14 @@ export default function BoardScene(props: BoardProps) {
           alpha: true,
           toneMapping: THREE.NeutralToneMapping,
         }}
+        onCreated={({ camera }) => {
+          initializeBoardCamera(camera);
+          props.onWebGlAvailableChange?.(true);
+        }}
       >
         <SceneContent {...resolvedProps} />
       </Canvas>
-      {!props.preview && <SaleLabels {...props} {...size} />}
-    </div>
+      {!props.preview && <SaleLabels {...resolvedProps} {...size} />}
+    </section>
   );
 }

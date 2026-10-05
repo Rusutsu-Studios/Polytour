@@ -427,6 +427,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.pause-zoom-help {
+  margin: 0;
+  color: #47666c;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .pause-audio-soon {
   margin: 36px 0;
   color: #47666c;

@@ -23,6 +23,19 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   between the top tools and the bottom choice; any future action shot must
   return to that frame and preserve access to the current decision. Geometry
   lives in `client/scene/board-layout.ts` and its orientation is unit-tested.
+- **Player view:** Pause > Video sets a local board zoom from 80% to 200%, in
+  10% steps, saved for this browser. During a match, the board also accepts wheel
+  zoom, +/- keys, drag to pan and touch pinch. These inputs stay on the board:
+  dialogs, HUD controls and text fields keep their own mouse and keyboard input.
+  Recentrer / Reset view (or 0) restores 100% and clears the user's pan, including
+  when the zoom was already 100%. Lobby previews accept only the Video controls;
+  the accessible flat-board fallback keeps these controls unavailable.
+  Input applies immediately without smoothing, including reduced motion.
+  The Director never writes the user preference: future camera moves apply this
+  multiplier after their base framing and preserve the user pan. The view composes
+  with camera choreography;
+  adjusting or resetting the view never cancels an event animation, advances the
+  event queue, changes a shared rule or sends a server intent.
 - **Lighting:** one warm key light with soft shadows (or baked + `ContactShadows`),
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),

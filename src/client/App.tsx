@@ -33,6 +33,7 @@ import type {
   RoomCredentials,
 } from "../shared/protocol/index.js";
 import { RoomCodeSchema, RoomConfigSchema } from "../shared/protocol/index.js";
+import { BOARD_ZOOM, clampBoardZoom } from "./board-view.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
 import {
@@ -91,7 +92,7 @@ import "./App.css";
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
 const DEFAULT_CONFIG = RoomConfigSchema.parse({});
 class SceneBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
+  { children: ReactNode; fallback: ReactNode; onError?: () => void },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -100,6 +101,7 @@ class SceneBoundary extends Component<
   }
   componentDidCatch(_error: Error, _info: ErrorInfo) {
     /* Keep the accessible board available without WebGL. */
+    this.props.onError?.();
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
@@ -1026,6 +1028,8 @@ function MatchView({
   onSelect,
   zoom,
   onZoom,
+  viewResetKey,
+  onViewReset,
   lowGraphics,
   onGraphicsChange,
   streamer,
@@ -1045,6 +1049,8 @@ function MatchView({
   onSelect: (tile: number) => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  viewResetKey: number;
+  onViewReset: () => void;
   lowGraphics: boolean;
   onGraphicsChange: (low: boolean) => void;
   streamer: boolean;
@@ -1057,6 +1063,7 @@ function MatchView({
   cloudflarePing: PingState;
 }) {
   const { serverState, busy, history, reducedMotion } = useDirector();
+  const [boardZoomAvailable, setBoardZoomAvailable] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
   const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
   const soloMenuPause = useRef(game.pause?.kind === "paused");
@@ -1342,6 +1349,7 @@ function MatchView({
     <>
       <div className="board-stage">
         <SceneBoundary
+          onError={() => setBoardZoomAvailable(false)}
           fallback={
             <BoardFallback
               state={game}
@@ -1371,6 +1379,10 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={controlSeat ?? undefined}
               zoom={zoom}
+              onZoom={onZoom}
+              viewResetKey={viewResetKey}
+              interactiveZoom
+              onWebGlAvailableChange={setBoardZoomAvailable}
               lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? salePending.seat : undefined}
@@ -1898,6 +1910,8 @@ function MatchView({
           }}
           zoom={zoom}
           onZoom={onZoom}
+          onViewReset={onViewReset}
+          zoomAvailable={boardZoomAvailable}
           lowGraphics={lowGraphics}
           onGraphicsChange={onGraphicsChange}
           connection={room.connection}
@@ -1989,7 +2003,32 @@ function App() {
     null,
   );
   const [copied, setCopied] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(() => {
+    try {
+      const saved = localStorage.getItem("polytour.boardZoom");
+      const value = saved?.trim() ? Number(saved) : BOARD_ZOOM.default;
+      return Number.isFinite(value)
+        ? clampBoardZoom(value)
+        : BOARD_ZOOM.default;
+    } catch {
+      return BOARD_ZOOM.default;
+    }
+  });
+  const [viewResetKey, setViewResetKey] = useState(0);
+  const [previewZoomAvailable, setPreviewZoomAvailable] = useState(false);
+  function changeZoom(value: number) {
+    const next = clampBoardZoom(value);
+    setZoom(next);
+    try {
+      localStorage.setItem("polytour.boardZoom", String(next));
+    } catch {
+      // Keep this session's view usable when browser storage is unavailable.
+    }
+  }
+  function resetBoardView() {
+    changeZoom(BOARD_ZOOM.default);
+    setViewResetKey((key) => key + 1);
+  }
   const [lowGraphics, setLowGraphics] = useState(() => {
     try {
       return localStorage.getItem("polytour.lowGraphics") === "true";
@@ -2284,6 +2323,7 @@ function App() {
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
+                onError={() => setPreviewZoomAvailable(false)}
                 fallback={
                   <BoardFallback
                     state={null}
@@ -2307,6 +2347,8 @@ function App() {
                     onSelect={setSelected}
                     preview
                     zoom={zoom}
+                    viewResetKey={viewResetKey}
+                    onWebGlAvailableChange={setPreviewZoomAvailable}
                     lowGraphics={lowGraphics}
                   />
                 </Suspense>
@@ -2463,6 +2505,7 @@ function App() {
           </div>
           <div className="room-preview">
             <SceneBoundary
+              onError={() => setPreviewZoomAvailable(false)}
               fallback={
                 <BoardFallback
                   state={null}
@@ -2485,6 +2528,8 @@ function App() {
                   onSelect={setSelected}
                   preview
                   zoom={zoom}
+                  viewResetKey={viewResetKey}
+                  onWebGlAvailableChange={setPreviewZoomAvailable}
                   lowGraphics={lowGraphics}
                 />
               </Suspense>
@@ -2500,7 +2545,9 @@ function App() {
           selected={selected ?? activePosition ?? null}
           onSelect={setSelected}
           zoom={zoom}
-          onZoom={setZoom}
+          onZoom={changeZoom}
+          viewResetKey={viewResetKey}
+          onViewReset={resetBoardView}
           lowGraphics={lowGraphics}
           onGraphicsChange={changeGraphics}
           streamer={streamer}
@@ -2568,7 +2615,9 @@ function App() {
           onClose={() => setHomeSettingsTab(null)}
           onLeave={() => {}}
           zoom={zoom}
-          onZoom={setZoom}
+          onZoom={changeZoom}
+          onViewReset={resetBoardView}
+          zoomAvailable={previewZoomAvailable}
           lowGraphics={lowGraphics}
           onGraphicsChange={changeGraphics}
           connection={room.connection}

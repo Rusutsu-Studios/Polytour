@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { PublicState, Seat } from "../../shared/engine/index.js";
+import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
@@ -38,6 +39,8 @@ export type PauseMenuProps = {
   onLeave: () => void;
   zoom: number;
   onZoom: (zoom: number) => void;
+  onViewReset: () => void;
+  zoomAvailable: boolean;
   lowGraphics: boolean;
   onGraphicsChange: (low: boolean) => void;
   connection: string;
@@ -69,6 +72,8 @@ export default function PauseMenu({
   onLeave,
   zoom,
   onZoom,
+  onViewReset,
+  zoomAvailable,
   lowGraphics,
   onGraphicsChange,
   connection,
@@ -528,7 +533,7 @@ export default function PauseMenu({
                       </label>
                       <div className="pause-setting">
                         <span id={`${id}-zoom-label`}>
-                          {t("Taille du plateau", "Board size")}
+                          {t("Zoom du plateau", "Board zoom")}
                         </span>
                         <fieldset
                           className="pause-zoom"
@@ -537,44 +542,53 @@ export default function PauseMenu({
                           <ActionButton
                             type="button"
                             aria-label={t("Dézoomer le plateau", "Zoom out")}
-                            disabled={zoom <= 0.8}
-                            disabledReason={t(
-                              "Le plateau est déjà dézoomé au maximum.",
-                              "The board is already zoomed out as far as possible.",
-                            )}
+                            disabled={!zoomAvailable || zoom <= BOARD_ZOOM.min}
+                            disabledReason={
+                              zoomAvailable
+                                ? t(
+                                    "Le plateau est déjà dézoomé au maximum.",
+                                    "The board is already zoomed out as far as possible.",
+                                  )
+                                : t(
+                                    "Le zoom est disponible sur le plateau 3D.",
+                                    "Zoom is available on the 3D board.",
+                                  )
+                            }
                             onClick={() =>
-                              onZoom(
-                                Math.max(
-                                  0.8,
-                                  Math.round((zoom - 0.1) * 10) / 10,
-                                ),
-                              )
+                              onZoom(clampBoardZoom(zoom - BOARD_ZOOM.step))
                             }
                           >
                             -
                           </ActionButton>
-                          <button
+                          <ActionButton
                             type="button"
                             className="pause-zoom-reset"
-                            onClick={() => onZoom(1)}
+                            disabled={!zoomAvailable}
+                            disabledReason={t(
+                              "Le recentrage est disponible sur le plateau 3D.",
+                              "Reset view is available on the 3D board.",
+                            )}
+                            onClick={onViewReset}
                           >
                             {t("Recentrer", "Reset view")}
-                          </button>
+                          </ActionButton>
                           <ActionButton
                             type="button"
                             aria-label={t("Zoomer le plateau", "Zoom in")}
-                            disabled={zoom >= 1.3}
-                            disabledReason={t(
-                              "Le plateau est déjà zoomé au maximum.",
-                              "The board is already zoomed in as far as possible.",
-                            )}
+                            disabled={!zoomAvailable || zoom >= BOARD_ZOOM.max}
+                            disabledReason={
+                              zoomAvailable
+                                ? t(
+                                    "Le plateau est déjà zoomé au maximum.",
+                                    "The board is already zoomed in as far as possible.",
+                                  )
+                                : t(
+                                    "Le zoom est disponible sur le plateau 3D.",
+                                    "Zoom is available on the 3D board.",
+                                  )
+                            }
                             onClick={() =>
-                              onZoom(
-                                Math.min(
-                                  1.3,
-                                  Math.round((zoom + 0.1) * 10) / 10,
-                                ),
-                              )
+                              onZoom(clampBoardZoom(zoom + BOARD_ZOOM.step))
                             }
                           >
                             +
@@ -583,6 +597,17 @@ export default function PauseMenu({
                             {Math.round(zoom * 100)} %
                           </output>
                         </fieldset>
+                        <p className="pause-zoom-help">
+                          {zoomAvailable
+                            ? t(
+                                "En partie : molette ou + / − pour zoomer, glisser pour déplacer, pincer sur écran tactile. 0 pour recentrer.",
+                                "In a match: wheel or + / − to zoom, drag to move, pinch on a touch screen. 0 to reset the view.",
+                              )
+                            : t(
+                                "Le plateau simplifié ne permet pas de zoomer ni de déplacer la vue.",
+                                "The flat board does not support zooming or moving the view.",
+                              )}
+                        </p>
                       </div>
                     </div>
                   )}

@@ -77,6 +77,8 @@ const FRANKFURT_ROOM = {
 type MatchFixtureOptions = {
   roomDiagnostics?: () => RoomDiagnostics;
   observePongs?: boolean;
+  flatBoard?: boolean;
+  realClock?: boolean;
 };
 
 const workerHealthRequests = new WeakMap<Page, string[]>();
@@ -220,7 +222,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
     });
   });
   // Track timers before the shared home/match probe creates its first cadence.
-  await page.clock.install({ time: Date.now() });
+  if (!options.realClock) await page.clock.install({ time: Date.now() });
   await page.goto("/");
   if (options.observePongs) {
     // The route mock is installed during navigation; observe it before joining.
@@ -243,10 +245,14 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
   await page.getByLabel("Votre nom de joueur").fill("Camille");
   await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
-  await expect(page.locator(".canvas-layer")).toHaveAttribute(
-    "data-scene-ready",
-    "true",
-  );
+  if (options.flatBoard) {
+    await expect(page.locator(".flat-board")).toBeVisible();
+  } else {
+    await expect(page.locator(".canvas-layer")).toHaveAttribute(
+      "data-scene-ready",
+      "true",
+    );
+  }
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeEnabled();
@@ -1573,4 +1579,261 @@ test("a reduced-motion answer outlasts a reload and outranks the system setting"
     "data-reduced-motion",
     "false",
   );
+});
+
+async function zoomBoard(page: Page, deltaY: number, expected: number) {
+  const board = page.locator(".canvas-layer");
+  const bounds = await board.boundingBox();
+  if (!bounds) throw new Error("Expected the mounted board");
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await page.mouse.wheel(0, deltaY);
+  await expect(board).toHaveAttribute("data-board-zoom", String(expected));
+}
+
+test("board zoom uses wheel and keys, respects fields and dialogs, and persists on reload", async ({
+  page,
+}) => {
+  const match = await enterMatch(page);
+  const board = page.locator(".canvas-layer");
+  await zoomBoard(page, -100, 1.1);
+  await board.focus();
+  await page.keyboard.press("+");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.2");
+  await page.keyboard.press("-");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  expect(
+    await board.evaluate((element) => {
+      const event = new WheelEvent("wheel", {
+        deltaY: -100,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      return element.dispatchEvent(event);
+    }),
+  ).toBe(true);
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  await page.keyboard.press("Control++");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await page.keyboard.press("+");
+  await board.dispatchEvent("wheel", { deltaY: -100 });
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  const zoomIn = page.getByRole("button", {
+    name: "Zoomer le plateau",
+    exact: true,
+  });
+  for (let value = 12; value <= 20; value += 1) {
+    await zoomIn.click();
+    await expect(board).toHaveAttribute("data-board-zoom", String(value / 10));
+  }
+  await expect(zoomIn).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await board.focus();
+  await page.keyboard.press("+");
+  await expect(board).toHaveAttribute("data-board-zoom", "2");
+  await page.reload();
+  await expect(board).toHaveAttribute("data-scene-ready", "true");
+  await expect(board).toHaveAttribute("data-board-zoom", "2");
+  await board.focus();
+  await page.keyboard.press("0");
+  await expect(board).toHaveAttribute("data-board-zoom", "1");
+  await zoomBoard(page, 100, 0.9);
+  await zoomBoard(page, 100, 0.8);
+  await zoomBoard(page, 100, 0.8);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Dézoomer le plateau", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
+  const field = page.getByLabel("Langue", { exact: true });
+  await field.focus();
+  await page.keyboard.press("0");
+  await expect(board).toHaveAttribute("data-board-zoom", "0.8");
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync", "sync"]);
+});
+
+test("board pinch and drag preserve click inspection and Reset view recenters", async ({
+  page,
+}) => {
+  await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const bounds = await board.boundingBox();
+  if (!bounds) throw new Error("Expected the mounted board");
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  const touch = await page.context().newCDPSession(page);
+  await touch.send("Emulation.setTouchEmulationEnabled", {
+    enabled: true,
+    maxTouchPoints: 2,
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      { x: x - 50, y, id: 1 },
+      { x: x + 50, y, id: 2 },
+    ],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      { x: x - 95, y, id: 1 },
+      { x: x + 95, y, id: 2 },
+    ],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(async () => Number(await board.getAttribute("data-board-zoom")))
+    .toBeGreaterThan(1);
+  await touch.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await touch.detach();
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 120, y + 60, { steps: 8 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => Number(await board.getAttribute("data-board-pan-x")))
+    .not.toBe(0);
+  await expect(page.locator(".city-card-dialog[open]")).toHaveCount(0);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await page.getByRole("button", { name: "Recentrer", exact: true }).click();
+  await expect(board).toHaveAttribute("data-board-zoom", "1");
+  await expect(board).toHaveAttribute("data-board-pan-x", "0");
+  await expect(board).toHaveAttribute("data-board-pan-y", "0");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  // A plain click still opens the actual lot after a dragged gesture.
+  await import("./board-interactions.js").then(({ clickBoardSpace }) =>
+    clickBoardSpace(page, 1),
+  );
+  await expect(page.locator(".city-card-dialog[open]")).toBeVisible();
+});
+
+for (const viewport of DESKTOP_SIZES) {
+  test(`board zoom extremes keep HUDs and actions visible at ${viewport.width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await enterMatch(page);
+    const board = page.locator(".canvas-layer");
+    for (const zoom of [0.8, 2]) {
+      await openSettings(page);
+      await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+      const button = page.getByRole("button", {
+        name: zoom === 2 ? "Zoomer le plateau" : "Dézoomer le plateau",
+        exact: true,
+      });
+      while (Number(await board.getAttribute("data-board-zoom")) !== zoom)
+        await button.click();
+      await page.screenshot({
+        path: `.local/verification/board-zoom-settings-${viewport.width}-${zoom}.png`,
+      });
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await page.clock.runFor(100);
+      await page.screenshot({
+        path: `.local/verification/board-zoom-centered-${viewport.width}-${zoom}.png`,
+      });
+      if (zoom === 2) {
+        await page.mouse.move(viewport.width / 2, viewport.height * 0.4);
+        await page.mouse.down();
+        await page.mouse.move(viewport.width - 1, viewport.height - 1, {
+          steps: 8,
+        });
+        await page.mouse.up();
+        await expect
+          .poll(async () =>
+            Number(await board.getAttribute("data-board-pan-y")),
+          )
+          .toBeLessThan(0);
+        await page.clock.runFor(100);
+      }
+      for (const element of await page
+        .locator(".player-card, .decision-panel")
+        .all()) {
+        const rect = await element.boundingBox();
+        expect(rect).not.toBeNull();
+        if (!rect) continue;
+        expect(rect.x).toBeGreaterThanOrEqual(0);
+        expect(rect.y).toBeGreaterThanOrEqual(0);
+        expect(rect.x + rect.width).toBeLessThanOrEqual(viewport.width);
+        expect(rect.y + rect.height).toBeLessThanOrEqual(viewport.height);
+      }
+      const roll = await page
+        .getByRole("button", { name: "Lancer les dés", exact: true })
+        .boundingBox();
+      if (!roll) throw new Error("Expected a visible roll button");
+      for (const hud of await page.locator(".player-card").all()) {
+        const rect = await hud.boundingBox();
+        if (!rect) throw new Error("Expected a visible player HUD");
+        expect(
+          roll.x < rect.x + rect.width &&
+            roll.x + roll.width > rect.x &&
+            roll.y < rect.y + rect.height &&
+            roll.y + roll.height > rect.y,
+        ).toBe(false);
+      }
+      expect(
+        await page.evaluate(() => ({
+          width: document.documentElement.scrollWidth,
+          height: document.documentElement.scrollHeight,
+        })),
+      ).toEqual(viewport);
+      await page.screenshot({
+        path: `.local/verification/board-zoom-${viewport.width}-${zoom}.png`,
+      });
+    }
+  });
+}
+
+test("the accessible flat board keeps camera controls inert", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      value(this: HTMLCanvasElement, contextId: string, options?: unknown) {
+        return contextId.includes("webgl")
+          ? null
+          : Reflect.apply(original, this, [contextId, options]);
+      },
+    });
+    localStorage.setItem("polytour.boardZoom", "1.4");
+  });
+  await enterMatch(page, { flatBoard: true });
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  for (const name of [
+    "Dézoomer le plateau",
+    "Zoomer le plateau",
+    "Recentrer",
+  ]) {
+    await expect(
+      page.getByRole("button", { name, exact: true }),
+    ).toBeDisabled();
+  }
+  await expect(page.getByRole("tabpanel")).toContainText(
+    "Le plateau simplifié ne permet pas de zoomer ni de déplacer la vue.",
+  );
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.locator(".flat-board button").first().focus();
+  await page.keyboard.press("+");
+  expect(
+    await page.evaluate(() => localStorage.getItem("polytour.boardZoom")),
+  ).toBe("1.4");
 });
