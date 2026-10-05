@@ -428,7 +428,8 @@ test("the match network button opens Debug directly without requesting a multipl
   await page.keyboard.press("Escape");
   const gear = modal.getByRole("button", { name: "Réglages", exact: true });
   await expect(gear).toBeFocused();
-  await expect(gear).toHaveText("");
+  await expect(gear).toHaveText("Réglages");
+  await expect(gear.locator("svg + span")).toBeVisible();
   await expect(gear.locator("svg")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
@@ -463,9 +464,17 @@ test("opening a multiplayer pause menu keeps clocks and authoritative updates ru
     name: "Réglages",
     exact: true,
   });
-  await expect(settingsGear).toHaveText("");
+  await expect(settingsGear).toHaveText("Réglages");
+  await expect(settingsGear.locator("svg + span")).toBeVisible();
   await expect(settingsGear.locator("svg")).toBeVisible();
   await page.screenshot({ path: ".local/verification/pause-menu.png" });
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(settingsGear.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/pause-menu-settings-fr-${viewport.width}.png`,
+    });
+  }
   const previousTime = await page.locator(".match-clock").innerText();
   await expect
     .poll(() => page.locator(".match-clock").innerText())
@@ -642,6 +651,18 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     graphics.getByRole("radio", { name: "High", exact: true }),
   ).not.toBeChecked();
   await page.keyboard.press("Escape");
+  const settings = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Settings", exact: true });
+  await expect(settings).toHaveText("Settings");
+  await expect(settings.locator("svg + span")).toBeVisible();
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(settings.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/pause-menu-settings-en-${viewport.width}.png`,
+    });
+  }
   await expect(
     page
       .locator(".pause-dialog")

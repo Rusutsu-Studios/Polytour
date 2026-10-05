@@ -2112,6 +2112,7 @@ function App() {
               onClick={() => setHomeSettingsTab("video")}
             >
               <Icon name="settings" size={18} />
+              <span>{t("Réglages", "Settings")}</span>
             </button>
             <button
               type="button"

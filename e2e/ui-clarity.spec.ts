@@ -15,6 +15,7 @@ import {
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
 import { clickBoardSpace } from "./board-interactions.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -771,6 +772,7 @@ test("the lobby settings gear groups personal controls and restores keyboard foc
   await page.goto("/");
   const trigger = page.locator(".personal-settings-trigger");
   await expect(trigger).toHaveAccessibleName("Réglages");
+  await expect(trigger).toHaveText("Réglages");
   await expect(page.locator(".language-trigger")).toHaveCount(0);
   await expect(page.locator(".topbar-right .graphics-quality")).toHaveCount(0);
   for (const size of [
@@ -780,6 +782,7 @@ test("the lobby settings gear groups personal controls and restores keyboard foc
   ]) {
     await page.setViewportSize(size);
     await expect(trigger.locator("svg")).toBeVisible();
+    await expect(trigger.locator("svg + span")).toBeVisible();
     const help = await page
       .getByRole("button", { name: "Comment jouer", exact: true })
       .boundingBox();
@@ -808,8 +811,18 @@ test("the lobby settings gear groups personal controls and restores keyboard foc
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
   await expect(trigger).toHaveAccessibleName("Settings");
+  await expect(trigger).toHaveText("Settings");
+  await expect(trigger.locator("svg + span")).toBeVisible();
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(trigger.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/settings-button-en-${viewport.width}.png`,
+    });
+  }
   await page.reload();
   await expect(trigger).toHaveAccessibleName("Settings");
+  await expect(trigger).toHaveText("Settings");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 

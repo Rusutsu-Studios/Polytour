@@ -112,13 +112,6 @@
   gap: 14px;
 }
 
-.pause-menu-actions .pause-settings {
-  justify-self: center;
-  width: 44px;
-  min-height: 44px;
-  padding: 0;
-}
-
 .pause-vote,
 .pause-request {
   margin-bottom: 24px;

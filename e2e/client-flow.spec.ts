@@ -198,7 +198,8 @@ test.describe("low graphics", () => {
     const homeSettings = page.locator(".personal-settings-trigger");
     const preview = page.locator(".welcome-board-preview .canvas-layer");
     await expect(homeSettings).toHaveAccessibleName("Réglages");
-    await expect(homeSettings).toHaveText("");
+    await expect(homeSettings).toHaveText("Réglages");
+    await expect(homeSettings.locator("svg + span")).toBeVisible();
     await expect(
       page.locator(".topbar-right [data-graphics-quality]"),
     ).toHaveCount(0);
@@ -249,6 +250,7 @@ test.describe("low graphics", () => {
     await page.keyboard.press("Escape");
     await chooseLanguage(page, "en");
     await expect(homeSettings).toHaveAccessibleName("Settings");
+    await expect(homeSettings).toHaveText("Settings");
     await homeSettings.click();
     await expect(
       page.getByRole("tab", { name: "Video", exact: true }),

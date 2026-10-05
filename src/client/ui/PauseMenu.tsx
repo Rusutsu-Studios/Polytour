@@ -355,6 +355,7 @@ export default function PauseMenu({
                 onClick={() => setPage("settings")}
               >
                 <Icon name="settings" size={20} />
+                <span>{t("Réglages", "Settings")}</span>
               </button>
               <button
                 ref={leaveRef}
