@@ -9,6 +9,105 @@ has been published, and it does not reconstruct earlier development history.
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-05
+
+### Added
+
+- Pause solo matches from the pause menu and resume with the remaining turn and
+  match time intact. Multiplayer pauses require every human player's approval,
+  with one request per room every five minutes (#55).
+- New Chance cards for new rooms (#100): Tailwind moves you forward 1 to 6
+  spaces on a die; Power Cut stops an opponent's city from earning rent until
+  its owner passes Start three times; Forced Sale sends an opponent's property
+  back to the bank with its refund (a Hotel only drops to three houses);
+  Shield floats over one of your properties and blocks the next attack;
+  Patron adds a level to your city, paid by the richest opponent; Roll Again
+  gives you another roll. Two new bad cards: the rare Fan Trip sends you to
+  pay rent in the championship's host city, and Gift makes you give a city
+  to the poorest opponent.
+- Earthquake, Power Cut and Land Swap now play on the board: the hit city
+  shakes and sinks into dust, a cut city goes dark, and swapped cities flash
+  in their new owners' colours. The game log names the affected city and
+  owner (#85).
+- Bare land now carries a small stand with a flag in its owner's colour, and
+  the flag pops up when the land is bought (#70).
+- Kept Chance cards lie face up beside their holder's cash on the table, and
+  the player HUD shows a round ×N badge instead of the "N cards" label (#71).
+- Each player's kept cards also appear as mini cards beside their name;
+  hovering or focusing one springs up the full card with its art and rule.
+  A truncated player name shows in full on hover.
+- Persistent streamer mode hides room codes in the lobby and match, masks the
+  manual join input, and removes invitation codes from the address bar (#37).
+- Missing pages show a roundabout and car with a keyboard-accessible link home
+  while returning HTTP 404 (#92).
+- New rooms include a retained Escape card that releases its holder from Lost
+  Island for free; saved rooms retain their existing card decks (#48).
+- The welcome menu opens video settings from a gear button. The network status
+  beside the credits and in a match opens the same settings panel on Debug.
+- First visits follow the browser's French or English language preference;
+  an explicitly saved language choice takes priority.
+
+### Changed
+
+- New rooms (rules version 10) rework the Chance deck: Tax audit moves you to
+  the Tax office, Detour rolls a die for 1 to 6 spaces back, and bad cards
+  make up half the draws. Rooms created earlier keep their sixteen
+  cards (#100).
+- In game, a drawn card shows only its title, one simple drawing and one
+  short line, in a gold frame for good cards and a wooden one for bad cards.
+  How to play keeps the full details (#100).
+- Every card has its own flat drawing instead of three shared detailed
+  illustrations (#61).
+- The Lost Island decision shows the flat island drawing instead of a line
+  icon, and the Escape card (#123) joins the reworked deck with its own drawing.
+- Protocol version 7: clients from before this release reload.
+- Pull requests no longer edit `CHANGELOG.md` or bump the package version, which
+  made concurrent pull requests conflict. Each adds a `changelog.d/` fragment
+  instead; `pnpm release:prepare` folds the pending fragments into a dated
+  changelog section and bumps the version at release time. CI now requires a
+  fragment per pull request and rejects version or changelog edits outside a
+  release. `pnpm version:prepare` and `--require-bump` are removed.
+
+### Fixed
+
+- Card ranges, the search description and the share-card text use the ASCII
+  hyphen (`1-6`, `2-4 players`) instead of en dashes. AGENTS.md now covers en
+  and em dashes too, and CI rejects them in code.
+- Align the home and room-lobby header, content, connection status and footer
+  on desktop, including large-screen interface scaling (#93).
+- Remove the running-game notice from the pause menu in both languages (#111).
+- Cover Lost Island bot alarms for paying to leave and rolling to escape (#84).
+- Stabilize the existing card/tax browser test's clock setup (from #119).
+- Preserve solo pause and unanimous multiplayer voting when removing the notice.
+- Held-card previews use the current card drawings, and the Island Escape
+  card appears beside the player's cash and in their hand after the Chance
+  card rework (#126). New board effects remain intact.
+- The welcome toolbar removes the Prototype badge and gives graphics and streamer
+  mode the same text-control styling as language; active streamer mode uses red
+  text (#37).
+- Interface minus signs use the standard ASCII hyphen-minus (-).
+- The pause menu uses a gear button for settings, and the language shortcut
+  remains available in the welcome toolbar.
+- Lobby departures and player removals shift occupied seats left, preserving
+  leadership, reconnect credentials and local player controls. New players and
+  bots fill the first open seat (#94).
+- Lost Island displays its title once, uses an island icon and keeps unavailable
+  escape choices visible with explanations (#48).
+- Lost Island descriptions include the Escape card when available under the
+  room’s rules, and the turn decision shows how many failed rolls remain until
+  automatic release (#87).
+- Regression coverage confirms Championship choices work during the first lap,
+  including a city acquired during doubles in the same turn (#83).
+- Keep the game log behind its top-bar icon in a compact, scrollable panel above
+  the bottom-left player, and remove the permanent bottom event caption (#45).
+- Identify log actions with icons, color player names by seat, and show dice
+  totals with a clear doubles label (#45).
+- The "Reduce motion" choice in Pause → Settings → Video is now kept. It was
+  read from the operating system on every load, so a player whose system asks
+  for less motion lost the animations again at each reload and could not keep
+  them on. The system setting now only supplies the first default, and the
+  player's own answer wins from then on.
+
 ## [0.7.3] - 2026-10-04
 
 ### Changed

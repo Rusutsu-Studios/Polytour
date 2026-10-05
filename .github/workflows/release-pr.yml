@@ -1,0 +1,58 @@
+name: Release PR
+
+# Keeps one rolling "Release vX.Y.Z" pull request up to date with the pending
+# changelog.d/ fragments. Merging it publishes the changelog and version. Feature
+# PRs still only add fragments, so nothing here can collide with them.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Update release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # RELEASE_TOKEN (a PAT or app token) makes CI run on the release PR;
+          # a PR opened with the default token does not trigger workflows.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+      - uses: ./.github/actions/setup
+      - name: Prepare release
+        id: prepare
+        run: |
+          if ls changelog.d/*.md 2>/dev/null | grep -qv README.md; then
+            pnpm release:prepare
+            echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          else
+            echo "No pending fragments."
+          fi
+      - name: Push release branch and open or update the PR
+        if: steps.prepare.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C release/next
+          git add -A
+          git commit -m "Release v$VERSION"
+          git push --force origin release/next
+          if gh pr view release/next --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit release/next --title "Release v$VERSION"
+          else
+            gh pr create --base main --head release/next --title "Release v$VERSION" \
+              --body "Folds the pending changelog fragments into CHANGELOG.md and bumps the version. Merge to release; this PR is rebuilt on every push to main."
+          fi

@@ -90,7 +90,12 @@ agents can still complete the normal workflow themselves.
 
 ## Preparing a release
 
-A release is its own small pull request, opened when you decide to ship:
+The `Release PR` workflow (`.github/workflows/release-pr.yml`) does this for you: on
+every push to `main` it rebuilds one rolling `release/next` pull request that folds
+the pending fragments into the changelog and version. Merge it to ship. Add a
+`RELEASE_TOKEN` secret (PAT or app token with contents and pull-request write) so
+CI runs on that PR; without it, close and reopen the PR to trigger CI.
+To do it by hand instead, open a release pull request:
 
 ```sh
 pnpm release:prepare            # bump = the highest one requested by the fragments
