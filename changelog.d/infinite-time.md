@@ -10,3 +10,6 @@
   least 15 minutes, including longer games such as 200 minutes, or a decision
   time from 10 to 60 seconds, without snapping to the presets. The duration
   slider extends for longer exact values, and its final position selects ∞.
+
+### Changed
+- Remove the save-on-close helper sentence from the editable settings dialog.

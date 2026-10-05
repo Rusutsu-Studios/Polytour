@@ -70,7 +70,9 @@ export default function SettingsDialog(props: RoomSettingsProps) {
             id={`${id}-dialog`}
             className="settings-dialog"
             aria-labelledby={`${id}-heading`}
-            aria-describedby={`${id}-description`}
+            aria-describedby={
+              disabled || !save ? `${id}-description` : undefined
+            }
             onCancel={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -108,22 +110,19 @@ export default function SettingsDialog(props: RoomSettingsProps) {
                 </button>
               </header>
               <div className="settings-dialog-body">
-                <p id={`${id}-description`} className="settings-dialog-note">
-                  {disabled
-                    ? t(
-                        "Consultez les règles de cette salle.",
-                        "View this room’s rules.",
-                      )
-                    : save
+                {(disabled || !save) && (
+                  <p id={`${id}-description`} className="settings-dialog-note">
+                    {disabled
                       ? t(
-                          "Vos changements sont enregistrés à la fermeture.",
-                          "Your changes are saved when you close this window.",
+                          "Consultez les règles de cette salle.",
+                          "View this room’s rules.",
                         )
                       : t(
                           "Choisissez les règles de votre prochaine partie.",
                           "Choose the rules for your next game.",
                         )}
-                </p>
+                  </p>
+                )}
                 <RoomSettingsFields {...props} />
               </div>
               <footer className="settings-dialog-footer">
