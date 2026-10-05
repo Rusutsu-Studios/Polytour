@@ -645,8 +645,8 @@ export default function PauseMenu({
                         <p className="pause-zoom-help" id={`${id}-view-help`}>
                           {zoomAvailable
                             ? t(
-                                "En partie : glisser pour tourner, Maj + glisser pour déplacer. Molette, pincer ou + / - pour zoomer. 0 pour la vue par défaut. Le verrouillage bloque ces gestes et le zoom.",
-                                "In a match: drag to rotate, Shift + drag to move. Wheel, pinch or + / - to zoom. 0 for the default view. Locking blocks these gestures and zoom.",
+                                "En partie : glisser horizontalement pour tourner autour du plateau, verticalement pour passer d’une vue basse à une vue de dessus. Maj + glisser pour déplacer. Molette, pincer ou + / - pour zoomer. 0 pour la vue par défaut. Le verrouillage bloque les gestes et le zoom.",
+                                "In a match: drag sideways to turn around the board, up/down to move between a low and overhead view. Shift + drag to move. Wheel, pinch or + / - to zoom. 0 for the default view. Locking blocks gestures and zoom.",
                               )
                             : t(
                                 "Le plateau simplifié ne permet pas de zoomer ni de déplacer la vue.",

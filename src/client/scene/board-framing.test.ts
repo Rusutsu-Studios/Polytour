@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 import {
+  BOARD_ELEVATION,
   boardScreenHit,
   boardViewRotation,
   DEFAULT_BOARD_ORIENTATION,
@@ -9,7 +10,13 @@ import {
   initializeBoardCamera,
   rotateBoardOrientation,
 } from "./board-framing.js";
-import { BOARD_HALF, LAWN_TOP, LOT_TOP, tilePoint } from "./board-layout.js";
+import {
+  BOARD_HALF,
+  CAMERA_OFFSET,
+  LAWN_TOP,
+  LOT_TOP,
+  tilePoint,
+} from "./board-layout.js";
 
 const SIZES = [
   [1280, 720],
@@ -57,10 +64,31 @@ describe("player board framing", () => {
     expect(gentle.pitch).toBeCloseTo(0.09);
     const far = rotateBoardOrientation(gentle, 100_000, 100_000);
     expect(Math.abs(far.yaw)).toBeLessThanOrEqual(Math.PI);
-    expect(far.pitch).toBe(0.18);
-    expect(rotateBoardOrientation(far, -100_000, -100_000).pitch).toBe(-0.18);
+    expect(far.pitch).toBe(BOARD_ELEVATION.max - BOARD_ELEVATION.default);
+    expect(rotateBoardOrientation(far, -100_000, -100_000).pitch).toBe(
+      BOARD_ELEVATION.min - BOARD_ELEVATION.default,
+    );
   });
 
+  it("maps downward drag toward overhead and upward drag toward a low viewing dome", () => {
+    const sight = new THREE.Vector3(...CAMERA_OFFSET)
+      .sub(new THREE.Vector3(0, LOT_TOP, 0))
+      .normalize();
+    for (const [dy, elevation] of [
+      [100_000, BOARD_ELEVATION.max],
+      [-100_000, BOARD_ELEVATION.min],
+    ] as const) {
+      const orientation = rotateBoardOrientation(
+        DEFAULT_BOARD_ORIENTATION,
+        0,
+        dy,
+      );
+      const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(
+        boardViewRotation(orientation),
+      );
+      expect(Math.asin(normal.dot(sight))).toBeCloseTo(elevation, 12);
+    }
+  });
   it("raycasts the actual rotated board center, tiles and edges, excluding empty backdrop", () => {
     const width = 1440;
     const height = 900;
@@ -129,6 +157,72 @@ describe("player board framing", () => {
       });
     }
 
+    it(`keeps projection scale fixed and every lot reachable across dome orbit at ${width}x${height}`, () => {
+      const camera = initializeBoardCamera(new THREE.OrthographicCamera());
+      for (const zoom of [BOARD_ZOOM.min, BOARD_ZOOM.default, BOARD_ZOOM.max]) {
+        const baseline = frameBoard(camera, width, height, false, zoom);
+        const baselineWidth = camera.right - camera.left;
+        const baselineHeight = camera.top - camera.bottom;
+        for (const orientation of [
+          DEFAULT_BOARD_ORIENTATION,
+          { yaw: 0.7, pitch: BOARD_ELEVATION.max - BOARD_ELEVATION.default },
+          { yaw: -1.4, pitch: BOARD_ELEVATION.min - BOARD_ELEVATION.default },
+        ]) {
+          const rotation = boardViewRotation(orientation);
+          const frame = frameBoard(
+            camera,
+            width,
+            height,
+            false,
+            zoom,
+            undefined,
+            1,
+            rotation,
+          );
+          expect(frame.unitsPerPixel).toBe(baseline.unitsPerPixel);
+          expect(camera.right - camera.left).toBeCloseTo(baselineWidth, 12);
+          expect(camera.top - camera.bottom).toBeCloseTo(baselineHeight, 12);
+          expect(camera.zoom).toBe(zoom);
+          if (orientation.pitch > 0) expect(frame.limits.y).toBeGreaterThan(0);
+          for (let tile = 0; tile < 32; tile++) {
+            const [x, z] = tilePoint(tile, 0, 0.3);
+            const cameraPoint = new THREE.Vector3(x, LOT_TOP + 0.08, z)
+              .applyQuaternion(rotation)
+              .applyMatrix4(camera.matrixWorldInverse);
+            const pan = {
+              x: (frame.bounds.min.x + frame.bounds.max.x) / 2 - cameraPoint.x,
+              y: (frame.bounds.min.y + frame.bounds.max.y) / 2 - cameraPoint.y,
+            };
+            frameBoard(camera, width, height, false, zoom, pan, 1, rotation);
+            const point = screen(
+              camera,
+              cameraPoint.x,
+              cameraPoint.y,
+              width,
+              height,
+            );
+            expect(point.x).toBeGreaterThanOrEqual(frame.insets.side - 0.001);
+            expect(point.x).toBeLessThanOrEqual(
+              width - frame.insets.side + 0.001,
+            );
+            expect(point.y).toBeGreaterThanOrEqual(frame.insets.top - 0.001);
+            expect(point.y).toBeLessThanOrEqual(
+              height - frame.insets.bottom + 0.001,
+            );
+          }
+        }
+      }
+    });
+
+    it(`keeps the default home preview fully framed at ${width}x${height}`, () => {
+      const camera = initializeBoardCamera(new THREE.OrthographicCamera());
+      const { bounds } = frameBoard(camera, width, height, true, 1);
+      const lower = screen(camera, bounds.min.x, bounds.min.y, width, height);
+      const upper = screen(camera, bounds.max.x, bounds.max.y, width, height);
+      expect(
+        Math.max((upper.x - lower.x) / width, (lower.y - upper.y) / height),
+      ).toBeGreaterThan(0.9);
+    });
     it(`bounds maximum-zoom pan and reaches every property at ${width}x${height}`, () => {
       const camera = initializeBoardCamera(new THREE.OrthographicCamera());
       const initial = frameBoard(camera, width, height, false, BOARD_ZOOM.max);
@@ -181,53 +275,15 @@ describe("player board framing", () => {
       }
     });
 
-    it(`fits rotated previews and aligns sale quotes and the Roll anchor at ${width}x${height}`, () => {
+    it(`aligns sale quotes and the Roll anchor throughout dome orbit at ${width}x${height}`, () => {
       for (const orientation of [
-        { yaw: 0.7, pitch: 0.18 },
-        { yaw: -1.4, pitch: -0.18 },
+        { yaw: 0.7, pitch: BOARD_ELEVATION.max - BOARD_ELEVATION.default },
+        { yaw: -1.4, pitch: BOARD_ELEVATION.min - BOARD_ELEVATION.default },
       ]) {
         const rotation = boardViewRotation(orientation);
         const group = new THREE.Group();
         group.quaternion.copy(rotation);
         group.updateMatrixWorld();
-        for (const preview of [false, true]) {
-          const camera = initializeBoardCamera(new THREE.OrthographicCamera());
-          const { bounds, insets } = frameBoard(
-            camera,
-            width,
-            height,
-            preview,
-            1,
-            undefined,
-            1,
-            rotation,
-          );
-          const lower = screen(
-            camera,
-            bounds.min.x,
-            bounds.min.y,
-            width,
-            height,
-          );
-          const upper = screen(
-            camera,
-            bounds.max.x,
-            bounds.max.y,
-            width,
-            height,
-          );
-          expect(lower.x).toBeGreaterThanOrEqual(insets.side - 0.001);
-          expect(upper.x).toBeLessThanOrEqual(width - insets.side + 0.001);
-          expect(upper.y).toBeGreaterThanOrEqual(insets.top - 0.001);
-          expect(lower.y).toBeLessThanOrEqual(height - insets.bottom + 0.001);
-          if (preview)
-            expect(
-              Math.max(
-                (upper.x - lower.x) / width,
-                (lower.y - upper.y) / height,
-              ),
-            ).toBeGreaterThan(0.9);
-        }
         for (const zoom of [BOARD_ZOOM.min, BOARD_ZOOM.max]) {
           const sceneCamera = initializeBoardCamera(
             new THREE.OrthographicCamera(),

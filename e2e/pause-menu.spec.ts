@@ -2037,6 +2037,94 @@ test("grabbing tiles, the center and edges rotates gently while clicks and float
   ).toEqual(["sync"]);
 });
 
+test("vertical grabs orbit from low to overhead without zooming at desktop sizes", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("polytour.lowGraphics", "true"),
+  );
+  const match = await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const reset = page.getByRole("button", {
+    name: "Recentrer le plateau",
+    exact: true,
+  });
+  const projection = () =>
+    page.evaluate(async () => {
+      const modulePath = performance
+        .getEntriesByType("resource")
+        .find((entry) => entry.name.includes("/@react-three_fiber.js"))?.name;
+      if (!modulePath) throw new Error("Expected the loaded R3F module");
+      const { _roots } = (await import(
+        modulePath
+      )) as typeof import("@react-three/fiber");
+      const canvas = document.querySelector<HTMLCanvasElement>(
+        ".canvas-layer canvas",
+      );
+      const scene = canvas && _roots.get(canvas)?.store.getState();
+      const view = scene?.scene.getObjectByName("board-user-view");
+      if (
+        !scene ||
+        !view ||
+        !("left" in scene.camera) ||
+        !("zoom" in scene.camera)
+      )
+        throw new Error("Expected the mounted orthographic board");
+      const camera = scene.camera as import("three").OrthographicCamera;
+      const normal = camera.position
+        .clone()
+        .set(0, 1, 0)
+        .applyQuaternion(view.quaternion);
+      const towardCamera = camera
+        .getWorldDirection(camera.position.clone())
+        .negate();
+      return {
+        width: (camera.right - camera.left) / camera.zoom,
+        height: (camera.top - camera.bottom) / camera.zoom,
+        elevation: (Math.asin(normal.dot(towardCamera)) * 180) / Math.PI,
+      };
+    });
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await reset.click();
+    await expect(board).toHaveAttribute("data-board-pitch", "0");
+    const initial = await projection();
+    for (const direction of [1, -1]) {
+      await reset.click();
+      for (let grab = 0; grab < 4; grab++) {
+        const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+        await dragBoard(page, center, 0, direction * 180);
+      }
+      await expect(board).toHaveAttribute("data-board-zoom", "1");
+      await expect(board).toHaveAttribute("data-board-yaw", "0");
+      const orbit = await projection();
+      expect(orbit.width).toBeCloseTo(initial.width, 6);
+      expect(orbit.height).toBeCloseTo(initial.height, 6);
+      if (direction === 1) expect(orbit.elevation).toBeGreaterThan(80);
+      else expect(orbit.elevation).toBeLessThan(20);
+      await page.screenshot({
+        path:
+          ".local/verification/board-orbit-" +
+          viewport.width +
+          (direction === 1 ? "-overhead.png" : "-low.png"),
+      });
+    }
+    await reset.click();
+    await zoomBoard(page, -100, 1.1);
+    expect((await projection()).width).toBeCloseTo(initial.width / 1.1, 6);
+    await reset.click();
+    await expect(board).toHaveAttribute("data-board-zoom", "1");
+    const restored = await projection();
+    expect(restored.width).toBeCloseTo(initial.width, 6);
+    expect(restored.elevation).toBeCloseTo(initial.elevation, 6);
+  }
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync"]);
+});
+
 test("locked board freezes every gesture and zoom preference but toolbar reset remains usable", async ({
   page,
 }) => {

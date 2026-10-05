@@ -1458,7 +1458,7 @@ function MatchView({
           )}
           onClick={onViewReset}
         >
-          <Icon name="reset" size={18} />
+          <Icon name="target" size={18} />
         </ActionButton>
         <button
           type="button"

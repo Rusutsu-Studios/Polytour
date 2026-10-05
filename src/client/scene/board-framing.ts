@@ -16,10 +16,17 @@ export const DEFAULT_BOARD_ORIENTATION: BoardOrientation = { yaw: 0, pitch: 0 };
 export const BOARD_DRAG_THRESHOLD = 8;
 const YAW_PER_PIXEL = 0.0025;
 const PITCH_PER_PIXEL = 0.0015;
-const MAX_PITCH = 0.18;
+export const BOARD_ELEVATION = {
+  min: Math.PI / 12,
+  max: (85 * Math.PI) / 180,
+  default: Math.atan2(
+    CAMERA_OFFSET[1] - LOT_TOP,
+    Math.hypot(CAMERA_OFFSET[0], CAMERA_OFFSET[2]),
+  ),
+} as const;
 const SCREEN_RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 
-/** Keep a gentle, readable tabletop angle while allowing a full turn. */
+/** A downward drag climbs the viewing dome; yaw allows a full turn. */
 export function rotateBoardOrientation(
   orientation: BoardOrientation,
   dx: number,
@@ -34,8 +41,8 @@ export function rotateBoardOrientation(
       Math.PI,
     pitch: THREE.MathUtils.clamp(
       orientation.pitch + dy * PITCH_PER_PIXEL,
-      -MAX_PITCH,
-      MAX_PITCH,
+      BOARD_ELEVATION.min - BOARD_ELEVATION.default,
+      BOARD_ELEVATION.max - BOARD_ELEVATION.default,
     ),
   };
 }
@@ -116,14 +123,19 @@ export function frameBoard(
         side: width * 0.04,
       };
   const bounds = new THREE.Box3();
+  const referenceBounds = new THREE.Box3();
   const point = new THREE.Vector3();
-  const add = (x: number, y: number, z: number) =>
+  const add = (x: number, y: number, z: number) => {
+    referenceBounds.expandByPoint(
+      point.set(x, y, z).applyMatrix4(camera.matrixWorldInverse),
+    );
     bounds.expandByPoint(
       point
         .set(x, y, z)
         .applyQuaternion(rotation)
         .applyMatrix4(camera.matrixWorldInverse),
     );
+  };
   const edge = BOARD_HALF + 0.08;
   for (const x of [-edge, edge])
     for (const z of [-edge, edge]) {
@@ -137,9 +149,10 @@ export function frameBoard(
   for (const [x, y, z] of LANDMARK_PEAKS) add(x, y, z);
   const availableWidth = Math.max(1, width - insets.side * 2);
   const availableHeight = Math.max(1, height - insets.top - insets.bottom);
+  // Orbit changes foreshortening, never the player's projection scale.
   const unitsPerPixel = Math.max(
-    (bounds.max.x - bounds.min.x) / availableWidth,
-    (bounds.max.y - bounds.min.y) / availableHeight,
+    (referenceBounds.max.x - referenceBounds.min.x) / availableWidth,
+    (referenceBounds.max.y - referenceBounds.min.y) / availableHeight,
   );
   // At a close view, either edge can be brought into the HUD's free band.
   const limits = {
