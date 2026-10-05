@@ -260,6 +260,18 @@ create a versioned config preset with tests. Do not rewrite the rules of a game
 already in progress. The initial functional prototype can be played while this
 comparison is being collected.
 
+### Polytour festival distribution exception - 6 October 2026
+
+New rooms use rules version 12 with `festivalDistribution: "spread"`. When
+configured festivals fit in separate countries, the chance of placing more than
+one in a country is one percentage point per configured festival: about 3% with
+three festivals. The count and city-only rule remain unchanged. Rare draws can
+still group all three in one country. Above eight festivals, the draw visits
+every country before assigning the remaining festivals to distinct cities.
+There is no Portugal-specific weighting. This is an explicit Polytour balance
+choice, not a claim about the reference game's festival distribution. Rooms
+through version 11 retain their original seeded shuffle and saved placements.
+
 ### Polytour festival exception — 4 October 2026
 
 Issue #96 requests that beaches never receive a festival. New rooms use rules

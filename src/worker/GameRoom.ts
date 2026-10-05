@@ -93,9 +93,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 8 pays four resorts double the third's rent and lets a buyout be built on;
  * 9 adds the saved Island Escape card;
  * 10 reworks the Chance deck (see ChanceRule);
- * 11 selects a random starter, then follows the fixed clockwise seats.
+ * 11 selects a random starter, then follows the fixed clockwise seats;
+ * 12 spreads initial festivals across sides and country groups.
  */
-const RULES_VERSION = 11;
+const RULES_VERSION = 12;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -107,7 +108,8 @@ function frozenRules(version: number | null) {
     version !== 8 &&
     version !== 9 &&
     version !== 10 &&
-    version !== 11
+    version !== 11 &&
+    version !== 12
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -125,6 +127,8 @@ function frozenRules(version: number | null) {
     escapeCard: version >= 9,
     turnOrderRule:
       version >= 11 ? ("clockwise" as const) : ("shuffled" as const),
+    festivalDistribution:
+      version >= 12 ? ("spread" as const) : ("random" as const),
   };
 }
 
@@ -302,7 +306,12 @@ export class GameRoom extends DurableObject<Env> {
     const escapeCard = state.config.escapeCard;
     const chances = state.config.chanceRule;
     const turnOrder = state.config.turnOrderRule;
+    const festivalDistribution = state.config.festivalDistribution;
     if (
+      // Older saves may omit the selector; their recorded festivals stay intact.
+      (rulesVersion !== null &&
+        festivalDistribution !== frozen.festivalDistribution &&
+        (rulesVersion >= 12 || festivalDistribution !== undefined)) ||
       // Older matches retain their stored order; version 11 requires its selector.
       (rulesVersion !== null &&
         rulesVersion >= 11 &&

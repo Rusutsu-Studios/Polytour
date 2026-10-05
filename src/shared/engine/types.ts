@@ -25,6 +25,8 @@ export type GameConfig = {
   readonly decisionSeconds?: number;
   readonly timeLimitMinutes?: number;
   readonly festivalCount?: number;
+  /** Missing on saved rooms before version 12: retain the original random draw. */
+  readonly festivalDistribution?: "spread" | "random";
   /** Missing on older saves: retain the economy's original resort festivals. */
   readonly resortFestivals?: boolean;
   readonly lineMonopoly?: boolean;

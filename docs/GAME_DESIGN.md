@@ -65,11 +65,19 @@ the tie.
    A separate round limit
    applies to short tests/simulations; the timed preset uses a 10,000-round safety
    cap. Twenty rounds are not labelled twenty minutes.
-5. Three initial festivals are selected by the seeded shuffle by default, among
-   cities only. Saved reference rooms (versions 4–6) retain festivals on cities
-   or resorts; prototype rooms also use cities only. Each doubles the rent of its
-   tile for the whole match and combines with the other modifiers (see Economy).
-   Festival count is configurable.
+5. Three initial festivals are selected among cities only by default. New rooms
+   spread them across different countries: with three configured festivals, a
+   country receives more than one in about 3% of matches. For two through eight
+   festivals, the chance of a repeated country is one percentage point per
+   configured festival. All countries use the same rule; Portugal has no special
+   weighting. A rare draw can still put all three in one country. Above eight
+   festivals, repetition is unavoidable: every country receives one before the
+   remaining festivals are assigned to other distinct cities. The configured
+   count is always retained, with no duplicate tiles. Rooms through version 11
+   keep their original unrestricted seeded shuffle. Saved reference rooms
+   (versions 4–6) retain festivals on cities or resorts; prototype rooms also use
+   cities only. Each doubles the rent of its tile for the whole match and combines
+   with the other modifiers (see Economy). Festival count is configurable.
 
 > Mechanics are not protected by copyright, but names and art are trademarks. Board
 > theme, city names, card names, and visuals must be our own.

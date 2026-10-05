@@ -89,10 +89,12 @@ Pending legacy dice block all pause intents. While a commitment is unresolved,
 vote expiry waits as well, keeping the committed event sequence unchanged. Dice
 resolution clears an expired vote in the same persisted event batch as its result;
 no late acceptance can count and the commitment/proof remains unchanged.
-New rooms freeze rules version 11: country-grouped board, reference economy,
+New rooms freeze rules version 12: country-grouped board, reference economy,
 staged hotels, World Tour flights to free or own properties, a 200 k rent for
 four resorts, a build offer after a buyout, a keepable Island Escape card,
-the reworked Chance deck, and clockwise seat order from a random starter.
+the reworked Chance deck, clockwise seat order from a random starter, and
+country-spread festivals. Rooms through version 11 retain their unrestricted
+festival shuffle.
 Rooms through version 10 keep their original shuffled order. Version-9 rooms
 keep the original sixteen cards plus
 Escape; version-8 and older rooms retain their original sixteen-card deck,
@@ -423,13 +425,18 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 11 with country-grouped tiles, reference economy, staged hotels, full
+  use version 12 with country-grouped tiles, reference economy, staged hotels, full
   nominal sale refunds, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
   `fourResortRent: true`, `buildAfterBuyout: true`, `chanceRule: "reworked"` and
-  `turnOrderRule: "clockwise"`. The server chooses a random starter, then cycles
+  `turnOrderRule: "clockwise"` and `festivalDistribution: "spread"`. The server chooses a random starter, then cycles
   seats bottom-right → bottom-left → top-left → top-right, skipping empty and
   bankrupt places. Saved version-10 and older lobbies use `turnOrderRule: "shuffled"`;
   running matches keep their persisted `startingTurnOrder` without a migration.
+  Version-11 and older lobbies use `festivalDistribution: "random"`; an absent
+  marker on an older active save retains its recorded festival tiles. New rooms
+  use the spread selector, with a repeated-country chance of one percentage point
+  per festival when distinct countries can accommodate the configured count.
+  No existing match is redrawn on reconnect or eviction.
   Saves without the Chance marker keep the original deck. Version-4/5/6 rooms retain
   their resort festivals and rent; an absent festival marker on those saved matches
   follows the original economy. A version-4/5 save without the World Tour selector

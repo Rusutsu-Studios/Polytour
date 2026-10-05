@@ -121,11 +121,20 @@ describe("createGame", () => {
       seat: seat as Seat,
     }));
     for (let seed = 0; seed < 100; seed += 1) {
-      const clockwise = createGame(DEFAULT_GAME_CONFIG, seats, seed, {
-        now: 100,
-      }).state;
+      const clockwise = createGame(
+        { ...DEFAULT_GAME_CONFIG, festivalDistribution: "random" },
+        seats,
+        seed,
+        {
+          now: 100,
+        },
+      ).state;
       const legacy = createGame(
-        { ...DEFAULT_GAME_CONFIG, turnOrderRule: "shuffled" },
+        {
+          ...DEFAULT_GAME_CONFIG,
+          turnOrderRule: "shuffled",
+          festivalDistribution: "random",
+        },
         seats,
         seed,
         { now: 100 },
@@ -211,6 +220,32 @@ describe("createGame", () => {
         toPublic(state),
       );
     }
+  });
+  it("freezes the spread rule for new games, while explicit random preserves saved setup", () => {
+    const spread = createGame(
+      { ...DEFAULT_GAME_CONFIG, festivalDistribution: undefined },
+      SEATS,
+      0,
+      { now: 0 },
+    ).state;
+    expect(spread.config.festivalDistribution).toBe("spread");
+    const random = createGame(
+      { ...DEFAULT_GAME_CONFIG, festivalDistribution: "random" },
+      SEATS,
+      0,
+      { now: 0 },
+    ).state;
+    expect(random.config.festivalDistribution).toBe("random");
+    expect(random.festivalTiles).toEqual([3, 21, 17]);
+    expect(random.rngState).toBe(1320036237);
+    expect(() =>
+      createGame(
+        { ...DEFAULT_GAME_CONFIG, festivalDistribution: "biased" as "spread" },
+        SEATS,
+        0,
+        { now: 0 },
+      ),
+    ).toThrow("festival distribution rule");
   });
   it("includes Escape in a version-9 deck only when marked, and freezes its marker", () => {
     for (const escapeCard of [true, false, undefined]) {

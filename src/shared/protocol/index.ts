@@ -209,6 +209,8 @@ export type LobbyState = {
   readonly chanceRule: ChanceRule;
   /** Omitted by older servers; existing rooms keep their recorded shuffled order. */
   readonly turnOrderRule?: "clockwise" | "shuffled";
+  /** Omitted by older servers; existing rooms keep their original festival draw. */
+  readonly festivalDistribution?: "spread" | "random";
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

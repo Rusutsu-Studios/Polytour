@@ -4,3 +4,9 @@
   top-left, then top-right, skipping empty and eliminated seats. Reveal the
   randomly selected starting player with a shared, bounded wheel animation,
   respecting reduced motion and snapshot recovery (#110).
+
+### Changed
+
+- Spread initial festivals across countries in new rooms. With three festivals,
+  a country receives several in about 3% of matches; rare grouped draws remain
+  possible. Keep the configured count and preserve older rooms' festival rules.

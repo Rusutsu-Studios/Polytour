@@ -53,6 +53,7 @@ const publicState = z.object({
       resortFestivals: z.boolean().optional(),
       escapeCard: z.boolean().optional(),
       turnOrderRule: z.enum(["clockwise", "shuffled"]).optional(),
+      festivalDistribution: z.enum(["spread", "random"]).optional(),
     })
     .passthrough(),
   players: z.array(
@@ -210,6 +211,7 @@ const lobby = z.object({
   escapeCard: z.boolean().optional(),
   chanceRule: z.enum(["reworked", "original"]).default("reworked"),
   turnOrderRule: z.enum(["clockwise", "shuffled"]).optional(),
+  festivalDistribution: z.enum(["spread", "random"]).optional(),
   resortFestivals: z.boolean().optional(),
   seats: z
     .array(

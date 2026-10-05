@@ -2,7 +2,9 @@ import type {
   BoardRule,
   BuildLevel,
   ChanceRule,
+  CityTile,
   EconomyRule,
+  ResortTile,
   WorldTourRule,
 } from "../board/index.js";
 import {
@@ -25,6 +27,7 @@ import {
   PAUSE_TIMING,
   ruleEconomy,
 } from "../board/index.js";
+import { selectInitialFestivals } from "./festivals.js";
 import { applyEvent, toPublic } from "./reducer.js";
 import { createEntropySampler, nextRandom, shuffle } from "./rng.js";
 import type {
@@ -59,6 +62,7 @@ export const DEFAULT_GAME_CONFIG = {
   roundLimit: 10_000,
   timeLimitMinutes: 120,
   festivalCount: 3,
+  festivalDistribution: "spread",
   resortFestivals: false,
   lineMonopoly: true,
   tripleMonopoly: true,
@@ -2315,6 +2319,12 @@ export function createGame(
   )
     throw new RangeError("Unsupported turn order rule");
   const turnOrderRule = config.turnOrderRule ?? "clockwise";
+  if (
+    config.festivalDistribution !== undefined &&
+    !["spread", "random"].includes(config.festivalDistribution)
+  )
+    throw new RangeError("Unsupported festival distribution rule");
+  const festivalDistribution = config.festivalDistribution ?? "spread";
   const chances = config.chanceRule ?? "reworked";
   if (
     config.sellBackPercent !== undefined &&
@@ -2382,21 +2392,22 @@ export function createGame(
     }),
     order.state,
   );
-  const festivals = shuffle(
-    board
-      .filter(
-        (tile) =>
-          isCityTile(tile) ||
-          (config.resortFestivals === true && isResortTile(tile)),
-      )
-      .map((tile) => tile.index),
+  const festivals = selectInitialFestivals(
+    board.filter(
+      (tile): tile is CityTile | ResortTile =>
+        isCityTile(tile) ||
+        (config.resortFestivals === true && isResortTile(tile)),
+    ),
+    config.festivalCount ?? 0,
     deck.state,
+    festivalDistribution,
   );
   const publicState: PublicState = {
     gameId: config.gameId,
     config: {
       ...config,
       resortFestivals: config.resortFestivals ?? false,
+      festivalDistribution,
       hotelPurchaseRule: config.hotelPurchaseRule ?? "staged-hotels",
       economyRule: config.economyRule ?? "reference",
       boardRule: config.boardRule ?? "country",
@@ -2436,7 +2447,7 @@ export function createGame(
       config.timeLimitMinutes !== undefined
         ? context.now + config.timeLimitMinutes * 60_000
         : null,
-    festivalTiles: festivals.items.slice(0, config.festivalCount ?? 0),
+    festivalTiles: festivals.items,
   };
   const state: GameState = {
     ...publicState,
