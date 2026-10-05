@@ -85,6 +85,7 @@ import {
 } from "./ui/RoomPeople.js";
 import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
+import StartOrderMoment from "./ui/StartOrderMoment.js";
 import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
 
@@ -2141,6 +2142,7 @@ function App() {
       className={isGame ? "game-shell" : "lobby-shell"}
       data-reduced-motion={reducedMotion}
     >
+      <StartOrderMoment />
       {!isGame && (
         <header className="topbar">
           <span className="brand-button">

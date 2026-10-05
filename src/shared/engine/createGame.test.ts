@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { getBoard, isCityTile } from "../board/index.js";
-import type { SeatInfo } from "./index.js";
 import {
+  BOT_TIMING,
+  DECISION_TIMING,
+  getBoard,
+  isCityTile,
+} from "../board/index.js";
+import type { GameState, Seat, SeatInfo } from "./index.js";
+import {
+  applyAction,
   applyEvent,
+  botDecisionAt,
   chanceDeck,
   createGame,
   DEFAULT_GAME_CONFIG,
+  decisionOpensAt,
+  shuffle,
   toPublic,
 } from "./index.js";
 
@@ -42,7 +51,7 @@ describe("createGame", () => {
     expect(state.pending).toEqual({
       kind: "roll",
       seat: state.activeSeat,
-      deadline: 30_100,
+      deadline: 30_100 + DECISION_TIMING.startAnimation,
     });
     expect(state.properties).toHaveLength(24);
     expect(
@@ -68,6 +77,140 @@ describe("createGame", () => {
     expect(state.deck).toHaveLength(36);
     expect(events).toHaveLength(1);
     expect(events.reduce(applyEvent, toPublic(state))).toEqual(toPublic(state));
+  });
+  it("chooses a random starter, then circles clockwise through every occupied seat", () => {
+    const tables: readonly (readonly Seat[])[] = [
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [1, 2],
+      [1, 3],
+      [2, 3],
+      [0, 1, 2],
+      [0, 1, 3],
+      [0, 2, 3],
+      [1, 2, 3],
+      [0, 1, 2, 3],
+    ];
+    for (const table of tables) {
+      const starters = new Set<Seat>();
+      for (let seed = 0; seed < 100; seed += 1) {
+        // Input order must not change the fixed corners or direction.
+        const seats = [...table]
+          .reverse()
+          .map((seat) => ({ ...SEATS[seat], seat }));
+        const { state } = createGame(DEFAULT_GAME_CONFIG, seats, seed, {
+          now: 100,
+        });
+        const starter = shuffle(table, seed).items[0];
+        const index = table.indexOf(starter);
+        const expected = [...table.slice(index), ...table.slice(0, index)];
+        expect(state.config.turnOrderRule).toBe("clockwise");
+        expect(state.turnOrder).toEqual(expected);
+        expect(state.startingTurnOrder).toEqual(expected);
+        expect(state.roundSeatsRemaining).toEqual(expected);
+        expect(state.activeSeat).toBe(starter);
+        starters.add(starter);
+      }
+      expect([...starters].sort()).toEqual(table);
+    }
+  });
+  it("keeps the old shuffle and setup RNG consumption for legacy lobbies", () => {
+    const seats = SEATS.map((entry, seat) => ({
+      ...entry,
+      seat: seat as Seat,
+    }));
+    for (let seed = 0; seed < 100; seed += 1) {
+      const clockwise = createGame(DEFAULT_GAME_CONFIG, seats, seed, {
+        now: 100,
+      }).state;
+      const legacy = createGame(
+        { ...DEFAULT_GAME_CONFIG, turnOrderRule: "shuffled" },
+        seats,
+        seed,
+        { now: 100 },
+      ).state;
+      expect(legacy.turnOrder).toEqual(shuffle([0, 1, 2, 3], seed).items);
+      expect(clockwise.activeSeat).toBe(legacy.activeSeat);
+      expect(clockwise.deck).toEqual(legacy.deck);
+      expect(clockwise.festivalTiles).toEqual(legacy.festivalTiles);
+      expect(clockwise.rngState).toBe(legacy.rngState);
+      expect(decisionOpensAt(clockwise)).toBe(
+        100 + DECISION_TIMING.startAnimation,
+      );
+      expect(botDecisionAt(clockwise)).toBe(
+        100 + DECISION_TIMING.startAnimation + BOT_TIMING.roll,
+      );
+      expect(decisionOpensAt(legacy)).toBe(100);
+      expect(botDecisionAt(legacy)).toBe(100 + BOT_TIMING.roll);
+    }
+    expect(() =>
+      createGame(
+        { ...DEFAULT_GAME_CONFIG, turnOrderRule: "reverse" as "clockwise" },
+        seats,
+        1,
+        { now: 0 },
+      ),
+    ).toThrow("turn order rule");
+  });
+  it("keeps the clockwise cycle through bankruptcy and starts the next round in the same order", () => {
+    let state = createGame(
+      { ...DEFAULT_GAME_CONFIG, festivalCount: 0, roundLimit: 3 },
+      SEATS,
+      42,
+      { now: 0 },
+    ).state;
+    const eliminated = state.startingTurnOrder[1];
+    const cycle = state.startingTurnOrder.filter((seat) => seat !== eliminated);
+    state = {
+      ...state,
+      ...applyEvent(toPublic(state), {
+        type: "PlayerBankrupt",
+        seat: eliminated,
+        creditor: null,
+        writtenOff: 0,
+        turnOrder: cycle,
+        roundSeatsRemaining: cycle,
+      }),
+    };
+    for (let turn = 0; turn < cycle.length * 2; turn += 1) {
+      expect(state.activeSeat).toBe(cycle[turn % cycle.length]);
+      expect(state.round).toBe(Math.floor(turn / cycle.length) + 1);
+      // Place the current pawn at Start to isolate turn progression from landings.
+      state = {
+        ...state,
+        players: state.players.map((player) =>
+          player.seat === state.activeSeat
+            ? { ...player, position: 0 }
+            : player,
+        ),
+      };
+      const rolled = applyAction(
+        state,
+        state.activeSeat,
+        { type: "Roll" },
+        {
+          now: turn * 1000 + 1,
+          dice: [1, 2],
+        },
+      );
+      expect(rolled.ok).toBe(true);
+      if (!rolled.ok) throw new Error("Roll failed");
+      const ended = applyAction(
+        rolled.state,
+        state.activeSeat,
+        { type: "Decline" },
+        {
+          now: turn * 1000 + 2,
+        },
+      );
+      expect(ended.ok).toBe(true);
+      if (!ended.ok) throw new Error("Decline failed");
+      state = ended.state as GameState;
+      expect(ended.events.reduce(applyEvent, toPublic(rolled.state))).toEqual(
+        toPublic(state),
+      );
+    }
   });
   it("includes Escape in a version-9 deck only when marked, and freezes its marker", () => {
     for (const escapeCard of [true, false, undefined]) {

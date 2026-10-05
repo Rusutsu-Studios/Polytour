@@ -48,6 +48,8 @@ export type GameConfig = {
   readonly escapeCard?: boolean;
   /** Missing on saves before rules version 10: the original card set. */
   readonly chanceRule?: ChanceRule;
+  /** Missing on saves before rules version 11: their recorded order stays shuffled. */
+  readonly turnOrderRule?: "clockwise" | "shuffled";
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;

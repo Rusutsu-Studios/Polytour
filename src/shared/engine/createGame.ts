@@ -72,6 +72,7 @@ export const DEFAULT_GAME_CONFIG = {
   buildAfterBuyout: true,
   escapeCard: true,
   chanceRule: "reworked",
+  turnOrderRule: "clockwise",
   sellBackPercent: 100,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
@@ -671,6 +672,13 @@ function instantWin(state: PublicState, seat: Seat): WinKind | null {
 function animationBudget(events: readonly GameEvent[]): number {
   return events.reduce((total, event) => {
     switch (event.type) {
+      case "GameCreated":
+        return (
+          total +
+          (event.state.config.turnOrderRule === "clockwise"
+            ? DECISION_TIMING.startAnimation
+            : 0)
+        );
       case "DiceRolled":
         return total + DECISION_TIMING.diceAnimation;
       case "PlayerMoved": {
@@ -741,17 +749,21 @@ export function decisionWindow(
         : DECISION_TIMING.choice;
 }
 /**
- * When a server bot should act on the pending decision: once the events that
- * opened it have played at 1× speed, plus a short pause, so players can follow
- * a bot's turn. The deadline already holds that animation budget.
+ * When the animations that opened the pending decision finish at 1× speed.
+ * The deadline already holds that presentation budget.
  */
-export function botDecisionAt(state: PublicState): number | null {
+export function decisionOpensAt(state: PublicState): number | null {
   const pending = state.pending;
   if (!pending || state.pause?.kind === "paused") return null;
-  const presented =
-    pending.deadline - decisionWindow(state.config, pending.kind);
+  return pending.deadline - decisionWindow(state.config, pending.kind);
+}
+/** Server bots wait for the full presentation, followed by their thinking pause. */
+export function botDecisionAt(state: PublicState): number | null {
+  const presented = decisionOpensAt(state);
+  if (presented === null || !state.pending) return null;
   return (
-    presented + (pending.kind === "roll" ? BOT_TIMING.roll : BOT_TIMING.choice)
+    presented +
+    (state.pending.kind === "roll" ? BOT_TIMING.roll : BOT_TIMING.choice)
   );
 }
 type DecisionInput = PendingDecision extends infer T
@@ -774,9 +786,13 @@ function resolutionContext(context: EngineContext): ResolutionContext {
 }
 
 /** An action-local resolver: all public writes go through emit/applyEvent. */
-function resolver(initial: GameState, context: ResolutionContext) {
+function resolver(
+  initial: GameState,
+  context: ResolutionContext,
+  openingEvents: readonly GameEvent[] = [],
+) {
   let state = initial;
-  const events: GameEvent[] = [];
+  const events: GameEvent[] = [...openingEvents];
   const emit = (event: GameEvent) => {
     state = { ...state, ...applyEvent(toPublic(state), event) };
     events.push(event);
@@ -2293,6 +2309,12 @@ export function createGame(
     !["reworked", "original"].includes(config.chanceRule)
   )
     throw new RangeError("Unsupported Chance rule");
+  if (
+    config.turnOrderRule !== undefined &&
+    !["clockwise", "shuffled"].includes(config.turnOrderRule)
+  )
+    throw new RangeError("Unsupported turn order rule");
+  const turnOrderRule = config.turnOrderRule ?? "clockwise";
   const chances = config.chanceRule ?? "reworked";
   if (
     config.sellBackPercent !== undefined &&
@@ -2343,10 +2365,16 @@ export function createGame(
       travelPending: false,
     }))
     .sort((a, b) => a.seat - b.seat);
-  const order = shuffle(
-    players.map((player) => player.seat),
-    seed,
-  );
+  const occupiedSeats = players.map((player) => player.seat);
+  const order = shuffle(occupiedSeats, seed);
+  const startingIndex = occupiedSeats.indexOf(order.items[0]);
+  const turnOrder =
+    turnOrderRule === "shuffled"
+      ? order.items
+      : [
+          ...occupiedSeats.slice(startingIndex),
+          ...occupiedSeats.slice(0, startingIndex),
+        ];
   const deck = shuffle(
     chanceDeck({
       chanceRule: chances,
@@ -2377,17 +2405,18 @@ export function createGame(
       buildAfterBuyout: config.buildAfterBuyout ?? true,
       escapeCard: config.escapeCard ?? true,
       chanceRule: chances,
+      turnOrderRule,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,
     properties: board
       .filter((tile) => isCityTile(tile) || isResortTile(tile))
       .map((tile) => ({ tile: tile.index, owner: null, level: 0 })),
-    turnOrder: order.items,
-    startingTurnOrder: order.items,
-    roundSeatsRemaining: order.items,
+    turnOrder,
+    startingTurnOrder: turnOrder,
+    roundSeatsRemaining: turnOrder,
     eliminated: [],
-    activeSeat: order.items[0],
+    activeSeat: turnOrder[0],
     round: 1,
     phase: "roll",
     doublesInTurn: 0,
@@ -2418,7 +2447,9 @@ export function createGame(
     extraRoll: false,
     turnEnded: false,
   };
-  const resolved = resolver(state, resolutionContext(context));
+  const resolved = resolver(state, resolutionContext(context), [
+    { type: "GameCreated", state: toPublic(state) },
+  ]);
   resolved.startDecision();
   const result = resolved.result();
   return {

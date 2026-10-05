@@ -89,6 +89,7 @@ flowchart LR
 
 | Event | Animation | Budget |
 | --- | --- | --- |
+| `GameCreated` | A four-second opening wheel places names in their HUD corners and spins a pointer onto the server-selected starter, then shows the clockwise turn order. Reconnect snapshots snap without replaying it. Start playing or Escape skips; reduced motion shows the result without spinning. | 4.0 s |
 | `DiceRolled` | Dice thrown from the player's side, tumble, bounce, settle on the server's values; camera micro-shake on impact; values pop above dice. Doubles: gold flash + "DOUBLE!" stamp. | 1.2 s |
 | `PawnMoved` | Pawn hops tile-to-tile on an arc with squash & stretch (anticipation → hop → land squash). Each tile gives a small "press" and a soft tick sound whose pitch climbs. Camera follows with damped lerp. Teleports: pawn spins up into a light beam, lands with a ring shockwave. | 0.28 s / tile |
 | `SalaryPaid` | Start tile flares; coins arc into the player's corner HUD; counter rolls up. | 0.8 s |

@@ -1395,8 +1395,10 @@ describe("wins, rankings and timeouts", () => {
   });
   it("starts the decision clock and bot moves after the animations", () => {
     const state = newGame();
-    // Nothing to watch yet: a bot only takes its short pause.
-    expect(botDecisionAt(toPublic(state))).toBe(BOT_TIMING.roll);
+    // The opening wheel finishes before the starter takes its thinking pause.
+    expect(botDecisionAt(toPublic(state))).toBe(
+      DECISION_TIMING.startAnimation + BOT_TIMING.roll,
+    );
     // From tile 4 to 7: the dice, three hops, then the purchase decision.
     const purchase = land(state, 7, [1, 2]).state;
     const presented =

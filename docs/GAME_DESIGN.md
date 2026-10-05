@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 10, `economyRule: "reference"`) follow the reference
+New rooms (rules version 11, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -41,9 +41,14 @@ the tie.
 
 ## Match setup, laps, and rounds
 
-1. The server shuffles occupied seats with the match PRNG to create `turnOrder`.
-   Every player starts on Start with configured cash (default 2,000,000), no property, no cards, and zero
-   completed laps. The first seat in `turnOrder` starts round 1.
+1. The server chooses a random occupied starting seat with the match PRNG, then
+   keeps a fixed cycle around the board: bottom-right → bottom-left → top-left →
+   top-right (table seats 3 → 0 → 1 → 2), skipping empty and bankrupt places.
+   `turnOrder` rotates that cycle so the selected starter comes first. The opening
+   wheel reveals the server's choice before the first decision clock and bot move.
+   Every player starts on Start with configured cash (default 2,000,000), no property,
+   no cards, and zero completed laps. Saved rooms and lobbies through version 10
+   retain their original shuffled order; active matches never reorder on reconnect.
 2. A **lap** is a clockwise crossing from tile 31 to tile 0. Crossing it immediately
    pays the Start salary and increments that player's lap count. Landing on Start by
    clockwise movement *is* that crossing: salary is paid once and one lap is counted,
@@ -323,7 +328,8 @@ line ownership.
 
 **Standings** (used for the game-over screen, `placement`, and ratings): the winner
 is first. Remaining non-bankrupt players follow, ranked by net worth, then cash,
-then number of resorts, then earliest position in the randomized `turnOrder`.
+then number of resorts, then earliest position in `turnOrder` from the randomly
+selected starter.
 Bankrupt players come last, the most recently eliminated first. At the round limit
 the same ordering picks the winner, so every match has exactly one winner.
 

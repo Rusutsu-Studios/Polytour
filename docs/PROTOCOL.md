@@ -121,11 +121,17 @@ debug socket has been removed; `/api/health` remains.
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 10 with `boardRule: "country"`,
+  New rooms freeze rules version 11 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true` and
-  `chanceRule: "reworked"`. Version-9 lobbies report `chanceRule: "original"`;
+  `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true`,
+  `chanceRule: "reworked"` and `turnOrderRule: "clockwise"`. The optional order
+  selector is server-owned: version-10 and older lobbies report `"shuffled"`.
+  `GameCreated.state.startingTurnOrder` contains the selected starter first,
+  followed by the fixed clockwise cycle. Its initial pending deadline reserves
+  the four-second opening wheel before the ordinary decision window; reconnect
+  snapshots do not replay that reveal. Version-9 lobbies report
+  `chanceRule: "original"`;
   older rooms also omit or freeze `escapeCard: false` and retain the original
   16-card deck. Version-7 lobbies report both
   booleans as `false`. The optional festival marker preserves version-4/5/6 rooms

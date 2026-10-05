@@ -22,6 +22,7 @@ import {
   applyEvent,
   botDecisionAt,
   CHANCE_CARDS,
+  decisionWindow,
   propertyRent,
   toPublic,
 } from "../src/shared/engine/index.js";
@@ -2231,7 +2232,118 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on rules version 10 with the Escape card, the reworked deck and the current economy", async () => {
+  it("reserves the starter reveal before scheduling the first bot and ignores an early alarm", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    const entropy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementationOnce(((array: Uint32Array) => {
+        array.fill(0);
+        return array;
+      }) as typeof crypto.getRandomValues);
+    try {
+      inbox.send({
+        type: "lobby",
+        id: "start",
+        op: { type: "start", fillBots: true },
+      });
+      const batch = await inbox.next("events");
+      const created = batch.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      if (created?.type !== "GameCreated")
+        throw new Error("GameCreated expected");
+      const state = created.state;
+      expect(state.startingTurnOrder).toEqual([3, 0, 1, 2]);
+      expect(state.pending?.deadline).toBe(
+        state.startedAt +
+          DECISION_TIMING.startAnimation +
+          decisionWindow(state.config, "roll"),
+      );
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      const timing = await runInDurableObject(
+        stub,
+        async (instance, durableState) => {
+          const sql = durableState.storage.sql;
+          const room = instance as unknown as { alarm(): Promise<void> };
+          await room.alarm();
+          return {
+            seq: sql
+              .exec<{ seq: number }>("SELECT seq FROM state WHERE id=1")
+              .toArray()[0].seq,
+            timers: sql
+              .exec<{ kind: string; fire_at: number }>(
+                "SELECT kind,fire_at FROM timers WHERE kind IN ('bot','decision')",
+              )
+              .toArray(),
+          };
+        },
+      );
+      expect(timing.seq).toBe(batch.toSeq);
+      expect(timing.timers).toEqual([
+        {
+          kind: "bot",
+          fire_at:
+            state.startedAt + DECISION_TIMING.startAnimation + BOT_TIMING.roll,
+        },
+      ]);
+      expect(
+        inbox.received.some(
+          (message) =>
+            message.type === "events" &&
+            message.events.some((event) => event.type === "DiceRolled"),
+        ),
+      ).toBe(false);
+    } finally {
+      entropy.mockRestore();
+    }
+  });
+  it("starts saved version-10 lobbies with their original shuffle and keeps that order after eviction", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='10' WHERE k='rulesVersion'",
+      );
+    });
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby.turnOrderRule).toBe("shuffled");
+    const entropy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementationOnce(((array: Uint32Array) => {
+        array.fill(0);
+        return array;
+      }) as typeof crypto.getRandomValues);
+    let original: PublicState;
+    try {
+      inbox.send({
+        type: "lobby",
+        id: "start",
+        op: { type: "start", fillBots: true },
+      });
+      const batch = await inbox.next("events");
+      const created = batch.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      if (created?.type !== "GameCreated")
+        throw new Error("GameCreated expected");
+      original = created.state;
+      expect(original.startingTurnOrder).toEqual([3, 2, 0, 1]);
+      expect(original.config.turnOrderRule).toBe("shuffled");
+      expect(original.pending?.deadline).toBe(
+        original.startedAt + decisionWindow(original.config, "roll"),
+      );
+    } finally {
+      entropy.mockRestore();
+    }
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    const snapshot = (await resumed.next("welcome")).snapshot;
+    expect(snapshot?.startingTurnOrder).toEqual(original.startingTurnOrder);
+    expect(snapshot?.turnOrder).toEqual(original.turnOrder);
+  });
+  it("freezes new rooms on rules version 11 with the Escape card, the reworked deck and the current economy", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -2242,6 +2354,7 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.fourResortRent).toBe(true);
     expect(game.state.config.buildAfterBuyout).toBe(true);
     expect(game.state.config.chanceRule).toBe("reworked");
+    expect(game.state.config.turnOrderRule).toBe("clockwise");
     expect(game.state.config.resortFestivals).toBe(false);
     expect(game.state.config.escapeCard).toBe(true);
     const cities = getBoard(game.state.config)
@@ -2262,7 +2375,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("10");
+    expect(rules).toBe("11");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
@@ -2271,6 +2384,9 @@ describe("Authoritative private rooms", () => {
     expect(welcome.lobby.escapeCard).toBe(true);
     expect(welcome.snapshot?.config.escapeCard).toBe(true);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
+    expect(welcome.snapshot?.startingTurnOrder).toEqual(
+      game.state.startingTurnOrder,
+    );
   });
 
   it.each([
@@ -3006,7 +3122,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='10' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='11' WHERE k='rulesVersion'",
       ),
     );
   });
