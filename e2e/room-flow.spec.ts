@@ -178,10 +178,12 @@ for (const viewport of [
     const guest: RoomCredentials = await joined.json();
     const hostContext = await browser.newContext({
       viewport,
+      locale: "en-GB",
       reducedMotion: viewport.width === 1440 ? "reduce" : "no-preference",
     });
     const guestContext = await browser.newContext({
       viewport,
+      locale: "en-GB",
       reducedMotion: viewport.width === 1440 ? "reduce" : "no-preference",
     });
     const errors: string[] = [];
@@ -204,7 +206,6 @@ for (const viewport of [
         page.on("pageerror", (error) => errors.push(error.message));
         await page.goto("/");
         await page.evaluate((session) => {
-          localStorage.setItem("polytour.locale", "en");
           sessionStorage.setItem("polytour-room-v1", JSON.stringify(session));
         }, credentials);
         await page.reload();

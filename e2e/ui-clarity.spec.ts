@@ -786,7 +786,13 @@ test("the lobby settings gear groups personal controls and restores keyboard foc
     const settings = await trigger.boundingBox();
     expect(settings).not.toBeNull();
     expect(help).not.toBeNull();
-    expect(Math.abs((settings?.y ?? 0) - (help?.y ?? 0))).toBeLessThan(2);
+    expect(
+      Math.abs(
+        (settings?.y ?? 0) +
+          (settings?.height ?? 0) / 2 -
+          ((help?.y ?? 0) + (help?.height ?? 0) / 2),
+      ),
+    ).toBeLessThan(2);
     await page.screenshot({
       path: `.local/verification/settings-button-${size.width}.png`,
     });
