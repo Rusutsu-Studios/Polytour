@@ -45,6 +45,7 @@ import {
   type PingState,
   useCloudflarePing,
 } from "./net/use-cloudflare-ping.js";
+import { useSettings } from "./settings/store.js";
 import ActionButton from "./ui/ActionButton.js";
 import {
   fullMoney,
@@ -70,7 +71,6 @@ import DiceExplanation from "./ui/DiceExplanation.js";
 import HeldCardHand from "./ui/HeldCardHand.js";
 import Icon from "./ui/Icon.js";
 import InvitationEntry from "./ui/InvitationEntry.js";
-import LanguagePicker from "./ui/LanguagePicker.js";
 import LuckCardHelp from "./ui/LuckCardHelp.js";
 import PauseMenu, { type SettingsTab } from "./ui/PauseMenu.js";
 import {
@@ -83,8 +83,8 @@ import {
   WaitingNotice,
   WaitingRoom,
 } from "./ui/RoomPeople.js";
+import RoomSettings from "./ui/RoomRulesDialog.js";
 import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
-import RoomSettings from "./ui/SettingsDialog.js";
 import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
 
@@ -1024,10 +1024,6 @@ function MatchView({
   config,
   selected,
   onSelect,
-  zoom,
-  onZoom,
-  lowGraphics,
-  onGraphicsChange,
   streamer,
   onStreamerChange,
   copied,
@@ -1043,10 +1039,6 @@ function MatchView({
   config: RoomConfig;
   selected: number | null;
   onSelect: (tile: number) => void;
-  zoom: number;
-  onZoom: (zoom: number) => void;
-  lowGraphics: boolean;
-  onGraphicsChange: (low: boolean) => void;
   streamer: boolean;
   onStreamerChange: (enabled: boolean) => void;
   copied: boolean;
@@ -1056,6 +1048,8 @@ function MatchView({
   debug: boolean;
   cloudflarePing: PingState;
 }) {
+  const { boardZoom: zoom, graphics } = useSettings();
+  const lowGraphics = graphics === "low";
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
   const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
@@ -1067,7 +1061,6 @@ function MatchView({
     y: number;
   } | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
   const [saleSelection, setSaleSelection] = useState<{
     gameId: string;
     pending: PublicState["pending"];
@@ -1235,7 +1228,7 @@ function MatchView({
       : tool === "proof"
         ? diceToolLabel
         : tool === "rules"
-          ? t("Réglages de la partie", "Game settings")
+          ? t("Règles de la partie", "Game rules")
           : t("Votre salle", "Your room");
   const journalEntries = history
     .map((event, index) => ({ content: eventText(event, game), key: index }))
@@ -1324,20 +1317,11 @@ function MatchView({
         overlayTrigger.current?.focus();
       }
     };
-    const fullscreenChanged = () =>
-      setFullscreen(Boolean(document.fullscreenElement));
     window.addEventListener("keydown", closeOverlays);
-    document.addEventListener("fullscreenchange", fullscreenChanged);
     return () => {
       window.removeEventListener("keydown", closeOverlays);
-      document.removeEventListener("fullscreenchange", fullscreenChanged);
     };
   }, []);
-  function toggleFullscreen() {
-    if (document.fullscreenElement)
-      void document.exitFullscreen().catch(() => {});
-    else void document.documentElement.requestFullscreen().catch(() => {});
-  }
   return (
     <>
       <div className="board-stage">
@@ -1461,12 +1445,12 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t("Réglages de la partie", "Game settings")}
-          title={t("Réglages de la partie", "Game settings")}
+          aria-label={t("Règles de la partie", "Game rules")}
+          title={t("Règles de la partie", "Game rules")}
           aria-expanded={tool === "rules"}
           onClick={(event) => showTool("rules", event.currentTarget)}
         >
-          <Icon name="settings" size={18} />
+          <Icon name="sliders" size={18} />
         </button>
         <button
           type="button"
@@ -1498,23 +1482,6 @@ function MatchView({
           onClick={onHelp}
         >
           <Icon name="help" size={18} />
-        </button>
-        <button
-          type="button"
-          className="game-tool-button"
-          aria-label={
-            fullscreen
-              ? t("Quitter le plein écran", "Exit fullscreen")
-              : t("Plein écran", "Fullscreen")
-          }
-          title={
-            fullscreen
-              ? t("Quitter le plein écran", "Exit fullscreen")
-              : t("Plein écran", "Fullscreen")
-          }
-          onClick={toggleFullscreen}
-        >
-          <Icon name="fullscreen" size={17} />
         </button>
         <button
           type="button"
@@ -1865,11 +1832,13 @@ function MatchView({
         )}
       </AnimatePresence>
 
-      <NetworkStatus
-        className="match-network"
-        ping={cloudflarePing}
-        onClick={() => openPauseMenu("debug")}
-      />
+      {debug && (
+        <NetworkStatus
+          className="match-network"
+          ping={cloudflarePing}
+          onClick={() => openPauseMenu("debug")}
+        />
+      )}
       {pauseOpen && (
         <PauseMenu
           initialSettingsTab={pauseSettingsTab}
@@ -1896,10 +1865,7 @@ function MatchView({
             setPauseOpen(false);
             onLeave();
           }}
-          zoom={zoom}
-          onZoom={onZoom}
-          lowGraphics={lowGraphics}
-          onGraphicsChange={onGraphicsChange}
+          debugAvailable={debug}
           connection={room.connection}
           ping={cloudflarePing}
           roomDebug={room.roomDebug}
@@ -1989,25 +1955,14 @@ function App() {
     null,
   );
   const [copied, setCopied] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [lowGraphics, setLowGraphics] = useState(() => {
-    try {
-      return localStorage.getItem("polytour.lowGraphics") === "true";
-    } catch {
-      return false;
-    }
-  });
-  function changeGraphics(low: boolean) {
-    setLowGraphics(low);
-    try {
-      localStorage.setItem("polytour.lowGraphics", String(low));
-    } catch {
-      // The local choice still works when browser storage is unavailable.
-    }
-  }
+  const { boardZoom: zoom, graphics } = useSettings();
+  const lowGraphics = graphics === "low";
+  const debug =
+    import.meta.env.DEV ||
+    new URLSearchParams(window.location.search).has("debug");
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
-  const cloudflarePing = useCloudflarePing(true, room.connection);
+  const cloudflarePing = useCloudflarePing(debug, room.connection);
   const serverConfigKey = room.lobby ? JSON.stringify(room.lobby.config) : null;
   const activePosition = viewState?.players.find(
     (player) => player.seat === viewState.activeSeat,
@@ -2110,7 +2065,6 @@ function App() {
   useEffect(() => {
     if (isGame) setHomeSettingsTab(null);
   }, [isGame]);
-  const debug = new URLSearchParams(window.location.search).has("debug");
   // Room controls stay steady while a quick change awaits its answer: the
   // room hook already drops a second command until the first is answered.
   const roomOffline = room.leaving || room.connection !== "online";
@@ -2159,7 +2113,6 @@ function App() {
             >
               <Icon name="settings" size={18} />
             </button>
-            <LanguagePicker />
             <button
               type="button"
               className="text-button help-button"
@@ -2499,10 +2452,6 @@ function App() {
           config={config}
           selected={selected ?? activePosition ?? null}
           onSelect={setSelected}
-          zoom={zoom}
-          onZoom={setZoom}
-          lowGraphics={lowGraphics}
-          onGraphicsChange={changeGraphics}
           streamer={streamer}
           onStreamerChange={changeStreamer}
           copied={copied}
@@ -2567,10 +2516,7 @@ function App() {
           error={null}
           onClose={() => setHomeSettingsTab(null)}
           onLeave={() => {}}
-          zoom={zoom}
-          onZoom={setZoom}
-          lowGraphics={lowGraphics}
-          onGraphicsChange={changeGraphics}
+          debugAvailable={debug}
           connection={room.connection}
           ping={cloudflarePing}
           roomDebug={credentials ? room.roomDebug : null}
@@ -2583,12 +2529,16 @@ function App() {
         <footer className="lobby-footer">
           <span className="lobby-credit">
             <span>{t("Crée par Poli & GJJS", "Made by Poli & GJJS")}</span>
-            <span aria-hidden="true">-</span>
-            <NetworkStatus
-              className="lobby-network"
-              ping={cloudflarePing}
-              onClick={() => setHomeSettingsTab("debug")}
-            />
+            {debug && (
+              <>
+                <span aria-hidden="true">-</span>
+                <NetworkStatus
+                  className="lobby-network"
+                  ping={cloudflarePing}
+                  onClick={() => setHomeSettingsTab("debug")}
+                />
+              </>
+            )}
           </span>
           <a
             href="https://github.com/Rusutsu-Studios/Polytour/"

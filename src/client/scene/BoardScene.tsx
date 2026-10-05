@@ -2727,6 +2727,7 @@ export default function BoardScene(props: BoardProps) {
       data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
       data-low-graphics={Boolean(props.lowGraphics)}
+      data-board-zoom={props.zoom ?? 1}
       data-sale-active={
         !props.preview && saleTargets(props.state, props.saleSeat).length > 0
       }

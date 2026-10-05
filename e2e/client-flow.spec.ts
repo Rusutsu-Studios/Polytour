@@ -93,7 +93,7 @@ function observeRoomCommands(screen: Page) {
 async function saveSettings(page: Page) {
   await page
     .locator(".settings-dialog-footer")
-    .getByRole("button", { name: "Fermer les réglages" })
+    .getByRole("button", { name: "Fermer les règles" })
     .click();
 }
 
@@ -226,6 +226,13 @@ test.describe("low graphics", () => {
       shadows: false,
       shadowLights: 0,
     });
+    await page
+      .getByRole("button", { name: "Zoomer le plateau", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Zoomer le plateau", exact: true })
+      .click();
+    await expect(preview).toHaveAttribute("data-board-zoom", "1.2");
     await page.keyboard.press("Escape");
     await expect(page.locator(".pause-dialog")).toHaveCount(0);
     await expect(homeSettings).toBeFocused();
@@ -234,6 +241,7 @@ test.describe("low graphics", () => {
     });
     await page.reload();
     await expect(preview).toHaveAttribute("data-low-graphics", "true");
+    await expect(preview).toHaveAttribute("data-board-zoom", "1.2");
     await homeSettings.click();
     await expect(
       homeGraphics.getByRole("radio", { name: "Faible", exact: true }),
@@ -264,6 +272,7 @@ test.describe("low graphics", () => {
     const scene = page.locator(".canvas-layer");
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    await expect(scene).toHaveAttribute("data-board-zoom", "1.2");
     const roll = page.getByRole("button", {
       name: "Lancer les dés",
       exact: true,
@@ -389,6 +398,7 @@ test.describe("low graphics", () => {
     await page.reload();
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    await expect(scene).toHaveAttribute("data-board-zoom", "1.2");
     await expect(toolbarGraphics).toHaveCount(0);
     await expect(page.locator(".match-connection")).toHaveAttribute(
       "data-state",
@@ -566,7 +576,7 @@ test("win conditions follow the settings draft and saved rules in both languages
     .getByRole("button", { name: "Lancer les dés", exact: true })
     .waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: "Réglages de la partie", exact: true })
+    .getByRole("button", { name: "Règles de la partie", exact: true })
     .click();
   const matchRules = page.locator(".match-rules");
   await expect(
@@ -1024,11 +1034,20 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("button", { name: "Menu pause", exact: true }).click();
   await page.getByRole("button", { name: "Réglages", exact: true }).click();
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  await expect(page.getByLabel("Réduire les animations")).toBeChecked();
-  await page.getByLabel("Réduire les animations").uncheck();
-  await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
-  await page.getByLabel("Réduire les animations").check();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  await expect(
+    motion.getByRole("radio", { name: "Système", exact: true }),
+  ).toBeChecked();
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+  await motion.getByRole("radio", { name: "Activé", exact: true }).check();
   await expect(page.getByLabel("Vitesse des animations")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
@@ -1352,7 +1371,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     await hostCommand("settings", () =>
       page
         .locator(".settings-dialog-footer")
-        .getByRole("button", { name: "Fermer les réglages" })
+        .getByRole("button", { name: "Fermer les règles" })
         .click(),
     );
     await expect(

@@ -115,7 +115,7 @@
     margin: 10px auto 14px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion="true"] {
   .chance-reading {
     display: none;
   }

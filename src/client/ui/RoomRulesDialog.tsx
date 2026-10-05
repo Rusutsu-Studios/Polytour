@@ -12,7 +12,7 @@ import "./SettingsDialog.css";
 // STORY: Read the values, move the sliders, save the host's draft when required.
 // FIRST VIEWPORT: Two clear columns of controls with a persistent close action.
 // FORM: The requested central game popup extends the existing toy-board world.
-export default function SettingsDialog(props: RoomSettingsProps) {
+export default function RoomRulesDialog(props: RoomSettingsProps) {
   const { t } = useLocale();
   const { disabled = false, save } = props;
   const [open, setOpen] = useState(false);
@@ -54,9 +54,9 @@ export default function SettingsDialog(props: RoomSettingsProps) {
           setOpen(true);
         }}
       >
-        <Icon name="settings" size={21} />
+        <Icon name="sliders" size={21} />
         <span className="settings-trigger-title">
-          {t("Réglages de la partie", "Game settings")}
+          {t("Règles de la partie", "Game rules")}
         </span>
         <span className="settings-trigger-hint">
           {t("Personnaliser", "Customize")}
@@ -94,14 +94,14 @@ export default function SettingsDialog(props: RoomSettingsProps) {
               }}
             >
               <header className="settings-dialog-ribbon">
-                <Icon name="settings" size={28} />
+                <Icon name="sliders" size={28} />
                 <h2 ref={headingRef} id={`${id}-heading`} tabIndex={-1}>
-                  {t("Réglages de la partie", "Game settings")}
+                  {t("Règles de la partie", "Game rules")}
                 </h2>
                 <button
                   type="button"
                   className="settings-dialog-close"
-                  aria-label={t("Fermer les réglages", "Close settings")}
+                  aria-label={t("Fermer les règles", "Close game rules")}
                   onClick={dismiss}
                 >
                   <Icon name="close" size={25} />
@@ -136,8 +136,8 @@ export default function SettingsDialog(props: RoomSettingsProps) {
                   {disabled
                     ? t("Revenir au plateau", "Back to the board")
                     : save
-                      ? t("Fermer les réglages", "Close settings")
-                      : t("Appliquer les réglages", "Apply settings")}
+                      ? t("Fermer les règles", "Close game rules")
+                      : t("Appliquer les règles", "Apply game rules")}
                 </button>
               </footer>
             </motion.div>

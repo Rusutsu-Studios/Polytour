@@ -230,7 +230,8 @@
 
 .pause-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: 4px;
   padding-bottom: 10px;
   border-bottom: 1px solid #b6c9c1;
@@ -295,9 +296,15 @@
   font-size: 15px;
 }
 
+.settings-language {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 1fr);
+  align-items: center;
+  margin-bottom: 22px;
+}
+
 .pause-video-settings {
   display: grid;
-  gap: 28px;
+  gap: 24px;
 }
 
 .graphics-quality {
@@ -366,20 +373,76 @@
   outline: none;
 }
 
-.pause-reduced-motion {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 30px;
-  font-size: 15px;
-  font-weight: 650;
+.settings-motion {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-.pause-reduced-motion input {
-  width: 20px;
-  height: 20px;
+.settings-motion legend {
+  margin-bottom: 12px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-motion-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-motion-options label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 8px;
+  border: 2px solid #759ca4;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-motion-options label:hover {
+  background: #e4f2e8;
+}
+
+.settings-motion-options label[data-selected="true"] {
+  border-color: #1856a7;
+  color: #fffaf0;
+  background: #236cce;
+}
+
+.settings-motion-options input {
+  width: 18px;
+  height: 18px;
   margin: 0;
-  accent-color: #236cce;
+  accent-color: #1856a7;
+}
+
+.settings-motion-options label:has(input:focus-visible) {
+  outline: 3px solid #173b45;
+  outline-offset: 4px;
+}
+
+.pause-dialog .settings-motion-options input:focus-visible {
+  outline: none;
+}
+
+.settings-description {
+  margin: 18px 0 0;
+  color: #47666c;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.settings-fullscreen {
+  min-height: 44px;
+  font-size: 15px;
 }
 
 .pause-zoom {

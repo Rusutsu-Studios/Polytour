@@ -2830,7 +2830,7 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion="true"] {
   *,
   *::before,
   *::after {
@@ -2868,7 +2868,7 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   outline: 3px solid #287aa7;
   outline-offset: -3px;
 }
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion="true"] {
   .player-timer-fill {
     animation: timer-drain var(--timer-window) linear var(--timer-delay) both;
   }
