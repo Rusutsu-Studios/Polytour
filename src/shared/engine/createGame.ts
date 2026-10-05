@@ -42,13 +42,14 @@ import type {
   PlayerState,
   PropertyState,
   PublicState,
+  RentCard,
   ResolutionTask,
   Seat,
   SeatInfo,
   Standing,
   WinKind,
 } from "./types.js";
-import { CHANCE_CARDS, SHIELDED_CARDS } from "./types.js";
+import { CHANCE_CARDS, LEGACY_CHANCE_CARDS, SHIELDED_CARDS } from "./types.js";
 
 export { applyEvent, toPublic } from "./reducer.js";
 export const DEFAULT_GAME_CONFIG = {
@@ -69,6 +70,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  escapeCard: true,
   chanceRule: "reworked",
   sellBackPercent: 100,
   extraRollOnDouble: true,
@@ -90,21 +92,25 @@ export function worldTourRule(
 ): WorldTourRule {
   return config.worldTourRule ?? "free-first";
 }
-/** Saves before rules version 9 keep the original sixteen-card deck. */
+/** Saves before rules version 10 keep the original card set. */
 export function chanceRule(config: Pick<GameConfig, "chanceRule">): ChanceRule {
   return config.chanceRule ?? "original";
 }
-/** The cards a full deck holds under the match's frozen Chance rule. */
+/**
+ * The cards a full deck holds under the match's frozen rules: every card with
+ * copies (version 10), or the original sixteen plus Escape from version 9.
+ */
 export function chanceDeck(
-  config: Pick<GameConfig, "chanceRule">,
+  config: Pick<GameConfig, "chanceRule" | "escapeCard">,
 ): ChanceCard[] {
   const copies: Partial<Record<ChanceCard, number>> = CHANCE_DECK_COPIES;
-  return chanceRule(config) === "reworked"
-    ? CHANCE_CARDS.flatMap((card) =>
-        Array<ChanceCard>(copies[card] ?? 1).fill(card),
-      )
-    : // The original sixteen precede the reworked-only cards.
-      CHANCE_CARDS.slice(0, CHANCE_CARDS.indexOf("Tailwind"));
+  if (chanceRule(config) === "reworked")
+    return CHANCE_CARDS.flatMap((card) =>
+      Array<ChanceCard>(copies[card] ?? 1).fill(card),
+    );
+  return config.escapeCard === true
+    ? [...LEGACY_CHANCE_CARDS, "Escape"]
+    : [...LEGACY_CHANCE_CARDS];
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
@@ -520,9 +526,13 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
     case "roll":
       return [{ type: "Roll" }];
     case "island":
-      return player.cash >= pending.fee
-        ? [{ type: "Roll" }, { type: "PayIsland" }]
-        : [{ type: "Roll" }];
+      return [
+        { type: "Roll" },
+        ...(player.cash >= pending.fee ? [{ type: "PayIsland" as const }] : []),
+        ...(player.heldCards.includes("Escape")
+          ? [{ type: "UseEscapeCard" as const }]
+          : []),
+      ];
     case "travel":
       return player.cash >= pending.fee
         ? [
@@ -1061,7 +1071,8 @@ function resolver(initial: GameState, context: ResolutionContext) {
     secrets({
       deck: [...state.deck.slice(0, index), ...state.deck.slice(index + 1)],
     });
-    const keep = card === "Guardian Angel" || card === "Coupon";
+    const keep =
+      card === "Guardian Angel" || card === "Coupon" || card === "Escape";
     const kept =
       keep && !getPlayer(state, seat).heldCards.includes(card as KeepCard);
     const reworked = chanceRule(state.config) === "reworked";
@@ -1251,6 +1262,8 @@ function resolver(initial: GameState, context: ResolutionContext) {
           if (player.onIsland)
             emit({ type: "LeftIsland", seat: player.seat, method: "card" });
         break;
+      case "Escape":
+        break;
       case "Charity": {
         const poorest = cashRankedOpponent(state, seat, false);
         if (poorest !== undefined)
@@ -1299,14 +1312,17 @@ function resolver(initial: GameState, context: ResolutionContext) {
         } else {
           const amount = propertyRent(state, tile.index);
           prepend({ kind: "buyout", seat, tile: tile.index });
-          if (player.heldCards.length > 0 && amount > 0)
+          const cards = player.heldCards.filter(
+            (card): card is RentCard => card !== "Escape",
+          );
+          if (cards.length > 0 && amount > 0)
             open({
               kind: "rent-card",
               seat,
               tile: tile.index,
               owner: property.owner,
               amount,
-              cards: player.heldCards,
+              cards,
             });
           else
             prepend({
@@ -1424,6 +1440,12 @@ function resolver(initial: GameState, context: ResolutionContext) {
         if (pending.kind === "island")
           payment(seat, null, pending.fee, "Island release");
         emit({ type: "LeftIsland", seat, method: "paid" });
+        startDecision();
+        break;
+      case "UseEscapeCard":
+        emit({ type: "CardUsed", seat, card: "Escape" });
+        secrets({ discard: [...state.discard, "Escape"] });
+        emit({ type: "LeftIsland", seat, method: "card" });
         startDecision();
         break;
       case "Travel":
@@ -2111,9 +2133,11 @@ export function botAction(
   switch (pending.kind) {
     case "island":
       return (
+        actions.find((action) => action.type === "UseEscapeCard") ??
         actions.find(
           (action) => action.type === "PayIsland" && cash > pending.fee * 3,
-        ) ?? actions[0]
+        ) ??
+        actions[0]
       );
     case "travel": {
       const travel = actions
@@ -2262,6 +2286,8 @@ export function createGame(
   for (const marker of [config.fourResortRent, config.buildAfterBuyout])
     if (marker !== undefined && typeof marker !== "boolean")
       throw new RangeError("Unsupported rules version 8 marker");
+  if (config.escapeCard !== undefined && typeof config.escapeCard !== "boolean")
+    throw new RangeError("Escape card rule must be a boolean");
   if (
     config.chanceRule !== undefined &&
     !["reworked", "original"].includes(config.chanceRule)
@@ -2321,7 +2347,13 @@ export function createGame(
     players.map((player) => player.seat),
     seed,
   );
-  const deck = shuffle(chanceDeck({ chanceRule: chances }), order.state);
+  const deck = shuffle(
+    chanceDeck({
+      chanceRule: chances,
+      escapeCard: config.escapeCard ?? true,
+    }),
+    order.state,
+  );
   const festivals = shuffle(
     board
       .filter(
@@ -2343,6 +2375,7 @@ export function createGame(
       worldTourRule: config.worldTourRule ?? "free-and-own",
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
+      escapeCard: config.escapeCard ?? true,
       chanceRule: chances,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },

@@ -31,6 +31,7 @@ export const CARD_NAMES: Record<ChanceCard, string> = {
   Detour: "Détour",
   Contractor: "Coup de pouce",
   Jailbreak: "Liberté",
+  Escape: "Carte d’évasion",
   Charity: "Solidarité",
   Tailwind: "Vent arrière",
   "Power Cut": "Coupure de courant",
@@ -57,6 +58,7 @@ const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   Detour: "Detour",
   Contractor: "Contractor",
   Jailbreak: "Jailbreak",
+  Escape: "Escape card",
   Charity: "Charity",
   Tailwind: "Tailwind",
   "Power Cut": "Power cut",
@@ -107,8 +109,8 @@ export function describeChanceCardDetails(
     case "Stranded":
       return [
         t(
-          `Ce transfert termine votre tour, sans salaire ni tour complet. La traversée coûte ${money(rules.islandReleaseFee)} ; vous êtes aussi libéré après ${rules.islandMaxFailedEscapes} tentatives de double ratées.`,
-          `This transfer ends your turn, without salary or lap credit. The fare is ${money(rules.islandReleaseFee)}; you are also released after ${rules.islandMaxFailedEscapes} failed doubles attempts.`,
+          `Ce transfert termine votre tour, sans salaire ni tour complet. La traversée coûte ${money(rules.islandReleaseFee)} ; vous êtes aussi libéré après ${rules.islandMaxFailedEscapes} tentatives de double ratées.${config.escapeCard === true ? " Une carte d’évasion permet aussi de repartir sans payer." : ""}`,
+          `This transfer ends your turn, without salary or lap credit. The fare is ${money(rules.islandReleaseFee)}; you are also released after ${rules.islandMaxFailedEscapes} failed doubles attempts.${config.escapeCard === true ? " An escape card also lets you leave without paying." : ""}`,
         ),
       ];
     case "Jet Set":
@@ -319,6 +321,13 @@ export function describeChanceCardDetails(
           "Pawns stay in place. If nobody is detained, the card has no effect.",
         ),
       ];
+    case "Escape":
+      return [
+        t(
+          "Gardez cette carte jusqu’au début d’un de vos tours sur l’île. Elle vous libère sans payer ; lancez ensuite les dés normalement. Elle est défaussée après usage. Vous ne pouvez en garder qu’un exemplaire.",
+          "Keep this card until the start of one of your turns on the Island. Leave without paying, then roll normally. Discard it after use. You may hold only one escape card.",
+        ),
+      ];
     case "Charity":
       return [
         t(
@@ -347,7 +356,9 @@ export function describeCard(
 ): CardPresentation {
   const card = describeChanceCard(event.card, state.config, event.roll);
   if (
-    (event.card === "Guardian Angel" || event.card === "Coupon") &&
+    (event.card === "Guardian Angel" ||
+      event.card === "Coupon" ||
+      event.card === "Escape") &&
     !event.kept
   ) {
     return {
@@ -360,10 +371,15 @@ export function describeCard(
               "Vous possédez déjà cette protection. Ce doublon ne rejoint pas votre main.",
               "You already have this protection. The duplicate is not added to your hand.",
             )
-          : t(
-              "Vous possédez déjà ce bon. Ce doublon ne rejoint pas votre main.",
-              "You already have this coupon. The duplicate is not added to your hand.",
-            ),
+          : event.card === "Coupon"
+            ? t(
+                "Vous possédez déjà ce bon. Ce doublon ne rejoint pas votre main.",
+                "You already have this coupon. The duplicate is not added to your hand.",
+              )
+            : t(
+                "Vous possédez déjà une carte d’évasion. Ce doublon ne rejoint pas votre main.",
+                "You already have an escape card. The duplicate is not added to your hand.",
+              ),
     };
   }
   return card;
@@ -403,8 +419,8 @@ export function describeChanceCard(
         badge: t("Escale sur l’île", "Go to the Island"),
         short: t("Allez sur l’île.", "Go to the Island."),
         text: t(
-          "Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée ou avec une libération.",
-          "Move to the Island. Leave by rolling doubles, paying the fare or being released.",
+          `Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée${config.escapeCard === true ? ", avec une carte d’évasion" : ""} ou avec une libération.`,
+          `Move to the Island. Leave by rolling doubles, paying the fare${config.escapeCard === true ? ", using an escape card" : ""} or being released.`,
         ),
       };
     case "Jet Set":
@@ -717,6 +733,20 @@ export function describeChanceCard(
         text: t(
           "Tous les joueurs présents sur l’Île paisible sont libérés. Ils repartent à leur tour.",
           "All players on the Island are released. They move again on their next turn.",
+        ),
+      };
+    case "Escape":
+      return {
+        ...base,
+        tone: "keep",
+        badge: t("Gardez cette carte", "Keep this card"),
+        short: t(
+          "Gardez-la : quittez l’île sans payer.",
+          "Keep it: leave the Island for free.",
+        ),
+        text: t(
+          "Au début d’un de vos tours sur l’île, utilisez cette carte pour repartir sans payer. Lancez ensuite les dés normalement.",
+          "At the start of one of your turns on the Island, use this card to leave without paying. Then roll normally.",
         ),
       };
     case "Charity":

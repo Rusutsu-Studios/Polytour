@@ -44,7 +44,9 @@ export type GameConfig = {
   readonly fourResortRent?: boolean;
   /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
-  /** Missing on saves before rules version 9: the original sixteen-card deck. */
+  /** Missing on saves before rules version 9: retain the original Chance deck. */
+  readonly escapeCard?: boolean;
+  /** Missing on saves before rules version 10: the original card set. */
   readonly chanceRule?: ChanceRule;
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
@@ -55,7 +57,7 @@ export type GameConfig = {
   readonly giftCanBankrupt?: boolean;
 };
 export type BotDifficulty = "easy" | "medium" | "hard";
-export const CHANCE_CARDS = [
+export const LEGACY_CHANCE_CARDS = [
   "Grand Tour",
   "Stranded",
   "Jet Set",
@@ -72,7 +74,9 @@ export const CHANCE_CARDS = [
   "Contractor",
   "Jailbreak",
   "Charity",
-  // Reworked decks only (rules version 9).
+] as const;
+/** Reworked decks only (rules version 10). */
+export const REWORKED_CHANCE_CARDS = [
   "Tailwind",
   "Power Cut",
   "Forced Sale",
@@ -81,6 +85,11 @@ export const CHANCE_CARDS = [
   "Fan Trip",
   "Gift",
   "Roll Again",
+] as const;
+export const CHANCE_CARDS = [
+  ...LEGACY_CHANCE_CARDS,
+  "Escape",
+  ...REWORKED_CHANCE_CARDS,
 ] as const;
 export type ChanceCard = (typeof CHANCE_CARDS)[number];
 /** Cards that cost the drawer money, a turn or ground; framed as bad cards. */
@@ -100,7 +109,8 @@ export const SHIELDED_CARDS: readonly ChanceCard[] = [
   "Forced Sale",
   "Land Swap",
 ];
-export type KeepCard = "Guardian Angel" | "Coupon";
+export type RentCard = "Guardian Angel" | "Coupon";
+export type KeepCard = RentCard | "Escape";
 export type TargetCard =
   | "Earthquake"
   | "Land Swap"
@@ -160,7 +170,7 @@ export type PendingDecision = DecisionBase &
         readonly tile: number;
         readonly owner: Seat;
         readonly amount: number;
-        readonly cards: readonly KeepCard[];
+        readonly cards: readonly RentCard[];
       }
     | { readonly kind: "host"; readonly targets: readonly number[] }
     | {
@@ -401,7 +411,7 @@ export type GameEvent =
       readonly seat: Seat;
       readonly card: ChanceCard;
       readonly kept: boolean;
-      /** The die a reworked Detour or Tailwind rolled, 1 to 6. */
+      /** The die a reworked (rules version 10) Detour or Tailwind rolled, 1 to 6. */
       readonly roll?: number;
     }
   | { readonly type: "CardUsed"; readonly seat: Seat; readonly card: KeepCard }
@@ -462,6 +472,7 @@ export type Action =
   | { readonly type: "VotePause"; readonly accept: boolean }
   | { readonly type: "ResumeGame" }
   | { readonly type: "PayIsland" }
+  | { readonly type: "UseEscapeCard" }
   | { readonly type: "Travel"; readonly tile: number }
   | { readonly type: "Decline" }
   | { readonly type: "Buy"; readonly level: BuildLevel }
@@ -470,7 +481,7 @@ export type Action =
   | { readonly type: "Sell"; readonly tile: number }
   | { readonly type: "ChooseHost"; readonly tile: number }
   | { readonly type: "ChooseTarget"; readonly tile: number }
-  | { readonly type: "UseRentCard"; readonly card: KeepCard };
+  | { readonly type: "UseRentCard"; readonly card: RentCard };
 export type RuleError = {
   readonly code:
     | "not-active-seat"

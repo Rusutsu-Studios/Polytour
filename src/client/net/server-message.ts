@@ -51,6 +51,7 @@ const publicState = z.object({
       startSalary: integer,
       roundLimit: integer,
       resortFestivals: z.boolean().optional(),
+      escapeCard: z.boolean().optional(),
     })
     .passthrough(),
   players: z.array(
@@ -66,7 +67,7 @@ const publicState = z.object({
       bankrupt: z.boolean(),
       islandTurns: integer,
       properties: z.array(tile),
-      heldCards: z.array(z.enum(["Guardian Angel", "Coupon"])),
+      heldCards: z.array(z.enum(["Guardian Angel", "Coupon", "Escape"])),
       travelPending: z.boolean(),
     }),
   ),
@@ -205,6 +206,7 @@ const lobby = z.object({
   worldTourRule: z.enum(["free-and-own", "free-first"]).default("free-and-own"),
   fourResortRent: z.boolean().default(true),
   buildAfterBuyout: z.boolean().default(true),
+  escapeCard: z.boolean().optional(),
   chanceRule: z.enum(["reworked", "original"]).default("reworked"),
   resortFestivals: z.boolean().optional(),
   seats: z

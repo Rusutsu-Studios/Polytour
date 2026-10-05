@@ -9,8 +9,9 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 6 adds the PowerCut event and Chance die rolls; stale clients reload.
-export const PROTOCOL_VERSION = 6;
+// Version 7 adds the reworked Chance deck's events and die rolls; version 6
+// added the retained Escape card and island action. Stale clients reload.
+export const PROTOCOL_VERSION = 7;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -58,6 +59,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ResumeGame") }).strict(),
   z.object({ type: z.literal("Roll") }).strict(),
   z.object({ type: z.literal("PayIsland") }).strict(),
+  z.object({ type: z.literal("UseEscapeCard") }).strict(),
   z.object({ type: z.literal("Decline") }).strict(),
   z.object({ type: z.literal("Buyout") }).strict(),
   z.object({ type: z.literal("Travel"), tile }).strict(),
@@ -202,6 +204,8 @@ export type LobbyState = {
   readonly worldTourRule: WorldTourRule;
   readonly fourResortRent: boolean;
   readonly buildAfterBuyout: boolean;
+  /** Omitted by older servers; those rooms retain their original Chance deck. */
+  readonly escapeCard?: boolean;
   readonly chanceRule: ChanceRule;
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;

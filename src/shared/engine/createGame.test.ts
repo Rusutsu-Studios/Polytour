@@ -3,6 +3,7 @@ import { getBoard, isCityTile } from "../board/index.js";
 import type { SeatInfo } from "./index.js";
 import {
   applyEvent,
+  chanceDeck,
   createGame,
   DEFAULT_GAME_CONFIG,
   toPublic,
@@ -64,9 +65,35 @@ describe("createGame", () => {
         heldCards: [],
         travelPending: false,
       });
-    expect(state.deck).toHaveLength(34);
+    expect(state.deck).toHaveLength(36);
     expect(events).toHaveLength(1);
     expect(events.reduce(applyEvent, toPublic(state))).toEqual(toPublic(state));
+  });
+  it("includes Escape in a version-9 deck only when marked, and freezes its marker", () => {
+    for (const escapeCard of [true, false, undefined]) {
+      // Version 9 decks: the original cards, with or without Escape.
+      const { state } = createGame(
+        { ...DEFAULT_GAME_CONFIG, chanceRule: "original", escapeCard },
+        SEATS,
+        42,
+        { now: 0 },
+      );
+      expect(state.config.escapeCard).toBe(escapeCard ?? true);
+      expect([...state.deck].sort()).toEqual(
+        [...chanceDeck(state.config)].sort(),
+      );
+      expect(state.deck.includes("Escape")).toBe(escapeCard ?? true);
+    }
+    expect(chanceDeck({})).not.toContain("Escape");
+    expect(chanceDeck({ chanceRule: "reworked" })).toContain("Escape");
+    expect(() =>
+      createGame(
+        { ...DEFAULT_GAME_CONFIG, escapeCard: "yes" as unknown as boolean },
+        SEATS,
+        42,
+        { now: 0 },
+      ),
+    ).toThrow("Escape card rule");
   });
   it("is deterministic for seed and time, including private deck and neutral festivals", () => {
     const first = createGame(DEFAULT_GAME_CONFIG, SEATS, 42, { now: 100 });

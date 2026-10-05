@@ -16,6 +16,7 @@ export default defineConfig({
   retries: 0,
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
+    locale: "fr-CH",
     viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",
     launchOptions: { args: ["--enable-unsafe-swiftshader"] },
@@ -31,6 +32,7 @@ export default defineConfig({
         "pause-menu.spec.ts",
         "invitation-flow.spec.ts",
         "sale-flow.spec.ts",
+        "privacy-flow.spec.ts",
       ],
       use: { baseURL: remoteBaseURL ?? devURL },
     },
@@ -41,6 +43,7 @@ export default defineConfig({
         "pause-game.spec.ts",
         "smoke.spec.ts",
         "seo.spec.ts",
+        "not-found.spec.ts",
       ],
       use: { baseURL: remoteBaseURL ?? productionURL },
     },

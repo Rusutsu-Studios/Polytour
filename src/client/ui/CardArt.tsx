@@ -368,6 +368,34 @@ const ART: Record<ChanceCard, (roll?: number) => [string, ReactNode]> = {
       <rect x="57.5" y="70" width="5" height="12" fill="#8a5a3b" />
     </>,
   ],
+  Escape: () => [
+    "#8fd3f4",
+    <>
+      <rect y="78" width="120" height="42" fill="#3f9fd0" />
+      <ellipse cx="20" cy="80" rx="22" ry="7" fill="#f1d58a" />
+      <path
+        d="M18 78c-1-10 1-18 6-24"
+        stroke="#8a5a3b"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        d="M24 54c-7-4-15-2-19 3 7-2 13-1 19-3Zm0 0c5-6 14-6 18 0-6-2-12-1-18 0Z"
+        fill="#3e9a55"
+      />
+      <path d="M66 22v52" stroke="#8a5a3b" strokeWidth="4" />
+      <path d="M68 24 96 70H68Z" fill="#fffdf6" />
+      <path d="M64 30 44 70h20Z" fill="#ef6f5e" />
+      <path d="M40 76h56l-8 12H48Z" fill="#8a5a3b" />
+      <path
+        d="M100 96h12M90 106h14"
+        stroke="#fffdf6"
+        strokeWidth="4"
+        strokeLinecap="round"
+        opacity=".7"
+      />
+    </>,
+  ],
   Charity: () => [
     "#f29bb0",
     <>

@@ -195,21 +195,62 @@ test.describe("low graphics", () => {
     }
 
     await page.goto("/");
-    const highLabel = "Graphismes : Élevés. Passer aux graphismes faibles.";
-    const lowLabel = "Graphismes : Faibles. Passer aux graphismes élevés.";
-    const homeGraphics = page.locator(".topbar-right [data-graphics-quality]");
-    await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "high");
-    await expect(homeGraphics).toHaveAccessibleName(highLabel);
-    await expect(homeGraphics).toHaveText("Élevés");
-    await homeGraphics.click();
+    const homeSettings = page.locator(".personal-settings-trigger");
+    const preview = page.locator(".welcome-board-preview .canvas-layer");
+    await expect(homeSettings).toHaveAccessibleName("Réglages");
+    await expect(homeSettings).toHaveText("");
+    await expect(
+      page.locator(".topbar-right [data-graphics-quality]"),
+    ).toHaveCount(0);
+    await expect(preview).toHaveAttribute("data-scene-ready", "true");
+    await expect.poll(rendering).toMatchObject({
+      dpr: 1.5,
+      shadows: true,
+      shadowLights: 1,
+    });
+    await homeSettings.click();
+    await expect(
+      page.getByRole("tab", { name: "Vidéo", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.screenshot({ path: ".local/verification/home-video-1440.png" });
+    const homeGraphics = page.locator(".pause-dialog .graphics-quality");
+    await expect(
+      homeGraphics.getByRole("radio", { name: "Élevé", exact: true }),
+    ).toBeChecked();
+    await homeGraphics
+      .getByRole("radio", { name: "Faible", exact: true })
+      .check();
+    await expect(preview).toHaveAttribute("data-low-graphics", "true");
+    await expect.poll(rendering).toMatchObject({
+      dpr: 1,
+      shadows: false,
+      shadowLights: 0,
+    });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".pause-dialog")).toHaveCount(0);
+    await expect(homeSettings).toBeFocused();
+    await page.screenshot({
+      path: ".local/verification/home-settings-entry-1440.png",
+    });
     await page.reload();
-    await expect(homeGraphics).toHaveAttribute("data-graphics-quality", "low");
-    await expect(homeGraphics).toHaveAccessibleName(lowLabel);
+    await expect(preview).toHaveAttribute("data-low-graphics", "true");
+    await homeSettings.click();
+    await expect(
+      homeGraphics.getByRole("radio", { name: "Faible", exact: true }),
+    ).toBeChecked();
+    await page.keyboard.press("Escape");
     await chooseLanguage(page, "en");
-    await expect(homeGraphics).toHaveAccessibleName(
-      "Graphics: Low. Switch to High.",
-    );
-    await expect(homeGraphics).toHaveText("Low");
+    await expect(homeSettings).toHaveAccessibleName("Settings");
+    await homeSettings.click();
+    await expect(
+      page.getByRole("tab", { name: "Video", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(homeGraphics).toHaveAccessibleName("Graphics");
+    await expect(
+      homeGraphics.getByRole("radio", { name: "Low", exact: true }),
+    ).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(homeSettings).toBeFocused();
     await chooseLanguage(page, "fr");
     await page.getByLabel("Votre nom de joueur").fill("Graphics QA");
     await openLobby(page);
@@ -1826,13 +1867,14 @@ test("the room leader seats a local player, admits a friend, hands over during p
   const seats = page.locator(".lobby-seats");
   await expect(seats).toContainText("Milo");
   await expect(seats.locator(".host-label")).toHaveCount(1);
-  // Someone next to Alice takes Milo's place on this screen.
+  // Removing Milo shifts the other bots left; the local player takes the
+  // next open place on this screen.
   await hostCommand("remove-bot", () =>
     page.getByRole("button", { name: "Retirer le bot Milo" }).click(),
   );
   await page
     .getByRole("button", {
-      name: "Ajouter un joueur sur ce PC à la place 2",
+      name: "Ajouter un joueur sur ce PC à la place 4",
     })
     .click();
   await page.getByLabel("Joueur sur ce PC").fill("Bea");
@@ -1891,10 +1933,10 @@ test("the room leader seats a local player, admits a friend, hands over during p
       page.getByRole("button", { name: "Démarrer la partie" }).click(),
     );
     await expect(page.locator(".player-card")).toHaveCount(4);
-    await expect(page.locator('.player-card[data-seat="1"]')).toContainText(
+    await expect(page.locator('.player-card[data-seat="3"]')).toContainText(
       "Ce PC",
     );
-    await expect(friend.locator('.player-card[data-seat="2"]')).toContainText(
+    await expect(friend.locator('.player-card[data-seat="1"]')).toContainText(
       "Vous",
     );
     // The room keeps every player's avatar visible, with only independent
@@ -1911,11 +1953,11 @@ test("the room leader seats a local player, admits a friend, hands over during p
     await expect(picker).toContainText("Cora");
     await expect(picker).toContainText("Atlas");
     const aliceChoice = picker.locator('.room-leader-choice[data-seat="0"]');
-    const coraChoice = picker.locator('.room-leader-choice[data-seat="2"]');
+    const coraChoice = picker.locator('.room-leader-choice[data-seat="1"]');
     await expect(aliceChoice).toHaveAttribute("aria-pressed", "true");
     await expect(aliceChoice).toBeDisabled();
     await expect(
-      picker.locator('.room-leader-choice[data-seat="1"]'),
+      picker.locator('.room-leader-choice[data-seat="2"]'),
     ).toBeDisabled();
     await expect(
       picker.locator('.room-leader-choice[data-seat="3"]'),
@@ -2006,7 +2048,7 @@ test("the room leader seats a local player, admits a friend, hands over during p
     ).toHaveCount(0);
     await expect(page.getByLabel(/Verrouiller la salle/)).toHaveCount(0);
     await expect(
-      friendPicker.locator('.room-leader-choice[data-seat="2"]'),
+      friendPicker.locator('.room-leader-choice[data-seat="1"]'),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(friend.getByLabel(/Verrouiller la salle/)).toBeEnabled();
     await friendCommand("transfer-host", () =>
@@ -2073,6 +2115,7 @@ const LUCK_CARD_TITLES = {
     "Coup de pouce",
     "Liberté",
     "Solidarité",
+    "Carte d’évasion",
     "Vent arrière",
     "Coupure de courant",
     "Vente forcée",
@@ -2099,6 +2142,7 @@ const LUCK_CARD_TITLES = {
     "Contractor",
     "Jailbreak",
     "Charity",
+    "Escape card",
     "Tailwind",
     "Power cut",
     "Forced sale",
@@ -2131,7 +2175,7 @@ for (const locale of ["fr", "en"] as const) {
         exact: true,
       }),
     ).toBeVisible();
-    await expect(catalogue.locator(".luck-card-button")).toHaveCount(24);
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
     const detail = page.locator(".luck-card-dialog");
     const closeCard = detail.locator(".luck-card-close");
     const backToCards = detail.locator(".luck-card-back");
@@ -2185,7 +2229,7 @@ for (const locale of ["fr", "en"] as const) {
     await helpTrigger.click();
     await expect(help).toBeVisible();
     await expect(detail).not.toBeVisible();
-    await expect(catalogue.locator(".luck-card-button")).toHaveCount(24);
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
     const lastCard = catalogue.locator(".luck-card-button").last();
     await lastCard.click();
     await expect(
@@ -2228,6 +2272,7 @@ test("match card help uses the active salary and saved economy rather than welco
         startSalary: 760_000,
         economyRule: "prototype",
         boardRule: "legacy",
+        escapeCard: false,
       },
       activeSeat: 0,
       pending: {
@@ -2242,7 +2287,7 @@ test("match card help uses the active salary and saved economy rather than welco
     .click();
   const help = page.locator(".help-dialog");
   const catalogue = help.locator(".help-cards");
-  await expect(catalogue.locator(".luck-card-button")).toHaveCount(24);
+  await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
   const detail = page.locator(".luck-card-dialog");
   await catalogue
     .locator(".luck-card-button")

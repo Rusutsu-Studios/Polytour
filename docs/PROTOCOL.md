@@ -109,31 +109,33 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
-- Protocol version 6 adds the `PowerCut {seat, tile, untilLap}`,
+- Protocol version 7 adds the `PowerCut {seat, tile, untilLap}`,
   `ShieldRaised {seat, tile}`, `ShieldBroken {seat, tile}` (the attacker's seat)
-  and `PropertyGiven {seat, to, tile}` events, an optional `shielded: true` on a
-  property, an
-  optional `roll` (1–6) on `CardDrawn` for Detour and Tailwind, an optional
-  `powerCutUntilLap` on a property and the lobby's `chanceRule`; older clients
-  reload. Protocol version 5 adds `RequestPause`, `VotePause {accept}` and `ResumeGame`,
+  and `PropertyGiven {seat, to, tile}` events, an optional `shielded: true` and
+  `powerCutUntilLap` on a property, an optional `roll` (1-6) on `CardDrawn` for
+  Detour and Tailwind, and the lobby's `chanceRule`; older clients reload.
+  Protocol version 6 adds the kept `Escape` card and `UseEscapeCard` intent;
+  older clients reload before receiving the new held-card value. Version 5 adds `RequestPause`, `VotePause {accept}` and `ResumeGame`,
   public `pause` / `pauseCooldownUntil`, and `PauseChanged` / `GameResumed` events;
   older clients reload. Version 4 adds leaders, waiting members and local players
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 9 with `boardRule: "country"`,
+  New rooms freeze rules version 10 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true`, `buildAfterBuyout: true` and `chanceRule: "reworked"`;
-  version-7 lobbies report both booleans as `false`, and version-8 and earlier
-  lobbies report `chanceRule: "original"`. The optional festival marker preserves version-4/5/6 rooms
+  `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true` and
+  `chanceRule: "reworked"`. Version-9 lobbies report `chanceRule: "original"`;
+  older rooms also omit or freeze `escapeCard: false` and retain the original
+  16-card deck. Version-7 lobbies report both
+  booleans as `false`. The optional festival marker preserves version-4/5/6 rooms
   (cities and resorts); missing markers follow the saved economy. Lobbies before
   version 6 report `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
   Lobby snapshots expose their frozen rule markers separately from room settings.
   The strict room-setting schema never accepts internal rule markers; clients
   derive legal construction, travel and sale choices from the shared engine.
-- Game actions use PascalCase: `Roll`, `PayIsland`, `Travel`, `Decline`, `Buy`,
+- Game actions use PascalCase: `Roll`, `PayIsland`, `UseEscapeCard`, `Travel`, `Decline`, `Buy`,
   `Build`, `Buyout`, `Sell`, `ChooseHost`, `ChooseTarget`, `UseRentCard`. The engine's
   `legalActions` supplies the choices; tile indices are 0..31; reference rooms use levels 0..4 and legacy prototype rooms retain 0..5.
 - Each intent has an id and `atSeq`; duplicates, stale state, wrong seats, malformed
@@ -320,6 +322,9 @@ type GameEvent =
 opponents know to block. A Guardian Angel or Coupon is offered through a
 `DecisionRequested` (`pending.kind: "rentCard"`) before `RentPaid`; if used, a
 `CardUsed` precedes the `RentPaid` carrying the reduced amount.
+An Escape card is offered only through an Island decision to the player holding
+it. `CardUsed {card: "Escape"}` precedes `LeftIsland {method: "card"}` and a normal
+roll decision. Escape is never offered as rent protection.
 
 ## Connection lifecycle
 

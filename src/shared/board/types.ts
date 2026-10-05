@@ -19,10 +19,11 @@ export type EconomyRule = "reference" | "prototype";
  */
 export type WorldTourRule = "free-and-own" | "free-first";
 /**
- * Frozen Chance deck of a match. "reworked" (rules version 9) weights the deck
- * so bad cards are about 45% of draws, rolls a die for Detour and Tailwind,
- * sends Audit to the tax square and adds Power Cut. "original" (and saves
- * without a marker) keeps sixteen single cards, a 3-step Detour and a 10% Audit.
+ * Frozen Chance deck of a match. "reworked" (rules version 10) adds eight cards
+ * and duplicate bad cards so half the draws are bad, rolls a die for Detour and
+ * Tailwind and sends Audit to the tax square. "original" (and saves without a
+ * marker) keeps single cards, a 3-step Detour and a 10% Audit; rules version 9
+ * adds only the Escape card to it (`escapeCard`).
  */
 export type ChanceRule = "reworked" | "original";
 export type ResortId = 1 | 2 | 3 | 4;

@@ -227,10 +227,10 @@ on it straight away, up to the limit a landing on their own city would allow.
 New rooms freeze `rulesVersion: 8` with `fourResortRent: true` and
 `buildAfterBuyout: true`; version-7 and earlier rooms keep the earlier behaviour.
 
-### Reworked Chance deck — rules version 9, 5 October 2026
+### Reworked Chance deck — rules version 10, 5 October 2026
 
 At the user's request (issues #61, #85 and #100, with reference card screenshots
-on #100), new rooms freeze `rulesVersion: 9` with `chanceRule: "reworked"`. The
+on #100), new rooms freeze `rulesVersion: 10` with `chanceRule: "reworked"`. The
 Tax audit card sends the player to the Tax office, like the reference luxury-tax
 card, instead of charging 10% of cash. Power Cut follows the reference power cut:
 no rent from one opponent city until its owner passes Start three times. Detour
@@ -252,7 +252,7 @@ not reference values. Version-8 and earlier rooms keep the original deck.
 | Buildings | Every level's incremental price and rent | Reference rent table adopted in rules version 5; hotel costs interpolated |
 | Buyout | Cost formula, protection, payout recipient | 2× to the owner; Hotels protected in rules version 5 |
 | Specials | Island, travel, championship, resorts, tax | Reference values adopted in rules version 5 (see above) |
-| Cards | Deck contents, targeting, held cards | Original 16-card deck; reference comparison pending |
+| Cards | Deck contents, targeting, held cards | Original 16-card deck; rules version 9 adds a retained Escape card, and version 10 the reworked deck (see above) |
 | End conditions | Monopolies, bankruptcy, duration tie-breaks | User monopoly switches plus last standing/resorts and real-time/round limits |
 
 Use the actual settings screen and tile tooltips to capture this matrix, then

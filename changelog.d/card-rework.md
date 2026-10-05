@@ -18,7 +18,7 @@
 
 ### Changed
 
-- New rooms (rules version 9) rework the Chance deck: Tax audit moves you to
+- New rooms (rules version 10) rework the Chance deck: Tax audit moves you to
   the Tax office, Detour rolls a die for 1 to 6 spaces back, and bad cards
   make up half the draws. Rooms created earlier keep their sixteen
   cards (#100).
@@ -27,4 +27,6 @@
   How to play keeps the full details (#100).
 - Every card has its own flat drawing instead of three shared detailed
   illustrations (#61).
-- Protocol version 6: clients from before this release reload.
+- The Lost Island decision shows the flat island drawing instead of a line
+  icon, and the Escape card (#123) joins the reworked deck with its own drawing.
+- Protocol version 7: clients from before this release reload.

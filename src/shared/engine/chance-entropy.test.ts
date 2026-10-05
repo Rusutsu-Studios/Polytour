@@ -148,9 +148,10 @@ describe("live Chance draws", () => {
     }
     expect(drawn.sort()).toEqual(deck.sort());
     expect(state.deck).toEqual([]);
-    expect(state.discard).toHaveLength(deck.length - 2);
+    expect(state.discard).toHaveLength(deck.length - 3);
     expect(state.players.flatMap((player) => player.heldCards).sort()).toEqual([
       "Coupon",
+      "Escape",
       "Guardian Angel",
     ]);
     const before = JSON.stringify(state);
@@ -158,10 +159,11 @@ describe("live Chance draws", () => {
     const previousRng = state.rngState;
     const result = draw(state, [1, 0]);
     expect(result.card).toBe(previousDiscard[1]);
-    expect(result.state.deck).toHaveLength(deck.length - 3);
+    expect(result.state.deck).toHaveLength(deck.length - 4);
     expect(result.state.discard).toEqual([result.card]);
     expect(result.state.deck).not.toContain("Guardian Angel");
     expect(result.state.deck).not.toContain("Coupon");
+    expect(result.state.deck).not.toContain("Escape");
     expect(result.state.rngState).toBe(previousRng);
     expect(JSON.stringify(state)).toBe(before);
   });

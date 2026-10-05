@@ -112,6 +112,13 @@
   gap: 14px;
 }
 
+.pause-menu-actions .pause-settings {
+  justify-self: center;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+
 .pause-vote,
 .pause-request {
   margin-bottom: 24px;
@@ -469,6 +476,10 @@
   align-items: start;
 }
 
+.pause-debug-grid[data-room="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .pause-debug h3 {
   margin: 0 0 14px;
   font-size: 16px;
@@ -492,6 +503,11 @@
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
+}
+
+.pause-debug-grid[data-room="false"] .pause-debug-edge {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .pause-debug-bank {

@@ -52,7 +52,7 @@ export const CHANCE_AMOUNTS = {
 
 /**
  * Copies of a card in a reworked deck; unlisted cards appear once. The bad
- * cards fill 17 of 34 slots, so half the draws cost the drawer. Fan Trip
+ * cards fill 18 of 36 slots, so half the draws cost the drawer. Fan Trip
  * stays a rare single copy.
  */
 export const CHANCE_DECK_COPIES = {
@@ -60,6 +60,6 @@ export const CHANCE_DECK_COPIES = {
   Audit: 3,
   Charity: 3,
   Detour: 3,
-  Stranded: 2,
+  Stranded: 3,
   Gift: 2,
 } as const;
