@@ -314,15 +314,19 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
       expect(rect.bottom).toBeLessThanOrEqual(size.height);
     }
     for (const target of await page.locator(".sale-tile-quote").all()) {
-      const receivesPointer = await target.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(
-          rect.x + rect.width / 2,
-          rect.y + rect.height / 2,
-        );
-        return button === hit || (hit !== null && button.contains(hit));
-      });
-      expect(receivesPointer).toBe(true);
+      // Projected board controls settle on the next render after a resize.
+      await expect
+        .poll(() =>
+          target.evaluate((button) => {
+            const rect = button.getBoundingClientRect();
+            const hit = document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            );
+            return button === hit || (hit !== null && button.contains(hit));
+          }),
+        )
+        .toBe(true);
     }
     await page.screenshot({
       path: `.local/verification/sale-board-${size.width}.png`,
