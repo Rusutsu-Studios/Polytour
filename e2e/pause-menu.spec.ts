@@ -1716,11 +1716,18 @@ test("board pinch and drag preserve click inspection and Reset view recenters", 
   await expect(board).toHaveAttribute("data-board-pan-y", "0");
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  // A plain click still opens the actual lot after a dragged gesture.
+  // Plain inspection preserves the previous tool focus after a dragged gesture.
+  const pauseTrigger = page.getByRole("button", {
+    name: "Menu pause",
+    exact: true,
+  });
+  await pauseTrigger.focus();
   await import("./board-interactions.js").then(({ clickBoardSpace }) =>
     clickBoardSpace(page, 1),
   );
   await expect(page.locator(".city-card-dialog[open]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(pauseTrigger).toBeFocused();
 });
 
 for (const viewport of DESKTOP_SIZES) {

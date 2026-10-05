@@ -600,8 +600,8 @@ export default function PauseMenu({
                         <p className="pause-zoom-help">
                           {zoomAvailable
                             ? t(
-                                "En partie : molette ou + / − pour zoomer, glisser pour déplacer, pincer sur écran tactile. 0 pour recentrer.",
-                                "In a match: wheel or + / − to zoom, drag to move, pinch on a touch screen. 0 to reset the view.",
+                                "En partie : molette ou + / - pour zoomer, glisser pour déplacer, pincer sur écran tactile. 0 pour recentrer.",
+                                "In a match: wheel or + / - to zoom, drag to move, pinch on a touch screen. 0 to reset the view.",
                               )
                             : t(
                                 "Le plateau simplifié ne permet pas de zoomer ni de déplacer la vue.",

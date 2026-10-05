@@ -75,6 +75,8 @@ export function useBoardView({
     const down = (event: PointerEvent) => {
       if (!active() || event.button !== 0 || event.ctrlKey || event.metaKey)
         return;
+      // Preserve the existing focus target when a tile opens its inspection.
+      if (event.target instanceof HTMLCanvasElement) event.preventDefault();
       const point = { x: event.clientX, y: event.clientY };
       pointers.set(event.pointerId, point);
       if (pointers.size === 1) {
@@ -82,8 +84,6 @@ export function useBoardView({
         last = point;
         dragged = false;
         element.dataset.boardDragging = "false";
-        if (event.target instanceof HTMLCanvasElement)
-          element.focus({ preventScroll: true });
       } else if (pointers.size === 2) {
         dragged = true;
         element.dataset.boardDragging = "true";
@@ -109,6 +109,7 @@ export function useBoardView({
         return;
       }
       if (!dragged && Math.hypot(point.x - start.x, point.y - start.y) >= 5) {
+        element.focus({ preventScroll: true });
         dragged = true;
         element.dataset.boardDragging = "true";
         capture(event.pointerId);
