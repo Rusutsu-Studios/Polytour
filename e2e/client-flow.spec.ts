@@ -1657,10 +1657,11 @@ test("travel, rent protections and exchanges show the complete legal choice", as
     director.reset({
       ...state,
       activeSeat: 0,
-      // The traveller waits on World Tour, so space 1 lies past Start.
+      // The traveller waits on World Tour, so space 1 lies past Start. Bots
+      // may already have moved cash with a card, so the balance is fixed too.
       players: state.players.map((player) =>
         player.seat === 0
-          ? { ...player, position: 24, travelPending: true }
+          ? { ...player, position: 24, travelPending: true, cash: 2_000_000 }
           : player,
       ),
       pending: {
