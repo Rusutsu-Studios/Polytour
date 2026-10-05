@@ -119,7 +119,6 @@ export default function StartOrderMoment() {
       data-revealed={settled}
       data-reduced-motion={reducedMotion}
       aria-labelledby="start-order-title"
-      aria-describedby="start-order-description"
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
       }}
@@ -130,12 +129,6 @@ export default function StartOrderMoment() {
     >
       <article className="start-order-moment">
         <h2 id="start-order-title">{t("Qui commence ?", "Who starts?")}</h2>
-        <p id="start-order-description">
-          {t(
-            "Un premier joueur au hasard, puis on suit le plateau.",
-            "A random first player, then we follow the board.",
-          )}
-        </p>
         <div className="start-order-stage">
           <div
             className="start-order-wheel"
@@ -181,7 +174,7 @@ export default function StartOrderMoment() {
                 `${starter?.name ?? "Le premier joueur"} commence !`,
                 `${starter?.name ?? "The first player"} starts!`,
               )
-            : t("Le premier tour se prépare…", "The first turn is coming…")}
+            : ""}
         </p>
         <ol
           className="start-order-sequence"

@@ -170,6 +170,13 @@ async function startGame(host: Actor, actors: Actor[], playerCount: number) {
       "true",
     );
     await expect.poll(() => actor.state?.status).toBe("active");
+    // The opening wheel owns focus until its bounded reveal finishes.
+    await expect(actor.page.locator(".start-order-dialog[open]")).toHaveCount(
+      0,
+      {
+        timeout: 10_000,
+      },
+    );
   }
 }
 
