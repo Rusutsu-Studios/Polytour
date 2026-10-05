@@ -147,10 +147,17 @@ export function LobbySeats({
   const { t } = useLocale();
   const [naming, setNaming] = useState<Seat | null>(null);
   const [localName, setLocalName] = useState("");
+  const firstOpen = SEATS.find(
+    (seat) => !lobby?.seats.find((entry) => entry.seat === seat)?.control,
+  );
+  const orderReason = t(
+    "Remplissez d’abord la première place libre.",
+    "Fill the first open seat first.",
+  );
   function addLocal(event: FormEvent, seat: Seat) {
     event.preventDefault();
     const name = localName.trim();
-    if (!name || disabled) return;
+    if (!name || disabled || seat !== firstOpen) return;
     onAddLocal(seat, name);
     setNaming(null);
     setLocalName("");
@@ -162,7 +169,12 @@ export function LobbySeats({
         const style = {
           "--player-color": PLAYER_COLORS[seat],
         } as CSSProperties;
-        if (!player?.control && naming === seat && you !== null)
+        if (
+          !player?.control &&
+          naming === seat &&
+          seat === firstOpen &&
+          you !== null
+        )
           return (
             <li key={seat} className="lobby-seat empty" style={style}>
               <form
@@ -237,7 +249,10 @@ export function LobbySeats({
                       <ActionButton
                         type="button"
                         className="seat-choice"
-                        disabled={disabled}
+                        disabled={disabled || seat !== firstOpen}
+                        disabledReason={
+                          seat !== firstOpen ? orderReason : undefined
+                        }
                         aria-label={t(
                           `Ajouter un bot à la place ${seat + 1}`,
                           `Add a bot to seat ${seat + 1}`,
@@ -251,7 +266,10 @@ export function LobbySeats({
                     <ActionButton
                       type="button"
                       className="seat-choice"
-                      disabled={disabled}
+                      disabled={disabled || seat !== firstOpen}
+                      disabledReason={
+                        seat !== firstOpen ? orderReason : undefined
+                      }
                       aria-label={t(
                         `Ajouter un joueur sur ce PC à la place ${seat + 1}`,
                         `Add a player on this PC to seat ${seat + 1}`,

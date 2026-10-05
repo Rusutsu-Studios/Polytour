@@ -18,6 +18,7 @@ import type {
   WinKind,
 } from "../shared/engine/index.js";
 import {
+  chanceDeck,
   decisionWindow,
   getProperty,
   legalActions,
@@ -40,7 +41,10 @@ import {
   readCredentials,
   useRoom,
 } from "./net/room.js";
-import { useCloudflarePing } from "./net/use-cloudflare-ping.js";
+import {
+  type PingState,
+  useCloudflarePing,
+} from "./net/use-cloudflare-ping.js";
 import ActionButton from "./ui/ActionButton.js";
 import {
   fullMoney,
@@ -63,12 +67,11 @@ import CityCard from "./ui/CityCard.js";
 import { cardName } from "./ui/chance-display.js";
 import DecisionPanel from "./ui/DecisionPanel.js";
 import DiceExplanation from "./ui/DiceExplanation.js";
-import GraphicsToggle from "./ui/GraphicsToggle.js";
 import Icon from "./ui/Icon.js";
 import InvitationEntry from "./ui/InvitationEntry.js";
 import LanguagePicker from "./ui/LanguagePicker.js";
 import LuckCardHelp from "./ui/LuckCardHelp.js";
-import PauseMenu from "./ui/PauseMenu.js";
+import PauseMenu, { type SettingsTab } from "./ui/PauseMenu.js";
 import {
   deviceSeats,
   LobbySeats,
@@ -81,6 +84,7 @@ import {
 } from "./ui/RoomPeople.js";
 import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
 import RoomSettings from "./ui/SettingsDialog.js";
+import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
 
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
@@ -388,6 +392,11 @@ function eventText(event: GameEvent, state: PublicState): ReactNode | null {
         t("Un joueur", "A player")}
     </strong>
   );
+  /** Card effects name the hit city's owner, so everyone sees who was affected. */
+  const owner = (tile: number) => {
+    const seat = getProperty(state, tile)?.owner;
+    return seat == null ? t("la banque", "the bank") : name(seat);
+  };
   const entry = (
     icon: Parameters<typeof Icon>[0]["name"],
     content: ReactNode,
@@ -483,6 +492,76 @@ function eventText(event: GameEvent, state: PublicState): ReactNode | null {
             `tire « ${cardName(event.card)} »`,
             `draws “${cardName(event.card)}”`,
           )}
+          {event.roll !== undefined &&
+            t(` · dé ${event.roll}`, ` · die ${event.roll}`)}
+        </>,
+      );
+    case "PropertyDowngraded":
+      return entry(
+        "build",
+        <>
+          {tileName(event.tile, state.config)} ({owner(event.tile)}){" "}
+          {t("perd un bâtiment", "loses a building")}
+        </>,
+      );
+    case "PowerCut":
+      return entry(
+        "build",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `coupe le courant à ${tileName(event.tile, state.config)}`,
+            `cuts the power in ${tileName(event.tile, state.config)}`,
+          )}{" "}
+          ({owner(event.tile)})
+        </>,
+      );
+    case "ShieldRaised":
+      return entry(
+        "shield",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `protège ${tileName(event.tile, state.config)}`,
+            `shields ${tileName(event.tile, state.config)}`,
+          )}
+        </>,
+      );
+    case "ShieldBroken":
+      return entry(
+        "shield",
+        <>
+          {t(
+            `Le bouclier de ${tileName(event.tile, state.config)}`,
+            `The shield on ${tileName(event.tile, state.config)}`,
+          )}{" "}
+          ({owner(event.tile)}){" "}
+          {t("bloque l’attaque de", "blocks the attack from")}{" "}
+          {name(event.seat)}
+        </>,
+      );
+    case "PropertyGiven":
+      return entry(
+        "people",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `offre ${tileName(event.tile, state.config)} à`,
+            `gives ${tileName(event.tile, state.config)} to`,
+          )}{" "}
+          {name(event.to)}
+        </>,
+      );
+    case "PropertiesSwapped":
+      return entry(
+        "people",
+        <>
+          {name(event.seat)}{" "}
+          {t(
+            `échange ${tileName(event.tile, state.config)} contre ${tileName(event.otherTile, state.config)} avec`,
+            `swaps ${tileName(event.tile, state.config)} for ${tileName(event.otherTile, state.config)} with`,
+          )}{" "}
+          {name(event.otherSeat)}
         </>,
       );
     case "CardUsed":
@@ -762,7 +841,10 @@ function Help({
           dialog.current?.querySelector<HTMLElement>(".help-cards h3")?.focus()
         }
       >
-        {t("Voir les 16 cartes Surprise", "View all 16 luck cards")}
+        {t(
+          `Voir les ${new Set(chanceDeck(config)).size} cartes Surprise`,
+          `View all ${new Set(chanceDeck(config)).size} luck cards`,
+        )}
         <Icon name="arrow" size={15} />
       </button>
       <ol className="rules-list">
@@ -895,6 +977,40 @@ function TurnTimer({
 
 type GameTool = "journal" | "proof" | "rules" | "room" | null;
 
+function NetworkStatus({
+  ping,
+  className,
+  onClick,
+}: {
+  ping: PingState;
+  className: string;
+  onClick: () => void;
+}) {
+  const point =
+    ping.status === "success"
+      ? (ping.value.colo ?? (ping.value.runtime === "local" ? "Local" : "-"))
+      : "-";
+  const latency =
+    ping.status === "success" ? `${ping.value.latencyMs} ms` : "- ms";
+  return (
+    <button
+      type="button"
+      className={`network-status ${className}`}
+      aria-label={t("Débogage réseau", "Network debug")}
+      aria-haspopup="dialog"
+      title={t(
+        "Ouvrir le débogage réseau. Dernière mesure du ping Cloudflare.",
+        "Open network debug. Last Cloudflare ping measurement.",
+      )}
+      onClick={onClick}
+    >
+      <span role="status" aria-live="off">
+        {point} · {latency}
+      </span>
+    </button>
+  );
+}
+
 // THESIS: The PC board fills the screen; the interface occupies its unused corners.
 // OWN-WORLD: sky blue, ivory toy controls, four colored pawn identities, physical buttons.
 // STORY: watch the board, make the current choice, open a tool only when needed.
@@ -911,11 +1027,14 @@ function MatchView({
   onZoom,
   lowGraphics,
   onGraphicsChange,
+  streamer,
+  onStreamerChange,
   copied,
   copyRoom,
   onLeave,
   onHelp,
   debug,
+  cloudflarePing,
 }: {
   game: PublicState;
   credentials: RoomCredentials;
@@ -927,30 +1046,20 @@ function MatchView({
   onZoom: (zoom: number) => void;
   lowGraphics: boolean;
   onGraphicsChange: (low: boolean) => void;
+  streamer: boolean;
+  onStreamerChange: (enabled: boolean) => void;
   copied: boolean;
   copyRoom: () => Promise<void>;
   onLeave: () => void;
   onHelp: () => void;
   debug: boolean;
+  cloudflarePing: PingState;
 }) {
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
+  const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
   const soloMenuPause = useRef(game.pause?.kind === "paused");
   const soloObservedPause = useRef(game.pause?.kind === "paused");
-  const cloudflarePing = useCloudflarePing(
-    room.connection === "online",
-    room.connection,
-  );
-  const networkPoint =
-    cloudflarePing.status === "success"
-      ? (cloudflarePing.value.colo ??
-        (cloudflarePing.value.runtime === "local" ? t("Local", "Local") : "-"))
-      : "-";
-  const networkLatency =
-    cloudflarePing.status === "success"
-      ? `${cloudflarePing.value.latencyMs} ms`
-      : "- ms";
-  const pauseTrigger = useRef<HTMLButtonElement | null>(null);
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
     x: number;
@@ -993,6 +1102,7 @@ function MatchView({
     if (pauseAnnouncement && !solo) {
       setTool(null);
       setInspectorOpen(false);
+      setPauseSettingsTab(undefined);
       setPauseOpen(true);
     }
   }, [pauseAnnouncement, solo]);
@@ -1027,8 +1137,9 @@ function MatchView({
       room.act({ type: "RequestPause" }, pauseSeat);
     }
   }, [solo, pauseSeat, pauseBlocked, pauseOpen, authoritative, room.act]);
-  const openPauseMenu = () => {
+  const openPauseMenu = (settingsTab?: SettingsTab) => {
     soloMenuPause.current = solo;
+    setPauseSettingsTab(settingsTab);
     setTool(null);
     setInspectorOpen(false);
     setPauseOpen(true);
@@ -1290,7 +1401,7 @@ function MatchView({
             <button
               type="button"
               className="text-button"
-              onClick={openPauseMenu}
+              onClick={() => openPauseMenu()}
             >
               {t("Partie en pause", "Game paused")}
             </button>
@@ -1317,6 +1428,11 @@ function MatchView({
         className="game-tools"
         aria-label={t("Outils de la partie", "Game tools")}
       >
+        <StreamerToggle
+          enabled={streamer}
+          onChange={onStreamerChange}
+          compact
+        />
         <button
           type="button"
           className="game-tool-button"
@@ -1400,14 +1516,13 @@ function MatchView({
           <Icon name="fullscreen" size={17} />
         </button>
         <button
-          ref={pauseTrigger}
           type="button"
           className="game-tool-button"
           aria-label={t("Menu pause", "Pause menu")}
           title={t("Menu pause", "Pause menu")}
           aria-haspopup="dialog"
           aria-expanded={pauseOpen}
-          onClick={openPauseMenu}
+          onClick={() => openPauseMenu()}
         >
           <Icon name="pause" size={18} />
         </button>
@@ -1661,7 +1776,11 @@ function MatchView({
                   {t("Code de votre salle", "Room code")}
                 </span>
                 <div className="room-tool-code">
-                  <strong>{credentials.roomCode}</strong>
+                  <strong>
+                    {streamer
+                      ? t("Code masqué", "Code hidden")
+                      : credentials.roomCode}
+                  </strong>
                   <button
                     type="button"
                     className="button secondary"
@@ -1736,26 +1855,14 @@ function MatchView({
         )}
       </AnimatePresence>
 
-      <span
+      <NetworkStatus
         className="match-network"
-        role="status"
-        aria-live="off"
-        title={
-          cloudflarePing.status === "success"
-            ? t(
-                "Dernière mesure du ping Cloudflare. Détails dans Débogage.",
-                "Last Cloudflare ping measurement. Details in Debug.",
-              )
-            : t(
-                "Ping Cloudflare indisponible. Détails dans Débogage.",
-                "Cloudflare ping unavailable. Details in Debug.",
-              )
-        }
-      >
-        {networkPoint} · {networkLatency}
-      </span>
+        ping={cloudflarePing}
+        onClick={() => openPauseMenu("debug")}
+      />
       {pauseOpen && (
         <PauseMenu
+          initialSettingsTab={pauseSettingsTab}
           game={authoritative}
           mySeats={mySeats}
           blocked={pauseBlocked}
@@ -1771,11 +1878,9 @@ function MatchView({
           onResume={() => {
             if (pauseSeat !== null) room.act({ type: "ResumeGame" }, pauseSeat);
             setPauseOpen(false);
-            pauseTrigger.current?.focus();
           }}
           onClose={() => {
             setPauseOpen(false);
-            pauseTrigger.current?.focus();
           }}
           onLeave={() => {
             setPauseOpen(false);
@@ -1827,10 +1932,42 @@ function App() {
       ? null
       : saved;
   });
-  const [name, setName] = useState(
-    () => localStorage.getItem("polytour-name") ?? "",
-  );
+  const [name, setName] = useState(() => {
+    try {
+      return localStorage.getItem("polytour-name") ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [joinCode, setJoinCode] = useState("");
+  const [streamer, setStreamer] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.streamer") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const streamerRef = useRef(streamer);
+  function changeStreamer(enabled: boolean) {
+    streamerRef.current = enabled;
+    setStreamer(enabled);
+    try {
+      localStorage.setItem("polytour.streamer", String(enabled));
+    } catch {
+      // Keep the preference working for this session without browser storage.
+    }
+  }
+  useEffect(() => {
+    if (!streamer) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    if (/^\/rooms\//.test(url.pathname)) url.pathname = "/";
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [streamer]);
   const [config, setConfig] = useState<RoomConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const entering = useRef(false);
@@ -1838,6 +1975,9 @@ function App() {
   // Null follows the active pawn; an explicit inspection stays pinned.
   const [selected, setSelected] = useState<number | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [homeSettingsTab, setHomeSettingsTab] = useState<SettingsTab | null>(
+    null,
+  );
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [lowGraphics, setLowGraphics] = useState(() => {
@@ -1857,6 +1997,7 @@ function App() {
   }
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
+  const cloudflarePing = useCloudflarePing(true, room.connection);
   const serverConfigKey = room.lobby ? JSON.stringify(room.lobby.config) : null;
   const activePosition = viewState?.players.find(
     (player) => player.seat === viewState.activeSeat,
@@ -1901,13 +2042,19 @@ function App() {
         join ? code : undefined,
         join ? 0 : 3,
       );
-      localStorage.setItem("polytour-name", cleanName);
+      try {
+        localStorage.setItem("polytour-name", cleanName);
+      } catch {
+        // Entering a room still works when browser storage is unavailable.
+      }
       director.reset(null);
       setCredentials(entered);
       window.history.replaceState(
         null,
         "",
-        `${window.location.pathname}?room=${entered.roomCode}`,
+        streamerRef.current
+          ? window.location.pathname
+          : `${window.location.pathname}?room=${entered.roomCode}`,
       );
     } catch (error) {
       setFormError(
@@ -1940,7 +2087,7 @@ function App() {
     if (!credentials) return;
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}${window.location.pathname}?room=${credentials.roomCode}`,
+        `${window.location.origin}/?room=${credentials.roomCode}`,
       );
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -1950,6 +2097,9 @@ function App() {
   }
   const game = viewState ?? serverState;
   const isGame = credentials && game;
+  useEffect(() => {
+    if (isGame) setHomeSettingsTab(null);
+  }, [isGame]);
   const debug = new URLSearchParams(window.location.search).has("debug");
   // Room controls stay steady while a quick change awaits its answer: the
   // room hook already drops a second command until the first is answered.
@@ -1965,7 +2115,9 @@ function App() {
     worldTourRule: room.lobby?.worldTourRule ?? "free-and-own",
     fourResortRent: room.lobby?.fourResortRent ?? true,
     buildAfterBuyout: room.lobby?.buildAfterBuyout ?? true,
+    chanceRule: room.lobby?.chanceRule ?? "reworked",
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
+    escapeCard: room.lobby ? room.lobby.escapeCard === true : true,
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;
@@ -1985,12 +2137,18 @@ function App() {
             <Logo small={Boolean(isGame)} />
           </span>
           <div className="topbar-right">
-            <span className="prototype-tag">Prototype</span>
-            <GraphicsToggle
-              lowGraphics={lowGraphics}
-              onChange={changeGraphics}
-              compact
-            />
+            <StreamerToggle enabled={streamer} onChange={changeStreamer} />
+            <button
+              type="button"
+              className="text-button personal-settings-trigger"
+              aria-label={t("Réglages", "Settings")}
+              title={t("Réglages", "Settings")}
+              aria-haspopup="dialog"
+              aria-expanded={homeSettingsTab !== null}
+              onClick={() => setHomeSettingsTab("video")}
+            >
+              <Icon name="settings" size={18} />
+            </button>
             <LanguagePicker />
             <button
               type="button"
@@ -2080,9 +2238,11 @@ function App() {
                     <input
                       id="room-code"
                       className="code-input"
+                      type={streamer ? "password" : "text"}
                       value={joinCode}
                       maxLength={6}
-                      placeholder="ABCD23"
+                      placeholder={streamer ? "••••••" : "ABCD23"}
+                      autoComplete="off"
                       autoCapitalize="characters"
                       spellCheck={false}
                       onChange={(event) =>
@@ -2136,6 +2296,7 @@ function App() {
                     selected={null}
                     onSelect={setSelected}
                     preview
+                    zoom={zoom}
                     lowGraphics={lowGraphics}
                   />
                 </Suspense>
@@ -2168,7 +2329,11 @@ function App() {
             <div className="room-code-block">
               <div>
                 <span>{t("Code de la salle", "Room code")}</span>
-                <strong>{credentials.roomCode}</strong>
+                <strong>
+                  {streamer
+                    ? t("Code masqué", "Code hidden")
+                    : credentials.roomCode}
+                </strong>
               </div>
               <button
                 type="button"
@@ -2309,6 +2474,7 @@ function App() {
                   selected={null}
                   onSelect={setSelected}
                   preview
+                  zoom={zoom}
                   lowGraphics={lowGraphics}
                 />
               </Suspense>
@@ -2327,11 +2493,14 @@ function App() {
           onZoom={setZoom}
           lowGraphics={lowGraphics}
           onGraphicsChange={changeGraphics}
+          streamer={streamer}
+          onStreamerChange={changeStreamer}
           copied={copied}
           copyRoom={copyRoom}
           onLeave={() => void leave()}
           onHelp={() => setHelpOpen(true)}
           debug={debug}
+          cloudflarePing={cloudflarePing}
         />
       )}
       {credentials && !game && (
@@ -2375,9 +2544,42 @@ function App() {
         mode={config.randomnessMode}
         config={game?.config ?? previewConfig}
       />
+      {!isGame && homeSettingsTab !== null && (
+        <PauseMenu
+          game={null}
+          initialSettingsTab={homeSettingsTab}
+          mySeats={[]}
+          blocked={false}
+          solo={false}
+          onRequestPause={() => {}}
+          onVote={() => {}}
+          onResume={() => {}}
+          error={null}
+          onClose={() => setHomeSettingsTab(null)}
+          onLeave={() => {}}
+          zoom={zoom}
+          onZoom={setZoom}
+          lowGraphics={lowGraphics}
+          onGraphicsChange={changeGraphics}
+          connection={room.connection}
+          ping={cloudflarePing}
+          roomDebug={credentials ? room.roomDebug : null}
+          ownSeat={room.you?.seat ?? null}
+          onDebugActiveChange={room.setDebugActive}
+          bank={null}
+        />
+      )}
       {!isGame && (
         <footer className="lobby-footer">
-          <span>{t("Crée par Poli & GJJS", "Made by Poli & GJJS")}</span>
+          <span className="lobby-credit">
+            <span>{t("Crée par Poli & GJJS", "Made by Poli & GJJS")}</span>
+            <span aria-hidden="true">-</span>
+            <NetworkStatus
+              className="lobby-network"
+              ping={cloudflarePing}
+              onClick={() => setHomeSettingsTab("debug")}
+            />
+          </span>
           <a
             href="https://github.com/Rusutsu-Studios/Polytour/"
             target="_blank"

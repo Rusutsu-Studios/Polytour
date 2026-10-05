@@ -10,7 +10,7 @@ const LOCALE_METADATA = {
   en: {
     title: "Polytour - Online Multiplayer Board Game",
     description:
-      "Play Polytour, a property-trading board game for 2–4 players. Buy cities, build and play with friends or bots in your browser.",
+      "Play Polytour, a property-trading board game for 2-4 players. Buy cities, build and play with friends or bots in your browser.",
     imageAlt: "Polytour game board with cities and player tokens",
     socialLocale: "en_GB",
     alternateLocale: "fr_FR",

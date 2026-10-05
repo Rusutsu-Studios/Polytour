@@ -188,6 +188,12 @@ close it and select another space on the board to inspect that space.
 Escape, the close button or a backdrop click closes it.
 
 The Director now has a separate DOM presenter alongside its scene animator.
+A drawn card shows only its title, its flat drawing and one short line; How to
+play holds the detailed rules. Card effects land on the board: Earthquake
+(`PropertyDowngraded`, 2 s) shakes the hit city, sinks it into dust under a red
+ring and raises what still stands; Power Cut flashes a dark ring and leaves the
+lot darkened while the power is off; Land Swap rings each city in its new
+owner's colour. The game log names the city and its owner.
 `CardDrawn` waits for a bounded illustrated reading moment (eight seconds at
 normal speed, at least six during automatic catch-up) before the subsequent
 effects play. Continue and Escape resolve that moment; state recovery, snapshot

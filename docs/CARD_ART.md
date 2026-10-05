@@ -1,14 +1,15 @@
 # Original card art
 
-Three original illustrations made with the built-in ImageGen tool on 1 October
-2026 are stored in `public/cards/`: `fortune.webp`, `travel.webp` and `city.webp`.
-The production files are 960 × 640 WebP images, 238 kB combined. They load when
-a card is shown, outside the initial lobby download. The source prompts are
-preserved in [card-art-prompts.json](card-art-prompts.json).
+Every Chance card has its own flat drawing in `src/client/ui/CardArt.tsx`:
+one subject (a flag, an island, a cracked house, a die and an arrow…) on one
+plain colour, readable as a 44-pixel thumbnail. The drawings are inline SVG, so
+they need no download and follow the card's die roll. They replaced three
+shared, detailed generated illustrations (#61).
 
-The illustrations share ivory paper, turquoise travel objects, coral roofs,
-green banknotes and gold. Sixteen cards reuse these three visual families;
-their names, amounts, destinations and protection effects remain distinct.
+In game, a drawn card shows only its title, its drawing and one short line, in a
+gold frame for a good card and a wooden one for a bad card. How to play keeps the
+full description and rule notes for each card.
+
 No competitor artwork is shipped. Property previews and physical banknote
 stacks are original code-native geometry.
 

@@ -40,6 +40,17 @@ jobs:
             echo "::error file=CLAUDE.md::CLAUDE.md must contain a line with only @AGENTS.md. Put project rules in AGENTS.md."
             exit 1
           }
+      # AGENTS.md: UI text, SVG and code use ASCII "-", never a Unicode minus,
+      # en dash or em dash.
+      - name: ASCII dashes only
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          if grep -rnP '[\x{2212}\x{2013}\x{2014}]' src e2e tools test public index.html \
+            --include='*.ts' --include='*.tsx' --include='*.css' --include='*.svg' --include='*.html'; then
+            echo "::error::Use ASCII '-' (AGENTS.md), not a Unicode minus, en dash or em dash."
+            exit 1
+          fi
       - uses: ./.github/actions/setup
       - name: Check release version and changelog
         env:

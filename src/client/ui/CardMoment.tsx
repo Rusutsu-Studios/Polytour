@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DECISION_TIMING } from "../../shared/board/index.js";
-import type { GameEvent } from "../../shared/engine/index.js";
+import { BAD_CHANCE_CARDS, type GameEvent } from "../../shared/engine/index.js";
 import {
   type AnimationContext,
   director,
@@ -11,6 +11,7 @@ import {
 } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import { money, PLAYER_COLORS } from "./board-display.js";
+import CardArt from "./CardArt.js";
 import { type CardDraw, describeCard } from "./chance-display.js";
 import Icon from "./Icon.js";
 import "./CardMoment.css";
@@ -114,13 +115,10 @@ export default function CardMoment({
       ? describeCard(event, context.next)
       : {
           title: t("Paiement des impôts", "Tax payment"),
-          badge: `− ${money(event.amount)}`,
-          text: t(
-            "Les impôts ont été versés à la banque.",
-            "Tax has been paid to the bank.",
+          short: t(
+            `${money(event.amount)} versés à la banque.`,
+            `${money(event.amount)} paid to the bank.`,
           ),
-          art: "fortune",
-          tone: "cost",
         };
   const player = context.next.players.find((entry) => entry.seat === seat);
   return createPortal(
@@ -140,7 +138,10 @@ export default function CardMoment({
     >
       <motion.article
         className="chance-card"
-        data-tone={card.tone}
+        data-bad={
+          tax ||
+          (event.type === "CardDrawn" && BAD_CHANCE_CARDS.includes(event.card))
+        }
         style={{ "--chance-player": PLAYER_COLORS[seat] } as CSSProperties}
         initial={
           reducedMotion ? false : { opacity: 0, scale: 0.9, rotate: -3, y: 24 }
@@ -157,24 +158,22 @@ export default function CardMoment({
             <strong>{player?.name ?? t("Joueur", "Player")}</strong>
           </span>
         </header>
-        {tax ? (
-          <div className="tax-illustration" aria-hidden="true">
-            <Icon name="bank" size={96} />
-          </div>
-        ) : (
-          <img
-            className="chance-art"
-            src={`/cards/${card.art}.webp`}
-            alt=""
-            width="600"
-            height="400"
-            decoding="async"
-          />
-        )}
         <div className="chance-copy">
           <h2 id="chance-title">{card.title}</h2>
-          <strong className="chance-impact">{card.badge}</strong>
-          <p id="chance-description">{card.text}</p>
+          {event.type === "CardDrawn" ? (
+            <CardArt
+              className="chance-art"
+              card={event.card}
+              roll={event.roll}
+            />
+          ) : (
+            <div className="chance-art tax-illustration" aria-hidden="true">
+              <Icon name="bank" size={80} />
+            </div>
+          )}
+          <p id="chance-description" className="chance-impact">
+            {card.short}
+          </p>
           <button
             type="button"
             className="button blue chance-continue"

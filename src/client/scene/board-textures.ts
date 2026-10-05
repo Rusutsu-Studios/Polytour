@@ -1236,6 +1236,33 @@ export function gainTexture(text: string) {
   });
 }
 
+/** The little shield that floats over a protected property. */
+export function shieldTexture() {
+  return canvasTexture(128, 144, (context) => {
+    const outer = new Path2D(
+      "M64 8 118 27v43c0 37-23 61-54 68-31-7-54-31-54-68V27Z",
+    );
+    context.fillStyle = "#2f6fd0";
+    context.fill(outer);
+    context.lineWidth = 8;
+    context.strokeStyle = "#fffdf6";
+    context.stroke(outer);
+    context.fillStyle = "#bfe3f7";
+    context.fill(
+      new Path2D("M64 26 100 39v31c0 25-15 43-36 50-21-7-36-25-36-50V39Z"),
+    );
+    context.lineWidth = 13;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#2f6fd0";
+    context.beginPath();
+    context.moveTo(44, 74);
+    context.lineTo(58, 88);
+    context.lineTo(86, 58);
+    context.stroke();
+  });
+}
+
 export function markerTexture(
   text: string,
   background: string,

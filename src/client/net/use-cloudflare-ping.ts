@@ -13,7 +13,7 @@ export type PingState = (
   | { status: "error" }
 ) & { connection: string };
 
-/** One shared sample stream for the match HUD and its debug settings. */
+/** One shared sample stream for the menus, match HUD and debug settings. */
 export function useCloudflarePing(
   active: boolean,
   connection: string,
