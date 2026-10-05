@@ -40,10 +40,11 @@
   border-color: #236cce;
   background: #e7f2f8;
 }
-.luck-card-button > img {
-  width: 48px;
-  height: 42px;
-  object-fit: contain;
+.luck-card-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  overflow: hidden;
   flex-shrink: 0;
 }
 .luck-card-button > span {
@@ -99,9 +100,11 @@
 }
 .luck-card-art {
   display: block;
-  width: 100%;
-  height: clamp(120px, 22svh, 200px);
-  object-fit: contain;
+  width: clamp(120px, 22svh, 180px);
+  height: clamp(120px, 22svh, 180px);
+  margin: 16px auto 8px;
+  border-radius: 16px;
+  overflow: hidden;
 }
 .luck-card-copy {
   padding: 8px 28px 24px;

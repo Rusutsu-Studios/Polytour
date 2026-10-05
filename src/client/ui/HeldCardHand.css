@@ -23,9 +23,13 @@
     transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 180ms;
 }
-.held-mini[data-card="coupon"] {
+.held-mini[data-card="Coupon"] {
   --card-frame: #1f8f84;
   --card-art: #7fd6c8;
+}
+.held-mini[data-card="Escape"] {
+  --card-frame: #2b6f9e;
+  --card-art: #b7edfa;
 }
 .held-mini:nth-child(2) {
   transform: rotate(6deg);
@@ -56,10 +60,13 @@
   pointer-events: none;
   --card-frame: #e0a21c;
 }
-.held-preview[data-card="coupon"] {
+.held-preview[data-card="Coupon"] {
   --card-frame: #1f8f84;
 }
-.held-preview img {
+.held-preview[data-card="Escape"] {
+  --card-frame: #2b6f9e;
+}
+.held-preview svg {
   display: block;
   width: 100%;
   height: 112px;
@@ -86,4 +93,7 @@
   .held-mini {
     transition: none;
   }
+}
+[data-reduced-motion="true"] .held-mini {
+  transition: none;
 }

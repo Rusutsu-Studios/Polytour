@@ -15,11 +15,13 @@ import {
   applyAction,
   applyEvent,
   applyTimeout,
+  BAD_CHANCE_CARDS,
   botAction,
   botDecisionAt,
   buyoutPrice,
   buyoutPriceAt,
   CHANCE_CARDS,
+  chanceDeck,
   changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,
@@ -46,7 +48,7 @@ import {
 const SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
   (name, index) => ({ playerId: `player-${index}`, name, control: "human" }),
 );
-/** Saved prototype rooms (rules versions 2–3) keep these rules; see the reference block below. */
+/** Saved prototype rooms (rules versions 2-3) keep these rules; see the reference block below. */
 const CONFIG: GameConfig = {
   ...DEFAULT_GAME_CONFIG,
   economyRule: "prototype",
@@ -54,6 +56,8 @@ const CONFIG: GameConfig = {
   sellBackPercent: 100,
   fourResortRent: false,
   buildAfterBuyout: false,
+  escapeCard: false,
+  chanceRule: "original",
   roundLimit: 20,
   timeLimitMinutes: undefined,
   festivalCount: 0,
@@ -459,6 +463,97 @@ describe("dice, Island, laps and World Tour", () => {
     expect(paid.pending).toMatchObject({ kind: "roll", seat });
     expect(getPlayer(paid, seat).cash).toBe(1_900_000);
   });
+  it("keeps Escape until an Island turn, consumes it for a free release and then rolls normally", () => {
+    const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = initial.activeSeat;
+    const drawn = draw(initial, "Escape").state;
+    expect(getPlayer(drawn, seat).heldCards).toEqual(["Escape"]);
+    expect(drawn.discard).not.toContain("Escape");
+    const trapped = {
+      ...setPlayer(withActive(drawn, seat), seat, {
+        position: 8,
+        onIsland: true,
+        islandTurns: 2,
+        cash: 0,
+      }),
+      pending: { kind: "island" as const, seat, fee: 200_000, deadline: 100 },
+    };
+    expect(legalActions(trapped, seat)).toEqual([
+      { type: "Roll" },
+      { type: "UseEscapeCard" },
+    ]);
+    expect(botAction(trapped, seat)).toEqual({ type: "UseEscapeCard" });
+    const escaped = act(trapped, { type: "UseEscapeCard" });
+    expect(escaped.events).toContainEqual({
+      type: "CardUsed",
+      seat,
+      card: "Escape",
+    });
+    expect(escaped.events).toContainEqual({
+      type: "LeftIsland",
+      seat,
+      method: "card",
+    });
+    expect(getPlayer(escaped.state, seat)).toMatchObject({
+      position: 8,
+      cash: 0,
+      onIsland: false,
+      islandTurns: 0,
+      heldCards: [],
+    });
+    expect(escaped.state.pending).toMatchObject({ kind: "roll", seat });
+    expect(
+      escaped.state.discard.filter((card) => card === "Escape"),
+    ).toHaveLength(1);
+    const rolled = act(escaped.state, { type: "Roll" }, [1, 1]).state;
+    expect(getPlayer(rolled, seat).position).toBe(10);
+    expect(act(rolled, { type: "Decline" }).state.pending).toMatchObject({
+      kind: "roll",
+      seat,
+    });
+    for (const invalid of [
+      setPlayer(trapped, seat, { heldCards: [] }),
+      { ...trapped, pending: { kind: "roll" as const, seat, deadline: 100 } },
+    ])
+      expect(
+        applyAction(invalid, seat, { type: "UseEscapeCard" }, { now: 1 }).ok,
+      ).toBe(false);
+    expect(
+      applyAction(
+        trapped,
+        other(trapped),
+        { type: "UseEscapeCard" },
+        { now: 1 },
+      ).ok,
+    ).toBe(false);
+  });
+  it("does not offer Escape as a rent card and preserves the automatic Jailbreak effect", () => {
+    const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = initial.activeSeat;
+    const owner = other(initial);
+    const withCard = setPlayer(grant(initial, 1, owner, 1), seat, {
+      heldCards: ["Escape"],
+    });
+    const rented = land(withCard, 1).state;
+    expect(rented.pending?.kind).not.toBe("rent-card");
+    expect(getPlayer(rented, seat).heldCards).toEqual(["Escape"]);
+    const mixed = land(
+      setPlayer(withCard, seat, { heldCards: ["Escape", "Coupon"] }),
+      1,
+    ).state;
+    expect(mixed.pending).toMatchObject({
+      kind: "rent-card",
+      cards: ["Coupon"],
+    });
+    expect(legalActions(mixed, seat)).not.toContainEqual({
+      type: "UseRentCard",
+      card: "Escape",
+    });
+    const saved = setPlayer(newGame(), owner, { position: 8, onIsland: true });
+    expect(getPlayer(draw(saved, "Jailbreak").state, owner).onIsland).toBe(
+      false,
+    );
+  });
   it("World Tour ends doubles, grants a next-turn option and clockwise travel resolves salary", () => {
     const state = newGame();
     const seat = state.activeSeat;
@@ -781,7 +876,7 @@ describe("forced sales and bankruptcy", () => {
   });
 });
 
-describe("all sixteen Chance cards", () => {
+describe("the original sixteen Chance cards", () => {
   it("movement cards follow clockwise laps, Detour never pays Start, and corner cards end doubles", () => {
     const state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
@@ -935,6 +1030,250 @@ describe("all sixteen Chance cards", () => {
   it("has a handled branch for every configured card", () => {
     for (const card of CHANCE_CARDS)
       expect(draw(newGame(), card).state.lastCard?.card).toBe(card);
+  });
+});
+describe("the reworked Chance deck (rules version 10)", () => {
+  const REWORKED: GameConfig = {
+    ...DEFAULT_GAME_CONFIG,
+    roundLimit: 20,
+    timeLimitMinutes: undefined,
+    festivalCount: 0,
+  };
+  /** A live draw: the first entropy word picks the card, the next the die. */
+  function drawLive(
+    state: GameState,
+    card: ChanceCard,
+    die: number,
+    tile = 12,
+  ) {
+    const ready = setPlayer(
+      { ...state, deck: [card], discard: [] },
+      state.activeSeat,
+      { position: tile - 3 },
+    );
+    const result = applyAction(
+      ready,
+      ready.activeSeat,
+      { type: "Roll" },
+      { now: 1, dice: [1, 2], chanceEntropy: [0, die - 1] },
+    );
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.events.reduce(applyEvent, toPublic(ready))).toEqual(
+      toPublic(result.state),
+    );
+    return result;
+  }
+  it("deals bad cards half the time, Fan Trip rarely, and keeps old rooms on sixteen cards", () => {
+    const deck = chanceDeck(REWORKED);
+    const bad = deck.filter((card) => BAD_CHANCE_CARDS.includes(card));
+    expect(deck).toHaveLength(36);
+    expect(bad.length / deck.length).toBe(0.5);
+    expect(deck.filter((card) => card === "Fan Trip")).toHaveLength(1);
+    expect(new Set(deck)).toEqual(new Set(CHANCE_CARDS));
+    expect(newGame(4, REWORKED).deck).toHaveLength(36);
+    expect(chanceDeck(CONFIG)).toHaveLength(16);
+    expect(chanceDeck({})).toEqual(chanceDeck(CONFIG));
+    expect(chanceDeck(CONFIG)).not.toContain("Power Cut");
+  });
+  it("sends Audit to the Tax office, which charges the tax there", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    state = grant(state, 1, seat, 1);
+    const audited = draw(state, "Audit");
+    expect(getPlayer(audited.state, seat)).toMatchObject({
+      position: 30,
+      laps: 0,
+    });
+    const tax = audited.events.find(
+      (event) => event.type === "MoneyTransferred" && event.reason === "Tax",
+    );
+    expect(tax).toMatchObject({ from: seat, to: null });
+    expect(getPlayer(audited.state, seat).cash).toBe(
+      2_000_000 - (tax?.type === "MoneyTransferred" ? tax.amount : 0),
+    );
+  });
+  it("rolls a die for Detour and Tailwind, paying salary when Tailwind passes Start", () => {
+    const state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const back = drawLive(state, "Detour", 2);
+    expect(back.events).toContainEqual(
+      expect.objectContaining({ type: "CardDrawn", card: "Detour", roll: 2 }),
+    );
+    expect(getPlayer(back.state, seat)).toMatchObject({
+      position: 10,
+      laps: 0,
+    });
+    const forward = drawLive(state, "Tailwind", 6, 28);
+    expect(forward.events).toContainEqual(
+      expect.objectContaining({ type: "CardDrawn", card: "Tailwind", roll: 6 }),
+    );
+    expect(getPlayer(forward.state, seat)).toMatchObject({
+      position: 2,
+      laps: 1,
+      cash: 2_400_000,
+    });
+    // Seeded simulations roll from the private sequence instead.
+    const seeded = draw(state, "Detour");
+    const drawn = seeded.events.find((event) => event.type === "CardDrawn");
+    expect(drawn?.type === "CardDrawn" ? drawn.roll : 0).toBeGreaterThan(0);
+    expect(seeded.state.rngState).not.toBe(state.rngState);
+  });
+  it("Power Cut stops a rival city's rent until its owner passes Start three times", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const rival = other(state);
+    state = grant(grant(state, 1, rival, 2), 2, rival);
+    const offered = draw(state, "Power Cut").state;
+    expect(offered.pending).toMatchObject({
+      kind: "card-target",
+      card: "Power Cut",
+      targets: [1, 2],
+    });
+    // A bot or an expired decision cuts the city that earns the most.
+    expect(botAction(offered, seat)).toEqual({ type: "ChooseTarget", tile: 1 });
+    const cut = act(offered, { type: "ChooseTarget", tile: 1 });
+    expect(cut.events).toContainEqual({
+      type: "PowerCut",
+      seat,
+      tile: 1,
+      untilLap: 3,
+    });
+    expect(propertyRent(cut.state, 1)).toBe(0);
+    expect(propertyRent(cut.state, 2)).toBeGreaterThan(0);
+    // A cut city is not a target again while its power is off.
+    const again = draw(withActive(cut.state, seat), "Power Cut").state;
+    expect(again.pending).toMatchObject({ targets: [2] });
+    expect(propertyRent(setPlayer(cut.state, rival, { laps: 2 }), 1)).toBe(0);
+    expect(
+      propertyRent(setPlayer(cut.state, rival, { laps: 3 }), 1),
+    ).toBeGreaterThan(0);
+    // A new owner restores the power.
+    const sold = applyEvent(toPublic(cut.state), {
+      type: "PropertySold",
+      seat: rival,
+      tile: 1,
+      amount: 0,
+    });
+    expect(getProperty(sold, 1)).not.toHaveProperty("powerCutUntilLap");
+  });
+  it("Forced Sale refunds a rival property to the bank, and only drops a Hotel one level", () => {
+    let state = newGame(4, REWORKED);
+    const rival = other(state);
+    state = grant(grant(grant(state, 1, rival, 2), 2, rival, 4), 4, rival);
+    const offered = draw(state, "Forced Sale").state;
+    expect(offered.pending).toMatchObject({
+      card: "Forced Sale",
+      targets: [1, 2, 4],
+    });
+    const cash = getPlayer(offered, rival).cash;
+    const sold = act(offered, { type: "ChooseTarget", tile: 1 }).state;
+    expect(getProperty(sold, 1)).toMatchObject({ owner: null, level: 0 });
+    expect(getPlayer(sold, rival).cash).toBe(cash + propertyRefund(offered, 1));
+    const hotel = act(offered, { type: "ChooseTarget", tile: 2 }).state;
+    expect(getProperty(hotel, 2)).toMatchObject({ owner: rival, level: 3 });
+    expect(getPlayer(hotel, rival).cash).toBe(
+      cash + propertyRefund(offered, 2) - propertyRefund(hotel, 2),
+    );
+    expect(getPlayer(hotel, rival).cash).toBeGreaterThan(cash);
+  });
+  it("a Shield floats over one of your properties and absorbs the next attack", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const rival = other(state);
+    state = grant(grant(state, 1, seat, 2), 4, seat);
+    const offered = draw(state, "Shield").state;
+    expect(offered.pending).toMatchObject({ card: "Shield", targets: [1, 4] });
+    const shielded = act(offered, { type: "ChooseTarget", tile: 1 }).state;
+    expect(getProperty(shielded, 1)?.shielded).toBe(true);
+    // A rival's Earthquake breaks the shield instead of a house.
+    const attack = draw(withActive(shielded, rival), "Earthquake").state;
+    expect(attack.pending).toMatchObject({ targets: [1] });
+    const blocked = act(attack, { type: "ChooseTarget", tile: 1 });
+    expect(blocked.events).toContainEqual({
+      type: "ShieldBroken",
+      seat: rival,
+      tile: 1,
+    });
+    expect(getProperty(blocked.state, 1)?.level).toBe(2);
+    expect(getProperty(blocked.state, 1)).not.toHaveProperty("shielded");
+    // Attack decisions prefer a city without a shield.
+    const exposed = grant(shielded, 2, seat, 1);
+    const choice = draw(withActive(exposed, rival), "Earthquake").state;
+    expect(botAction(choice, rival)).toEqual({
+      type: "ChooseTarget",
+      tile: 2,
+    });
+  });
+  it("Patron upgrades your city and bills the richest opponent", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const rich = other(state);
+    state = setPlayer(grant(state, 1, seat, 1), rich, { cash: 3_000_000 });
+    const offered = draw(state, "Patron").state;
+    expect(offered.pending).toMatchObject({ card: "Patron", targets: [1] });
+    const built = act(offered, { type: "ChooseTarget", tile: 1 });
+    const bill = built.events.find(
+      (event) => event.type === "MoneyTransferred" && event.reason === "Patron",
+    );
+    expect(bill).toMatchObject({ from: rich, to: null });
+    const amount = bill?.type === "MoneyTransferred" ? bill.amount : 0;
+    expect(amount).toBeGreaterThan(0);
+    expect(getProperty(built.state, 1)?.level).toBe(2);
+    expect(getPlayer(built.state, seat).cash).toBe(2_000_000);
+    expect(getPlayer(built.state, rich).cash).toBe(3_000_000 - amount);
+  });
+  it("Fan Trip sends the drawer to pay rent in the host city, and does nothing without one", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const host = other(state);
+    expect(getPlayer(draw(state, "Fan Trip").state, seat).position).toBe(12);
+    state = {
+      ...grant(state, 13, host, 1),
+      championshipHost: { tile: 13, multiplier: 2 },
+    };
+    const trip = draw(state, "Fan Trip");
+    expect(getPlayer(trip.state, seat).position).toBe(13);
+    expect(trip.events).toContainEqual(
+      expect.objectContaining({
+        type: "RentPaid",
+        seat,
+        owner: host,
+        tile: 13,
+      }),
+    );
+  });
+  it("Gift hands one of your cities, buildings included, to the poorest opponent", () => {
+    let state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const poor = other(state);
+    state = setPlayer(grant(grant(state, 1, seat, 2), 2, seat, 4), poor, {
+      cash: 10_000,
+    });
+    const offered = draw(state, "Gift").state;
+    // A Hotel never changes hands, and the gift cannot be declined.
+    expect(offered.pending).toMatchObject({ card: "Gift", targets: [1] });
+    expect(legalActions(offered, seat)).not.toContainEqual({
+      type: "Decline",
+    });
+    const given = act(offered, { type: "ChooseTarget", tile: 1 });
+    expect(given.events).toContainEqual({
+      type: "PropertyGiven",
+      seat,
+      to: poor,
+      tile: 1,
+    });
+    expect(getProperty(given.state, 1)).toMatchObject({
+      owner: poor,
+      level: 2,
+    });
+    expect(getPlayer(given.state, poor).properties).toContain(1);
+  });
+  it("Roll Again gives the drawer another roll", () => {
+    const state = newGame(4, REWORKED);
+    const seat = state.activeSeat;
+    const again = draw(state, "Roll Again").state;
+    expect(again.activeSeat).toBe(seat);
+    expect(again.pending).toMatchObject({ kind: "roll", seat });
   });
 });
 describe("wins, rankings and timeouts", () => {
@@ -1903,6 +2242,51 @@ describe("reference economy on the original board", () => {
       { type: "ChooseHost", tile: 6 },
     ]);
   });
+  it.each([true, false])(
+    "hosts during the first turn before a completed lap with escape deck %s",
+    (escapeCard) => {
+      const initial = newGame(4, {
+        ...DEFAULT_GAME_CONFIG,
+        festivalCount: 0,
+        escapeCard,
+      });
+      const seat = initial.activeSeat;
+      const city = act(initial, { type: "Roll" }, [3, 3]).state;
+      const bought = act(city, { type: "Buy", level: 2 }).state;
+      expect(bought.pending).toMatchObject({ kind: "roll", seat });
+      const firstVisit = act(bought, { type: "Roll" }, [4, 6]).state;
+      expect(firstVisit.round).toBe(1);
+      expect(getPlayer(firstVisit, seat).laps).toBe(0);
+      expect(firstVisit.pending).toMatchObject({
+        kind: "host",
+        seat,
+        targets: [6],
+      });
+      const hosted = act(firstVisit, { type: "ChooseHost", tile: 6 }).state;
+      expect(hosted.championshipHost).toEqual({ tile: 6, multiplier: 2 });
+      expect(getPlayer(hosted, seat).cash).toBe(
+        2_000_000 - getTileInvestedValue(6, 2, "reference", "country") - 50_000,
+      );
+      expect(hosted.activeSeat).not.toBe(seat);
+    },
+  );
+  it("offers Championship hosting when Stadium Call arrives during the first turn", () => {
+    const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
+    const seat = initial.activeSeat;
+    const city = act(initial, { type: "Roll" }, [3, 3]).state;
+    const bought = act(city, { type: "Buy", level: 2 }).state;
+    const call = act(
+      { ...bought, deck: ["Stadium Call"] },
+      { type: "Roll" },
+      [3, 3],
+    ).state;
+    expect(call.round).toBe(1);
+    expect(getPlayer(call, seat)).toMatchObject({ position: 16, laps: 0 });
+    expect(call.pending).toMatchObject({ kind: "host", seat, targets: [6] });
+    expect(
+      act(call, { type: "ChooseHost", tile: 6 }).state.championshipHost,
+    ).toEqual({ tile: 6, multiplier: 2 });
+  });
   it("times a paid championship out to a free renewal or a decline", () => {
     let state = reference();
     const seat = state.activeSeat;
@@ -1985,7 +2369,7 @@ describe("reference economy on the original board", () => {
   it.each([
     // Rules version 6: free properties and the traveller's own.
     ["free-and-own", (tile: number) => tile !== 1],
-    // Rules versions 4–5: the traveller's own only when none is free.
+    // Rules versions 4-5: the traveller's own only when none is free.
     ["free-first", (tile: number) => tile !== 1 && tile !== 2],
   ] as const)(
     "flies a %s World Tour only to the properties that rule allows",

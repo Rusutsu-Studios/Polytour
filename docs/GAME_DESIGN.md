@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 8, `economyRule: "reference"`) follow the reference
+New rooms (rules version 10, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -203,6 +203,9 @@ it to the bank.
     those same dice move it - there is no second roll, and an escape roll never
     grants an extra roll. A non-double increments `islandTurns` and ends the turn
     without moving.
+  - **Escape card** (when held): consume it for a free release, then take a normal
+    roll. Its doubles follow the normal extra-roll rule. This retained Chance card
+    exists only in new rules-version-9 rooms; saved rooms keep their original deck.
 
   After the third failed escape roll (`islandTurns = 3`; prototype: the second)
   the player is released on the spot; their next turn is a normal turn.
@@ -229,8 +232,8 @@ it to the bank.
 - **Tax:** pay 10% of your total invested property value, rounded up. Cash is
   never taxed, so a player with little cash and many buildings can owe more than
   they hold. There is no minimum (prototype: 50,000).
-- **Chance:** draw uniformly from the remaining cards in a 16-card deck, without
-  replacement. When its draw pile is empty, discarded cards form the next draw
+- **Chance:** draw uniformly from the remaining cards in a 36-card deck (rules
+  version 9: 17 cards; older rooms: 16), without replacement. When its draw pile is empty, discarded cards form the next draw
   pile; held keep cards remain unavailable.
 
 ### Payment, rent, buyout, and insolvency
@@ -327,7 +330,15 @@ the same ordering picks the winner, so every match has exactly one winner.
 Instant wins are the dramatic core: they force players to buy out opponents'
 properties to *block* a monopoly, which is where the tension comes from.
 
-## Chance deck (16 cards)
+## Chance deck (36 cards)
+
+Rules version 10 holds 36 cards: the twenty-five below, with extra copies of bad
+cards (Parking Fine, Audit, Charity, Detour and Stranded ×3; Gift ×2), so bad
+cards make up 18 of 36 draws, exactly half. Fan Trip stays a rare single copy. Bad cards are those that cost the drawer
+(`BAD_CHANCE_CARDS`); the in-game card shows them in a wooden frame, good cards
+in a gold one. Version-9 rooms keep sixteen single cards plus Escape, a 3-tile
+Detour and a 10% Audit, and never draw the cards marked v10; older rooms also
+lack Escape.
 
 | Card | Effect | Keep? |
 | --- | --- | --- |
@@ -338,21 +349,32 @@ properties to *block* a monopoly, which is where the tension comes from.
 | Windfall | Collect 150,000 | |
 | Parking Fine | Pay 100,000 | |
 | Birthday | Collect 50,000 from every other non-bankrupt player | |
-| Audit | Pay 10% of your cash, rounded up | |
+| Audit | Move clockwise to the Tax office and pay its tax there (before v9: pay 10% of your cash, rounded up) | |
 | Guardian Angel | Cancel one rent payment | ✅ |
 | Coupon | Halve one rent payment | ✅ |
 | Earthquake | Downgrade one opponent building by 1 level, Hotels included (prototype: not Landmarks) | |
 | Land Swap | Optionally choose an opponent city; exchange it with your eligible city of lowest land price (not Hotels; prototype: not Landmarks) | |
-| Detour | Move back 3 tiles | |
+| Detour | Roll one die and move back that many tiles (before v9: 3 tiles) | |
 | Contractor | Upgrade one of your cities by 1 level for free | |
 | Jailbreak | Everyone on the Island is released | |
 | Charity | Give 100,000 to the poorest player | |
+| Escape | Leave the Island for free at the start of your trapped turn, then roll normally (v9) | ✅ |
+| Tailwind | Roll one die and move forward that many tiles (v10) | |
+| Power Cut | An opponent's city earns no rent until its owner has passed Start 3 more times; a new owner restores it (v10) | |
+| Forced Sale | An opponent's property returns to the bank and its owner gets the sale refund; a Hotel only loses its top level, refunded the same way (v10) | |
+| Shield | One of your properties absorbs the next Earthquake, Power Cut, Forced Sale or Land Swap aimed at it; the shield then breaks. Buyouts are not blocked (v10) | |
+| Patron | One of your cities gains a level; the opponent with the most cash pays the bank for it (v10) | |
+| Fan Trip | Move clockwise to the championship's host city and resolve it there; no effect without a host. One copy only (v10) | |
+| Gift | Give one of your cities below the Hotel, buildings included, to the opponent with the least cash; no decline (v10) | |
+| Roll Again | Roll the dice again after this card; it does not add to a doubles roll (v10) | |
 
 ### Chance resolution details
 
 - Drawn, non-keep cards resolve immediately, then enter the discard pile. Keep cards
-  leave the deck until used; a player can hold at most one Guardian Angel and one
-  Coupon. When used, they enter the discard pile. When the draw pile is empty, its
+  leave the deck until used; a player can hold at most one Guardian Angel, one
+  Coupon and one Escape card. Escape is added only when `escapeCard: true`, frozen
+  in new rules-version-9 rooms; saved decks and Jailbreak's immediate effect remain
+  unchanged. When used, kept cards enter the discard pile. When the draw pile is empty, its
   discard pile replenishes it; held cards remain out of the draw. Each live draw
   uses fresh cryptographic rejection sampling, including from previously saved
   seeded decks. Seeded simulations shuffle on refill and remain reproducible.
@@ -361,8 +383,10 @@ properties to *block* a monopoly, which is where the tension comes from.
   **clockwise** along the board, so the lap rule applies: Grand Tour always pays
   salary once and counts a lap, and Stadium Call drawn on tile 19 goes all the way
   round and does too. (The client walks the pawn along that clockwise path, faster
-  on a long move.) Detour moves counter-clockwise and never pays Start, even when
-  it lands on Start. Jet Set ends the turn on World Tour, and Stranded sends the
+  on a long move.) Tailwind moves clockwise and pays Start when it passes it.
+  Detour moves counter-clockwise and never pays Start, even when it lands on
+  Start. The die of Detour and Tailwind is rolled with the draw, from the same
+  live Chance entropy as the draw itself, and shown on the card. Jet Set ends the turn on World Tour, and Stranded sends the
   pawn to Island; both use those tiles' rules.
 - A card with no legal target (or no legal effect) does nothing and is discarded.
 - Guardian Angel is offered after a rent amount is known and before it is paid; it

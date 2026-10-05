@@ -104,6 +104,12 @@
 .decision-popup h2:focus {
   outline: none;
 }
+.decision-popup .decision-popup-ribbon h2 {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+}
 .decision-popup #decision-description {
   text-align: center;
   font-size: 14px;
@@ -121,6 +127,15 @@
 .decision-illustration {
   min-width: 0;
   text-align: center;
+}
+/* The Island uses the Stranded card's flat drawing, like every card. */
+.decision-island-art {
+  display: block;
+  width: min(100%, 170px);
+  height: auto;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
 }
 .city-art {
   display: block;
@@ -311,6 +326,13 @@
 .decision-popup .decision-other-choices .button.secondary[aria-pressed="true"] {
   background: #f8db9b;
   box-shadow: 0 3px 0 #c29336;
+}
+.decision-popup .decision-other-choices .button[data-locked="true"] {
+  opacity: 1;
+  cursor: not-allowed;
+  background: #ebeae0;
+  color: #52676a;
+  box-shadow: 0 3px 0 #d0d1c3;
 }
 .decision-confirmation {
   display: flex;

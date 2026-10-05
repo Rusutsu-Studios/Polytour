@@ -7,17 +7,25 @@ export type BuildLevel = 0 | 1 | 2 | 3 | 4 | 5;
 export type BoardRule = "country" | "legacy";
 /**
  * Frozen economy of a match. "reference" (rules version 4) follows the
- * reference game's grid and fees; "prototype" (rules versions 2–3, and saves
+ * reference game's grid and fees; "prototype" (rules versions 2-3, and saves
  * without a marker) keeps the original Polytour economy and its Landmark.
  */
 export type EconomyRule = "reference" | "prototype";
 /**
  * Frozen World Tour destinations of a reference match. "free-and-own" (rules
  * version 6) reaches unowned properties and the traveller's own; "free-first"
- * (versions 4–5, and saves without a marker) reaches the traveller's own only
+ * (versions 4-5, and saves without a marker) reaches the traveller's own only
  * when none is free. Prototype matches fly to any other tile either way.
  */
 export type WorldTourRule = "free-and-own" | "free-first";
+/**
+ * Frozen Chance deck of a match. "reworked" (rules version 10) adds eight cards
+ * and duplicate bad cards so half the draws are bad, rolls a die for Detour and
+ * Tailwind and sends Audit to the tax square. "original" (and saves without a
+ * marker) keeps single cards, a 3-step Detour and a 10% Audit; rules version 9
+ * adds only the Escape card to it (`escapeCard`).
+ */
+export type ChanceRule = "reworked" | "original";
 export type ResortId = 1 | 2 | 3 | 4;
 
 export type CityTile = {

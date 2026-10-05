@@ -12,7 +12,7 @@ type ReferenceCityConfig = CityConfig & {
   readonly rent: readonly [number, number, number, number, number];
 };
 
-/** Prototype rooms (rules versions 2–3). Captured endpoints are exact;
+/** Prototype rooms (rules versions 2-3). Captured endpoints are exact;
  * intermediate prices/rents are provisional tuning. Costs are absolute per
  * tile, never a guessed house-to-land ratio. */
 export const CITY_ECONOMY = [
@@ -67,7 +67,7 @@ export const LEGACY_CITY_ECONOMY = [
  * side on Polytour's board so each side keeps its price tier. Rents and
  * three-house totals are the reference values (see REFERENCE_PARITY.md); the
  * comment names the reference city each tile takes. A house costs 50/100/150/
- * 200 k on sides 1–4, which matches the three captured splits (first city,
+ * 200 k on sides 1-4, which matches the three captured splits (first city,
  * 13th city's bare plot, Tokyo). Hotel costs, the totals marked "interpolated"
  * and tile 27 are interpolated between captured values.
  */

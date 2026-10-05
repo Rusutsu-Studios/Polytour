@@ -99,6 +99,37 @@ describe("Search engine crawl endpoints", () => {
 });
 
 describe("Document indexing and routing", () => {
+  it.each(["GET", "HEAD"])(
+    "serves missing-page HTML with HTTP 404 for %s navigations",
+    async (method) => {
+      const assets = appAssets();
+      const response = await request(
+        `${PRODUCTION_ORIGIN}/wrong-turn?room=ABC234`,
+        assets.bindings,
+        {
+          method,
+          headers: { Accept: "text/html" },
+        },
+      );
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Content-Type")).toContain("text/html");
+      expect(response.headers.get("X-Robots-Tag")).toBe(NO_INDEX);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.text()).toBe(
+        method === "HEAD" ? "" : "<!doctype html><title>Polytour</title>",
+      );
+      expect(assets.fetch).toHaveBeenCalledOnce();
+    },
+  );
+  it("retains JSON errors on unknown service routes even for browser requests", async () => {
+    const response = await request(
+      `${PRODUCTION_ORIGIN}/api/unknown`,
+      {} as Env,
+      { headers: { Accept: "text/html" } },
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Not found" });
+  });
   it("keeps the production homepage indexable with a fixed canonical URL", async () => {
     const assets = appAssets();
     const response = await request(

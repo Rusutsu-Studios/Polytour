@@ -511,10 +511,15 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
           `Receive ${money(state.config.startSalary)} when passing Start.`,
         );
       case "island":
-        return t(
-          `Un double ou le paiement de ${money(rules.islandReleaseFee)} vous permet de repartir. Vous êtes libéré après ${rules.islandMaxFailedEscapes} lancers ratés.`,
-          `Roll doubles or pay ${money(rules.islandReleaseFee)} to leave. You are released after ${rules.islandMaxFailedEscapes} failed rolls.`,
-        );
+        return state.config.escapeCard === true
+          ? t(
+              `Faites un double, utilisez votre carte d’évasion ou payez ${money(rules.islandReleaseFee)} pour repartir. Vous êtes libéré après ${rules.islandMaxFailedEscapes} lancers ratés.`,
+              `Roll doubles, use your escape card or pay ${money(rules.islandReleaseFee)} to leave. You are released after ${rules.islandMaxFailedEscapes} failed rolls.`,
+            )
+          : t(
+              `Un double ou le paiement de ${money(rules.islandReleaseFee)} vous permet de repartir. Vous êtes libéré après ${rules.islandMaxFailedEscapes} lancers ratés.`,
+              `Roll doubles or pay ${money(rules.islandReleaseFee)} to leave. You are released after ${rules.islandMaxFailedEscapes} failed rolls.`,
+            );
       case "championship":
         return rules.championshipFee > 0
           ? t(

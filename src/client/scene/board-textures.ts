@@ -1236,6 +1236,33 @@ export function gainTexture(text: string) {
   });
 }
 
+/** The little shield that floats over a protected property. */
+export function shieldTexture() {
+  return canvasTexture(128, 144, (context) => {
+    const outer = new Path2D(
+      "M64 8 118 27v43c0 37-23 61-54 68-31-7-54-31-54-68V27Z",
+    );
+    context.fillStyle = "#2f6fd0";
+    context.fill(outer);
+    context.lineWidth = 8;
+    context.strokeStyle = "#fffdf6";
+    context.stroke(outer);
+    context.fillStyle = "#bfe3f7";
+    context.fill(
+      new Path2D("M64 26 100 39v31c0 25-15 43-36 50-21-7-36-25-36-50V39Z"),
+    );
+    context.lineWidth = 13;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#2f6fd0";
+    context.beginPath();
+    context.moveTo(44, 74);
+    context.lineTo(58, 88);
+    context.lineTo(86, 58);
+    context.stroke();
+  });
+}
+
 export function markerTexture(
   text: string,
   background: string,
@@ -1278,14 +1305,16 @@ export function noteTexture() {
 /** The face of a kept Chance card lying beside its holder's cash. */
 export function heldCardTexture(card: KeepCard) {
   const angel = card === "Guardian Angel";
+  const escapeCard = card === "Escape";
+  const frame = angel ? "#e0a21c" : escapeCard ? "#2b6f9e" : "#1f8f84";
   return canvasTexture(200, 280, (context) => {
-    context.fillStyle = angel ? "#e0a21c" : "#1f8f84";
+    context.fillStyle = frame;
     context.fillRect(0, 0, 200, 280);
     context.fillStyle = PAPER;
     context.beginPath();
     context.roundRect(16, 16, 168, 248, 12);
     context.fill();
-    context.fillStyle = angel ? "#ffd965" : "#7fd6c8";
+    context.fillStyle = angel ? "#ffd965" : escapeCard ? "#b7edfa" : "#7fd6c8";
     context.beginPath();
     context.roundRect(28, 28, 144, 146, 8);
     context.fill();
@@ -1317,13 +1346,27 @@ export function heldCardTexture(card: KeepCard) {
       context.beginPath();
       context.ellipse(100, 68, 26, 8, 0, 0, Math.PI * 2);
       context.stroke();
+    } else if (escapeCard) {
+      // An open door marks the retained Island escape card.
+      context.strokeRect(68, 54, 64, 100);
+      context.beginPath();
+      context.moveTo(68, 54);
+      context.lineTo(110, 70);
+      context.lineTo(110, 150);
+      context.lineTo(68, 154);
+      context.closePath();
+      context.stroke();
+      context.fillStyle = INK;
+      context.beginPath();
+      context.arc(98, 110, 4, 0, Math.PI * 2);
+      context.fill();
     } else {
       context.fillStyle = INK;
       context.font = `900 104px ${DISPLAY_FONT}`;
       context.fillText("%", 100, 104);
     }
     // Printed lines stand in for the card text.
-    context.fillStyle = angel ? "#c98d12" : "#1f8f84";
+    context.fillStyle = frame;
     for (const [y, width] of [
       [198, 130],
       [222, 112],

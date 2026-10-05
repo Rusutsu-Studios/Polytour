@@ -60,11 +60,12 @@ function changeOwner(
 ): PublicState {
   return {
     ...state,
-    properties: state.properties.map((property) =>
-      property.tile === tile
-        ? { ...property, owner, level: owner === null ? 0 : property.level }
-        : property,
-    ),
+    properties: state.properties.map((property) => {
+      if (property.tile !== tile) return property;
+      // A new owner, or the bank, restores power and drops the shield.
+      const { powerCutUntilLap: _cut, shielded: _shield, ...rest } = property;
+      return { ...rest, owner, level: owner === null ? 0 : property.level };
+    }),
     players: state.players.map((player) => ({
       ...player,
       properties:
@@ -225,7 +226,9 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
           ...player,
           heldCards:
             event.kept &&
-            (event.card === "Guardian Angel" || event.card === "Coupon")
+            (event.card === "Guardian Angel" ||
+              event.card === "Coupon" ||
+              event.card === "Escape")
               ? [...player.heldCards, event.card]
               : player.heldCards,
         })),
@@ -242,6 +245,29 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
         properties: state.properties.map((property) =>
           property.tile === event.tile
             ? { ...property, level: event.level }
+            : property,
+        ),
+      };
+    case "ShieldRaised":
+    case "ShieldBroken":
+      return {
+        ...state,
+        properties: state.properties.map((property) => {
+          if (property.tile !== event.tile) return property;
+          const { shielded: _shield, ...rest } = property;
+          return event.type === "ShieldRaised"
+            ? { ...rest, shielded: true }
+            : rest;
+        }),
+      };
+    case "PropertyGiven":
+      return changeOwner(state, event.tile, event.to);
+    case "PowerCut":
+      return {
+        ...state,
+        properties: state.properties.map((property) =>
+          property.tile === event.tile
+            ? { ...property, powerCutUntilLap: event.untilLap }
             : property,
         ),
       };

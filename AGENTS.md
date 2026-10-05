@@ -17,9 +17,10 @@ a stylized 3D board with juicy, choreographed animations.
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins (four-beach win optional, off) and
-> 120 minutes. New rooms (rules version 7) use the reference economy: its rent
+> 120 minutes. New rooms (rules version 10) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
-> championship, Hotels that cannot be bought out and no Landmark. Festivals are
+> championship, a retained island Escape card, a reworked 36-card Chance deck (half bad
+> cards), Hotels that cannot be bought out and no Landmark. Festivals are
 > cities only; saved version-4/5/6 rooms keep resort festivals. World Tour
 > reaches free properties and the traveller's own (version 5: own only when none
 > is free). Four resorts pay 200 k rent, and a bought-out city can be built on
@@ -249,6 +250,10 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - Money is integer units (no floats). Economy coefficients are integer percentages
   evaluated with integer math (`1.4 * 90` is `125.99999999999999` in JS); fractions
   of money round up for charges and down for payouts. Tile indices are `0..31`.
+- Use ASCII hyphen-minus (`-`) for minus signs, ranges and dashes in UI text and
+  formatting, including SVG text and code comments: write `- 100 k`, `1-6` and
+  `2-4 players`. Never use Unicode minus (U+2212), en dash (U+2013) or em dash
+  (U+2014).
 - Names: `PascalCase` components/classes, `camelCase` functions, `SCREAMING_SNAKE`
   constants, kebab-case filenames except React components (`PascalCase.tsx`).
 - Game tuning numbers live in `shared/board/*.ts` config, never inline in logic.
@@ -320,7 +325,7 @@ queue. `verify` is the one check to require: it fails if any job fails.
 
 | Job | What fails it |
 | --- | --- |
-| `lint` | CLAUDE.md lost `@AGENTS.md`; release version/changelog mismatch or altered dated base history; a PR/merge-queue version that does not exceed its base; a tag that does not match the package version; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
+| `lint` | CLAUDE.md lost `@AGENTS.md`; a Unicode minus, en dash or em dash in `src/`, `e2e/`, `tools/`, `test/`, `public/` or `index.html`; release version/changelog mismatch or altered dated base history; a PR/merge-queue version that does not exceed its base; a tag that does not match the package version; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
 | `typecheck` | `pnpm typecheck`, covering `src/`, `test/`, `e2e/` and `tools/` |
 | `test` | `pnpm test:version`, `pnpm test` or the quick bot simulation |
 | `build` | `vite build`, `pnpm check:bundle` (job summary shows the sizes), `wrangler deploy --dry-run` |

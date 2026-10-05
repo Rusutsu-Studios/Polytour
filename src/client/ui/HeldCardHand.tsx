@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import type { GameConfig, KeepCard } from "../../shared/engine/index.js";
 import { useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
+import CardArt from "./CardArt.js";
 import { cardName, describeChanceCard } from "./chance-display.js";
 import "./HeldCardHand.css";
 
@@ -53,7 +54,7 @@ export default function HeldCardHand({
           id={id}
           role="tooltip"
           className="held-preview"
-          data-card={open.card === "Coupon" ? "coupon" : "angel"}
+          data-card={open.card}
           style={{
             width: PREVIEW_WIDTH,
             left: Math.min(
@@ -78,13 +79,7 @@ export default function HeldCardHand({
           }
           transition={{ type: "spring", stiffness: 420, damping: 28 }}
         >
-          <img
-            src={`/cards/${face.art}.webp`}
-            alt=""
-            width="600"
-            height="400"
-            decoding="async"
-          />
+          <CardArt card={open.card} />
           <strong>{face.title}</strong>
           <span>{face.badge}</span>
           <p>{face.text}</p>
@@ -99,7 +94,7 @@ export default function HeldCardHand({
           key={card}
           type="button"
           className="held-mini"
-          data-card={card === "Coupon" ? "coupon" : "angel"}
+          data-card={card}
           aria-label={t(
             `Carte « ${cardName(card)} »`,
             `Card “${cardName(card)}”`,
@@ -109,6 +104,12 @@ export default function HeldCardHand({
           onPointerLeave={hide}
           onFocus={show(card)}
           onBlur={hide}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              hide();
+            }
+          }}
         />
       ))}
       {createPortal(preview, document.body)}
