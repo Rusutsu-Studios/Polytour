@@ -117,9 +117,13 @@
     background 150ms,
     transform 150ms;
 }
-.game-tool-button:hover {
+.game-tool-button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fffaf0;
   transform: translateY(-1px);
+}
+.game-tool-button:is(:disabled, [aria-disabled="true"]) {
+  opacity: 0.45;
+  cursor: default;
 }
 .game-tool-button[aria-expanded="true"] {
   background: #fffaf0;
@@ -1604,7 +1608,8 @@ input::placeholder {
 .invitation-entry .welcome-world {
   grid-template-rows: minmax(0, 1fr);
 }
-.welcome-board-preview > div:not(.flat-board) {
+.welcome-board-preview > .canvas-layer,
+.welcome-board-preview > .scene-loading {
   height: 100%;
 }
 .welcome-quick-settings {

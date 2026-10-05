@@ -1,8 +1,15 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
-import { frameBoard, initializeBoardCamera } from "./board-framing.js";
-import { LOT_TOP, tilePoint } from "./board-layout.js";
+import {
+  boardScreenHit,
+  boardViewRotation,
+  DEFAULT_BOARD_ORIENTATION,
+  frameBoard,
+  initializeBoardCamera,
+  rotateBoardOrientation,
+} from "./board-framing.js";
+import { BOARD_HALF, LAWN_TOP, LOT_TOP, tilePoint } from "./board-layout.js";
 
 const SIZES = [
   [1280, 720],
@@ -42,6 +49,60 @@ describe("player board framing", () => {
     expect(camera.position.equals(position)).toBe(true);
     expect(camera.quaternion.equals(quaternion)).toBe(true);
     expect(camera.zoom).toBe(1.8);
+  });
+  it("turns gently and bounds pitch without accumulating full turns", () => {
+    const gentle = rotateBoardOrientation(DEFAULT_BOARD_ORIENTATION, 120, 60);
+    expect(gentle.yaw).toBeGreaterThan(0);
+    expect(gentle.yaw).toBeLessThan(Math.PI / 9);
+    expect(gentle.pitch).toBeCloseTo(0.09);
+    const far = rotateBoardOrientation(gentle, 100_000, 100_000);
+    expect(Math.abs(far.yaw)).toBeLessThanOrEqual(Math.PI);
+    expect(far.pitch).toBe(0.18);
+    expect(rotateBoardOrientation(far, -100_000, -100_000).pitch).toBe(-0.18);
+  });
+
+  it("raycasts the actual rotated board center, tiles and edges, excluding empty backdrop", () => {
+    const width = 1440;
+    const height = 900;
+    const camera = initializeBoardCamera(new THREE.OrthographicCamera());
+    for (const orientation of [
+      DEFAULT_BOARD_ORIENTATION,
+      { yaw: 0.6, pitch: 0.12 },
+    ]) {
+      const rotation = boardViewRotation(orientation);
+      frameBoard(camera, width, height, false, 1, undefined, 1, rotation);
+      const [tileX, tileZ] = tilePoint(1, 0, 0.3);
+      for (const local of [
+        new THREE.Vector3(0, LOT_TOP, 0),
+        new THREE.Vector3(tileX, LOT_TOP, tileZ),
+        new THREE.Vector3(BOARD_HALF - 0.01, LOT_TOP, 0),
+      ]) {
+        const point = local.applyQuaternion(rotation).project(camera);
+        expect(
+          boardScreenHit(
+            camera,
+            width,
+            height,
+            ((point.x + 1) * width) / 2,
+            ((1 - point.y) * height) / 2,
+            rotation,
+          ),
+        ).toBe(true);
+      }
+      expect(boardScreenHit(camera, width, height, 10, 10, rotation)).toBe(
+        false,
+      );
+      expect(
+        boardScreenHit(
+          camera,
+          width,
+          height,
+          width - 10,
+          height - 10,
+          rotation,
+        ),
+      ).toBe(false);
+    }
   });
   for (const [width, height] of SIZES) {
     for (const zoom of [BOARD_ZOOM.min, BOARD_ZOOM.default]) {
@@ -120,6 +181,83 @@ describe("player board framing", () => {
       }
     });
 
+    it(`fits rotated previews and aligns sale quotes and the Roll anchor at ${width}x${height}`, () => {
+      for (const orientation of [
+        { yaw: 0.7, pitch: 0.18 },
+        { yaw: -1.4, pitch: -0.18 },
+      ]) {
+        const rotation = boardViewRotation(orientation);
+        const group = new THREE.Group();
+        group.quaternion.copy(rotation);
+        group.updateMatrixWorld();
+        for (const preview of [false, true]) {
+          const camera = initializeBoardCamera(new THREE.OrthographicCamera());
+          const { bounds, insets } = frameBoard(
+            camera,
+            width,
+            height,
+            preview,
+            1,
+            undefined,
+            1,
+            rotation,
+          );
+          const lower = screen(
+            camera,
+            bounds.min.x,
+            bounds.min.y,
+            width,
+            height,
+          );
+          const upper = screen(
+            camera,
+            bounds.max.x,
+            bounds.max.y,
+            width,
+            height,
+          );
+          expect(lower.x).toBeGreaterThanOrEqual(insets.side - 0.001);
+          expect(upper.x).toBeLessThanOrEqual(width - insets.side + 0.001);
+          expect(upper.y).toBeGreaterThanOrEqual(insets.top - 0.001);
+          expect(lower.y).toBeLessThanOrEqual(height - insets.bottom + 0.001);
+          if (preview)
+            expect(
+              Math.max(
+                (upper.x - lower.x) / width,
+                (lower.y - upper.y) / height,
+              ),
+            ).toBeGreaterThan(0.9);
+        }
+        for (const zoom of [BOARD_ZOOM.min, BOARD_ZOOM.max]) {
+          const sceneCamera = initializeBoardCamera(
+            new THREE.OrthographicCamera(),
+          );
+          const labelCamera = initializeBoardCamera(
+            new THREE.OrthographicCamera(),
+          );
+          const pan = { x: -1.5, y: 1.2 };
+          frameBoard(sceneCamera, width, height, false, zoom, pan, 1, rotation);
+          frameBoard(labelCamera, width, height, false, zoom, pan, 1, rotation);
+          const points = Array.from({ length: 32 }, (_, tile) => {
+            const [x, z] = tilePoint(tile, 0, 0.3);
+            return new THREE.Vector3(x, LOT_TOP + 0.08, z);
+          });
+          points.push(new THREE.Vector3(1.05, LAWN_TOP, 1.05));
+          for (const point of points) {
+            const scene = point
+              .clone()
+              .applyMatrix4(group.matrixWorld)
+              .project(sceneCamera);
+            const overlay = point
+              .clone()
+              .applyQuaternion(rotation)
+              .project(labelCamera);
+            expect(overlay.x).toBeCloseTo(scene.x, 12);
+            expect(overlay.y).toBeCloseTo(scene.y, 12);
+          }
+        }
+      }
+    });
     it(`keeps forced-sale quotes on their scene lots through zoom and pan at ${width}x${height}`, () => {
       for (const zoom of [BOARD_ZOOM.min, BOARD_ZOOM.max]) {
         const sceneCamera = new THREE.OrthographicCamera(

@@ -40,7 +40,11 @@ import {
 import "./BoardScene.css";
 import { useAmbientMotion } from "./ambient.js";
 import {
+  type BoardOrientation,
   type BoardPan,
+  boardScreenHit,
+  boardViewRotation,
+  DEFAULT_BOARD_ORIENTATION,
   frameBoard,
   initializeBoardCamera,
 } from "./board-framing.js";
@@ -89,6 +93,8 @@ import { Downtown, type DowntownHandle } from "./Downtown.js";
 import { BeachUmbrella, Landmarks } from "./Landmarks.js";
 import { useBoardView } from "./use-board-view.js";
 
+const DEFAULT_BOARD_ROTATION = new THREE.Quaternion();
+type BoardHitTest = (x: number, y: number) => boolean;
 type BoardProps = {
   state: PublicState | null;
   /** Frozen room rules for a lobby preview before the first game snapshot. */
@@ -105,6 +111,9 @@ type BoardProps = {
   onZoom?: (zoom: number) => void;
   viewResetKey?: number;
   interactiveZoom?: boolean;
+  viewLocked?: boolean;
+  rotation?: THREE.Quaternion;
+  onBoardHitTest?: (test: BoardHitTest) => void;
   onWebGlAvailableChange?: (available: boolean) => void;
   pan?: BoardPan;
   lowGraphics?: boolean;
@@ -1531,7 +1540,8 @@ function interfaceZoom() {
 }
 
 function SceneContent(props: BoardProps) {
-  const { state, preview, zoom = 1, pan, onRollAnchor } = props;
+  const { state, preview, zoom = 1, pan, onRollAnchor, onBoardHitTest } = props;
+  const rotation = props.rotation ?? DEFAULT_BOARD_ROTATION;
   const boardConfig = state?.config ?? props.config;
   const rule = boardConfig ? boardRule(boardConfig) : "country";
   const chosen =
@@ -1608,9 +1618,12 @@ function SceneContent(props: BoardProps) {
         zoom,
         pan,
         interfaceZoom(),
+        rotation,
       );
     if (onRollAnchor) {
-      const spot = new THREE.Vector3(...ROLL_SPOT).project(camera);
+      const spot = new THREE.Vector3(...ROLL_SPOT)
+        .applyQuaternion(rotation)
+        .project(camera);
       onRollAnchor({
         x: ((spot.x + 1) / 2) * size.width,
         y: ((1 - spot.y) / 2) * size.height,
@@ -1624,11 +1637,27 @@ function SceneContent(props: BoardProps) {
     viewport.dpr,
     zoom,
     pan,
+    rotation,
     preview,
     invalidate,
     onRollAnchor,
   ]);
 
+  useEffect(() => {
+    if (!onBoardHitTest) return;
+    onBoardHitTest((x, y) => {
+      const bounds = gl.domElement.getBoundingClientRect();
+      return boardScreenHit(
+        camera,
+        bounds.width,
+        bounds.height,
+        x - bounds.left,
+        y - bounds.top,
+        rotation,
+      );
+    });
+    return () => onBoardHitTest(() => false);
+  }, [camera, gl, onBoardHitTest, rotation]);
   useEffect(() => {
     if (preview) return;
     let propertyEffectGeneration = 0;
@@ -2435,155 +2464,157 @@ function SceneContent(props: BoardProps) {
         shadow-normalBias={0.035}
         shadow-radius={3}
       />
-      <BoardBase
-        boardRule={rule}
-        onRendered={() => {
-          if (rendered.current) return;
-          rendered.current = true;
-          gl.domElement.dataset.sceneReady = "true";
-          gl.domElement
-            .closest(".canvas-layer")
-            ?.setAttribute("data-scene-ready", "true");
-        }}
-      />
-      {!preview && state && <CashReserves state={state} />}
-      {!preview &&
-        state &&
-        KEEP_CARDS.map((card) => (
-          <HeldCards key={card} state={state} card={card} />
-        ))}
-      <BoardTiles {...props} />
-      <TileFocus {...props} />
-      {!preview && props.targets && (
-        <PickHighlights
-          key={props.pickKey}
-          targets={props.targets}
-          picked={
-            chosen != null && props.targets.includes(chosen) ? chosen : null
-          }
-          color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
+      <group name="board-user-view" quaternion={rotation}>
+        <BoardBase
+          boardRule={rule}
+          onRendered={() => {
+            if (rendered.current) return;
+            rendered.current = true;
+            gl.domElement.dataset.sceneReady = "true";
+            gl.domElement
+              .closest(".canvas-layer")
+              ?.setAttribute("data-scene-ready", "true");
+          }}
+        />
+        {!preview && state && <CashReserves state={state} />}
+        {!preview &&
+          state &&
+          KEEP_CARDS.map((card) => (
+            <HeldCards key={card} state={state} card={card} />
+          ))}
+        <BoardTiles {...props} />
+        <TileFocus {...props} />
+        {!preview && props.targets && (
+          <PickHighlights
+            key={props.pickKey}
+            targets={props.targets}
+            picked={
+              chosen != null && props.targets.includes(chosen) ? chosen : null
+            }
+            color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
+            lowGraphics={props.lowGraphics}
+          />
+        )}
+        <Towns
+          state={state}
+          config={boardConfig}
+          preview={preview}
+          handle={towns}
+        />
+        <Downtown
+          state={state}
+          config={boardConfig}
+          preview={preview}
+          animated={ambient}
+          handle={downtown}
+        />
+        <ResortProps boardRule={rule} />
+        <FestivalMarkers state={state} />
+        {!preview && <ShieldMarkers state={state} />}
+        <Landmarks
+          boardRule={rule}
+          state={state}
+          animated={ambient}
           lowGraphics={props.lowGraphics}
         />
-      )}
-      <Towns
-        state={state}
-        config={boardConfig}
-        preview={preview}
-        handle={towns}
-      />
-      <Downtown
-        state={state}
-        config={boardConfig}
-        preview={preview}
-        animated={ambient}
-        handle={downtown}
-      />
-      <ResortProps boardRule={rule} />
-      <FestivalMarkers state={state} />
-      {!preview && <ShieldMarkers state={state} />}
-      <Landmarks
-        boardRule={rule}
-        state={state}
-        animated={ambient}
-        lowGraphics={props.lowGraphics}
-      />
-      {(state && !preview
-        ? state.players.map((player) => player.seat)
-        : ([0, 1, 2, 3] as const)
-      ).map((seat) => (
-        <Pawn
-          key={seat}
-          seat={seat}
-          active={
-            !preview &&
-            state?.status === "active" &&
-            (state.pending?.seat ?? state.activeSeat) === seat
-          }
-          groupRef={(group) => {
-            pawns.current[seat] = group;
-          }}
-        />
-      ))}
-      {DIE_REST.map((position, index) => (
-        <Die
-          key={position.join(",")}
-          position={position}
-          geometry={dieGeometry}
-          groupRef={(group) => {
-            dice.current[index] = group;
-          }}
-          materialRef={(material) => {
-            diceMaterials.current[index] = material;
-          }}
-        />
-      ))}
-      <sprite
-        ref={score}
-        visible={false}
-        position={[0, DIE_REST_Y + 1.15, 0]}
-        scale={[0.7, 0.7, 1]}
-        renderOrder={5}
-      >
-        <spriteMaterial depthTest={false} transparent toneMapped={false} />
-      </sprite>
-      <mesh
-        ref={destination}
-        visible={false}
-        geometry={destinationOutlines.lot}
-        renderOrder={2}
-      >
-        <meshBasicMaterial color="#e8a321" toneMapped={false} />
-      </mesh>
-      <sprite ref={gain} visible={false} renderOrder={6}>
-        <spriteMaterial depthTest={false} transparent toneMapped={false} />
-      </sprite>
-      <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.42, 0.5, 28]} />
-        <meshBasicMaterial
-          color="#ffda72"
-          transparent
-          opacity={0.85}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-      <instancedMesh
-        ref={sparks}
-        visible={false}
-        args={[undefined, undefined, 8]}
-        frustumCulled={false}
-      >
-        <boxGeometry />
-        <meshBasicMaterial color="#ffcf59" toneMapped={false} />
-      </instancedMesh>
-      <group ref={cashFlight} visible={false}>
-        <instancedMesh
-          ref={cashNotes}
-          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
-          frustumCulled={false}
-          castShadow
+        {(state && !preview
+          ? state.players.map((player) => player.seat)
+          : ([0, 1, 2, 3] as const)
+        ).map((seat) => (
+          <Pawn
+            key={seat}
+            seat={seat}
+            active={
+              !preview &&
+              state?.status === "active" &&
+              (state.pending?.seat ?? state.activeSeat) === seat
+            }
+            groupRef={(group) => {
+              pawns.current[seat] = group;
+            }}
+          />
+        ))}
+        {DIE_REST.map((position, index) => (
+          <Die
+            key={position.join(",")}
+            position={position}
+            geometry={dieGeometry}
+            groupRef={(group) => {
+              dice.current[index] = group;
+            }}
+            materialRef={(material) => {
+              diceMaterials.current[index] = material;
+            }}
+          />
+        ))}
+        <sprite
+          ref={score}
+          visible={false}
+          position={[0, DIE_REST_Y + 1.15, 0]}
+          scale={[0.7, 0.7, 1]}
+          renderOrder={5}
         >
-          <boxGeometry args={[0.94, 0.12, 0.48]} />
-          <meshStandardMaterial color="#dae4bd" roughness={0.85} />
-        </instancedMesh>
+          <spriteMaterial depthTest={false} transparent toneMapped={false} />
+        </sprite>
+        <mesh
+          ref={destination}
+          visible={false}
+          geometry={destinationOutlines.lot}
+          renderOrder={2}
+        >
+          <meshBasicMaterial color="#e8a321" toneMapped={false} />
+        </mesh>
+        <sprite ref={gain} visible={false} renderOrder={6}>
+          <spriteMaterial depthTest={false} transparent toneMapped={false} />
+        </sprite>
+        <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.42, 0.5, 28]} />
+          <meshBasicMaterial
+            color="#ffda72"
+            transparent
+            opacity={0.85}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
         <instancedMesh
-          ref={cashFaces}
-          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+          ref={sparks}
+          visible={false}
+          args={[undefined, undefined, 8]}
           frustumCulled={false}
         >
-          <boxGeometry args={[0.95, 0.012, 0.49]} />
-          <meshStandardMaterial map={cashTexture} roughness={0.9} />
+          <boxGeometry />
+          <meshBasicMaterial color="#ffcf59" toneMapped={false} />
         </instancedMesh>
-        <instancedMesh
-          ref={cashBands}
-          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
-          frustumCulled={false}
-        >
-          <boxGeometry args={[0.16, 0.145, 0.51]} />
-          <meshStandardMaterial roughness={0.7} />
-        </instancedMesh>
+        <group ref={cashFlight} visible={false}>
+          <instancedMesh
+            ref={cashNotes}
+            args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+            frustumCulled={false}
+            castShadow
+          >
+            <boxGeometry args={[0.94, 0.12, 0.48]} />
+            <meshStandardMaterial color="#dae4bd" roughness={0.85} />
+          </instancedMesh>
+          <instancedMesh
+            ref={cashFaces}
+            args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+            frustumCulled={false}
+          >
+            <boxGeometry args={[0.95, 0.012, 0.49]} />
+            <meshStandardMaterial map={cashTexture} roughness={0.9} />
+          </instancedMesh>
+          <instancedMesh
+            ref={cashBands}
+            args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+            frustumCulled={false}
+          >
+            <boxGeometry args={[0.16, 0.145, 0.51]} />
+            <meshStandardMaterial roughness={0.7} />
+          </instancedMesh>
+        </group>
+        <FrameMonitor />
       </group>
-      <FrameMonitor />
     </>
   );
 }
@@ -2613,6 +2644,7 @@ function SaleLabels({
   saleBlocked,
   zoom = 1,
   pan,
+  rotation = DEFAULT_BOARD_ROTATION,
   width,
   height,
 }: BoardProps & { width: number; height: number }) {
@@ -2620,9 +2652,18 @@ function SaleLabels({
   const targets = saleTargets(state, saleSeat);
   const camera = useMemo(() => {
     const value = initializeBoardCamera(new THREE.OrthographicCamera());
-    frameBoard(value, width, height, false, zoom, pan, interfaceZoom());
+    frameBoard(
+      value,
+      width,
+      height,
+      false,
+      zoom,
+      pan,
+      interfaceZoom(),
+      rotation,
+    );
     return value;
-  }, [width, height, zoom, pan]);
+  }, [width, height, zoom, pan, rotation]);
   if (!state || !targets.length || !width || !height) return null;
   return (
     <fieldset
@@ -2634,7 +2675,9 @@ function SaleLabels({
     >
       {targets.map((tile) => {
         const [x, z] = tilePoint(tile, 0, 0.3);
-        const point = new THREE.Vector3(x, LOT_TOP + 0.08, z).project(camera);
+        const point = new THREE.Vector3(x, LOT_TOP + 0.08, z)
+          .applyQuaternion(rotation)
+          .project(camera);
         const amount = money(propertyRefund(state, tile));
         const chosen = tile === selected;
         return (
@@ -2671,6 +2714,18 @@ export default function BoardScene(props: BoardProps) {
   const config = props.state?.config ?? props.config;
   const layer = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [orientation, setOrientation] = useState<BoardOrientation>(
+    DEFAULT_BOARD_ORIENTATION,
+  );
+  const rotation = useMemo(() => boardViewRotation(orientation), [orientation]);
+  const hitTest = useRef<BoardHitTest>(() => false);
+  const setHitTest = useCallback((test: BoardHitTest) => {
+    hitTest.current = test;
+  }, []);
+  const canStartGesture = useCallback(
+    (x: number, y: number) => hitTest.current(x, y),
+    [],
+  );
   const zoom = clampBoardZoom(props.zoom ?? 1);
   const framing = useMemo(
     () =>
@@ -2682,21 +2737,36 @@ export default function BoardScene(props: BoardProps) {
         zoom,
         undefined,
         interfaceZoom(),
+        rotation,
       ),
-    [size.width, size.height, props.preview, zoom],
+    [size.width, size.height, props.preview, zoom, rotation],
   );
   const pan = useBoardView({
     layer,
     enabled: Boolean(
-      props.interactiveZoom && !props.preview && size.width && size.height,
+      props.interactiveZoom &&
+        !props.preview &&
+        !props.viewLocked &&
+        size.width &&
+        size.height,
     ),
     zoom,
     onZoom: props.onZoom,
     resetKey: props.viewResetKey,
     limits: framing.limits,
     unitsPerPixel: framing.unitsPerPixel,
+    orientation,
+    onOrientation: setOrientation,
+    canStartGesture,
   });
-  const resolvedProps = { ...props, zoom, pan, targets: choiceTargets(props) };
+  const resolvedProps = {
+    ...props,
+    zoom,
+    pan,
+    rotation,
+    onBoardHitTest: setHitTest,
+    targets: choiceTargets(props),
+  };
   useEffect(() => {
     const element = layer.current;
     if (!element) return;
@@ -2716,9 +2786,14 @@ export default function BoardScene(props: BoardProps) {
       aria-label={t("Plateau de jeu", "Game board")}
       tabIndex={props.interactiveZoom ? 0 : undefined}
       data-board-zoom={zoom}
+      data-board-yaw={orientation.yaw}
+      data-board-pitch={orientation.pitch}
+      data-board-view-locked={Boolean(props.viewLocked)}
       data-board-pan-x={pan.x}
       data-board-pan-y={pan.y}
-      data-interactive-zoom={Boolean(props.interactiveZoom && !props.preview)}
+      data-interactive-zoom={Boolean(
+        props.interactiveZoom && !props.preview && !props.viewLocked,
+      )}
       data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
       data-low-graphics={Boolean(props.lowGraphics)}

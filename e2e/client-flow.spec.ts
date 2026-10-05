@@ -5,7 +5,7 @@ import type {
   Seat,
 } from "../src/shared/engine/index.js";
 import { APP_VERSION } from "../src/shared/version.js";
-import { clickBoardSpace } from "./board-interactions.js";
+import { boardScreenPoint, clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 import { chooseLanguage } from "./language.js";
 
@@ -362,7 +362,18 @@ test.describe("low graphics", () => {
     await expect(
       page.getByRole("button", { name: "Menu pause", exact: true }),
     ).toBeFocused();
+    const center = await boardScreenPoint(page, { x: 0, y: 0.3, z: 0 });
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 80, center.y + 20, { steps: 8 });
+    await page.mouse.up();
+    const yaw = await scene.getAttribute("data-board-yaw");
+    expect(Number(yaw)).not.toBe(0);
+    await page.screenshot({
+      path: ".local/verification/board-view-real-roll-1440.png",
+    });
     await roll.click();
+    await expect(scene).toHaveAttribute("data-board-yaw", yaw ?? "");
     await expect
       .poll(
         () =>

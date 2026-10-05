@@ -89,10 +89,37 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
     .click();
   await expect(page.locator(".room-tool-code")).toContainText("Code hidden");
   await expect(page.locator("body")).not.toContainText(roomCode);
-  await toggle.click();
-  await expect(page.locator(".room-tool-code")).toContainText(roomCode);
-  await toggle.click();
-  await expect(page.locator(".room-tool-code")).toContainText("Code hidden");
+  await expect(
+    page
+      .locator(".game-tools")
+      .getByRole("button", { name: "Streamer mode", exact: true }),
+  ).toHaveCount(0);
+  for (const enabled of [false, true]) {
+    await page.getByRole("button", { name: "Pause menu", exact: true }).click();
+    await page
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Settings", exact: true })
+      .click();
+    const setting = page
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Streamer mode", exact: true });
+    await setting.click();
+    await expect(setting).toHaveAttribute("aria-pressed", String(enabled));
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", { name: "Invite players", exact: true })
+      .click();
+    await expect(page.locator(".room-tool-code")).toContainText(
+      enabled ? "Code hidden" : roomCode,
+    );
+    if (enabled) {
+      expect(new URL(page.url()).searchParams.has("room")).toBe(false);
+      expect(
+        await page.locator("body").evaluate((body) => body.outerHTML),
+      ).not.toContain(roomCode);
+    }
+  }
 });
 
 test("streamer invitations keep the code out of markup and the address bar", async ({

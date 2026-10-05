@@ -23,19 +23,22 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   between the top tools and the bottom choice; any future action shot must
   return to that frame and preserve access to the current decision. Geometry
   lives in `client/scene/board-layout.ts` and its orientation is unit-tested.
-- **Player view:** Pause > Video sets a local board zoom from 80% to 200%, in
-  10% steps, saved for this browser. During a match, the board also accepts wheel
-  zoom, +/- keys, drag to pan and touch pinch. These inputs stay on the board:
-  dialogs, HUD controls and text fields keep their own mouse and keyboard input.
-  Recentrer / Reset view (or 0) restores 100% and clears the user's pan, including
-  when the zoom was already 100%. Lobby previews accept only the Video controls;
-  the accessible flat-board fallback keeps these controls unavailable.
+- **Player view:** Video sets local board zoom from 80% to 200% in 10% steps,
+  saved for this browser. In a match, wheel, +/- keys and touch pinch zoom the
+  view. A left-button grab on the board's tiles, center or edges rotates gently
+  after an 8px threshold; Shift-drag pans within the framing bounds. A simple
+  click still inspects or chooses a tile. Empty background and floating controls,
+  including the Roll button and sale quotes, never start a grab.
+  Reset board view in the game toolbar, Default view in Video (or 0 while unlocked)
+  restores 100%, the initial orientation and centered pan. Lock board view is
+  saved locally and blocks gestures, keyboard shortcuts and Video zoom controls;
+  the two reset buttons remain usable. Lobby previews use only Video controls.
+  The accessible flat-board fallback keeps camera controls unavailable.
   Input applies immediately without smoothing, including reduced motion.
-  The Director never writes the user preference: future camera moves apply this
-  multiplier after their base framing and preserve the user pan. The view composes
-  with camera choreography;
-  adjusting or resetting the view never cancels an event animation, advances the
-  event queue, changes a shared rule or sends a server intent.
+  The Director never writes this preference or the user's board transform.
+  Framing, sale quotes and the floating Roll anchor share the same local transform
+  and projection. View changes never cancel an event animation, advance the
+  event queue, change a shared rule or send a server intent.
 - **Lighting:** one warm key light with soft shadows (or baked + `ContactShadows`),
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),

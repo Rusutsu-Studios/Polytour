@@ -1,9 +1,13 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 import {
+  BOARD_DRAG_THRESHOLD,
+  type BoardOrientation,
   type BoardPan,
   CENTERED_BOARD,
   clampBoardPan,
+  DEFAULT_BOARD_ORIENTATION,
+  rotateBoardOrientation,
 } from "./board-framing.js";
 
 /** User gestures change only framing; game animation remains with the Director. */
@@ -15,6 +19,9 @@ export function useBoardView({
   resetKey,
   limits,
   unitsPerPixel,
+  orientation,
+  onOrientation,
+  canStartGesture,
 }: {
   layer: RefObject<HTMLElement | null>;
   enabled: boolean;
@@ -23,15 +30,39 @@ export function useBoardView({
   resetKey?: number;
   limits: BoardPan;
   unitsPerPixel: number;
+  orientation: BoardOrientation;
+  onOrientation: (orientation: BoardOrientation) => void;
+  canStartGesture: (x: number, y: number) => boolean;
 }) {
   const [pan, setPan] = useState(CENTERED_BOARD);
-  const latest = useRef({ enabled, zoom, onZoom, limits, unitsPerPixel });
-  latest.current = { enabled, zoom, onZoom, limits, unitsPerPixel };
+  const latest = useRef({
+    enabled,
+    zoom,
+    onZoom,
+    limits,
+    unitsPerPixel,
+    orientation,
+    onOrientation,
+    canStartGesture,
+  });
+  latest.current = {
+    enabled,
+    zoom,
+    onZoom,
+    limits,
+    unitsPerPixel,
+    orientation,
+    onOrientation,
+    canStartGesture,
+  };
   const effectivePan = useMemo(() => clampBoardPan(pan, limits), [pan, limits]);
 
-  // A menu reset also recenters a previously dragged board.
+  // Menu reset works even while direct gestures are locked.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key deliberately requests a fresh centered view.
-  useEffect(() => setPan(CENTERED_BOARD), [resetKey]);
+  useEffect(() => {
+    setPan(CENTERED_BOARD);
+    onOrientation(DEFAULT_BOARD_ORIENTATION);
+  }, [resetKey, onOrientation]);
   useEffect(() => {
     setPan((value) => {
       const next = clampBoardPan(value, limits);
@@ -46,6 +77,7 @@ export function useBoardView({
     let start = CENTERED_BOARD;
     let last = CENTERED_BOARD;
     let dragged = false;
+    let panGesture = false;
     let hovered = false;
     let pinch: { distance: number; zoom: number } | null = null;
     const active = () =>
@@ -55,6 +87,9 @@ export function useBoardView({
           "dialog[open], [role='dialog'], [role='alertdialog']",
         ),
       ).some((dialog) => dialog.getClientRects().length > 0);
+    const onBoard = (event: PointerEvent | WheelEvent) =>
+      event.target instanceof HTMLCanvasElement &&
+      latest.current.canStartGesture(event.clientX, event.clientY);
     const changeZoom = (value: number) => {
       const next = clampBoardZoom(value);
       latest.current.onZoom?.(next);
@@ -73,16 +108,24 @@ export function useBoardView({
       }
     };
     const down = (event: PointerEvent) => {
-      if (!active() || event.button !== 0 || event.ctrlKey || event.metaKey)
+      if (pointers.size === 0) dragged = false;
+      if (
+        !active() ||
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        !onBoard(event)
+      )
         return;
-      // Preserve the existing focus target when a tile opens its inspection.
-      if (event.target instanceof HTMLCanvasElement) event.preventDefault();
+      // A plain tile click preserves the tool focus restored after inspection.
+      event.preventDefault();
       const point = { x: event.clientX, y: event.clientY };
       pointers.set(event.pointerId, point);
       if (pointers.size === 1) {
         start = point;
         last = point;
         dragged = false;
+        panGesture = event.shiftKey;
         element.dataset.boardDragging = "false";
       } else if (pointers.size === 2) {
         dragged = true;
@@ -95,10 +138,14 @@ export function useBoardView({
       }
     };
     const move = (event: PointerEvent) => {
-      if (!pointers.has(event.pointerId)) return;
+      if (!pointers.has(event.pointerId)) {
+        hovered = onBoard(event);
+        return;
+      }
       if (!active()) {
         pointers.clear();
         pinch = null;
+        element.dataset.boardDragging = "false";
         return;
       }
       const point = { x: event.clientX, y: event.clientY };
@@ -108,24 +155,43 @@ export function useBoardView({
         event.preventDefault();
         return;
       }
-      if (!dragged && Math.hypot(point.x - start.x, point.y - start.y) >= 5) {
+      if (
+        !dragged &&
+        Math.hypot(point.x - start.x, point.y - start.y) >= BOARD_DRAG_THRESHOLD
+      ) {
         element.focus({ preventScroll: true });
         dragged = true;
         element.dataset.boardDragging = "true";
         capture(event.pointerId);
       }
       if (dragged) {
-        const { unitsPerPixel: units, limits: bounds } = latest.current;
-        const dx = (point.x - last.x) * units;
-        const dy = -(point.y - last.y) * units;
-        setPan((value) =>
-          clampBoardPan({ x: value.x + dx, y: value.y + dy }, bounds),
-        );
+        const dx = point.x - last.x;
+        const dy = point.y - last.y;
+        if (panGesture) {
+          const { unitsPerPixel: units, limits: bounds } = latest.current;
+          setPan((value) =>
+            clampBoardPan(
+              { x: value.x + dx * units, y: value.y - dy * units },
+              bounds,
+            ),
+          );
+        } else {
+          const next = rotateBoardOrientation(
+            latest.current.orientation,
+            dx,
+            dy,
+          );
+          latest.current.orientation = next;
+          latest.current.onOrientation(next);
+        }
         event.preventDefault();
       }
       last = point;
     };
     const up = (event: PointerEvent) => {
+      // Transferring implicit canvas capture must not end an active touch.
+      if (event.type === "lostpointercapture" && event.target !== element)
+        return;
       pointers.delete(event.pointerId);
       if (element.hasPointerCapture(event.pointerId))
         element.releasePointerCapture(event.pointerId);
@@ -136,12 +202,17 @@ export function useBoardView({
     };
     const click = (event: MouseEvent) => {
       if (!dragged || event.detail === 0) return;
-      // Includes R3F tile clicks and the DOM quotes over forced-sale lots.
       event.preventDefault();
       event.stopImmediatePropagation();
     };
     const wheel = (event: WheelEvent) => {
-      if (!active() || event.ctrlKey || event.metaKey || event.deltaY === 0)
+      if (
+        !active() ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.deltaY === 0 ||
+        !onBoard(event)
+      )
         return;
       event.preventDefault();
       changeZoom(
@@ -163,20 +234,17 @@ export function useBoardView({
       )
         return;
       const focus = document.activeElement;
-      if (!element.contains(focus) && !(hovered && focus === document.body))
-        return;
-      if (event.key === "+" || event.key === "=") {
+      if (focus !== element && !(hovered && focus === document.body)) return;
+      if (event.key === "+" || event.key === "=")
         changeZoom(latest.current.zoom + BOARD_ZOOM.step);
-      } else if (event.key === "-") {
+      else if (event.key === "-")
         changeZoom(latest.current.zoom - BOARD_ZOOM.step);
-      } else if (event.key === "0") {
+      else if (event.key === "0") {
         changeZoom(BOARD_ZOOM.default);
         setPan(CENTERED_BOARD);
+        latest.current.onOrientation(DEFAULT_BOARD_ORIENTATION);
       } else return;
       event.preventDefault();
-    };
-    const enter = () => {
-      hovered = true;
     };
     const leave = () => {
       hovered = false;
@@ -188,7 +256,6 @@ export function useBoardView({
     element.addEventListener("lostpointercapture", up, true);
     element.addEventListener("click", click, true);
     element.addEventListener("wheel", wheel, { passive: false });
-    element.addEventListener("pointerenter", enter);
     element.addEventListener("pointerleave", leave);
     window.addEventListener("keydown", keydown);
     return () => {
@@ -200,7 +267,6 @@ export function useBoardView({
       element.removeEventListener("lostpointercapture", up, true);
       element.removeEventListener("click", click, true);
       element.removeEventListener("wheel", wheel);
-      element.removeEventListener("pointerenter", enter);
       element.removeEventListener("pointerleave", leave);
       window.removeEventListener("keydown", keydown);
     };

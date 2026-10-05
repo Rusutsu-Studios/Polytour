@@ -11,6 +11,73 @@ import {
 } from "./board-layout.js";
 import { LANDMARK_PEAKS } from "./Landmarks.js";
 
+export type BoardOrientation = { yaw: number; pitch: number };
+export const DEFAULT_BOARD_ORIENTATION: BoardOrientation = { yaw: 0, pitch: 0 };
+export const BOARD_DRAG_THRESHOLD = 8;
+const YAW_PER_PIXEL = 0.0025;
+const PITCH_PER_PIXEL = 0.0015;
+const MAX_PITCH = 0.18;
+const SCREEN_RIGHT = new THREE.Vector3(1, 0, -1).normalize();
+
+/** Keep a gentle, readable tabletop angle while allowing a full turn. */
+export function rotateBoardOrientation(
+  orientation: BoardOrientation,
+  dx: number,
+  dy: number,
+): BoardOrientation {
+  const fullTurn = Math.PI * 2;
+  return {
+    yaw:
+      ((((orientation.yaw + dx * YAW_PER_PIXEL + Math.PI) % fullTurn) +
+        fullTurn) %
+        fullTurn) -
+      Math.PI,
+    pitch: THREE.MathUtils.clamp(
+      orientation.pitch + dy * PITCH_PER_PIXEL,
+      -MAX_PITCH,
+      MAX_PITCH,
+    ),
+  };
+}
+
+/** Local board rotation composes with, and never replaces, the camera pose. */
+export function boardViewRotation(
+  orientation: BoardOrientation,
+): THREE.Quaternion {
+  const yaw = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    orientation.yaw,
+  );
+  return new THREE.Quaternion()
+    .setFromAxisAngle(SCREEN_RIGHT, orientation.pitch)
+    .multiply(yaw);
+}
+
+export function boardScreenHit(
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  rotation: THREE.Quaternion,
+): boolean {
+  if (!width || !height) return false;
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(
+    new THREE.Vector2((x / width) * 2 - 1, 1 - (y / height) * 2),
+    camera,
+  );
+  const inverse = new THREE.Matrix4()
+    .makeRotationFromQuaternion(rotation)
+    .invert();
+  const localRay = raycaster.ray.clone().applyMatrix4(inverse);
+  const edge = BOARD_HALF + 0.08;
+  const box = new THREE.Box3(
+    new THREE.Vector3(-edge, BOARD_BOTTOM, -edge),
+    new THREE.Vector3(edge, LOT_TOP, edge),
+  );
+  return localRay.intersectBox(box, new THREE.Vector3()) !== null;
+}
 export type BoardPan = { x: number; y: number };
 export const CENTERED_BOARD: BoardPan = { x: 0, y: 0 };
 
@@ -37,6 +104,7 @@ export function frameBoard(
   requestedZoom: number,
   requestedPan: BoardPan = CENTERED_BOARD,
   ui = 1,
+  rotation = new THREE.Quaternion(),
 ) {
   const zoom = clampBoardZoom(requestedZoom);
   camera.updateMatrixWorld();
@@ -51,7 +119,10 @@ export function frameBoard(
   const point = new THREE.Vector3();
   const add = (x: number, y: number, z: number) =>
     bounds.expandByPoint(
-      point.set(x, y, z).applyMatrix4(camera.matrixWorldInverse),
+      point
+        .set(x, y, z)
+        .applyQuaternion(rotation)
+        .applyMatrix4(camera.matrixWorldInverse),
     );
   const edge = BOARD_HALF + 0.08;
   for (const x of [-edge, edge])

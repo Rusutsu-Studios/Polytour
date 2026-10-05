@@ -295,9 +295,39 @@
   font-size: 15px;
 }
 
+.pause-game-settings,
 .pause-video-settings {
   display: grid;
   gap: 28px;
+}
+
+.pause-streamer-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 14px;
+}
+
+.pause-streamer-setting .streamer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  background: #e4f2e8;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pause-streamer-setting p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #47666c;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .graphics-quality {
@@ -366,7 +396,8 @@
   outline: none;
 }
 
-.pause-reduced-motion {
+.pause-reduced-motion,
+.pause-view-lock {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -375,7 +406,8 @@
   font-weight: 650;
 }
 
-.pause-reduced-motion input {
+.pause-reduced-motion input,
+.pause-view-lock input {
   width: 20px;
   height: 20px;
   margin: 0;
@@ -408,8 +440,31 @@
   box-shadow: 0 3px 0 #a9cabc;
 }
 
-.pause-zoom .pause-zoom-reset {
-  font-size: 14px;
+.pause-view-default {
+  margin-bottom: 10px;
+}
+
+.pause-view-default[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pause-view-lock {
+  margin-bottom: 12px;
+}
+
+.pause-zoom-slider {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  margin: 0;
+  accent-color: #236cce;
+  cursor: pointer;
+}
+
+.pause-zoom-slider:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .pause-zoom button:hover:not(:is(:disabled, [aria-disabled="true"])) {
@@ -422,7 +477,7 @@
 }
 
 .pause-zoom output {
-  margin-left: auto;
+  min-width: 44px;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }

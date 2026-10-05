@@ -18,7 +18,7 @@ import {
   PROTOCOL_VERSION,
   RoomConfigSchema,
 } from "../src/shared/protocol/index.js";
-import { clickBoardSpace } from "./board-interactions.js";
+import { boardScreenPoint, clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
@@ -686,9 +686,12 @@ test("roll button and informative timer remain usable through 4K and reduced mot
   expect(room.errors).toEqual([]);
 });
 
-test("forced-sale quotes follow the actual camera at zoom extremes and after pan", async ({
+test("forced-sale quotes follow the actual board view after zoom, rotation and pan", async ({
   page,
 }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("polytour.lowGraphics", "true"),
+  );
   const room = await enterSaleRoom(page);
   const board = page.locator(".canvas-layer");
   for (const viewport of DESKTOP_SIZES) {
@@ -699,23 +702,32 @@ test("forced-sale quotes follow the actual camera at zoom extremes and after pan
         .click();
       await page.getByRole("button", { name: "Réglages", exact: true }).click();
       await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-      const button = page.getByRole("button", {
-        name: zoom === 2 ? "Zoomer le plateau" : "Dézoomer le plateau",
-        exact: true,
-      });
-      while (Number(await board.getAttribute("data-board-zoom")) !== zoom)
-        await button.click();
+      await page
+        .getByRole("slider", { name: "Zoom du plateau", exact: true })
+        .press(zoom === 2 ? "End" : "Home");
+      await expect(board).toHaveAttribute("data-board-zoom", String(zoom));
       await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
       if (zoom === 2) {
-        await page.mouse.move(viewport.width / 2, viewport.height / 2);
+        const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+        await page.mouse.move(center.x, center.y);
         await page.mouse.down();
-        await page.mouse.move(
-          viewport.width / 2 + 100,
-          viewport.height / 2 + 50,
-          { steps: 6 },
-        );
+        await page.mouse.move(center.x + 60, center.y + 12, { steps: 6 });
         await page.mouse.up();
+        await expect
+          .poll(async () => Number(await board.getAttribute("data-board-yaw")))
+          .not.toBe(0);
+        const shifted = await boardScreenPoint(page, {
+          x: 0,
+          y: LOT_TOP,
+          z: 0,
+        });
+        await page.mouse.move(shifted.x, shifted.y);
+        await page.keyboard.down("Shift");
+        await page.mouse.down();
+        await page.mouse.move(shifted.x + 100, shifted.y + 50, { steps: 6 });
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
         await expect
           .poll(async () =>
             Number(await board.getAttribute("data-board-pan-x")),
@@ -747,10 +759,13 @@ test("forced-sale quotes follow the actual camera at zoom extremes and after pan
             const rect = canvas.getBoundingClientRect();
             return Math.max(
               ...points.map(({ tile, x, y, z }) => {
-                const point = scene.camera.position
-                  .clone()
-                  .set(x, y, z)
-                  .project(scene.camera);
+                const point = scene.camera.position.clone().set(x, y, z);
+                const view = scene.scene.getObjectByName("board-user-view");
+                if (view) {
+                  view.updateWorldMatrix(true, false);
+                  point.applyMatrix4(view.matrixWorld);
+                }
+                point.project(scene.camera);
                 const quote = document.querySelector<HTMLElement>(
                   `.sale-tile-quote[data-tile="${tile}"]`,
                 );

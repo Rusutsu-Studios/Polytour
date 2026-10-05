@@ -1030,6 +1030,8 @@ function MatchView({
   onZoom,
   viewResetKey,
   onViewReset,
+  viewLocked,
+  onViewLockedChange,
   lowGraphics,
   onGraphicsChange,
   streamer,
@@ -1051,6 +1053,8 @@ function MatchView({
   onZoom: (zoom: number) => void;
   viewResetKey: number;
   onViewReset: () => void;
+  viewLocked: boolean;
+  onViewLockedChange: (locked: boolean) => void;
   lowGraphics: boolean;
   onGraphicsChange: (low: boolean) => void;
   streamer: boolean;
@@ -1381,6 +1385,7 @@ function MatchView({
               zoom={zoom}
               onZoom={onZoom}
               viewResetKey={viewResetKey}
+              viewLocked={viewLocked}
               interactiveZoom
               onWebGlAvailableChange={setBoardZoomAvailable}
               lowGraphics={lowGraphics}
@@ -1441,11 +1446,20 @@ function MatchView({
         className="game-tools"
         aria-label={t("Outils de la partie", "Game tools")}
       >
-        <StreamerToggle
-          enabled={streamer}
-          onChange={onStreamerChange}
-          compact
-        />
+        <ActionButton
+          type="button"
+          className="game-tool-button"
+          aria-label={t("Recentrer le plateau", "Reset board view")}
+          title={t("Recentrer le plateau", "Reset board view")}
+          disabled={!boardZoomAvailable}
+          disabledReason={t(
+            "Le recentrage est disponible sur le plateau 3D.",
+            "Reset view is available on the 3D board.",
+          )}
+          onClick={onViewReset}
+        >
+          <Icon name="reset" size={18} />
+        </ActionButton>
         <button
           type="button"
           className="game-tool-button"
@@ -1912,6 +1926,10 @@ function MatchView({
           onZoom={onZoom}
           onViewReset={onViewReset}
           zoomAvailable={boardZoomAvailable}
+          viewLocked={viewLocked}
+          onViewLockedChange={onViewLockedChange}
+          streamer={streamer}
+          onStreamerChange={onStreamerChange}
           lowGraphics={lowGraphics}
           onGraphicsChange={onGraphicsChange}
           connection={room.connection}
@@ -2015,7 +2033,22 @@ function App() {
     }
   });
   const [viewResetKey, setViewResetKey] = useState(0);
+  const [viewLocked, setViewLocked] = useState(() => {
+    try {
+      return localStorage.getItem("polytour.boardViewLocked") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [previewZoomAvailable, setPreviewZoomAvailable] = useState(false);
+  function changeViewLocked(locked: boolean) {
+    setViewLocked(locked);
+    try {
+      localStorage.setItem("polytour.boardViewLocked", String(locked));
+    } catch {
+      // The lock still works for this session without browser storage.
+    }
+  }
   function changeZoom(value: number) {
     const next = clampBoardZoom(value);
     setZoom(next);
@@ -2348,6 +2381,7 @@ function App() {
                     preview
                     zoom={zoom}
                     viewResetKey={viewResetKey}
+                    viewLocked={viewLocked}
                     onWebGlAvailableChange={setPreviewZoomAvailable}
                     lowGraphics={lowGraphics}
                   />
@@ -2529,6 +2563,7 @@ function App() {
                   preview
                   zoom={zoom}
                   viewResetKey={viewResetKey}
+                  viewLocked={viewLocked}
                   onWebGlAvailableChange={setPreviewZoomAvailable}
                   lowGraphics={lowGraphics}
                 />
@@ -2548,6 +2583,8 @@ function App() {
           onZoom={changeZoom}
           viewResetKey={viewResetKey}
           onViewReset={resetBoardView}
+          viewLocked={viewLocked}
+          onViewLockedChange={changeViewLocked}
           lowGraphics={lowGraphics}
           onGraphicsChange={changeGraphics}
           streamer={streamer}
@@ -2618,6 +2655,10 @@ function App() {
           onZoom={changeZoom}
           onViewReset={resetBoardView}
           zoomAvailable={previewZoomAvailable}
+          viewLocked={viewLocked}
+          onViewLockedChange={changeViewLocked}
+          streamer={streamer}
+          onStreamerChange={changeStreamer}
           lowGraphics={lowGraphics}
           onGraphicsChange={changeGraphics}
           connection={room.connection}
