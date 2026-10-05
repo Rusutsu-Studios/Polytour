@@ -176,6 +176,92 @@ async function decisionRoom(
   };
 }
 
+for (const locale of ["fr", "en"] as const) {
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    test(`held cards use current art and fit every HUD in ${locale} at ${size.width}x${size.height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(size);
+      await page.addInitScript((language) => {
+        localStorage.setItem("polytour.locale", language);
+      }, locale);
+      const missingImages: string[] = [];
+      page.on("response", (response) => {
+        if (response.url().includes("/cards/") && response.status() >= 400)
+          missingImages.push(response.url());
+      });
+      await decisionRoom(
+        page,
+        2_000_000,
+        (state) => ({
+          ...state,
+          players: state.players.map((player) => ({
+            ...player,
+            heldCards: ["Guardian Angel", "Coupon", "Escape"],
+          })),
+          properties: state.properties.map((property) =>
+            property.tile === 1
+              ? { ...property, owner: 0, level: 0 }
+              : property,
+          ),
+        }),
+        ["Camille", "Atlas", "Noémie", "Bo"],
+      );
+      await page.keyboard.press("Escape");
+      await expect(page.locator("main")).toHaveAttribute(
+        "data-reduced-motion",
+        "true",
+      );
+      await expect(page.locator(".held-mini")).toHaveCount(12);
+      await expect(page.locator(".player-held-cards")).toHaveText([
+        "×3",
+        "×3",
+        "×3",
+        "×3",
+      ]);
+      const titles =
+        locale === "fr"
+          ? ["Ange gardien", "Bon de réduction", "Carte d’évasion"]
+          : ["Guardian angel", "Rent coupon", "Escape card"];
+      for (const hud of await page.locator(".player-card").all()) {
+        for (const [index, chip] of (
+          await hud.locator(".held-mini").all()
+        ).entries()) {
+          await chip.focus();
+          const preview = page.getByRole("tooltip");
+          await expect(preview).toBeVisible();
+          await expect(preview.locator("strong")).toHaveText(titles[index]);
+          await expect(preview.locator("svg")).toBeVisible();
+          await expect(preview.locator("img")).toHaveCount(0);
+          const bounds = await preview.boundingBox();
+          expect(bounds).not.toBeNull();
+          if (!bounds) throw new Error("Expected held-card preview bounds");
+          expect(bounds.x).toBeGreaterThanOrEqual(0);
+          expect(bounds.y).toBeGreaterThanOrEqual(0);
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(size.width);
+          expect(bounds.y + bounds.height).toBeLessThanOrEqual(size.height);
+          await chip.press("Escape");
+          await expect(preview).not.toBeVisible();
+          await expect(chip).toBeFocused();
+        }
+      }
+      const top = page.locator(
+        '.player-card[data-seat="1"] .held-mini[data-card="Escape"]',
+      );
+      await top.hover();
+      await expect(page.getByRole("tooltip")).toBeVisible();
+      await page.screenshot({
+        path: `.local/verification/held-cards-${locale}-${size.width}.png`,
+      });
+      expect(missingImages).toEqual([]);
+    });
+  }
+}
+
 function islandDecision(state: PublicState): PublicState {
   return {
     ...state,
