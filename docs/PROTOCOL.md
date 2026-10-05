@@ -109,6 +109,10 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
+- Protocol version 8 accepts `timeLimitMinutes: null` in room creation and lobby
+  settings for unlimited games. Omitted duration still defaults to 120 minutes.
+  Public config preserves null and `matchDeadline` is null; neither time nor
+  round limits end these games. Older clients reload before reading this setting.
 - Protocol version 7 adds the `PowerCut {seat, tile, untilLap}`,
   `ShieldRaised {seat, tile}`, `ShieldBroken {seat, tile}` (the attacker's seat)
   and `PropertyGiven {seat, to, tile}` events, an optional `shielded: true` and

@@ -207,23 +207,28 @@ function ChoiceSetting({
   value,
   choices,
   suffix,
+  unlimitedLabel,
   disabled,
   onChange,
 }: {
   label: string;
-  value: number;
-  choices: readonly number[];
+  value: number | null;
+  choices: readonly (number | null)[];
   suffix: string;
+  unlimitedLabel?: string;
   disabled: boolean;
-  onChange: (value: number) => void;
+  onChange: (value: number | null) => void;
 }) {
   const id = useId();
   // Keep valid settings from existing saved rooms visible, even outside the presets.
   const options = choices.includes(value)
     ? choices
-    : [...choices, value].sort((a, b) => a - b);
+    : [...choices, value].sort((a, b) => (a ?? Infinity) - (b ?? Infinity));
   return (
-    <fieldset className="room-setting-choice" disabled={disabled}>
+    <fieldset
+      className={`room-setting-choice${unlimitedLabel ? " room-setting-choice--duration" : ""}`}
+      disabled={disabled}
+    >
       <legend>{label}</legend>
       <input
         className="room-setting-range"
@@ -234,7 +239,7 @@ function ChoiceSetting({
         value={options.indexOf(value)}
         disabled={disabled}
         aria-label={label}
-        aria-valuetext={`${value} ${suffix}`}
+        aria-valuetext={value === null ? unlimitedLabel : `${value} ${suffix}`}
         style={
           {
             "--setting-progress": `${(options.indexOf(value) / (options.length - 1)) * 100}%`,
@@ -247,11 +252,12 @@ function ChoiceSetting({
       />
       <div className="room-setting-pills">
         {options.map((option) => (
-          <label className="room-setting-pill" key={option}>
+          <label className="room-setting-pill" key={option ?? "unlimited"}>
             <input
               type="radio"
               name={id}
-              value={option}
+              value={option ?? "unlimited"}
+              aria-label={option === null ? unlimitedLabel : undefined}
               checked={option === value}
               disabled={disabled}
               onChange={() => {
@@ -259,7 +265,13 @@ function ChoiceSetting({
               }}
             />
             <span>
-              {option} <span>{suffix}</span>
+              {option === null ? (
+                "∞"
+              ) : (
+                <>
+                  {option} <span>{suffix}</span>
+                </>
+              )}
             </span>
           </label>
         ))}
@@ -324,11 +336,15 @@ export function RoomSettings({
         <ChoiceSetting
           label={t("Durée de partie", "Game duration")}
           value={config.timeLimitMinutes}
-          choices={[20, 60, 120]}
+          choices={[20, 60, 120, null]}
           suffix="min"
+          unlimitedLabel={t("Durée illimitée", "Unlimited duration")}
           disabled={disabled}
           onChange={(timeLimitMinutes) =>
-            update({ timeLimitMinutes: timeLimitMinutes as 20 | 60 | 120 })
+            update({
+              timeLimitMinutes:
+                timeLimitMinutes as RoomConfig["timeLimitMinutes"],
+            })
           }
         />
         <ChoiceSetting
@@ -337,7 +353,9 @@ export function RoomSettings({
           choices={[15, 30, 45, 60]}
           suffix="s"
           disabled={disabled}
-          onChange={(decisionSeconds) => update({ decisionSeconds })}
+          onChange={(decisionSeconds) => {
+            if (decisionSeconds !== null) update({ decisionSeconds });
+          }}
         />
       </div>
       <fieldset className="room-settings-rules" disabled={disabled}>
@@ -428,24 +446,33 @@ export function RoomSettings({
               )}
             </li>
           )}
-          <li>
-            {t(
-              `Avoir le patrimoine le plus élevé après ${config.timeLimitMinutes} min : argent + valeur investie dans les propriétés.`,
-              `Have the highest net worth after ${config.timeLimitMinutes} min: cash + invested property value.`,
-            )}
-          </li>
-          <li>
-            {t(
-              `Si la limite de ${config.roundLimit} tours de table est atteinte avant, le patrimoine le plus élevé gagne.`,
-              `If the ${config.roundLimit}-round limit is reached first, highest net worth wins.`,
-            )}
-          </li>
+          {config.timeLimitMinutes !== null && (
+            <>
+              <li>
+                {t(
+                  `Avoir le patrimoine le plus élevé après ${config.timeLimitMinutes} min : argent + valeur investie dans les propriétés.`,
+                  `Have the highest net worth after ${config.timeLimitMinutes} min: cash + invested property value.`,
+                )}
+              </li>
+              <li>
+                {t(
+                  `Si la limite de ${config.roundLimit} tours de table est atteinte avant, le patrimoine le plus élevé gagne.`,
+                  `If the ${config.roundLimit}-round limit is reached first, highest net worth wins.`,
+                )}
+              </li>
+            </>
+          )}
         </ul>
         <p>
-          {t(
-            "À égalité de patrimoine : argent disponible, puis nombre de plages, puis ordre de jeu initial.",
-            "Net-worth ties: most cash, then most beaches, then original turn order.",
-          )}
+          {config.timeLimitMinutes === null
+            ? t(
+                "Durée illimitée : aucune limite de temps ou de tours. Seules les conditions de victoire ci-dessus terminent la partie.",
+                "Unlimited duration: no time or round limit. Only the win conditions above end the game.",
+              )
+            : t(
+                "À égalité de patrimoine : argent disponible, puis nombre de plages, puis ordre de jeu initial.",
+                "Net-worth ties: most cash, then most beaches, then original turn order.",
+              )}
         </p>
       </section>
     </div>

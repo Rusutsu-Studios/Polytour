@@ -4,6 +4,8 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { applyEvent } from "../src/shared/engine/index.js";
+import type { ServerMessage } from "../src/shared/protocol/index.js";
 import { APP_VERSION } from "../src/shared/version.js";
 import { clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
@@ -578,6 +580,142 @@ test("win conditions follow the settings draft and saved rules in both languages
     matchRules.getByLabel("Victoire par ligne complète", { exact: true }),
   ).toBeDisabled();
 });
+
+for (const locale of ["fr", "en"] as const) {
+  test(`unlimited duration slider, saved rules and gameplay (${locale})`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const command = observeRoomCommands(page);
+    let snapshot: PublicState | null = null;
+    let rolls = 0;
+    page.on("websocket", (socket) => {
+      socket.on("framereceived", (frame) => {
+        try {
+          const message = JSON.parse(String(frame.payload)) as ServerMessage;
+          if (message.type === "welcome") snapshot = message.snapshot;
+          if (message.type === "events") {
+            for (const event of message.events) {
+              if (event.type === "GameCreated") snapshot = event.state;
+              else if (snapshot) snapshot = applyEvent(snapshot, event);
+              if (event.type === "DiceRolled") rolls++;
+            }
+          }
+        } catch {
+          // Transport diagnostics are plain text.
+        }
+      });
+    });
+    await page.goto("/");
+    await page.getByLabel("Votre nom de joueur").fill("Unlimited tester");
+    await openLobby(page);
+    await chooseLanguage(page, locale);
+    await page.locator(".settings-trigger").click();
+    const dialog = page.locator(".settings-dialog");
+    const duration = dialog.getByRole("slider", {
+      name: locale === "fr" ? "Durée de partie" : "Game duration",
+      exact: true,
+    });
+    const unlimitedName =
+      locale === "fr" ? "Durée illimitée" : "Unlimited duration";
+    const unlimited = dialog.getByRole("radio", {
+      name: unlimitedName,
+      exact: true,
+    });
+    const wins = dialog.locator(".room-settings-wins");
+    await expect(
+      dialog.getByRole("radio", { name: "120 min", exact: true }),
+    ).toBeChecked();
+    await expect(duration).toHaveValue("2");
+    await expect(duration).toHaveAttribute("max", "3");
+    await duration.focus();
+    await duration.press("End");
+    await expect(unlimited).toBeChecked();
+    await expect(duration).toHaveAttribute("aria-valuetext", unlimitedName);
+    await expect(wins).toContainText(
+      locale === "fr"
+        ? "aucune limite de temps ou de tours"
+        : "no time or round limit",
+    );
+    await expect(wins).not.toContainText("min :");
+    await expect(wins).not.toContainText("min:");
+    await expect(wins.getByRole("listitem")).toHaveCount(3);
+    await duration.press("ArrowLeft");
+    await expect(
+      dialog.getByRole("radio", { name: "120 min", exact: true }),
+    ).toBeChecked();
+    await expect(wins.getByRole("listitem")).toHaveCount(5);
+    await duration.press("End");
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(size);
+      await unlimited.scrollIntoViewIfNeeded();
+      await expect(unlimited).toBeVisible();
+      expect(
+        await dialog
+          .locator(".settings-dialog-body")
+          .evaluate((element) => element.scrollWidth > element.clientWidth),
+      ).toBe(false);
+      await page.screenshot({
+        path: `.local/verification/infinite-settings-${locale}-${size.width}.png`,
+      });
+    }
+    await command("settings", () => page.keyboard.press("Escape"));
+    await page.reload();
+    await expect(page.locator(".lobby-seats")).toBeVisible();
+    await page.locator(".settings-trigger").click();
+    await expect(unlimited).toBeChecked();
+    await page.keyboard.press("Escape");
+    await command("start", () =>
+      page
+        .getByRole("button", {
+          name: locale === "fr" ? "Démarrer la partie" : "Start game",
+          exact: true,
+        })
+        .click(),
+    );
+    const clock = page.getByRole("img", { name: unlimitedName, exact: true });
+    await expect(clock).toHaveText("∞");
+    await expect.poll(() => snapshot?.config.timeLimitMinutes).toBeNull();
+    await expect.poll(() => snapshot?.matchDeadline).toBeNull();
+    await page
+      .getByRole("button", {
+        name: locale === "fr" ? "Réglages de la partie" : "Game settings",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page
+        .locator(".match-rules")
+        .getByRole("radio", { name: unlimitedName, exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    const roll = page.getByRole("button", {
+      name: locale === "fr" ? "Lancer les dés" : "Roll the dice",
+      exact: true,
+    });
+    await expect(roll).toBeVisible({ timeout: 120_000 });
+    const before = rolls;
+    await roll.click();
+    await expect.poll(() => rolls).toBeGreaterThan(before);
+    await page.reload();
+    await expect(clock).toHaveText("∞");
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(size);
+      await expect(clock).toBeVisible();
+      await page.screenshot({
+        path: `.local/verification/infinite-match-${locale}-${size.width}.png`,
+      });
+    }
+  });
+}
 
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,

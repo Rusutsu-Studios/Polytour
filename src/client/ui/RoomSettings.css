@@ -195,6 +195,13 @@
   font-weight: 500;
 }
 
+.room-setting-choice--duration .room-setting-pill > span {
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 3px;
+  line-height: 1.2;
+}
+
 .room-setting-pill input:checked + span {
   border-color: #557122;
   background: var(--settings-lime);

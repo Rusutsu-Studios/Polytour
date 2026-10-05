@@ -23,7 +23,8 @@ export type GameConfig = {
   readonly startSalary: number;
   readonly roundLimit: number;
   readonly decisionSeconds?: number;
-  readonly timeLimitMinutes?: number;
+  /** null disables time and round limits; undefined retains round-only games. */
+  readonly timeLimitMinutes?: number | null;
   readonly festivalCount?: number;
   /** Missing on older saves: retain the economy's original resort festivals. */
   readonly resortFestivals?: boolean;
