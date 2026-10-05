@@ -110,7 +110,8 @@ debug socket has been removed; `/api/health` remains.
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
 - Protocol version 8 accepts `timeLimitMinutes: null` in room creation and lobby
-  settings for unlimited games, or any whole-minute duration from 1 to 120.
+  settings for unlimited games, or a whole-minute duration of at least 15,
+  including durations above 120 (such as 200).
   Decision time accepts whole seconds from 10 to 60. Omitted duration still defaults to 120 minutes.
   Public config preserves null and `matchDeadline` is null; neither time nor
   round limits end these games. Older clients reload before reading this setting.

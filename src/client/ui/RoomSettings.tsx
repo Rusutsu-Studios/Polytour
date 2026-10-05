@@ -231,15 +231,16 @@ function TimeSetting({
     if (disabled) editing.current = false;
     if (!editing.current) setDraft(String(value ?? ""));
   }, [value, disabled]);
-  const sliderMax = max + (unlimitedLabel ? 1 : 0);
+  const finiteMax = unlimitedLabel ? Math.max(max, value ?? max) : max;
+  const sliderMax = finiteMax + (unlimitedLabel ? 1 : 0);
   const sliderValue = value ?? sliderMax;
   const commit = () => {
     editing.current = false;
     if (disabled) return;
-    const entered = Number(draft);
+    const entered = Math.round(Number(draft));
     const next =
-      draft.trim() !== "" && Number.isFinite(entered)
-        ? Math.max(min, Math.min(max, Math.round(entered)))
+      draft.trim() !== "" && Number.isSafeInteger(entered)
+        ? Math.max(min, unlimitedLabel ? entered : Math.min(max, entered))
         : value;
     setDraft(String(next ?? ""));
     if (next !== value) onChange(next);
@@ -270,14 +271,14 @@ function TimeSetting({
           }
           onChange={(event) => {
             const entered = Number(event.currentTarget.value);
-            if (!disabled) onChange(entered > max ? null : entered);
+            if (!disabled) onChange(entered > finiteMax ? null : entered);
           }}
         />
         <div className="room-setting-time-value">
           <input
             type="number"
             min={min}
-            max={max}
+            max={unlimitedLabel ? undefined : max}
             step={1}
             value={draft}
             placeholder={value === null ? "∞" : undefined}
@@ -300,9 +301,9 @@ function TimeSetting({
               const entered = Number(text);
               if (
                 text !== "" &&
-                Number.isInteger(entered) &&
+                Number.isSafeInteger(entered) &&
                 entered >= min &&
-                entered <= max
+                (unlimitedLabel || entered <= max)
               )
                 onChange(entered);
             }}
@@ -397,7 +398,7 @@ export function RoomSettings({
           label={t("Durée de partie", "Game duration")}
           value={config.timeLimitMinutes}
           choices={[20, 60, 120, null]}
-          min={1}
+          min={15}
           max={120}
           suffix="min"
           unlimitedLabel={t("Durée illimitée", "Unlimited duration")}

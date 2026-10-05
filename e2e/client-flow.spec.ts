@@ -628,6 +628,7 @@ for (const locale of ["fr", "en"] as const) {
     ).toBeChecked();
     await expect(duration).toHaveValue("120");
     await expect(duration).toHaveAttribute("max", "121");
+    await expect(duration).toHaveAttribute("min", "15");
     const exactDuration = dialog.getByRole("spinbutton", {
       name:
         locale === "fr"
@@ -646,12 +647,26 @@ for (const locale of ["fr", "en"] as const) {
       name: locale === "fr" ? "Temps de décision" : "Decision timer",
       exact: true,
     });
+    await exactDuration.fill("14");
+    await exactDuration.press("Enter");
+    await expect(exactDuration).toHaveValue("15");
+    await duration.focus();
+    await duration.press("Home");
+    await duration.press("ArrowLeft");
+    await expect(duration).toHaveValue("15");
     await exactDuration.fill("73");
     await duration.focus();
     await duration.press("ArrowRight");
     await expect(exactDuration).toHaveValue("74");
     await expect(wins).toContainText(
       locale === "fr" ? "après 74 min" : "after 74 min",
+    );
+    await exactDuration.fill("200");
+    await exactDuration.press("Enter");
+    await expect(duration).toHaveValue("200");
+    await expect(duration).toHaveAttribute("max", "201");
+    await expect(wins).toContainText(
+      locale === "fr" ? "après 200 min" : "after 200 min",
     );
     await exactDecision.fill("37");
     await decision.focus();
