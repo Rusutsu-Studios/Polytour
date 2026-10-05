@@ -9,9 +9,10 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 7 adds the reworked Chance deck's events and die rolls; version 6
-// added the retained Escape card and island action. Stale clients reload.
-export const PROTOCOL_VERSION = 7;
+// Version 8 adds the public PurchaseUnaffordable notice; version 7 added the
+// reworked Chance deck's events and die rolls; version 6 added the retained
+// Escape card and island action. Stale clients reload.
+export const PROTOCOL_VERSION = 8;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);

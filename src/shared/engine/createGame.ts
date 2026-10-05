@@ -714,6 +714,8 @@ function animationBudget(events: readonly GameEvent[]): number {
           DECISION_TIMING.moneyAnimation +
           DECISION_TIMING.propertyAnimation
         );
+      case "PurchaseUnaffordable":
+        return total + DECISION_TIMING.noticeAnimation;
       case "PropertyDowngraded":
         return total + DECISION_TIMING.wreckAnimation;
       case "PropertiesSwapped":
@@ -1305,8 +1307,23 @@ function resolver(initial: GameState, context: ResolutionContext) {
         const property = getProperty(state, tile.index);
         if (!property) throw new Error("Missing property state");
         if (property.owner === null) {
-          const maxLevel = maxBuildLevel(state, seat, tile.index, true);
-          open({ kind: "buy", seat, tile: tile.index, maxLevel });
+          // Without the cash for even the land, everyone sees why nothing opens.
+          const price = purchaseCost(state, tile.index, 0);
+          if (player.cash < price)
+            emit({
+              type: "PurchaseUnaffordable",
+              seat,
+              tile: tile.index,
+              purchase: "buy",
+              price,
+            });
+          else
+            open({
+              kind: "buy",
+              seat,
+              tile: tile.index,
+              maxLevel: maxBuildLevel(state, seat, tile.index, true),
+            });
         } else if (property.owner === seat) {
           offerBuild(seat, tile.index);
         } else {
@@ -1410,6 +1427,14 @@ function resolver(initial: GameState, context: ResolutionContext) {
             const price = buyoutPriceAt(state, task.tile, property.level);
             if (price !== null && getPlayer(state, task.seat).cash >= price)
               open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
+            else if (price !== null)
+              emit({
+                type: "PurchaseUnaffordable",
+                seat: task.seat,
+                tile: task.tile,
+                purchase: "buyout",
+                price,
+              });
           }
           break;
         }

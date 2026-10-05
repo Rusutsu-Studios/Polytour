@@ -200,6 +200,8 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
         event.tile,
         event.seat,
       );
+    case "PurchaseUnaffordable":
+      return state;
     case "RentPaid":
       return cashChange(
         cashChange(state, event.seat, -event.amount),

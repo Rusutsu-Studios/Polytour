@@ -395,6 +395,23 @@ describe("property economy and build unlocking", () => {
     expect(getPlayer(bought, owner).cash).toBe(2_000_000 + 72_000 + 220_000);
     expect(bought.championshipHost).toBeNull();
   });
+  it("shows everyone a buyout the visitor cannot afford after rent", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(state, 2, other(state), 1);
+    const price = buyoutPriceAt(state, 2, 1) ?? 0;
+    // From Start, the walk to tile 2 earns no salary before the rent.
+    const rented = land(setPlayer(state, seat, { cash: price }), 2, [1, 1]);
+    expect(getPlayer(rented.state, seat).cash).toBeLessThan(price);
+    expect(rented.events).toContainEqual({
+      type: "PurchaseUnaffordable",
+      seat,
+      tile: 2,
+      purchase: "buyout",
+      price,
+    });
+    expect(rented.state.pending?.kind).not.toBe("buyout");
+  });
 });
 describe("dice, Island, laps and World Tour", () => {
   it("pays one salary and counts one lap when clockwise movement lands on Start", () => {
@@ -505,12 +522,18 @@ describe("dice, Island, laps and World Tour", () => {
     expect(
       escaped.state.discard.filter((card) => card === "Escape"),
     ).toHaveLength(1);
-    const rolled = act(escaped.state, { type: "Roll" }, [1, 1]).state;
-    expect(getPlayer(rolled, seat).position).toBe(10);
-    expect(act(rolled, { type: "Decline" }).state.pending).toMatchObject({
-      kind: "roll",
-      seat,
-    });
+    // Penniless on a free city: no buy decision, a public notice instead.
+    const rolled = act(escaped.state, { type: "Roll" }, [1, 1]);
+    expect(getPlayer(rolled.state, seat).position).toBe(10);
+    expect(rolled.events).toContainEqual(
+      expect.objectContaining({
+        type: "PurchaseUnaffordable",
+        seat,
+        tile: 10,
+        purchase: "buy",
+      }),
+    );
+    expect(rolled.state.pending).toMatchObject({ kind: "roll", seat });
     for (const invalid of [
       setPlayer(trapped, seat, { heldCards: [] }),
       { ...trapped, pending: { kind: "roll" as const, seat, deadline: 100 } },

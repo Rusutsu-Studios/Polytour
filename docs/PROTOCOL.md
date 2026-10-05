@@ -109,6 +109,9 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
+- Protocol version 8 adds the public `PurchaseUnaffordable {seat, tile,
+  purchase: "buy" | "buyout", price}` event, which changes no state; older
+  clients reload.
 - Protocol version 7 adds the `PowerCut {seat, tile, untilLap}`,
   `ShieldRaised {seat, tile}`, `ShieldBroken {seat, tile}` (the attacker's seat)
   and `PropertyGiven {seat, to, tile}` events, an optional `shielded: true` and

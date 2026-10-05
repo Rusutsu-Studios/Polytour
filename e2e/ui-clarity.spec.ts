@@ -15,6 +15,7 @@ import {
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
 import { clickBoardSpace } from "./board-interactions.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -807,6 +808,79 @@ test("globe and language text switch directly on click and keyboard and persist"
   await expect(trigger).toHaveText("EN");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
+
+for (const size of DESKTOP_SIZES) {
+  test(`everyone sees a fitted notice when a player cannot afford a city at ${size.width}x${size.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    await page.clock.install();
+    const room = await decisionRoom(page, 100_000, (state) => ({
+      ...state,
+      players: state.players.map((player) =>
+        player.seat === 1 ? { ...player, cash: 640_000 } : player,
+      ),
+    }));
+    await page.keyboard.press("Escape");
+    const notice = page.locator('.notice-dialog[data-moment="notice"][open]');
+    const title = page.locator("#notice-title");
+    const fits = async () => {
+      const box = await notice.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) return;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+    };
+    room.send([
+      {
+        type: "PurchaseUnaffordable",
+        seat: 0,
+        tile: 1,
+        purchase: "buy",
+        price: 350_000,
+      },
+    ]);
+    await expect(notice).toBeVisible();
+    // Freeze once the board has drawn, so slow 4K screenshots keep the hold open.
+    await page.clock.pauseAt(Date.now() + 1000);
+    await expect(title).toHaveText(
+      /^Vous n’avez pas assez d’argent pour acheter \S/,
+    );
+    await expect(page.locator("#notice-description")).toHaveText(
+      "Prix 350 k · Argent 100 k",
+    );
+    await fits();
+    await page.screenshot({
+      path: `.local/verification/notice-buy-${size.width}x${size.height}.png`,
+    });
+    await page.getByRole("button", { name: "Continuer", exact: true }).click();
+    await expect(page.locator(".notice-dialog")).toHaveCount(0);
+    room.send([
+      { type: "PropertyBought", seat: 0, tile: 9, level: 2, amount: 0 },
+      {
+        type: "PurchaseUnaffordable",
+        seat: 1,
+        tile: 9,
+        purchase: "buyout",
+        price: 880_000,
+      },
+    ]);
+    await expect(title).toHaveText(
+      /^Atlas n’a pas assez d’argent pour racheter \S/,
+    );
+    await expect(page.locator("#notice-description")).toHaveText(
+      "Rachat 880 k · Argent 640 k",
+    );
+    await fits();
+    await page.screenshot({
+      path: `.local/verification/notice-buyout-${size.width}x${size.height}.png`,
+    });
+    await page.clock.runFor(4100);
+    await expect(page.locator(".notice-dialog")).toHaveCount(0);
+  });
+}
 
 test("own and opponent cards and taxes keep readable holds and cancel on recovery", async ({
   page,
