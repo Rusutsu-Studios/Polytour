@@ -496,11 +496,11 @@ function prism() {
 }
 
 /**
- * The one small house of the lots, front door toward local +z. It is baked
- * into two vertex-coloured geometries that share every instance matrix: a
- * fixed body (walls, windows, door, chimney) and a trim (plinth, roof, ridge)
- * whose shades are multiplied by the owner colour. Its parts stay large
- * enough to read at board scale.
+ * The one small house of the lots, front windows toward local +z. It is
+ * baked into two vertex-coloured geometries that share every instance
+ * matrix: a fixed body (walls, windows, chimney) and a trim (plinth, roof,
+ * ridge) whose shades are multiplied by the owner colour. It keeps few, large
+ * parts so a full board stays calm.
  */
 function houseGeometry() {
   const width = 0.23;
@@ -531,8 +531,8 @@ function houseGeometry() {
       position: [0, wall, 0],
       scale: [width, rise, depth],
     },
-    // Identical windows: one on each side of the door, two on each side wall.
-    ...[-0.072, 0.072].map((x) => ({
+    // Two identical windows on each wall the camera can see.
+    ...[-0.06, 0.06].map((x) => ({
       geometry: box(0.05, 0.056, 0.01),
       color: glass,
       position: [x, 0.105, front + 0.004] as const,
@@ -544,11 +544,6 @@ function houseGeometry() {
         position: [side * (width / 2 + 0.004), 0.105, z] as const,
       })),
     ),
-    {
-      geometry: box(0.06, 0.1, 0.012),
-      color: "#8b5a3c",
-      position: [0, 0.08, front + 0.004],
-    },
     // A stone chimney through the right slope.
     {
       geometry: box(0.044, chimneyTop - chimneyBottom, 0.044),
@@ -715,7 +710,7 @@ function Towns({
             plotX + (growing?.shake ?? 0),
             bandZ,
           );
-          // The door turns toward the camera; the side walls are alike.
+          // The front windows turn toward the camera; the side walls are alike.
           dummy.rotation.set(0, faceZ > 0 ? angle : angle + Math.PI, 0);
           dummy.position.set(x, LOT_TOP, z);
           dummy.scale.set(scale[0], scale[1], scale[0]);
