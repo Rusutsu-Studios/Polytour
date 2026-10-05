@@ -97,10 +97,10 @@ pnpm test:e2e       # desktop UI plus production Worker/socket flows
 pnpm check:bundle   # after `vite build`: lobby JS budget, asset and Worker size limits
 pnpm check:wrangler # DO migrations append-only vs origin/main, SQLite-only, Previews isolated
 pnpm check:version # package version/changelog agreement; --tag vX.Y.Z; --base <git-ref>
-pnpm test:version  # focused release-tooling tests
-pnpm check:fragments # validate changelog.d/ fragments; --base <git-ref> also checks a PR's notes
+pnpm test:version  # focused changelog/release-tooling tests
+pnpm check:fragments # normal PRs: validate changelog.d/; --base <git-ref> checks committed PR notes
 pnpm release:prepare # release only: fold changelog.d/ fragments into CHANGELOG.md and bump the version
-pnpm version:bump patch # low-level manual bump; releases normally use release:prepare
+pnpm version:bump patch # release only: low-level manual bump; normally use release:prepare
 pnpm sim -- --games 1000 # deterministic bot simulations (--players 2|3|4, default 4;
                     # --rules reference|prototype, default reference; --rounds N, default 20)
 pnpm check:drand    # live future-round verification; local proof evidence
@@ -278,47 +278,45 @@ every branch, PR head, commit message, PR body, and review or issue comment.
 - Worker routing, `wrangler.jsonc`, or app shell change → `pnpm test:e2e`, and
   `pnpm check:wrangler` for `wrangler.jsonc`.
 
-## Application version: required for every pull request
+## Release notes: required for every pull request
 
-Codex and Claude Code must manage version preparation themselves. Every pull
-request, including documentation-only changes, must advance the application
-version above its current base. CI enforces this on pull requests and the merge
-queue. `package.json` remains the sole source of `APP_VERSION`; do not hardcode a
-version in the UI or Worker, and do not change protocol/state/rules counters
-unless their own compatibility contract requires it.
+Codex and Claude Code follow the same changelog-fragment workflow. Every ordinary
+pull request, including documentation-only and maintenance changes, adds one
+unique `changelog.d/<short-name>.md` file and leaves `CHANGELOG.md` and the
+`package.json` version unchanged. CI enforces this on pull requests and the merge
+queue. Only release pull requests consume fragments and advance the version.
 
-Before the final commit or creating/updating a pull request:
+For an ordinary pull request:
 
-1. Add concrete notes for this change under `## [Unreleased]` in `CHANGELOG.md`,
-   using `### Added`, `### Changed` or `### Fixed`. Include useful issue or pull
-   request references when available. Preserve all dated entries inherited from
-   the base; record corrections in the new notes.
-2. Fetch the latest base with `git fetch origin main`, then run
-   `pnpm version:prepare patch --base origin/main`. Patch is the default for fixes,
-   maintenance and documentation; choose `minor` for a feature or substantial
-   compatible improvement. Choose `major` only for a deliberate stable launch or
-   an incompatible stable public API change. During prototype development,
-   breaking prototype changes use `minor` and must be explained in the notes.
-3. Review `package.json` and `CHANGELOG.md`, then run
-   `pnpm check:version --base origin/main --require-bump`, `pnpm test:version`, and the checks
-   required for the change. Include these files in the same pull request.
+1. Add concrete bullet notes under `### Added`, `### Changed` or `### Fixed` in
+   its fragment, including useful issue or pull request references. Indent
+   continuation lines for long notes. Patch is the default for fixes, maintenance
+   and documentation. An optional first line `<!-- bump: minor -->` requests a
+   minor release for a feature or substantial compatible improvement; use
+   `<!-- bump: major -->`
+   only for a deliberate stable launch or an incompatible stable public API
+   change. Breaking prototype changes use `minor` and must be explained in the
+   notes. See [changelog.d/README.md](changelog.d/README.md).
+2. Run `pnpm check:fragments`, `pnpm test:version`, and the checks required for the
+   change, then commit the changes and fragment together.
+3. Fetch the latest base with `git fetch origin main`, then run
+   `pnpm check:fragments --base origin/main` and
+   `pnpm check:version --base origin/main` before creating/updating the pull
+   request. The fragment base check compares committed changes through `HEAD`.
+   If targeting another branch, fetch it and use its remote ref instead.
 
-The preparation command reads the fetched base and defaults to `patch`. It
-requires real `Unreleased` notes for a fresh bump and moves them into a dated
-release section. It is safe to rerun: when this pull request already has a
-prepared version above the base, it keeps that version and folds any additional
-`Unreleased` notes into that pull request's existing section. Iterations of the
-same open pull request may share its prepared version; every merged pull request
-must advance beyond the latest base. If the scope grows, explicitly preparing
-`minor` or `major` promotes the prepared section to at least the corresponding
-next version of the base without losing its date or notes or downgrading a higher
-version. If another pull request makes the prepared version stale, rebase or
-merge the latest base, resolve conflicts, and run
-preparation and checks again before merging. If targeting another branch, fetch
-that branch and pass its remote ref instead of `origin/main`.
+Iterations of the same open pull request update its fragment. Preserve dated
+changelog history; record corrections in the new fragment. Release preparation
+uses `pnpm release:prepare` to fold pending fragments into a dated changelog
+section, bump the version and remove the consumed fragments. The rolling
+`release/next` pull request is maintained by `.github/workflows/release-pr.yml`;
+manual preparation and publication are covered in
+[docs/RELEASING.md](docs/RELEASING.md). Preparation never commits, tags, publishes
+or deploys.
 
-Preparation never commits, tags, publishes or deploys. Follow the normal review
-workflow; release publication is covered in [docs/RELEASING.md](docs/RELEASING.md).
+`package.json` remains the sole source of `APP_VERSION`; do not hardcode a version
+in the UI or Worker, and do not change protocol/state/rules counters unless their
+own compatibility contract requires it.
 
 ## CI
 
@@ -327,11 +325,11 @@ queue. `verify` is the one check to require: it fails if any job fails.
 
 | Job | What fails it |
 | --- | --- |
-| `lint` | CLAUDE.md lost `@AGENTS.md`; a Unicode minus, en dash or em dash in `src/`, `e2e/`, `tools/`, `test/`, `public/` or `index.html`; release version/changelog mismatch or altered dated base history; a PR/merge-queue version that does not exceed its base; a tag that does not match the package version; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
+| `lint` | CLAUDE.md lost `@AGENTS.md`; a Unicode minus, en dash or em dash in `src/`, `e2e/`, `tools/`, `test/`, `public/` or `index.html`; invalid changelog fragments; a PR/merge-queue entry without a new fragment or editing the version/changelog outside a release; release version/changelog mismatch or altered dated base history; a tag that does not match the package version; `biome ci` format/lint errors, including the rules above encoded in `biome.json`: `shared/`↔`client/`↔`worker/` import boundaries, `Math.random` or `Date` in `shared/`, `setTimeout`/`setInterval`/`accept()`/`addEventListener` in `worker/` |
 | `typecheck` | `pnpm typecheck`, covering `src/`, `test/`, `e2e/` and `tools/` |
 | `test` | `pnpm test:version`, `pnpm test` or the quick bot simulation |
 | `build` | `vite build`, `pnpm check:bundle` (job summary shows the sizes), `wrangler deploy --dry-run` |
-| `changes` | Decides whether `e2e` runs: skipped only for pull requests that change nothing but `.md` files; a required package-version update also triggers it |
+| `changes` | Decides whether `e2e` runs: skipped only for pull requests that change nothing but `.md` files |
 | `e2e` | `pnpm test:e2e`; on failure the Playwright report and traces are uploaded |
 | `cloudflare` | `pnpm check:wrangler` against the PR's base commit |
 | `secrets` | gitleaks over the full history and the tree |
