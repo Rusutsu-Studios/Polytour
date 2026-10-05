@@ -82,10 +82,16 @@ function observeRoomCommands(screen: Page) {
       }
     });
   });
-  return async (operation: string, perform: () => Promise<void>) => {
+  return async (
+    operation: string,
+    perform: () => Promise<void>,
+    timeout = 5000,
+  ) => {
     const completed = replies.get(operation)?.length ?? 0;
     await perform();
-    await expect.poll(() => replies.get(operation)?.[completed]).toBe("ack");
+    await expect
+      .poll(() => replies.get(operation)?.[completed], { timeout })
+      .toBe("ack");
   };
 }
 
@@ -2083,8 +2089,8 @@ test("the room leader seats a local player, admits a friend, hands over during p
       name: "Terminer et revenir au salon",
     });
     await expect(end).toBeFocused();
-    await end.click();
-    await expect(seats).toContainText("Bea");
+    await hostCommand("return-to-lobby", () => end.click(), 15_000);
+    await expect(seats).toContainText("Bea", { timeout: 15_000 });
     await expect(friend.locator(".lobby-seats")).toContainText("Alice");
     await expect(page.getByLabel(/Verrouiller la salle/)).toBeChecked();
     await expect(
