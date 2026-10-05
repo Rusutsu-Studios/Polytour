@@ -5,6 +5,7 @@ import {
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BOT_POLICY } from "../src/shared/board/bot-policy.js";
 import {
   BOT_TIMING,
   DECISION_TIMING,
@@ -30,6 +31,7 @@ import type {
   RoomCredentials,
   ServerMessage,
 } from "../src/shared/protocol/index.js";
+import { ClientMessageSchema } from "../src/shared/protocol/index.js";
 import { ROOM_ADMISSION_KEY } from "../src/worker/room-admission.js";
 
 const origin = "https://example.test";
@@ -1235,6 +1237,7 @@ describe("Authoritative private rooms", () => {
           "UPDATE state SET json=? WHERE id=1",
           JSON.stringify({
             ...state,
+            round: BOT_POLICY.easyLapsePeriod - 2,
             activeSeat: 1,
             players: state.players.map((player) =>
               player.seat === 1
@@ -1270,11 +1273,355 @@ describe("Authoritative private rooms", () => {
           type: "PropertyBought",
           seat: 1,
           tile: 1,
-          level: level === "easy" ? 0 : 2,
+          level: level === "easy" ? 1 : 2,
         }),
       );
     },
   );
+
+  it("freezes mixed bot choices through reload, alarms, another lobby and shifted seats", async () => {
+    const host = await create("secure", 3);
+    let inbox = await connect(host);
+    const welcome = await inbox.next("welcome");
+    const levels = ["easy", "hard", "medium"] as const;
+    for (const [index, difficulty] of levels.entries())
+      expect(
+        await roomOp(inbox, `pick-${index}`, {
+          type: "bot-difficulty",
+          seat: index + 1,
+          difficulty,
+        }),
+      ).toBe("ack");
+    expect(
+      await roomOp(inbox, "new-default", {
+        type: "settings",
+        config: { ...welcome.lobby.config, botDifficulty: "hard" },
+      }),
+    ).toBe("ack");
+    const botLevels = async () =>
+      (await lobbyOf(host.roomCode)).seats
+        .filter((entry) => entry.control === "bot")
+        .map((entry) => entry.botDifficulty);
+    expect(await botLevels()).toEqual(levels);
+    await closeInbox(inbox);
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await evictDurableObject(stub);
+    inbox = await connect(host);
+    expect(
+      (await inbox.next("welcome")).lobby.seats
+        .slice(1)
+        .map((entry) => entry.botDifficulty),
+    ).toEqual(levels);
+    expect(
+      await roomOp(inbox, "mixed-start", { type: "start", fillBots: false }),
+    ).toBe("ack");
+    const batch = await eventsWith(inbox, "GameCreated");
+    const created = batch.events.find((event) => event.type === "GameCreated");
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(created.state.players.map((player) => player.botDifficulty)).toEqual(
+      [undefined, ...levels],
+    );
+    expect(
+      await roomOp(inbox, "late-pick", {
+        type: "bot-difficulty",
+        seat: 1,
+        difficulty: "hard",
+      }),
+    ).toBe("game-already-started");
+    for (const seat of [1, 2, 3] as const) {
+      await runInDurableObject(stub, async (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const state = JSON.parse(
+          sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState;
+        sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...state,
+            round: BOT_POLICY.easyLapsePeriod - 2,
+            activeSeat: seat,
+            players: state.players.map((player) => ({
+              ...player,
+              properties: player.properties.filter((tile) => tile !== 1),
+              ...(player.seat === seat ? { position: 1, cash: 2_000_000 } : {}),
+            })),
+            properties: state.properties.map((property) =>
+              property.tile === 1
+                ? { ...property, owner: null, level: 0 }
+                : property,
+            ),
+            pending: {
+              kind: "buy",
+              seat,
+              tile: 1,
+              maxLevel: 2,
+              deadline: Date.now() + 60_000,
+            },
+          }),
+        );
+        sql.exec(
+          "INSERT OR REPLACE INTO timers(kind,fire_at) VALUES('bot',?)",
+          Date.now() - 1,
+        );
+        await durableState.storage.setAlarm(Date.now() + 30_000);
+      });
+      expect(await runDurableObjectAlarm(stub)).toBe(true);
+      expect((await eventsWith(inbox, "PropertyBought")).events).toContainEqual(
+        expect.objectContaining({
+          type: "PropertyBought",
+          seat,
+          tile: 1,
+          level: seat === 1 ? 1 : 2,
+        }),
+      );
+    }
+    await closeInbox(inbox);
+    await evictDurableObject(stub);
+    inbox = await connect(host);
+    expect(
+      (await inbox.next("welcome")).snapshot?.players.map(
+        (player) => player.botDifficulty,
+      ),
+    ).toEqual([undefined, ...levels]);
+    expect(
+      await roomOp(inbox, "mixed-return", { type: "return-to-lobby" }),
+    ).toBe("ack");
+    expect(await botLevels()).toEqual(levels);
+    expect(
+      await roomOp(inbox, "remove-middle", { type: "remove-bot", seat: 2 }),
+    ).toBe("ack");
+    expect(await botLevels()).toEqual(["easy", "medium"]);
+    expect(
+      await roomOp(inbox, "fill-again", { type: "start", fillBots: true }),
+    ).toBe("ack");
+    const second = await eventsWith(inbox, "GameCreated");
+    const restarted = second.events.find(
+      (event) => event.type === "GameCreated",
+    );
+    expect(
+      restarted?.type === "GameCreated"
+        ? restarted.state.players.map((player) => player.botDifficulty)
+        : [],
+    ).toEqual([undefined, "easy", "medium", "hard"]);
+  });
+
+  it("restricts individual bot choices to a room leader and a real lobby bot", async () => {
+    const host = await create();
+    const guest = await joinSeated(host.roomCode, "Guest");
+    const hostInbox = await connect(host);
+    const guestInbox = await connect(guest);
+    await hostInbox.next("welcome");
+    await guestInbox.next("welcome");
+    expect(
+      await roomOp(hostInbox, "seat-bot", { type: "add-bot", seat: 2 }),
+    ).toBe("ack");
+    expect(
+      await roomOp(guestInbox, "guest-level", {
+        type: "bot-difficulty",
+        seat: 2,
+        difficulty: "easy",
+      }),
+    ).toBe("host-only");
+    for (const seat of [0, 1, 3])
+      expect(
+        await roomOp(hostInbox, `not-bot-${seat}`, {
+          type: "bot-difficulty",
+          seat,
+          difficulty: "hard",
+        }),
+      ).toBe("not-a-bot");
+    expect(
+      await roomOp(hostInbox, "leader-level", {
+        type: "bot-difficulty",
+        seat: 2,
+        difficulty: "easy",
+      }),
+    ).toBe("ack");
+    expect((await lobbyOf(host.roomCode)).seats[2].botDifficulty).toBe("easy");
+    const op = { type: "bot-difficulty", seat: 2, difficulty: "easy" };
+    for (const invalid of [
+      { ...op, difficulty: "expert" },
+      { ...op, seat: 4 },
+      { ...op, extra: true },
+    ])
+      expect(
+        ClientMessageSchema.safeParse({
+          type: "lobby",
+          id: "invalid-level",
+          op: invalid,
+        }).success,
+      ).toBe(false);
+  });
+
+  it.each([false, true])(
+    "loads an old seat schema without writing, then adds bot choices on mutation (%s)",
+    async (choose) => {
+      const host = await create("secure", 1);
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        sql.exec("ALTER TABLE seats DROP COLUMN bot_difficulty");
+        const room = JSON.parse(
+          sql
+            .exec<{ v: string }>("SELECT v FROM meta WHERE k='room'")
+            .toArray()[0].v,
+        ) as { config: Record<string, unknown> };
+        delete room.config.botDifficulty;
+        sql.exec("UPDATE meta SET v=? WHERE k='room'", JSON.stringify(room));
+      });
+      await evictDurableObject(stub);
+      expect((await lobbyOf(host.roomCode)).seats[1].botDifficulty).toBe(
+        "medium",
+      );
+      await runInDurableObject(stub, (_instance, durableState) => {
+        expect(
+          durableState.storage.sql
+            .exec<{ name: string }>("PRAGMA table_info(seats)")
+            .toArray()
+            .map((column) => column.name),
+        ).not.toContain("bot_difficulty");
+      });
+      const inbox = await connect(host);
+      await inbox.next("welcome");
+      if (choose)
+        expect(
+          await roomOp(inbox, "legacy-choice", {
+            type: "bot-difficulty",
+            seat: 1,
+            difficulty: "easy",
+          }),
+        ).toBe("ack");
+      expect(
+        await roomOp(inbox, "legacy-start", { type: "start", fillBots: false }),
+      ).toBe("ack");
+      const created = (await eventsWith(inbox, "GameCreated")).events.find(
+        (event) => event.type === "GameCreated",
+      );
+      expect(
+        created?.type === "GameCreated"
+          ? created.state.players[1].botDifficulty
+          : null,
+      ).toBe(choose ? "easy" : "medium");
+      await runInDurableObject(stub, (_instance, durableState) => {
+        expect(
+          durableState.storage.sql
+            .exec<{ bot_difficulty: string }>(
+              "SELECT bot_difficulty FROM seats WHERE seat=1",
+            )
+            .toArray()[0].bot_difficulty,
+        ).toBe(choose ? "easy" : "medium");
+      });
+    },
+  );
+
+  it("clears an individual bot choice when a human takes its place and uses the match default on disconnect", async () => {
+    const host = await create("secure", 3);
+    const inbox = await connect(host);
+    const welcome = await inbox.next("welcome");
+    expect(
+      await roomOp(inbox, "easy-seat", {
+        type: "bot-difficulty",
+        seat: 1,
+        difficulty: "easy",
+      }),
+    ).toBe("ack");
+    expect(
+      await roomOp(inbox, "hard-replacement", {
+        type: "settings",
+        config: { ...welcome.lobby.config, botDifficulty: "hard" },
+      }),
+    ).toBe("ack");
+    expect(
+      await roomOp(inbox, "replacement-start", {
+        type: "start",
+        fillBots: false,
+      }),
+    ).toBe("ack");
+    await eventsWith(inbox, "GameCreated");
+    const late = await join(host.roomCode, "Late");
+    const lateInbox = await connect(late);
+    const waiting = await lateInbox.next("welcome");
+    if (!waiting.you.member) throw new Error("Waiting member expected");
+    expect(
+      await roomOp(inbox, "replace-easy", {
+        type: "replace-bot",
+        seat: 1,
+        member: waiting.you.member,
+      }),
+    ).toBe("ack");
+    const promoted = await lateInbox.next("welcome");
+    expect(
+      promoted.snapshot?.players.find((player) => player.seat === 1),
+    ).toMatchObject({ control: "human", name: "Late" });
+    expect(
+      promoted.snapshot?.players.find((player) => player.seat === 1)
+        ?.botDifficulty,
+    ).toBeUndefined();
+    expect(
+      (await lobbyOf(host.roomCode)).seats[1].botDifficulty,
+    ).toBeUndefined();
+    await closeInbox(lateInbox);
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, async (_instance, durableState) => {
+      const sql = durableState.storage.sql;
+      const state = JSON.parse(
+        sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0].json,
+      ) as GameState;
+      sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...state,
+          activeSeat: 1,
+          players: state.players.map((player) =>
+            player.seat === 1
+              ? { ...player, position: 1, cash: 2_000_000 }
+              : player,
+          ),
+          pending: {
+            kind: "buy",
+            seat: 1,
+            tile: 1,
+            maxLevel: 2,
+            deadline: Date.now() + 60_000,
+          },
+        }),
+      );
+      sql.exec("DELETE FROM timers WHERE kind IN ('bot','decision')");
+      sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind='grace:1'",
+        Date.now() - 1,
+      );
+      await durableState.storage.setAlarm(Date.now() + 30_000);
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await runInDurableObject(stub, async (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "UPDATE timers SET fire_at=? WHERE kind='bot'",
+        Date.now() - 1,
+      );
+      await durableState.storage.setAlarm(Date.now() + 30_000);
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect((await eventsWith(inbox, "PropertyBought")).events).toContainEqual(
+      expect.objectContaining({
+        type: "PropertyBought",
+        seat: 1,
+        tile: 1,
+        level: 2,
+      }),
+    );
+    expect(
+      await roomOp(inbox, "human-return", { type: "return-to-lobby" }),
+    ).toBe("ack");
+    expect(
+      (await lobbyOf(host.roomCode)).seats[1].botDifficulty,
+    ).toBeUndefined();
+  });
 
   it("lets a bot act only after the animations of its previous move", async () => {
     const host = await create();

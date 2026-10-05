@@ -55,6 +55,8 @@ function observeRoom(page: Page) {
   return {
     lobby: () => lobby,
     state: () => state,
+    operationCount: (operation: string) =>
+      [...operations.values()].filter((type) => type === operation).length,
     command: async (operation: string, perform: () => Promise<void>) => {
       const completed = replies.get(operation)?.length ?? 0;
       await perform();
@@ -92,7 +94,7 @@ for (const locale of ["fr", "en"] as const) {
     const words =
       locale === "fr"
         ? {
-            group: "Difficulté des bots",
+            group: "Niveau par défaut",
             easy: "Facile",
             medium: "Moyen",
             hard: "Difficile",
@@ -105,11 +107,11 @@ for (const locale of ["fr", "en"] as const) {
             building: "Les bots peuvent construire",
             noBuilding: "Construction désactivée pour tous les niveaux.",
             dice: "Mêmes dés et règles que vous.",
-            easyDescription: "sans construire ni racheter vos villes",
+            easyDescription: "profite moins bien de certaines occasions",
             hardDescription: "garde une réserve pour les loyers",
           }
         : {
-            group: "Bot difficulty",
+            group: "Default bot difficulty",
             easy: "Easy",
             medium: "Medium",
             hard: "Hard",
@@ -122,7 +124,7 @@ for (const locale of ["fr", "en"] as const) {
             building: "Bots can build",
             noBuilding: "Building is disabled at every level.",
             dice: "The same dice and rules as you.",
-            easyDescription: "without building or buying out your cities",
+            easyDescription: "occasionally misses opportunities",
             hardDescription: "keeps cash for rent",
           };
     await page.goto("/");
@@ -166,6 +168,53 @@ for (const locale of ["fr", "en"] as const) {
       `Bot · ${words.easy}`,
     ]);
 
+    const cycle = async (seat: number, level: string, keyboard = false) => {
+      const card = page.locator(`.lobby-seat[data-seat="${seat}"]`);
+      const button = card.locator(".seat-bot-difficulty");
+      await expect(button).toHaveAccessibleName(
+        new RegExp(locale === "fr" ? "Passer à" : "Switch to"),
+      );
+      await room.command("bot-difficulty", async () => {
+        if (keyboard) {
+          await button.focus();
+          await page.keyboard.press("Space");
+        } else await button.click();
+      });
+      await expect(button).toHaveText(`Bot · ${level}`);
+    };
+    await cycle(1, words.medium, true);
+    // Changing Milo leaves the other cards untouched.
+    await expect(page.locator(".lobby-seat.bot .seat-status")).toHaveText([
+      `Bot · ${words.medium}`,
+      `Bot · ${words.easy}`,
+      `Bot · ${words.easy}`,
+    ]);
+    await cycle(2, words.medium);
+    await cycle(2, words.hard);
+    await cycle(3, words.medium);
+    await cycle(3, words.hard);
+    await cycle(3, words.easy);
+    await expect
+      .poll(() =>
+        room
+          .lobby()
+          ?.seats.filter((player) => player.control === "bot")
+          .map((player) => player.botDifficulty),
+      )
+      .toEqual(["medium", "hard", "easy"]);
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(viewport);
+      for (const button of await page.locator(".seat-bot-difficulty").all())
+        await expectContained(button, viewport.width, viewport.height);
+      await page.screenshot({
+        path: `.local/verification/bot-difficulty-lobby-${locale}-${viewport.width}.png`,
+      });
+    }
+
     const trigger = page.locator(".settings-trigger");
     await trigger.focus();
     await page.keyboard.press("Enter");
@@ -197,9 +246,9 @@ for (const locale of ["fr", "en"] as const) {
     await expect.poll(() => room.lobby()?.config.botDifficulty).toBe("hard");
     await page.reload();
     await expect(page.locator(".lobby-seat.bot .seat-status")).toHaveText([
+      `Bot · ${words.medium}`,
       `Bot · ${words.hard}`,
-      `Bot · ${words.hard}`,
-      `Bot · ${words.hard}`,
+      `Bot · ${words.easy}`,
     ]);
     await room.command("start", () =>
       page.getByRole("button", { name: words.start }).click(),
@@ -207,10 +256,21 @@ for (const locale of ["fr", "en"] as const) {
     await expect.poll(() => room.state()?.config.botDifficulty).toBe("hard");
     await expect(page.locator(".player-name-row > span")).toContainText([
       locale === "fr" ? "Vous" : "You",
+      `Bot · ${words.medium}`,
       `Bot · ${words.hard}`,
-      `Bot · ${words.hard}`,
-      `Bot · ${words.hard}`,
+      `Bot · ${words.easy}`,
     ]);
+    await expect
+      .poll(() =>
+        room
+          .state()
+          ?.players.filter((player) => player.control === "bot")
+          .map((player) => player.botDifficulty),
+      )
+      .toEqual(["medium", "hard", "easy"]);
+    await expect(
+      page.locator(".player-roster .seat-bot-difficulty"),
+    ).toHaveCount(0);
     // Escape minimizes any purchase offered while the board catches up.
     await page.keyboard.press("Escape");
     const rulesTrigger = page.getByRole("button", {
@@ -241,10 +301,57 @@ for (const locale of ["fr", "en"] as const) {
     await page.reload();
     await expect(page.locator(".player-name-row > span")).toContainText([
       locale === "fr" ? "Vous" : "You",
+      `Bot · ${words.medium}`,
       `Bot · ${words.hard}`,
-      `Bot · ${words.hard}`,
-      `Bot · ${words.hard}`,
+      `Bot · ${words.easy}`,
     ]);
     await expect.poll(() => room.state()?.config.botDifficulty).toBe("hard");
   });
 }
+
+test("a guest can read each bot level but cannot cycle it", async ({
+  page,
+  browser,
+}) => {
+  const hostRoom = observeRoom(page);
+  await page.goto("/");
+  await chooseLanguage(page, "en");
+  await page.getByLabel("Player name").fill("Difficulty leader");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.locator(".seat-bot-difficulty")).toHaveCount(3);
+  const roomCode = hostRoom.lobby()?.roomCode;
+  if (!roomCode) throw new Error("Expected the created room code");
+  const context = await browser.newContext({
+    locale: "en-GB",
+    reducedMotion: "reduce",
+  });
+  try {
+    const guest = await context.newPage();
+    const guestRoom = observeRoom(guest);
+    const invitation = new URL("/", page.url());
+    invitation.searchParams.set("room", roomCode);
+    await guest.goto(invitation.toString());
+    await guest.getByLabel("Player name").fill("Difficulty guest");
+    await guest.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(guest.locator(".seat-bot-difficulty")).toHaveCount(2);
+    for (const button of await guest.locator(".seat-bot-difficulty").all()) {
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveText("Bot · Medium");
+      await button.focus();
+      await guest.keyboard.press("Enter");
+    }
+    expect(guestRoom.operationCount("bot-difficulty")).toBe(0);
+    await expect(page.locator(".seat-bot-difficulty")).toHaveText([
+      "Bot · Medium",
+      "Bot · Medium",
+    ]);
+    await guest.locator(".settings-trigger").click();
+    const defaults = guest
+      .locator(".settings-dialog")
+      .getByRole("group", { name: "Default bot difficulty" });
+    for (const radio of await defaults.getByRole("radio").all())
+      await expect(radio).toBeDisabled();
+  } finally {
+    await context.close();
+  }
+});

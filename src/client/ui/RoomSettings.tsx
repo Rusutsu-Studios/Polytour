@@ -171,8 +171,12 @@ function BotDifficultyDescription({
   const description =
     difficulty === "easy"
       ? t(
-          "Achète des terrains nus, sans construire ni racheter vos villes.",
-          "Buys bare land, without building or buying out your cities.",
+          config.botCanBuild
+            ? "Construit et rachète, mais profite moins bien de certaines occasions."
+            : "Achète des terrains et rachète, mais manque certaines occasions.",
+          config.botCanBuild
+            ? "Builds and buys out cities, but occasionally misses opportunities."
+            : "Buys land and takes buyouts, but occasionally misses opportunities.",
         )
       : difficulty === "hard"
         ? t(
@@ -194,8 +198,8 @@ function BotDifficultyDescription({
       </p>
       <p id={`${id}-rules`} className="room-setting-bot-rules">
         {t(
-          "Même niveau pour tous les bots. Mêmes dés et règles que vous.",
-          "One level for all bots. The same dice and rules as you.",
+          "Les niveaux choisis sur les cartes sont conservés. Mêmes dés et règles que vous.",
+          "Individual choices are kept. The same dice and rules as you.",
         )}
         {!config.botCanBuild && (
           <>
@@ -228,7 +232,7 @@ function BotDifficultySetting({
       disabled={disabled}
       aria-describedby={`${copyId}-description ${copyId}-rules`}
     >
-      <legend>{t("Difficulté des bots", "Bot difficulty")}</legend>
+      <legend>{t("Niveau par défaut", "Default bot difficulty")}</legend>
       <div className="room-setting-pills">
         {(["easy", "medium", "hard"] as const).map((option: BotDifficulty) => (
           <label className="room-setting-pill" key={option}>

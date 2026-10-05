@@ -77,20 +77,74 @@ describe("bot difficulty", () => {
     const unmarked = {
       ...fixture(),
       config: { ...fixture().config, botDifficulty: undefined },
+      players: fixture().players.map((player) => ({
+        ...player,
+        botDifficulty: undefined,
+      })),
     };
     expect(botAction(unmarked, 0)).toEqual(botAction(unmarked, 0, "medium"));
     const easy = {
       ...fixture(),
+      round: 3,
       config: { ...fixture().config, botDifficulty: "easy" as const },
+      players: fixture().players.map((player) => ({
+        ...player,
+        botDifficulty: undefined,
+      })),
     };
-    expect(botAction(easy, 0)).toEqual({ type: "Buy", level: 0 });
+    expect(botAction(easy, 0)).toEqual({ type: "Buy", level: 1 });
   });
 
-  it("Easy buys land while Medium develops it", () => {
-    expect(botAction(fixture(), 0, "easy")).toEqual({ type: "Buy", level: 0 });
+  it("Easy normally develops like Medium and occasionally buys one level lower", () => {
+    expect(botAction(fixture(), 0, "easy")).toEqual({ type: "Buy", level: 2 });
     expect(botAction(fixture(), 0, "medium")).toEqual({
       type: "Buy",
       level: 2,
+    });
+    const lapse = { ...fixture(), round: 3 };
+    expect(botAction(lapse, 0, "easy")).toEqual({ type: "Buy", level: 1 });
+    expect(botAction(lapse, 0, "medium")).toEqual({ type: "Buy", level: 2 });
+    expect(botAction(lapse, 0, "easy")).toEqual(botAction(lapse, 0, "easy"));
+  });
+
+  it("Easy builds on owned cities and may postpone a single-step upgrade", () => {
+    const state = {
+      ...own(fixture(), [1], 0, 1),
+      pending: {
+        kind: "build" as const,
+        tile: 1,
+        seat: 0 as const,
+        maxLevel: 2 as const,
+        deadline: 1000,
+      },
+    };
+    expect(botAction(state, 0, "easy")).toEqual({ type: "Build", level: 2 });
+    expect(botAction({ ...state, round: 3 }, 0, "easy")).toEqual({
+      type: "Decline",
+    });
+    expect(botAction({ ...state, round: 3 }, 0, "medium")).toEqual({
+      type: "Build",
+      level: 2,
+    });
+  });
+
+  it("Easy can buy out opponents but sometimes misses the opportunity", () => {
+    const state = {
+      ...own(fixture(), [1], 1),
+      pending: {
+        kind: "buyout" as const,
+        tile: 1,
+        seat: 0 as const,
+        price: 120_000,
+        deadline: 1000,
+      },
+    };
+    expect(botAction(state, 0, "easy")).toEqual({ type: "Buyout" });
+    expect(botAction({ ...state, round: 3 }, 0, "easy")).toEqual({
+      type: "Decline",
+    });
+    expect(botAction({ ...state, round: 3 }, 0, "medium")).toEqual({
+      type: "Buyout",
     });
   });
 

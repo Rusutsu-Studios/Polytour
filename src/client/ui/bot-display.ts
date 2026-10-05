@@ -11,3 +11,11 @@ export function botDifficultyName(difficulty: BotDifficulty = "medium") {
       return translate("Difficile", "Hard");
   }
 }
+
+export function nextBotDifficulty(difficulty: BotDifficulty): BotDifficulty {
+  return difficulty === "easy"
+    ? "medium"
+    : difficulty === "medium"
+      ? "hard"
+      : "easy";
+}

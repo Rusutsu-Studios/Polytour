@@ -2268,22 +2268,20 @@ function botReserve(state: PublicState, seat: Seat): number {
 export function botAction(
   state: PublicState,
   seat: Seat,
-  difficulty: BotDifficulty = state.config.botDifficulty ?? "medium",
+  difficulty: BotDifficulty = getPlayer(state, seat).botDifficulty ??
+    state.config.botDifficulty ??
+    "medium",
 ): Action {
   const actions = legalActions(state, seat);
   if (actions.length === 0) throw new RangeError("Bot has no legal decision");
   const pending = state.pending;
   if (!pending) return actions[0];
   const cash = getPlayer(state, seat).cash;
-  if (difficulty === "easy") {
-    if (pending.kind === "buy")
-      return (
-        actions.find((action) => action.type === "Buy" && action.level === 0) ??
-        actions[0]
-      );
-    if (pending.kind === "build" || pending.kind === "buyout")
-      return { type: "Decline" };
-  }
+  // Public, reproducible lapses leave Easy close to the ordinary Medium policy.
+  const easyLapse =
+    difficulty === "easy" &&
+    "tile" in pending &&
+    (state.round + seat + pending.tile) % BOT_POLICY.easyLapsePeriod === 0;
   switch (pending.kind) {
     case "island":
       return (
@@ -2343,11 +2341,9 @@ export function botAction(
       );
       const economy = rules(state);
       const reserve =
-        difficulty === "easy"
-          ? 0
-          : difficulty === "hard"
-            ? botReserve(state, seat)
-            : economy.islandReleaseFee;
+        difficulty === "hard"
+          ? botReserve(state, seat)
+          : economy.islandReleaseFee;
       const winningPurchase =
         difficulty === "hard" &&
         pending.kind === "buy" &&
@@ -2364,6 +2360,14 @@ export function botAction(
             action.level < 5 ||
             cash >= actionCost(state, action) * 3,
         );
+      if (easyLapse && selected && selected.level > 0)
+        return (
+          affordable.find(
+            (action) =>
+              action.type === selected.type &&
+              action.level === selected.level - 1,
+          ) ?? { type: "Decline" }
+        );
       return selected ?? { type: "Decline" };
     }
     case "buyout":
@@ -2375,7 +2379,8 @@ export function botAction(
               acquisitionValue(state, pending.tile, seat) >= pending.price))
           ? { type: "Buyout" }
           : { type: "Decline" };
-      return cash - pending.price >= rules(state).islandReleaseFee &&
+      return !easyLapse &&
+        cash - pending.price >= rules(state).islandReleaseFee &&
         pending.price <= cash / 2
         ? { type: "Buyout" }
         : { type: "Decline" };
@@ -2527,6 +2532,14 @@ export function createGame(
     seats.some((seat) => seat.playerId.length === 0 || seat.name.length === 0)
   )
     throw new RangeError("Every seat must have a player ID and name");
+  if (
+    seats.some(
+      (seat) =>
+        seat.botDifficulty !== undefined &&
+        !["easy", "medium", "hard"].includes(seat.botDifficulty),
+    )
+  )
+    throw new RangeError("Unsupported seat bot difficulty");
   const tableSeats = seats.map((seat, index) => seat.seat ?? index);
   if (
     tableSeats.some(
@@ -2541,6 +2554,12 @@ export function createGame(
       playerId: seat.playerId,
       name: seat.name,
       control: seat.control,
+      ...(seat.control === "bot"
+        ? {
+            botDifficulty:
+              seat.botDifficulty ?? config.botDifficulty ?? "medium",
+          }
+        : {}),
       seat: tableSeats[index] as Seat,
       cash: config.startingCash,
       position: 0,

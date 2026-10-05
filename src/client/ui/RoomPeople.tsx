@@ -1,11 +1,11 @@
 import type { CSSProperties, FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { Seat } from "../../shared/engine/index.js";
+import type { BotDifficulty, Seat } from "../../shared/engine/index.js";
 import type { LobbyState } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import ActionButton from "./ActionButton.js";
 import { PLAYER_COLORS } from "./board-display.js";
-import { botDifficultyName } from "./bot-display.js";
+import { botDifficultyName, nextBotDifficulty } from "./bot-display.js";
 import Icon from "./Icon.js";
 import PlayerAvatar from "./PlayerAvatar.js";
 import "./RoomPeople.css";
@@ -129,8 +129,10 @@ export function LobbySeats({
   you,
   leader,
   disabled,
+  pending,
   onAddBot,
   onRemoveBot,
+  onBotDifficulty,
   onAddLocal,
   onRemoveLocal,
   onTransferHost,
@@ -139,8 +141,10 @@ export function LobbySeats({
   you: Seat | null;
   leader: boolean;
   disabled: boolean;
+  pending: boolean;
   onAddBot: (seat: Seat) => void;
   onRemoveBot: (seat: Seat) => void;
+  onBotDifficulty: (seat: Seat, difficulty: BotDifficulty) => void;
   onAddLocal: (seat: Seat, name: string) => void;
   onRemoveLocal: (seat: Seat) => void;
   onTransferHost: (seat: Seat) => void;
@@ -295,19 +299,54 @@ export function LobbySeats({
         const removable =
           (leader && player.control === "bot") ||
           (local && (leader || player.controller === you));
+        const difficulty =
+          player.botDifficulty ?? lobby?.config.botDifficulty ?? "medium";
+        const nextDifficulty = nextBotDifficulty(difficulty);
+        const currentLevel = botDifficultyName(difficulty);
+        const nextLevel = botDifficultyName(nextDifficulty);
         return (
           <li
             key={seat}
             className={`lobby-seat filled ${player.control}`}
             data-local={local || undefined}
+            data-seat={seat}
             style={style}
           >
             <PlayerAvatar seat={seat} />
             <strong>{player.name}</strong>
-            <span className="seat-status">
-              {player.control === "bot"
-                ? `Bot · ${botDifficultyName(lobby?.config.botDifficulty)}`
-                : local
+            {player.control === "bot" ? (
+              <ActionButton
+                type="button"
+                className="seat-status seat-bot-difficulty"
+                aria-label={t(
+                  `${player.name} : Bot · ${currentLevel}. Passer à ${nextLevel}`,
+                  `${player.name}: Bot · ${currentLevel}. Switch to ${nextLevel}`,
+                )}
+                disabled={disabled || pending || !leader}
+                disabledReason={
+                  !leader
+                    ? t(
+                        "Seul le chef de salle peut changer le niveau de ce bot.",
+                        "Only the room leader can change this bot's level.",
+                      )
+                    : pending
+                      ? t(
+                          "En attente de confirmation.",
+                          "Waiting for confirmation.",
+                        )
+                      : t(
+                          "Reconnectez-vous pour changer le niveau de ce bot.",
+                          "Reconnect to change this bot's level.",
+                        )
+                }
+                onClick={() => onBotDifficulty(seat, nextDifficulty)}
+              >
+                {`Bot · ${currentLevel}`}
+                <Icon name="arrow" size={13} />
+              </ActionButton>
+            ) : (
+              <span className="seat-status">
+                {local
                   ? player.controller === you
                     ? t("Sur votre PC", "On your PC")
                     : t(
@@ -319,7 +358,8 @@ export function LobbySeats({
                     : seat === you
                       ? t("Vous", "You")
                       : t("En ligne", "Online")}
-            </span>
+              </span>
+            )}
             {seat === lobby?.hostSeat && (
               <span className="host-label">
                 <Icon name="crown" size={13} />

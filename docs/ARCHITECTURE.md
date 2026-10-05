@@ -54,11 +54,19 @@ Persisted alarms drive bots, decision deadlines, disconnect grace, real-time mat
 expiry and pause-vote expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
 survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
-The room's `botDifficulty` setting is frozen in match config at start. The same
-engine `botAction` policy drives permanent bots and temporary disconnect
-replacements; it reads only public state and legal actions. Missing saved fields
-retain Medium. Protocol version 8 requires stale clients to refresh; no state
-migration or rules-version change is required. See
+Each lobby bot can keep an individual `botDifficulty` choice on its seat row.
+Unselected bots follow the room default; changing that default preserves explicit
+choices. Starting freezes each bot's effective level in its public player state
+and seat row, so returning to the lobby retains it. Compaction moves the entire
+seat row, including its level. Humans carry no individual bot level; taking a bot's
+place clears that field, and temporary disconnect replacements use the frozen
+match default. The same engine `botAction` policy reads only public state and
+legal actions. Missing player fields use match config, then Medium.
+New rooms create the nullable `seats.bot_difficulty` column. Existing rooms gain
+it only when a bot choice is saved, a match starts or a bot is replaced by a
+human; reads and constructor wake-ups do not change that schema. Protocol version
+9 requires stale clients to refresh; no state migration or rules-version change
+is required. See
 [BOT_DIFFICULTY.md](BOT_DIFFICULTY.md) for the proposal and its evaluation limits.
 Live Chance draws receive fresh Web Crypto through `EngineContext.chanceEntropy`
 and select uniformly among remaining cards with rejection sampling, without
@@ -378,7 +386,7 @@ info is added later, redact per socket using the seat in the attachment.
 | `pause-vote` | `state.pause.deadline` during voting | Clear an expired vote; gameplay continues. Deferred during a pending dice commitment. |
 | `match-end` | `state.matchDeadline` | Finish an active unpaused match, including an unattended match. |
 | `decision` | `state.pending.deadline` (computed by the engine) | `applyTimeout` applies the rule-defined default for a human seat (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
-| `grace:<seat>` | 60 s after socket close | Seat becomes a bot seat (`botAction`, medium) until the player reconnects. |
+| `grace:<seat>` | 60 s after socket close | A bot uses the match's frozen default for the human's seat until the player reconnects. |
 | `bot` | `botDecisionAt`: once the events that opened the decision have played at 1×, plus 0.7 s (roll) or 1.4 s (choice); 0.9 s after a wake-up | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
 | `cleanup` | 10 min after `Finished` | `deleteAll()` storage. |
 

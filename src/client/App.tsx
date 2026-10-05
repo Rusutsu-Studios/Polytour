@@ -1576,7 +1576,7 @@ function MatchView({
                           : mySeats.includes(player.seat)
                             ? t("Ce PC", "This PC")
                             : player.control === "bot"
-                              ? `Bot · ${botDifficultyName(game.config.botDifficulty)}`
+                              ? `Bot · ${botDifficultyName(player.botDifficulty ?? game.config.botDifficulty)}`
                               : t("Absent", "Away")}
                     </span>
                   )}
@@ -2362,8 +2362,10 @@ function App() {
               you={you}
               leader={leader}
               disabled={roomOffline}
+              pending={room.pending}
               onAddBot={room.addBot}
               onRemoveBot={room.removeBot}
+              onBotDifficulty={room.botDifficulty}
               onAddLocal={room.addLocal}
               onRemoveLocal={room.removeLocal}
               onTransferHost={room.transferHost}

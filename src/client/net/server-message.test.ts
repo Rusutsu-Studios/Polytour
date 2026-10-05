@@ -52,6 +52,93 @@ const diagnostics: RoomDiagnostics = {
 };
 
 describe("room debug server envelopes", () => {
+  it("validates individual bot levels in lobby updates and match snapshots", () => {
+    const snapshot = createGame(
+      DEFAULT_GAME_CONFIG,
+      [
+        { playerId: "ada", name: "Ada", control: "human" },
+        { playerId: "bea", name: "Bea", control: "bot" },
+      ],
+      7,
+      { now: 0 },
+    ).state;
+    for (const difficulty of ["easy", "medium", "hard"]) {
+      const changedLobby = {
+        ...welcome.lobby,
+        seats: welcome.lobby.seats.map((player, index) =>
+          index === 1
+            ? { ...player, control: "bot", botDifficulty: difficulty }
+            : player,
+        ),
+      };
+      expect(
+        parseServerMessage(
+          JSON.stringify({ type: "lobby", lobby: changedLobby }),
+        ),
+      ).toMatchObject({
+        lobby: {
+          seats: [
+            { seat: 0 },
+            { seat: 1, botDifficulty: difficulty },
+            { seat: 2 },
+            { seat: 3 },
+          ],
+        },
+      });
+      expect(
+        parseServerMessage(
+          JSON.stringify({
+            ...welcome,
+            snapshot: {
+              ...snapshot,
+              players: snapshot.players.map((player) =>
+                player.control === "bot"
+                  ? { ...player, botDifficulty: difficulty }
+                  : player,
+              ),
+            },
+          }),
+        ),
+      ).toMatchObject({
+        snapshot: {
+          players: [{ seat: 0 }, { seat: 1, botDifficulty: difficulty }],
+        },
+      });
+    }
+    for (const difficulty of ["expert", null, 3]) {
+      expect(() =>
+        parseServerMessage(
+          JSON.stringify({
+            ...welcome,
+            lobby: {
+              ...welcome.lobby,
+              seats: welcome.lobby.seats.map((player, index) =>
+                index === 1 ? { ...player, botDifficulty: difficulty } : player,
+              ),
+            },
+          }),
+        ),
+      ).toThrow();
+      expect(() =>
+        parseServerMessage(
+          JSON.stringify({
+            ...welcome,
+            snapshot: {
+              ...snapshot,
+              players: snapshot.players.map((player) => ({
+                ...player,
+                botDifficulty: difficulty,
+              })),
+            },
+          }),
+        ),
+      ).toThrow();
+    }
+    expect(
+      parseServerMessage(JSON.stringify({ ...welcome, snapshot })),
+    ).toMatchObject({ snapshot });
+  });
+
   it("validates frozen bot difficulty while preserving unmarked saved matches", () => {
     const snapshot = createGame(
       DEFAULT_GAME_CONFIG,

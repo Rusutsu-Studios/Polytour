@@ -11,6 +11,8 @@ export type SeatInfo = {
   readonly playerId: string;
   readonly name: string;
   readonly control: "human" | "bot";
+  /** An individual bot's choice, frozen when its match starts. */
+  readonly botDifficulty?: BotDifficulty;
   /**
    * The table seat (colour and corner). Defaults to the list index, so a room
    * of two or three players can keep the seats they chose in the lobby.
@@ -126,6 +128,8 @@ export type PlayerState = {
   readonly playerId: string;
   readonly name: string;
   readonly control: "human" | "bot";
+  /** Missing saved fields use the match's default, then Medium. */
+  readonly botDifficulty?: BotDifficulty;
   readonly seat: Seat;
   readonly cash: number;
   readonly position: number;

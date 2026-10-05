@@ -5,7 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { Action, Seat } from "../../shared/engine/index.js";
+import type { Action, BotDifficulty, Seat } from "../../shared/engine/index.js";
 import type {
   ClientMessage,
   LobbyOp,
@@ -597,6 +597,8 @@ export function useRoom(credentials: RoomCredentials | null) {
     settings: (config: RoomConfig) => lobbyOp({ type: "settings", config }),
     addBot: (seat: Seat) => lobbyOp({ type: "add-bot", seat }),
     removeBot: (seat: Seat) => lobbyOp({ type: "remove-bot", seat }),
+    botDifficulty: (seat: Seat, difficulty: BotDifficulty) =>
+      lobbyOp({ type: "bot-difficulty", seat, difficulty }),
     addLocal: (seat: Seat, name: string) =>
       lobbyOp({ type: "add-local", seat, name }),
     removeLocal: (seat: Seat) => lobbyOp({ type: "remove-local", seat }),
