@@ -134,7 +134,7 @@ debug socket has been removed; `/api/health` remains.
   selector is server-owned: version-10 and older lobbies report `"shuffled"`.
   `GameCreated.state.startingTurnOrder` contains the selected starter first,
   followed by the fixed clockwise cycle. Its initial pending deadline reserves
-  the four-second opening wheel before the ordinary decision window; reconnect
+  the seven-second opening wheel before the ordinary decision window; reconnect
   snapshots do not replay that reveal. Version-9 lobbies report
   `chanceRule: "original"`;
   older rooms also omit or freeze `escapeCard: false` and retain the original

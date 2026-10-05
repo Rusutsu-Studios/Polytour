@@ -3,7 +3,10 @@
 - Follow the board's direction when passing turns: bottom-right, bottom-left,
   top-left, then top-right, skipping empty and eliminated seats. Reveal the
   randomly selected starting player with a shared, bounded wheel animation,
-  respecting reduced motion and snapshot recovery (#110).
+  respecting reduced motion and snapshot recovery (#110). The wheel selects for
+  3.6 seconds and holds its result for 3.4 seconds; coloured name badges remain
+  empty until the order numbers appear. First-turn clocks and bots reserve the
+  full seven-second presentation.
 
 ### Changed
 

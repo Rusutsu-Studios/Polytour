@@ -118,8 +118,27 @@ for (const size of SIZES) {
       );
       await expect(page.locator(".player-card")).toHaveCount(size.players);
       await expect(page.locator(".roll-button")).not.toBeVisible();
-      if (!reducedMotion) await page.clock.runFor(2900);
+      if (!reducedMotion) {
+        await expect(dialog).toHaveAttribute("data-revealed", "false");
+        await expect(dialog.locator(".start-order-result")).toHaveText("");
+        await expect(dialog.locator(".start-order-sequence")).not.toBeVisible();
+        for (const badge of await dialog
+          .locator(".start-order-player .start-order-number")
+          .all())
+          await expect(badge).toHaveText("");
+        // Selection lasts a second longer; badges stay blank while it spins.
+        await page.clock.runFor(3000);
+        await expect(dialog).toHaveAttribute("data-revealed", "false");
+        await page.screenshot({
+          path: `.local/verification/start-order-${size.width}-fr-spinning.png`,
+        });
+        await page.clock.runFor(900);
+      }
       await expect(dialog).toHaveAttribute("data-revealed", "true");
+      await expect(dialog.locator(".start-order-sequence")).toBeVisible();
+      await expect(dialog.locator(".start-order-result")).toContainText(
+        NAMES[state.activeSeat],
+      );
       const sequence = await dialog
         .locator(".start-order-sequence > li")
         .evaluateAll((items) =>
@@ -131,6 +150,9 @@ for (const size of SIZES) {
           `.start-order-player[data-seat="${player.seat}"]`,
         );
         await expect(token).toContainText(player.name);
+        await expect(token.locator(".start-order-number")).toHaveText(
+          String(state.startingTurnOrder.indexOf(player.seat) + 1),
+        );
       }
       const box = await dialog.boundingBox();
       if (!box) throw new Error("Expected start dialog bounds");
@@ -146,8 +168,21 @@ for (const size of SIZES) {
       await page.screenshot({
         path: `.local/verification/start-order-${size.width}-${english ? "en-reduced" : "fr"}.png`,
       });
-      // Native keyboard dismissal finishes the Director moment and returns focus.
-      await page.keyboard.press("Escape");
+      if (size.players === 4 && !reducedMotion) {
+        // Hold the revealed result past the old timeout, then finish at seven seconds.
+        await page.clock.runFor(3000);
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toHaveAttribute("data-revealed", "true");
+        await expect(dialog.locator(".start-order-sequence")).toBeVisible();
+        await expect(dialog.locator(".start-order-result")).toContainText(
+          NAMES[state.activeSeat],
+        );
+        await expect(page.locator(".roll-button")).not.toBeVisible();
+        await page.clock.runFor(200);
+      } else {
+        // Native keyboard dismissal finishes the Director moment and returns focus.
+        await page.keyboard.press("Escape");
+      }
       await expect(dialog).toHaveCount(0);
       const roll = page.getByRole("button", {
         name: english ? "Roll the dice" : "Lancer les dés",

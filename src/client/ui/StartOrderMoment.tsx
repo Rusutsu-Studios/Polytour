@@ -16,7 +16,7 @@ const POINTER_ANGLES = [225, 315, 45, 135] as const;
 type StartMoment = {
   state: PublicState;
   reducedMotion: boolean;
-  duration: number;
+  spinDuration: number;
 };
 
 /** The server's selected starter, presented once in the ordered event queue. */
@@ -64,7 +64,8 @@ export default function StartOrderMoment() {
           setMoment({
             state: event.state,
             reducedMotion: context.reducedMotion,
-            duration,
+            spinDuration:
+              DECISION_TIMING.startSpinAnimation / context.playbackRate,
           });
           timer = setTimeout(complete, duration);
         });
@@ -98,7 +99,7 @@ export default function StartOrderMoment() {
   }, [moment, busy]);
 
   if (!moment) return null;
-  const { state, reducedMotion, duration } = moment;
+  const { state, reducedMotion, spinDuration } = moment;
   const starter = state.players.find(
     (player) => player.seat === state.activeSeat,
   );
@@ -140,7 +141,7 @@ export default function StartOrderMoment() {
               initial={{ rotate: reducedMotion ? angle : 135 }}
               animate={{ rotate: reducedMotion ? angle : 1440 + angle }}
               transition={{
-                duration: reducedMotion ? 0 : (duration / 1000) * 0.65,
+                duration: reducedMotion ? 0 : spinDuration / 1000,
                 ease: [0.16, 1, 0.3, 1],
               }}
               onAnimationComplete={() => setSettled(true)}
@@ -161,7 +162,7 @@ export default function StartOrderMoment() {
                 }
               >
                 <span className="start-order-number" aria-hidden="true">
-                  {settled ? state.startingTurnOrder.indexOf(seat) + 1 : "·"}
+                  {settled ? state.startingTurnOrder.indexOf(seat) + 1 : null}
                 </span>
                 <strong title={player.name}>{player.name}</strong>
               </div>
