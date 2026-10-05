@@ -1714,6 +1714,12 @@ input::placeholder {
     );
   gap: calc(70px * var(--ui-zoom));
 }
+@media (min-width: 1051px) {
+  .room-lobby {
+    grid-template-columns: calc(450px * var(--ui-zoom)) minmax(0, 1fr);
+    gap: calc(28px * var(--ui-zoom));
+  }
+}
 .room-lobby h1 {
   font-size: clamp(3rem, 4.2vw, 4.4rem);
 }

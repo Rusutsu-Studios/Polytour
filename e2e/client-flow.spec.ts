@@ -443,6 +443,16 @@ test("room lobby board fills its preview across desktop sizes", async ({
     expect((canvas?.x ?? 0) + (canvas?.width ?? 0)).toBeLessThanOrEqual(
       size.width,
     );
+    const controls = await page.locator(".room-lobby-main").boundingBox();
+    if (!canvas || !controls) throw new Error("Expected the lobby columns");
+    // Give spare desktop width to the board rather than an empty player column.
+    expect(canvas.x - controls.x - controls.width).toBeGreaterThanOrEqual(0);
+    expect(
+      (canvas.x - controls.x - controls.width) / controls.width,
+    ).toBeLessThan(0.1);
+    await expect(
+      page.getByRole("button", { name: "Démarrer la partie", exact: true }),
+    ).toBeEnabled();
     const alignment = await page.evaluate(() => {
       const left = (selector: string) => {
         const element = document.querySelector(selector);

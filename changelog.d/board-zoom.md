@@ -14,5 +14,6 @@
 ### Fixed
 
 - Keep the welcome and invitation board preview at the full height of its stage.
+- Give the lobby board more desktop space beside the compact player controls.
 - Preserve ordinary tile clicks and keep floating controls separate from board
   gestures, including when holding the roll button.
