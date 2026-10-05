@@ -31,6 +31,7 @@ export {
 export {
   BOT_TIMING,
   CHANCE_AMOUNTS,
+  CHANCE_DECK_COPIES,
   DECISION_TIMING,
   PAUSE_TIMING,
 } from "./timing.js";
@@ -39,6 +40,7 @@ export type {
   BoardSide,
   BuildLevel,
   BuildLevelConfig,
+  ChanceRule,
   CityTile,
   CountryConfig,
   CountryId,

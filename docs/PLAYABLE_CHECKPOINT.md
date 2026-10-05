@@ -228,8 +228,8 @@ entry animation and reading progress decoration.
 Original banknote reserves and coin piles surround the board. Cancellable cash
 transfers show salaries, rent, purchases, upgrades, buyouts and sales using the
 existing animation budgets. The player HUD retains the exact balances. Artwork,
-source references and complete generation prompts are recorded in
-[CARD_ART.md](CARD_ART.md) and [card-art-prompts.json](card-art-prompts.json).
+source references and the card drawings are recorded in
+[CARD_ART.md](CARD_ART.md).
 
 Review corrections preserve the free dice option during travel, show the exact
 payment after Guardian/Coupon protection (including odd-value rounding), and

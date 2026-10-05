@@ -141,6 +141,9 @@
   font-size: 20px;
   flex-shrink: 0;
 }
+.streamer-toggle[aria-pressed="true"] {
+  color: var(--coral-dark);
+}
 .icon-button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fff;
 }
@@ -913,6 +916,22 @@
   padding: 10px;
   min-height: 37px;
 }
+.network-status {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.network-status:is(:hover, :focus-visible) {
+  color: var(--coral-dark);
+}
+.network-status:focus-visible {
+  outline: 2px solid var(--coral-dark);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
 .match-network {
   position: absolute;
   z-index: 3;
@@ -1284,41 +1303,6 @@
   gap: 18px;
 }
 
-.graphics-setting {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12px;
-  font-weight: 750;
-}
-.graphics-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 92px;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid #648b99;
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.graphics-toggle:hover {
-  background: #e6f1e8;
-}
-.prototype-tag {
-  background: #b9eadd;
-  color: #285d58;
-  border-radius: 6px;
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: 700;
-}
 .text-button {
   display: inline-flex;
   align-items: center;
@@ -1331,8 +1315,12 @@
   font-weight: 700;
   padding: 5px 0;
 }
-.text-button:hover {
+.text-button:is(:hover, :focus-visible) {
   color: var(--coral-dark);
+}
+.personal-settings-trigger {
+  min-width: 32px;
+  min-height: 32px;
 }
 .text-button:is(:disabled, [aria-disabled="true"]) {
   color: #5e7c7c;
@@ -1530,7 +1518,7 @@ input::placeholder {
   font-size: 16px;
 }
 .settings-disclosure[open] > summary::before {
-  content: "−";
+  content: "-";
 }
 .settings-disclosure > summary > span {
   margin-left: auto;
@@ -1665,6 +1653,12 @@ input::placeholder {
   padding: 0 48px 24px;
   font-size: 11px;
   color: #446969;
+}
+.lobby-credit {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .scene-loading {
   height: 100%;
@@ -2397,10 +2391,6 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   font-size: 12px;
 }
 
-.lobby-shell .prototype-tag {
-  background: #c1ecf2;
-  color: #235a70;
-}
 .lobby-shell .travel-stamp,
 .lobby-shell .fair-play {
   color: #24546a;
@@ -2646,9 +2636,6 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
   .topbar {
     height: 80px;
     padding: 0 22px;
-  }
-  .prototype-tag {
-    display: none;
   }
   .welcome-grid {
     display: flex;

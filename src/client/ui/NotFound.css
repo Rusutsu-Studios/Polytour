@@ -1,0 +1,69 @@
+.not-found {
+  min-height: 100svh;
+  padding: 32px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  background: #b7edfa;
+}
+.not-found nav {
+  position: absolute;
+  top: 24px;
+  right: 32px;
+}
+.not-found-roundabout {
+  width: min(420px, 80vw);
+  height: auto;
+}
+.not-found-code {
+  color: #98291a;
+  font-size: 28px;
+  font-weight: 900;
+}
+.not-found h1 {
+  max-width: 24ch;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.not-found > p:last-of-type {
+  max-width: 48ch;
+  line-height: 1.5;
+}
+.not-found-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 12px;
+  padding: 16px 24px;
+  border-radius: 8px;
+  color: #fffaf0;
+  background: #c74024;
+  box-shadow: 0 4px 0 #98291a;
+  text-decoration: none;
+  font-weight: 750;
+}
+.not-found-home:hover {
+  background: #b8331b;
+}
+.not-found-car {
+  animation: car-idle 2s ease-in-out infinite;
+}
+@keyframes car-idle {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .not-found-car {
+    animation: none;
+  }
+}
+@media (max-height: 720px) {
+  .not-found-roundabout {
+    width: min(320px, 70vw);
+  }
+}

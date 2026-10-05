@@ -1,6 +1,7 @@
 import type {
   BoardRule,
   BuildLevel,
+  ChanceRule,
   EconomyRule,
   WorldTourRule,
 } from "../board/index.js";
@@ -8,6 +9,7 @@ import {
   BOARD_SIZE,
   BOT_TIMING,
   CHANCE_AMOUNTS,
+  CHANCE_DECK_COPIES,
   COUNTRY_IDS,
   DECISION_TIMING,
   ECONOMY,
@@ -29,6 +31,7 @@ import type {
   Action,
   ApplyActionResult,
   BotDifficulty,
+  ChanceCard,
   CreateGameResult,
   EngineContext,
   GameConfig,
@@ -39,13 +42,14 @@ import type {
   PlayerState,
   PropertyState,
   PublicState,
+  RentCard,
   ResolutionTask,
   Seat,
   SeatInfo,
   Standing,
   WinKind,
 } from "./types.js";
-import { CHANCE_CARDS } from "./types.js";
+import { CHANCE_CARDS, LEGACY_CHANCE_CARDS, SHIELDED_CARDS } from "./types.js";
 
 export { applyEvent, toPublic } from "./reducer.js";
 export const DEFAULT_GAME_CONFIG = {
@@ -66,6 +70,8 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  escapeCard: true,
+  chanceRule: "reworked",
   sellBackPercent: 100,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
@@ -85,6 +91,26 @@ export function worldTourRule(
   config: Pick<GameConfig, "worldTourRule">,
 ): WorldTourRule {
   return config.worldTourRule ?? "free-first";
+}
+/** Saves before rules version 10 keep the original card set. */
+export function chanceRule(config: Pick<GameConfig, "chanceRule">): ChanceRule {
+  return config.chanceRule ?? "original";
+}
+/**
+ * The cards a full deck holds under the match's frozen rules: every card with
+ * copies (version 10), or the original sixteen plus Escape from version 9.
+ */
+export function chanceDeck(
+  config: Pick<GameConfig, "chanceRule" | "escapeCard">,
+): ChanceCard[] {
+  const copies: Partial<Record<ChanceCard, number>> = CHANCE_DECK_COPIES;
+  if (chanceRule(config) === "reworked")
+    return CHANCE_CARDS.flatMap((card) =>
+      Array<ChanceCard>(copies[card] ?? 1).fill(card),
+    );
+  return config.escapeCard === true
+    ? [...LEGACY_CHANCE_CARDS, "Escape"]
+    : [...LEGACY_CHANCE_CARDS];
 }
 function rules(state: PublicState) {
   return ruleEconomy(economyRule(state.config));
@@ -108,6 +134,32 @@ export function getProperty(
   tile: number,
 ): PropertyState | undefined {
   return state.properties.find((property) => property.tile === tile);
+}
+/** A Power Cut lasts until the owner has passed Start enough times. */
+export function powerCutActive(
+  state: PublicState,
+  property: PropertyState,
+): boolean {
+  return (
+    property.powerCutUntilLap !== undefined &&
+    property.owner !== null &&
+    getPlayer(state, property.owner).laps < property.powerCutUntilLap
+  );
+}
+/** The opponent still in play with the least (or most) cash; ties keep turn order. */
+export function cashRankedOpponent(
+  state: PublicState,
+  seat: Seat,
+  most: boolean,
+): Seat | undefined {
+  return state.turnOrder
+    .filter((other) => other !== seat)
+    .map((other) => getPlayer(state, other))
+    .sort(
+      (a, b) =>
+        (most ? b.cash - a.cash : a.cash - b.cash) ||
+        state.turnOrder.indexOf(a.seat) - state.turnOrder.indexOf(b.seat),
+    )[0]?.seat;
 }
 export function propertyOwner(state: PublicState, tile: number): Seat | null {
   return getProperty(state, tile)?.owner ?? null;
@@ -192,6 +244,7 @@ export function propertyRent(state: PublicState, tileIndex: number): number {
       : rent;
   }
   if (!tile || !isCityTile(tile) || !property) return 0;
+  if (powerCutActive(state, property)) return 0;
   const rent = getTileBaseRent(
     tileIndex,
     property.level,
@@ -224,6 +277,7 @@ export function rentBoost(
     return null;
   if (isCityTile(tile) && property.level === 5) return null;
   if (isResortTile(tile) && !resortFestivals(state.config)) return null;
+  if (powerCutActive(state, property)) return null;
   const boosts: RentBoost[] = [];
   if (isCityTile(tile) && state.championshipHost?.tile === tileIndex)
     boosts.push({
@@ -472,9 +526,13 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
     case "roll":
       return [{ type: "Roll" }];
     case "island":
-      return player.cash >= pending.fee
-        ? [{ type: "Roll" }, { type: "PayIsland" }]
-        : [{ type: "Roll" }];
+      return [
+        { type: "Roll" },
+        ...(player.cash >= pending.fee ? [{ type: "PayIsland" as const }] : []),
+        ...(player.heldCards.includes("Escape")
+          ? [{ type: "UseEscapeCard" as const }]
+          : []),
+      ];
     case "travel":
       return player.cash >= pending.fee
         ? [
@@ -657,7 +715,12 @@ function animationBudget(events: readonly GameEvent[]): number {
           DECISION_TIMING.propertyAnimation
         );
       case "PropertyDowngraded":
+        return total + DECISION_TIMING.wreckAnimation;
       case "PropertiesSwapped":
+      case "PowerCut":
+      case "ShieldRaised":
+      case "ShieldBroken":
+      case "PropertyGiven":
         return total + DECISION_TIMING.propertyAnimation;
       default:
         return total;
@@ -819,7 +882,7 @@ function resolver(initial: GameState, context: ResolutionContext) {
     if (to !== null && getPlayer(state, to).bankrupt) to = null;
     if (
       state.config.giftCanBankrupt === false &&
-      ["Birthday", "Charity"].includes(reason)
+      ["Birthday", "Charity", "Patron"].includes(reason)
     )
       amount = Math.min(amount, Math.max(0, getPlayer(state, from).cash));
     if (tile !== undefined && to !== null)
@@ -970,6 +1033,23 @@ function resolver(initial: GameState, context: ResolutionContext) {
         getTile(property.tile, state.config)?.kind === "city" &&
         property.level < 5,
     );
+  /** Own cities a free level can still raise: Contractor and Patron. */
+  const upgradeTargets = (seat: Seat) => {
+    const cap =
+      getPlayer(state, seat).laps > 0 || state.config.hotelsDirectly === true
+        ? 4
+        : rules(state).firstLapHouseCap;
+    return eligibleOwnCities(seat)
+      .filter((property) => property.level < cap)
+      .map((property) => property.tile);
+  };
+  /** A card's own die: live entropy, or the seeded sequence in simulations. */
+  const rollDie = () => {
+    if (context.chanceIndex) return context.chanceIndex(6) + 1;
+    const next = nextRandom(state.rngState);
+    secrets({ rngState: next.state });
+    return Math.floor(next.value * 6) + 1;
+  };
   const chance = (seat: Seat) => {
     if (state.deck.length === 0) {
       if (context.chanceIndex) {
@@ -991,10 +1071,23 @@ function resolver(initial: GameState, context: ResolutionContext) {
     secrets({
       deck: [...state.deck.slice(0, index), ...state.deck.slice(index + 1)],
     });
-    const keep = card === "Guardian Angel" || card === "Coupon";
+    const keep =
+      card === "Guardian Angel" || card === "Coupon" || card === "Escape";
     const kept =
       keep && !getPlayer(state, seat).heldCards.includes(card as KeepCard);
-    emit({ type: "CardDrawn", seat, card, kept });
+    const reworked = chanceRule(state.config) === "reworked";
+    // The card shows its die, so the roll happens with the draw.
+    const roll =
+      card === "Tailwind" || (reworked && card === "Detour")
+        ? rollDie()
+        : undefined;
+    emit({
+      type: "CardDrawn",
+      seat,
+      card,
+      kept,
+      ...(roll === undefined ? {} : { roll }),
+    });
     if (kept) return;
     secrets({ discard: [...state.discard, card] });
     const relocate = (target: number) => {
@@ -1048,6 +1141,13 @@ function resolver(initial: GameState, context: ResolutionContext) {
         );
         break;
       case "Audit":
+        if (reworked) {
+          const tax = getBoard(state.config).find(
+            (tile) => tile.kind === "tax",
+          );
+          if (tax) relocate(tax.index);
+          break;
+        }
         prepend({
           kind: "payment",
           from: seat,
@@ -1104,41 +1204,73 @@ function resolver(initial: GameState, context: ResolutionContext) {
         break;
       }
       case "Detour":
+      case "Tailwind":
         secrets({ extraRoll: false });
-        move(seat, -CHANCE_AMOUNTS.detourSteps);
+        move(
+          seat,
+          (card === "Detour" ? -1 : 1) * (roll ?? CHANCE_AMOUNTS.detourSteps),
+        );
         prepend({ kind: "landing", seat });
         break;
-      case "Contractor": {
-        const cap =
-          getPlayer(state, seat).laps > 0 ||
-          state.config.hotelsDirectly === true
-            ? 4
-            : rules(state).firstLapHouseCap;
-        const targets = eligibleOwnCities(seat)
-          .filter((property) => property.level < cap)
+      case "Power Cut": {
+        const targets = state.properties
+          .filter(
+            (property) =>
+              property.owner !== null &&
+              property.owner !== seat &&
+              getTile(property.tile, state.config)?.kind === "city" &&
+              !powerCutActive(state, property),
+          )
           .map((property) => property.tile);
         if (targets.length) open({ kind: "card-target", seat, card, targets });
         break;
       }
+      case "Contractor":
+      case "Patron": {
+        const targets = upgradeTargets(seat);
+        if (targets.length) open({ kind: "card-target", seat, card, targets });
+        break;
+      }
+      case "Forced Sale":
+      case "Shield":
+      case "Gift": {
+        // Forced Sale hits any opponent property; Shield guards one of yours;
+        // Gift gives away one of your cities below the Hotel.
+        const targets = state.properties
+          .filter((property) =>
+            card === "Forced Sale"
+              ? property.owner !== null && property.owner !== seat
+              : property.owner === seat &&
+                (card === "Shield"
+                  ? !property.shielded
+                  : getTile(property.tile, state.config)?.kind === "city" &&
+                    property.level < rules(state).protectedLevel),
+          )
+          .map((property) => property.tile);
+        if (targets.length) open({ kind: "card-target", seat, card, targets });
+        break;
+      }
+      case "Fan Trip":
+        // Off to whoever hosts the championship, to pay its rent there.
+        if (state.championshipHost) relocate(state.championshipHost.tile);
+        break;
+      case "Roll Again":
+        secrets({ extraRoll: true });
+        break;
       case "Jailbreak":
         for (const player of state.players)
           if (player.onIsland)
             emit({ type: "LeftIsland", seat: player.seat, method: "card" });
         break;
+      case "Escape":
+        break;
       case "Charity": {
-        const poorest = state.turnOrder
-          .filter((other) => other !== seat)
-          .map((other) => getPlayer(state, other))
-          .sort(
-            (a, b) =>
-              a.cash - b.cash ||
-              state.turnOrder.indexOf(a.seat) - state.turnOrder.indexOf(b.seat),
-          )[0];
-        if (poorest)
+        const poorest = cashRankedOpponent(state, seat, false);
+        if (poorest !== undefined)
           prepend({
             kind: "payment",
             from: seat,
-            to: poorest.seat,
+            to: poorest,
             amount: CHANCE_AMOUNTS.charity,
             reason: card,
           });
@@ -1180,14 +1312,17 @@ function resolver(initial: GameState, context: ResolutionContext) {
         } else {
           const amount = propertyRent(state, tile.index);
           prepend({ kind: "buyout", seat, tile: tile.index });
-          if (player.heldCards.length > 0 && amount > 0)
+          const cards = player.heldCards.filter(
+            (card): card is RentCard => card !== "Escape",
+          );
+          if (cards.length > 0 && amount > 0)
             open({
               kind: "rent-card",
               seat,
               tile: tile.index,
               owner: property.owner,
               amount,
-              cards: player.heldCards,
+              cards,
             });
           else
             prepend({
@@ -1307,6 +1442,12 @@ function resolver(initial: GameState, context: ResolutionContext) {
         emit({ type: "LeftIsland", seat, method: "paid" });
         startDecision();
         break;
+      case "UseEscapeCard":
+        emit({ type: "CardUsed", seat, card: "Escape" });
+        secrets({ discard: [...state.discard, "Escape"] });
+        emit({ type: "LeftIsland", seat, method: "card" });
+        startDecision();
+        break;
       case "Travel":
         if (pending.kind === "travel")
           payment(seat, null, pending.fee, "World Tour");
@@ -1384,13 +1525,91 @@ function resolver(initial: GameState, context: ResolutionContext) {
         if (pending.kind === "card-target") {
           const property = getProperty(state, action.tile);
           if (!property) throw new Error("Card target requires property");
-          if (pending.card === "Earthquake")
+          const tile = action.tile;
+          if (SHIELDED_CARDS.includes(pending.card) && property.shielded)
+            emit({ type: "ShieldBroken", seat, tile });
+          else if (pending.card === "Earthquake")
             emit({
               type: "PropertyDowngraded",
               tile: action.tile,
               level: (property.level - 1) as BuildLevel,
             });
-          else if (pending.card === "Contractor")
+          else if (pending.card === "Power Cut" && property.owner !== null)
+            emit({
+              type: "PowerCut",
+              seat,
+              tile: action.tile,
+              untilLap:
+                getPlayer(state, property.owner).laps +
+                CHANCE_AMOUNTS.powerCutLaps,
+            });
+          else if (pending.card === "Forced Sale" && property.owner !== null) {
+            // A Hotel loses its top level instead of the whole city.
+            const owner = property.owner;
+            if (property.level >= 4) {
+              const level = (property.level - 1) as BuildLevel;
+              const refund =
+                propertyRefund(state, tile) -
+                propertyRefund(
+                  {
+                    ...state,
+                    properties: state.properties.map((entry) =>
+                      entry.tile === tile ? { ...entry, level } : entry,
+                    ),
+                  },
+                  tile,
+                );
+              emit({ type: "PropertyDowngraded", tile, level });
+              if (refund > 0)
+                emit({
+                  type: "MoneyTransferred",
+                  from: null,
+                  to: owner,
+                  amount: refund,
+                  reason: pending.card,
+                });
+            } else {
+              clearHost([tile]);
+              emit({
+                type: "PropertySold",
+                seat: owner,
+                tile,
+                amount: propertyRefund(state, tile),
+              });
+            }
+          } else if (pending.card === "Shield")
+            emit({ type: "ShieldRaised", seat, tile });
+          else if (pending.card === "Gift") {
+            const to = cashRankedOpponent(state, seat, false);
+            if (to !== undefined) {
+              clearHost([tile]);
+              emit({ type: "PropertyGiven", seat, to, tile });
+              prepend({ kind: "wins" });
+            }
+          } else if (pending.card === "Patron") {
+            // The richest opponent pays the bank for your next level.
+            const payer = cashRankedOpponent(state, seat, true);
+            const level = (property.level + 1) as BuildLevel;
+            const cost =
+              purchaseCost(state, tile, level) -
+              propertyInvestedValue(state, tile);
+            emit({
+              type: "PropertyUpgraded",
+              seat,
+              tile,
+              level,
+              amount: 0,
+              free: true,
+            });
+            if (payer !== undefined)
+              prepend({
+                kind: "payment",
+                from: payer,
+                to: null,
+                amount: cost,
+                reason: pending.card,
+              });
+          } else if (pending.card === "Contractor")
             emit({
               type: "PropertyUpgraded",
               seat,
@@ -1733,20 +1952,36 @@ function timeoutAction(state: PublicState): Action {
         ? { type: "ChooseHost", tile: current }
         : { type: "Decline" };
     }
-    case "card-target":
-      return pending.card === "Land Swap"
-        ? { type: "Decline" }
-        : {
-            type: "ChooseTarget",
-            tile:
-              pending.card === "Earthquake"
-                ? bestRentTarget(state, pending.targets)
-                : [...pending.targets].sort(
-                    (a, b) =>
-                      nextRentIncrease(state, b) - nextRentIncrease(state, a) ||
-                      a - b,
-                  )[0],
-          };
+    case "card-target": {
+      if (pending.card === "Land Swap") return { type: "Decline" };
+      const targets = pending.targets;
+      // Attacks prefer an unshielded property; a Gift gives the cheapest city.
+      const exposed = targets.filter(
+        (tile) => !getProperty(state, tile)?.shielded,
+      );
+      return {
+        type: "ChooseTarget",
+        tile:
+          pending.card === "Gift"
+            ? [...targets].sort(
+                (a, b) =>
+                  propertyInvestedValue(state, a) -
+                    propertyInvestedValue(state, b) || a - b,
+              )[0]
+            : pending.card === "Contractor" || pending.card === "Patron"
+              ? [...targets].sort(
+                  (a, b) =>
+                    nextRentIncrease(state, b) - nextRentIncrease(state, a) ||
+                    a - b,
+                )[0]
+              : bestRentTarget(
+                  state,
+                  SHIELDED_CARDS.includes(pending.card) && exposed.length
+                    ? exposed
+                    : targets,
+                ),
+      };
+    }
     case "sell":
       return {
         type: "Sell",
@@ -1898,9 +2133,11 @@ export function botAction(
   switch (pending.kind) {
     case "island":
       return (
+        actions.find((action) => action.type === "UseEscapeCard") ??
         actions.find(
           (action) => action.type === "PayIsland" && cash > pending.fee * 3,
-        ) ?? actions[0]
+        ) ??
+        actions[0]
       );
     case "travel": {
       const travel = actions
@@ -1979,7 +2216,12 @@ export function botAction(
       return timeoutAction(state);
     case "card-target":
       return pending.card === "Land Swap"
-        ? (actions.find((action) => action.type === "ChooseTarget") ??
+        ? (actions.find(
+            (action) =>
+              action.type === "ChooseTarget" &&
+              !getProperty(state, action.tile)?.shielded,
+          ) ??
+            actions.find((action) => action.type === "ChooseTarget") ??
             actions[0])
         : timeoutAction(state);
     case "roll":
@@ -2044,6 +2286,14 @@ export function createGame(
   for (const marker of [config.fourResortRent, config.buildAfterBuyout])
     if (marker !== undefined && typeof marker !== "boolean")
       throw new RangeError("Unsupported rules version 8 marker");
+  if (config.escapeCard !== undefined && typeof config.escapeCard !== "boolean")
+    throw new RangeError("Escape card rule must be a boolean");
+  if (
+    config.chanceRule !== undefined &&
+    !["reworked", "original"].includes(config.chanceRule)
+  )
+    throw new RangeError("Unsupported Chance rule");
+  const chances = config.chanceRule ?? "reworked";
   if (
     config.sellBackPercent !== undefined &&
     config.sellBackPercent !== 50 &&
@@ -2097,7 +2347,13 @@ export function createGame(
     players.map((player) => player.seat),
     seed,
   );
-  const deck = shuffle(CHANCE_CARDS, order.state);
+  const deck = shuffle(
+    chanceDeck({
+      chanceRule: chances,
+      escapeCard: config.escapeCard ?? true,
+    }),
+    order.state,
+  );
   const festivals = shuffle(
     board
       .filter(
@@ -2119,6 +2375,8 @@ export function createGame(
       worldTourRule: config.worldTourRule ?? "free-and-own",
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
+      escapeCard: config.escapeCard ?? true,
+      chanceRule: chances,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
     },
     players,

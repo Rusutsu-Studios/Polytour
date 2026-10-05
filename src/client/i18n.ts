@@ -5,18 +5,22 @@ export type Locale = "fr" | "en";
 const STORAGE_KEY = "polytour.locale";
 const listeners = new Set<() => void>();
 
-function savedLocale(): Locale {
+function initialLocale(): Locale {
+  if (typeof window === "undefined") return "fr";
   try {
-    return typeof window !== "undefined" &&
-      window.localStorage.getItem(STORAGE_KEY) === "en"
-      ? "en"
-      : "fr";
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (saved === "fr" || saved === "en") return saved;
   } catch {
-    return "fr";
+    // Browser language still applies when preference storage is unavailable.
   }
+  for (const language of [...navigator.languages, navigator.language]) {
+    const supported = language.toLowerCase().split("-")[0];
+    if (supported === "fr" || supported === "en") return supported;
+  }
+  return "fr";
 }
 
-let locale = savedLocale();
+let locale = initialLocale();
 
 function applyLocale(next: Locale) {
   applyLocaleMetadata(next);
@@ -29,7 +33,7 @@ if (typeof window !== "undefined") {
   applyLocaleMetadata(locale);
   window.addEventListener("storage", (event) => {
     if (event.key === STORAGE_KEY || event.key === null)
-      applyLocale(savedLocale());
+      applyLocale(initialLocale());
   });
 }
 

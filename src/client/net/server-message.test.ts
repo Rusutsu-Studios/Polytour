@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createGame, DEFAULT_GAME_CONFIG } from "../../shared/engine/index.js";
 import { RoomConfigSchema } from "../../shared/protocol/index.js";
 import type { RoomDiagnostics } from "../../shared/protocol/room-diagnostics.js";
 import { parseServerMessage } from "./server-message.js";
@@ -51,6 +52,49 @@ const diagnostics: RoomDiagnostics = {
 };
 
 describe("room debug server envelopes", () => {
+  it("accepts Escape in snapshots and preserves the optional frozen deck marker", () => {
+    const snapshot = createGame(
+      DEFAULT_GAME_CONFIG,
+      [
+        { playerId: "ada", name: "Ada", control: "human" },
+        { playerId: "bea", name: "Bea", control: "human" },
+      ],
+      7,
+      { now: 0 },
+    ).state;
+    const withCard = {
+      ...snapshot,
+      players: snapshot.players.map((player) => ({
+        ...player,
+        heldCards: ["Escape"],
+      })),
+    };
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          snapshot: withCard,
+          lobby: { ...welcome.lobby, escapeCard: true },
+        }),
+      ),
+    ).toMatchObject({
+      snapshot: {
+        players: [{ heldCards: ["Escape"] }, { heldCards: ["Escape"] }],
+      },
+      lobby: { escapeCard: true },
+    });
+    expect(parseServerMessage(JSON.stringify(welcome))).not.toHaveProperty(
+      "lobby.escapeCard",
+    );
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          lobby: { ...welcome.lobby, escapeCard: "yes" },
+        }),
+      ),
+    ).toThrow();
+  });
   it("validates pause and resume events before they reach the reducer", () => {
     const events = [
       {
@@ -76,6 +120,33 @@ describe("room debug server envelopes", () => {
       expect(() =>
         parseServerMessage(JSON.stringify({ ...envelope, events: [event] })),
       ).toThrow();
+  });
+  it("accepts the reworked deck's die roll, Power Cut, shields and gifts", () => {
+    const events = [
+      { type: "CardDrawn", seat: 1, card: "Tailwind", kept: false, roll: 4 },
+      { type: "PowerCut", seat: 1, tile: 13, untilLap: 3 },
+      { type: "ShieldRaised", seat: 0, tile: 1 },
+      { type: "ShieldBroken", seat: 1, tile: 1 },
+      { type: "PropertyGiven", seat: 0, to: 2, tile: 3 },
+    ];
+    expect(
+      parseServerMessage(
+        JSON.stringify({ type: "events", fromSeq: 1, toSeq: 2, events }),
+      ),
+    ).toMatchObject({ events });
+    expect(parseServerMessage(JSON.stringify(welcome))).toMatchObject({
+      lobby: { chanceRule: "reworked" },
+    });
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          type: "events",
+          fromSeq: 1,
+          toSeq: 1,
+          events: [{ ...events[1], tile: 40 }],
+        }),
+      ),
+    ).toThrow();
   });
   it.each([false, true])(
     "retains the frozen resort festival marker %s",

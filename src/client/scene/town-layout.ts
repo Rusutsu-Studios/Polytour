@@ -51,7 +51,7 @@ export function lawnPoint(side: number, along: number, inset: number): Vec2 {
   ];
 }
 
-/** Unit direction from the board center toward corner `corner` (0–3). */
+/** Unit direction from the board center toward corner `corner` (0-3). */
 export function cornerDirection(corner: number): Vec2 {
   const [x, z] = tileCenter(corner * 8);
   const length = Math.hypot(x, z);

@@ -21,11 +21,12 @@ import RoomDebug, { translatedRegion } from "./RoomDebug.js";
 import "./PauseMenu.css";
 
 type Page = "menu" | "settings" | "confirm-leave";
-type SettingsTab = "game" | "video" | "audio" | "debug";
+export type SettingsTab = "game" | "video" | "audio" | "debug";
 const TABS: readonly SettingsTab[] = ["game", "video", "audio", "debug"];
 
 export type PauseMenuProps = {
-  game: PublicState;
+  game: PublicState | null;
+  initialSettingsTab?: SettingsTab;
   mySeats: readonly Seat[];
   blocked: boolean;
   solo: boolean;
@@ -41,12 +42,12 @@ export type PauseMenuProps = {
   onGraphicsChange: (low: boolean) => void;
   connection: string;
   ping: PingState;
-  roomDebug: RoomDebugState;
+  roomDebug: RoomDebugState | null;
   /** Null while this screen waits for a place in the room. */
   ownSeat: Seat | null;
   onDebugActiveChange: (active: boolean) => void;
   /** The bank's running totals, from the authoritative match state. */
-  bank: { received: number; paidOut: number; balance: number };
+  bank: { received: number; paidOut: number; balance: number } | null;
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -56,6 +57,7 @@ export type PauseMenuProps = {
 // FORM: Native dialog focus protects settings and each human's pause consent.
 export default function PauseMenu({
   game,
+  initialSettingsTab,
   mySeats,
   blocked,
   solo,
@@ -78,12 +80,16 @@ export default function PauseMenu({
 }: PauseMenuProps) {
   const { locale, setLocale, t } = useLocale();
   const { reducedMotion } = useDirector();
-  const [page, setPage] = useState<Page>("menu");
-  const [tab, setTab] = useState<SettingsTab>("game");
+  const [page, setPage] = useState<Page>(
+    !game || initialSettingsTab ? "settings" : "menu",
+  );
+  const [tab, setTab] = useState<SettingsTab>(
+    initialSettingsTab ?? (game ? "game" : "video"),
+  );
   const [now, setNow] = useState(Date.now());
-  const paused = game.pause?.kind === "paused";
-  const vote = game.pause?.kind === "vote" ? game.pause : null;
-  const eligible = game.players.filter(
+  const paused = game?.pause?.kind === "paused";
+  const vote = game?.pause?.kind === "vote" ? game.pause : null;
+  const eligible = (game?.players ?? []).filter(
     (player) =>
       player.control === "human" &&
       !player.bankrupt &&
@@ -95,12 +101,12 @@ export default function PauseMenu({
         "La partie est en pause. Les tours et les chronomètres sont arrêtés.",
         "The game is paused. Turns and clocks are stopped.",
       )
-    : solo && eligible.length > 0 && game.status === "active"
+    : solo && eligible.length > 0 && game?.status === "active"
       ? t("Mise en pause de la partie…", "Pausing the game…")
       : null;
   const cooldown = Math.max(
     0,
-    Math.ceil((game.pauseCooldownUntil - now) / 1000),
+    Math.ceil(((game?.pauseCooldownUntil ?? 0) - now) / 1000),
   );
   const countdown = (seconds: number) =>
     `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -185,7 +191,7 @@ export default function PauseMenu({
     setPage("menu");
   };
   const dismiss = () => {
-    if (page === "menu") onClose();
+    if (!game || page === "menu") onClose();
     else backToMenu();
   };
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -254,7 +260,7 @@ export default function PauseMenu({
         transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }}
       >
         <header className="pause-dialog-header">
-          {page !== "menu" && (
+          {game && page !== "menu" && (
             <button
               type="button"
               className="pause-back"
@@ -270,7 +276,11 @@ export default function PauseMenu({
           <button
             type="button"
             className="pause-close"
-            aria-label={t("Revenir au plateau", "Back to the board")}
+            aria-label={
+              game
+                ? t("Revenir au plateau", "Back to the board")
+                : t("Fermer les réglages", "Close settings")
+            }
             onClick={onClose}
           >
             <Icon name="close" size={23} />
@@ -287,7 +297,7 @@ export default function PauseMenu({
               {error}
             </p>
           )}
-          {vote && (
+          {game && vote && (
             <section
               className="pause-vote"
               aria-label={t("Vote de pause", "Pause vote")}
@@ -357,7 +367,8 @@ export default function PauseMenu({
               </ul>
             </section>
           )}
-          {!solo &&
+          {game &&
+            !solo &&
             !game.pause &&
             game.status === "active" &&
             eligible.length > 0 && (
@@ -384,7 +395,7 @@ export default function PauseMenu({
                 </p>
               </div>
             )}
-          {page === "menu" && (
+          {game && page === "menu" && (
             <div className="pause-menu-actions">
               <button
                 ref={continueRef}
@@ -401,11 +412,12 @@ export default function PauseMenu({
               <button
                 ref={settingsRef}
                 type="button"
-                className="pause-action pause-secondary"
+                className="pause-action pause-secondary pause-settings"
+                aria-label={t("Réglages", "Settings")}
+                title={t("Réglages", "Settings")}
                 onClick={() => setPage("settings")}
               >
                 <Icon name="settings" size={20} />
-                {t("Réglages", "Settings")}
               </button>
               <button
                 ref={leaveRef}
@@ -418,7 +430,7 @@ export default function PauseMenu({
               </button>
             </div>
           )}
-          {page === "confirm-leave" && (
+          {game && page === "confirm-leave" && (
             <div className="pause-leave-confirmation">
               <p>
                 {t(
@@ -539,7 +551,7 @@ export default function PauseMenu({
                               )
                             }
                           >
-                            −
+                            -
                           </ActionButton>
                           <button
                             type="button"
@@ -584,8 +596,13 @@ export default function PauseMenu({
                       className="pause-debug"
                       data-runtime={sample?.runtime ?? "unknown"}
                     >
-                      <div className="pause-debug-grid">
-                        <RoomDebug value={roomDebug} ownSeat={ownSeat} />
+                      <div
+                        className="pause-debug-grid"
+                        data-room={Boolean(roomDebug)}
+                      >
+                        {roomDebug && (
+                          <RoomDebug value={roomDebug} ownSeat={ownSeat} />
+                        )}
                         <section
                           className="pause-debug-edge"
                           aria-labelledby={`${id}-http-title`}
@@ -625,12 +642,17 @@ export default function PauseMenu({
                               <dt>{t("Hôte", "Host")}</dt>
                               <dd>{sample?.hostname ?? unavailable}</dd>
                             </div>
-                            <div>
-                              <dt>
-                                {t("Connexion de la partie", "Game connection")}
-                              </dt>
-                              <dd>{connectionLabel}</dd>
-                            </div>
+                            {game && (
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Connexion de la partie",
+                                    "Game connection",
+                                  )}
+                                </dt>
+                                <dd>{connectionLabel}</dd>
+                              </div>
+                            )}
                           </dl>
                           <p className="pause-debug-note">
                             {ping.status === "success" ? (
@@ -668,39 +690,48 @@ export default function PauseMenu({
                             )}
                           </p>
                         </section>
-                        <section
-                          className="pause-debug-bank"
-                          aria-labelledby={`${id}-bank-title`}
-                        >
-                          <h3 id={`${id}-bank-title`}>{t("Banque", "Bank")}</h3>
-                          <dl>
-                            <div>
-                              <dt>
-                                {t("Versé aux joueurs", "Paid to players")}
-                              </dt>
-                              <dd>{fullMoney(bank.paidOut)}</dd>
-                            </div>
-                            <div>
-                              <dt>
-                                {t("Reçu des joueurs", "Received from players")}
-                              </dt>
-                              <dd>{fullMoney(bank.received)}</dd>
-                            </div>
-                            <div>
-                              <dt>{t("Solde du compte", "Account balance")}</dt>
-                              <dd data-negative={bank.balance < 0}>
-                                {bank.balance > 0 ? "+" : ""}
-                                {fullMoney(bank.balance)}
-                              </dd>
-                            </div>
-                          </dl>
-                          <p className="pause-debug-note">
-                            {t(
-                              "Le compte de la banque démarre à 0. Salaires et primes le font baisser ; taxes et amendes le font monter. Les achats, constructions et ventes de propriétés n’y passent pas.",
-                              "The bank account starts at 0. Salaries and bonuses lower it; taxes and fines raise it. Property purchases, building and sales don’t go through it.",
-                            )}
-                          </p>
-                        </section>
+                        {bank && (
+                          <section
+                            className="pause-debug-bank"
+                            aria-labelledby={`${id}-bank-title`}
+                          >
+                            <h3 id={`${id}-bank-title`}>
+                              {t("Banque", "Bank")}
+                            </h3>
+                            <dl>
+                              <div>
+                                <dt>
+                                  {t("Versé aux joueurs", "Paid to players")}
+                                </dt>
+                                <dd>{fullMoney(bank.paidOut)}</dd>
+                              </div>
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Reçu des joueurs",
+                                    "Received from players",
+                                  )}
+                                </dt>
+                                <dd>{fullMoney(bank.received)}</dd>
+                              </div>
+                              <div>
+                                <dt>
+                                  {t("Solde du compte", "Account balance")}
+                                </dt>
+                                <dd data-negative={bank.balance < 0}>
+                                  {bank.balance > 0 ? "+" : ""}
+                                  {fullMoney(bank.balance)}
+                                </dd>
+                              </div>
+                            </dl>
+                            <p className="pause-debug-note">
+                              {t(
+                                "Le compte de la banque démarre à 0. Salaires et primes le font baisser ; taxes et amendes le font monter. Les achats, constructions et ventes de propriétés n’y passent pas.",
+                                "The bank account starts at 0. Salaries and bonuses lower it; taxes and fines raise it. Property purchases, building and sales don’t go through it.",
+                              )}
+                            </p>
+                          </section>
+                        )}
                       </div>
                     </div>
                   )}

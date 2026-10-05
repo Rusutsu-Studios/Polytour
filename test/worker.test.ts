@@ -4,7 +4,7 @@ import {
   runInDurableObject,
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOT_TIMING,
   DECISION_TIMING,
@@ -30,6 +30,7 @@ import type {
   RoomCredentials,
   ServerMessage,
 } from "../src/shared/protocol/index.js";
+import { ROOM_ADMISSION_KEY } from "../src/worker/room-admission.js";
 
 const origin = "https://example.test";
 const activeSockets: WebSocket[] = [];
@@ -241,6 +242,13 @@ async function closeInbox(inbox: Inbox): Promise<void> {
   inbox.socket.close(1000);
   await closed;
 }
+beforeEach(async () => {
+  // Each test shares the real creation gate only among its own room fixtures.
+  await runInDurableObject(
+    env.MATCHMAKER.getByName("room-admission"),
+    (_instance, state) => state.storage.delete(ROOM_ADMISSION_KEY),
+  );
+});
 afterEach(() => {
   for (const socket of activeSockets.splice(0)) socket.close(1000);
   vi.restoreAllMocks();
@@ -536,13 +544,17 @@ describe("Authoritative private rooms", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
     expect(await closed).toEqual({ code: 1008, reason: "Left room" });
-    let announced = (await nextHostInbox.next("lobby")).lobby;
-    while (announced.hostSeat !== nextHost.seat)
-      announced = (await nextHostInbox.next("lobby")).lobby;
-    expect(announced.seats[host.seat]).toMatchObject({
-      control: null,
-      online: false,
-    });
+    const shifted = await nextHostInbox.next("welcome");
+    expect(shifted.you.seat).toBe(1);
+    expect(shifted.lobby.hostSeat).toBe(1);
+    expect(
+      shifted.lobby.seats.map((seat) => [seat.name, seat.control]),
+    ).toEqual([
+      ["Bo", "human"],
+      ["Cam", "human"],
+      ["Place libre", null],
+      ["Place libre", null],
+    ]);
     const rejectedReconnect = await exports.default.fetch(
       new Request(`${origin}/ws/room/${host.roomCode}`, {
         headers: {
@@ -559,7 +571,8 @@ describe("Authoritative private rooms", () => {
     await evictDurableObject(stub);
     const resumed = await connect(nextHost);
     const welcome = await resumed.next("welcome");
-    expect(welcome.lobby.hostSeat).toBe(nextHost.seat);
+    expect(welcome.you.seat).toBe(1);
+    expect(welcome.lobby.hostSeat).toBe(1);
     const guestInbox = await connect(offlineGuest);
     await guestInbox.next("welcome");
     guestInbox.send({
@@ -581,7 +594,7 @@ describe("Authoritative private rooms", () => {
       3_000_000,
     );
     for (const type of ["add-bot", "remove-bot"] as const) {
-      resumed.send({ type: "lobby", id: type, op: { type, seat: 0 } });
+      resumed.send({ type: "lobby", id: type, op: { type, seat: 2 } });
       expect((await resumed.next("ack")).id).toBe(type);
     }
     resumed.send({
@@ -596,8 +609,8 @@ describe("Authoritative private rooms", () => {
     ).toMatchObject({
       state: {
         players: [
-          { seat: offlineGuest.seat, name: "Bo" },
-          { seat: nextHost.seat, name: "Cam" },
+          { seat: 0, name: "Bo" },
+          { seat: 1, name: "Cam" },
         ],
       },
     });
@@ -606,10 +619,13 @@ describe("Authoritative private rooms", () => {
   it("keeps the host when a guest quits but retains seats for ordinary lobby disconnections", async () => {
     const host = await create();
     const guest = await joinSeated(host.roomCode, "Bo");
+    const lastGuest = await joinSeated(host.roomCode, "Cam");
     const hostInbox = await connect(host);
     await hostInbox.next("welcome");
     const guestInbox = await connect(guest);
     await guestInbox.next("welcome");
+    const lastGuestInbox = await connect(lastGuest);
+    await lastGuestInbox.next("welcome");
     await closeInbox(hostInbox);
     const disconnected = await readLobby(host.roomCode);
     expect(disconnected.hostSeat).toBe(host.seat);
@@ -617,6 +633,7 @@ describe("Authoritative private rooms", () => {
       control: "human",
       online: false,
     });
+    expect(disconnected.seats[lastGuest.seat].name).toBe("Cam");
     const resumed = await connect(host);
     await resumed.next("welcome");
     const closed = waitForClose(guestInbox);
@@ -625,10 +642,12 @@ describe("Authoritative private rooms", () => {
     const departed = await readLobby(host.roomCode);
     expect(departed.hostSeat).toBe(host.seat);
     expect(departed.seats[guest.seat]).toMatchObject({
-      control: null,
-      online: false,
+      name: "Cam",
+      control: "human",
+      online: true,
     });
-    expect((await join(host.roomCode, "Replacement")).seat).toBe(guest.seat);
+    expect((await lastGuestInbox.next("welcome")).you.seat).toBe(1);
+    expect((await join(host.roomCode, "Replacement")).seat).toBe(2);
     expect((await leave(guest)).status).toBe(401);
   });
 
@@ -667,9 +686,9 @@ describe("Authoritative private rooms", () => {
           .exec("SELECT id FROM commands WHERE seat=0")
           .toArray(),
       })),
-    ).toEqual({ seats: [], commands: [] });
+    ).toEqual({ seats: [{ seat: 0 }], commands: [] });
     const replacement = await joinSeated(host.roomCode, "Replacement");
-    expect(replacement.seat).toBe(host.seat);
+    expect(replacement.seat).toBe(1);
     const stalePresence = await runInDurableObject(stub, async (instance) => {
       const handlers = instance as unknown as {
         departedSockets: WebSocket[];
@@ -692,7 +711,7 @@ describe("Authoritative private rooms", () => {
     });
     expect(stalePresence).toBe(0);
     const reused = await readLobby(host.roomCode);
-    expect(reused.hostSeat).toBe(guest.seat);
+    expect(reused.hostSeat).toBe(0);
     expect(reused.seats[replacement.seat]).toMatchObject({
       name: "Replacement",
       control: "human",
@@ -733,7 +752,7 @@ describe("Authoritative private rooms", () => {
     const closed = waitForClose(hostInbox);
     expect((await leave(host)).status).toBe(200);
     await closed;
-    expect((await readLobby(host.roomCode)).hostSeat).toBe(guest.seat);
+    expect((await readLobby(host.roomCode)).hostSeat).toBe(0);
   });
 
   it("makes the next human host after everyone leaves even when bots occupy earlier seats", async () => {
@@ -745,7 +764,7 @@ describe("Authoritative private rooms", () => {
     guestInbox.send({
       type: "lobby",
       id: "earlier-bot",
-      op: { type: "add-bot", seat: 0 },
+      op: { type: "add-bot", seat: 1 },
     });
     expect((await guestInbox.next("ack")).id).toBe("earlier-bot");
     expect(
@@ -1559,14 +1578,17 @@ describe("Authoritative private rooms", () => {
     expect(await lobbyOp("alone", { type: "start", fillBots: false })).toBe(
       "players-required",
     );
-    expect(await lobbyOp("bot-2", { type: "add-bot", seat: 2 })).toBe("ack");
+    expect(await lobbyOp("skip-bot-1", { type: "add-bot", seat: 2 })).toBe(
+      "seat-order",
+    );
+    expect(await lobbyOp("bot-1", { type: "add-bot", seat: 1 })).toBe("ack");
     expect(await seats()).toEqual([
       ["Alex", "human"],
+      ["Milo", "bot"],
       ["Place libre", null],
-      ["Nova", "bot"],
       ["Place libre", null],
     ]);
-    expect(await lobbyOp("again", { type: "add-bot", seat: 2 })).toBe(
+    expect(await lobbyOp("again", { type: "add-bot", seat: 1 })).toBe(
       "seat-taken",
     );
     expect(await lobbyOp("host-seat", { type: "add-bot", seat: 0 })).toBe(
@@ -1575,9 +1597,14 @@ describe("Authoritative private rooms", () => {
     expect(await lobbyOp("human", { type: "remove-bot", seat: 0 })).toBe(
       "not-a-bot",
     );
-    expect(await lobbyOp("empty", { type: "remove-bot", seat: 1 })).toBe(
+    expect(await lobbyOp("empty", { type: "remove-bot", seat: 2 })).toBe(
       "not-a-bot",
     );
+    expect(await lobbyOp("skip-bot-2", { type: "add-bot", seat: 3 })).toBe(
+      "seat-order",
+    );
+    expect(await lobbyOp("bot-2", { type: "add-bot", seat: 2 })).toBe("ack");
+    await hostSocket.next("lobby");
     expect(await lobbyOp("bot-3", { type: "add-bot", seat: 3 })).toBe("ack");
     await hostSocket.next("lobby");
     expect(await lobbyOp("drop-2", { type: "remove-bot", seat: 2 })).toBe(
@@ -1585,13 +1612,22 @@ describe("Authoritative private rooms", () => {
     );
     expect(await seats()).toEqual([
       ["Alex", "human"],
-      ["Place libre", null],
-      ["Place libre", null],
+      ["Milo", "bot"],
       ["Atlas", "bot"],
+      ["Place libre", null],
+    ]);
+    expect(await lobbyOp("drop-1", { type: "remove-bot", seat: 1 })).toBe(
+      "ack",
+    );
+    expect(await seats()).toEqual([
+      ["Alex", "human"],
+      ["Atlas", "bot"],
+      ["Place libre", null],
+      ["Place libre", null],
     ]);
     // A friend takes the first free place; only the host manages bots.
     const friend = await join(host.roomCode, "Bo");
-    expect(friend.seat).toBe(1);
+    expect(friend.seat).toBe(2);
     await hostSocket.next("lobby");
     const friendSocket = await connect(friend);
     await friendSocket.next("welcome");
@@ -1613,16 +1649,16 @@ describe("Authoritative private rooms", () => {
       ]),
     ).toEqual([
       [0, "Alex", "human"],
-      [1, "Bo", "human"],
-      [3, "Atlas", "bot"],
+      [1, "Atlas", "bot"],
+      [2, "Bo", "human"],
     ]);
-    expect([...created.state.turnOrder].sort()).toEqual([0, 1, 3]);
+    expect([...created.state.turnOrder].sort()).toEqual([0, 1, 2]);
     let started = (await hostSocket.next("lobby")).lobby;
     while (started.status === "lobby")
       started = (await hostSocket.next("lobby")).lobby;
     expect(started.status).toBe("playing");
-    expect(started.seats[2].control).toBeNull();
-    expect(await lobbyOp("late-bot", { type: "add-bot", seat: 2 })).toBe(
+    expect(started.seats[3].control).toBeNull();
+    expect(await lobbyOp("late-bot", { type: "add-bot", seat: 3 })).toBe(
       "game-already-started",
     );
     const lateJoin = await exports.default.fetch(
@@ -1825,6 +1861,102 @@ describe("Authoritative private rooms", () => {
     } finally {
       entropy.mockRestore();
     }
+  });
+
+  it("broadcasts a Power Cut and persists it across eviction", async () => {
+    const host = await create();
+    const original = await connect(host);
+    await original.next("welcome");
+    original.send({
+      type: "lobby",
+      id: "start-power-cut",
+      op: { type: "start", fillBots: true },
+    });
+    await original.next("events");
+    const rival = ((host.seat + 1) % 4) as Seat;
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          activeSeat: host.seat,
+          deck: ["Power Cut"],
+          discard: [],
+          properties: saved.properties.map((property) =>
+            property.tile === 13
+              ? { ...property, owner: rival, level: 1 }
+              : property,
+          ),
+          players: saved.players.map((player) =>
+            player.seat === host.seat
+              ? { ...player, position: 24, travelPending: true }
+              : player.seat === rival
+                ? { ...player, properties: [13] }
+                : player,
+          ),
+          pending: {
+            kind: "travel",
+            seat: host.seat,
+            fee: 0,
+            targets: [12],
+            deadline: Date.now() + 60_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
+      );
+    });
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    const welcome = await resumed.next("welcome");
+    resumed.send({
+      type: "intent",
+      id: "power-cut-draw",
+      atSeq: welcome.seq,
+      action: { type: "Travel", tile: 12 },
+    });
+    const drawn = await resumed.next("events");
+    expect(drawn.events).toContainEqual(
+      expect.objectContaining({
+        type: "DecisionOpened",
+        pending: expect.objectContaining({
+          kind: "card-target",
+          card: "Power Cut",
+          targets: [13],
+        }),
+      }),
+    );
+    resumed.send({
+      type: "intent",
+      id: "power-cut-target",
+      atSeq: drawn.toSeq,
+      action: { type: "ChooseTarget", tile: 13 },
+    });
+    const cut = await resumed.next("events");
+    expect(cut.events).toContainEqual({
+      type: "PowerCut",
+      seat: host.seat,
+      tile: 13,
+      untilLap: 3,
+    });
+    await evictDurableObject(stub);
+    const persisted = await runInDurableObject(
+      stub,
+      (_instance, durableState) =>
+        JSON.parse(
+          durableState.storage.sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState,
+    );
+    expect(
+      persisted.properties.find((property) => property.tile === 13),
+    ).toMatchObject({ owner: rival, powerCutUntilLap: 3 });
+    expect(propertyRent(persisted, 13)).toBe(0);
   });
 
   it("recovers persisted state after eviction and always welcomes before replay", async () => {
@@ -2099,7 +2231,7 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on rules version 8 with city-only festivals, four-resort rent and building after a buyout", async () => {
+  it("freezes new rooms on rules version 10 with the Escape card, the reworked deck and the current economy", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -2109,7 +2241,9 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.worldTourRule).toBe("free-and-own");
     expect(game.state.config.fourResortRent).toBe(true);
     expect(game.state.config.buildAfterBuyout).toBe(true);
+    expect(game.state.config.chanceRule).toBe("reworked");
     expect(game.state.config.resortFestivals).toBe(false);
+    expect(game.state.config.escapeCard).toBe(true);
     const cities = getBoard(game.state.config)
       .filter(isCityTile)
       .map((tile) => tile.index);
@@ -2128,12 +2262,14 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("8");
+    expect(rules).toBe("10");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
     expect(welcome.lobby.resortFestivals).toBe(false);
     expect(welcome.snapshot?.config.resortFestivals).toBe(false);
+    expect(welcome.lobby.escapeCard).toBe(true);
+    expect(welcome.snapshot?.config.escapeCard).toBe(true);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
   });
 
@@ -2143,6 +2279,8 @@ describe("Authoritative private rooms", () => {
     { version: "6", marker: true, ownReachable: true },
     { version: "7", marker: true, ownReachable: true },
     { version: "8", marker: true, ownReachable: true },
+    { version: "9", marker: true, ownReachable: true },
+    { version: "10", marker: true, ownReachable: true },
   ])(
     "opens a version-$version World Tour with the room's frozen destinations",
     async ({ version, marker, ownReachable }) => {
@@ -2156,27 +2294,34 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
+        const { chanceRule: _chance, ...v9 } = saved.config;
+        const { escapeCard: _escape, ...v8 } = v9;
         const {
           resortFestivals: _festival,
           worldTourRule: _tour,
           fourResortRent: _four,
           buildAfterBuyout: _build,
           ...bare
-        } = saved.config;
-        // Versions before 8 predate the resort and buyout markers; before 7 the
-        // festival marker, and before 6 the World Tour marker.
+        } = v8;
+        // Versions before 10 predate the Chance marker; before 9 the Escape
+        // card; before 8 the resort and buyout markers; before 7 the festival
+        // marker, and before 6 the World Tour marker.
         const config =
-          version === "8"
+          version === "10"
             ? saved.config
-            : version === "7"
-              ? {
-                  ...bare,
-                  resortFestivals: saved.config.resortFestivals,
-                  worldTourRule: saved.config.worldTourRule,
-                }
-              : marker
-                ? { ...bare, worldTourRule: saved.config.worldTourRule }
-                : bare;
+            : version === "9"
+              ? v9
+              : version === "8"
+                ? v8
+                : version === "7"
+                  ? {
+                      ...bare,
+                      resortFestivals: saved.config.resortFestivals,
+                      worldTourRule: saved.config.worldTourRule,
+                    }
+                  : marker
+                    ? { ...bare, worldTourRule: saved.config.worldTourRule }
+                    : bare;
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
           version,
@@ -2241,6 +2386,142 @@ describe("Authoritative private rooms", () => {
     },
   );
 
+  it("keeps an unmarked version-8 saved deck without the Escape card after eviction", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='8' WHERE k='rulesVersion'",
+      ),
+    );
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby.escapeCard).toBe(false);
+    expect(
+      await roomOp(inbox, "legacy-deck-start", {
+        type: "start",
+        fillBots: true,
+      }),
+    ).toBe("ack");
+    await inbox.next("events");
+    const deck = await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      const {
+        escapeCard: _escape,
+        chanceRule: _chance,
+        ...config
+      } = saved.config;
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({ ...saved, config }),
+      );
+      return saved.deck;
+    });
+    expect(deck).toHaveLength(16);
+    expect(deck).not.toContain("Escape");
+    await closeInbox(inbox);
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.lobby.escapeCard).toBe(false);
+    expect(welcome.snapshot?.config.escapeCard).toBeUndefined();
+    expect(welcome.snapshot?.config.chanceRule).toBeUndefined();
+    expect(
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        return (JSON.parse(row.json) as GameState).deck;
+      }),
+    ).toEqual(deck);
+  });
+
+  it("restores a held Escape card and broadcasts its authenticated use without charging island release", async () => {
+    const game = await startFour();
+    const active = game.state.activeSeat;
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const row = durableState.storage.sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const saved = JSON.parse(row.json) as GameState;
+      durableState.storage.sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          deck: saved.deck.filter((card) => card !== "Escape"),
+          players: saved.players.map((player) =>
+            player.seat === active
+              ? {
+                  ...player,
+                  position: 8,
+                  onIsland: true,
+                  islandTurns: 1,
+                  heldCards: ["Escape"],
+                }
+              : player,
+          ),
+          pending: {
+            kind: "island",
+            seat: active,
+            fee: 200_000,
+            deadline: Date.now() + 30_000,
+          },
+        }),
+      );
+    });
+    await closeInbox(game.inboxes[active]);
+    await evictDurableObject(stub);
+    const resumed = await connect(game.credentials[active]);
+    const welcome = await resumed.next("welcome");
+    if (!welcome.snapshot) throw new Error("Saved island decision expected");
+    expect(
+      welcome.snapshot?.players.find((player) => player.seat === active),
+    ).toMatchObject({
+      onIsland: true,
+      heldCards: ["Escape"],
+    });
+    resumed.send({
+      type: "intent",
+      id: "use-escape-card",
+      atSeq: welcome.seq,
+      action: { type: "UseEscapeCard" },
+    });
+    expect(await answer(resumed, "use-escape-card")).toBe("ack");
+    const events = await resumed.next("events");
+    expect(events.events).toContainEqual({
+      type: "CardUsed",
+      seat: active,
+      card: "Escape",
+    });
+    expect(events.events).toContainEqual({
+      type: "LeftIsland",
+      seat: active,
+      method: "card",
+    });
+    const observer = game.inboxes[(active + 1) % game.inboxes.length];
+    expect((await observer.next("events")).events).toEqual(events.events);
+    const next = events.events.reduce(applyEvent, welcome.snapshot);
+    expect(next.players.find((player) => player.seat === active)).toMatchObject(
+      {
+        onIsland: false,
+        heldCards: [],
+        cash: game.state.players.find((player) => player.seat === active)?.cash,
+      },
+    );
+    expect(next.pending).toMatchObject({ kind: "roll", seat: active });
+    expect(
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const row = durableState.storage.sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0];
+        return (JSON.parse(row.json) as GameState).discard;
+      }),
+    ).toContain("Escape");
+  });
+
   it("rejects client-supplied internal rule markers at room creation", async () => {
     for (const config of [
       { hotelPurchaseRule: "staged-hotels" },
@@ -2259,6 +2540,10 @@ describe("Authoritative private rooms", () => {
       { buildAfterBuyout: false },
       { resortFestivals: true },
       { resortFestivals: false },
+      { escapeCard: true },
+      { escapeCard: false },
+      { chanceRule: "reworked" },
+      { chanceRule: "original" },
     ]) {
       const response = await exports.default.fetch(
         new Request(`${origin}/api/rooms`, {
@@ -2286,6 +2571,8 @@ describe("Authoritative private rooms", () => {
         worldTourRule: _tour,
         fourResortRent: _four,
         buildAfterBuyout: _build,
+        escapeCard: _escape,
+        chanceRule: _chance,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -2402,6 +2689,8 @@ describe("Authoritative private rooms", () => {
         resortFestivals: _marker,
         fourResortRent: _four,
         buildAfterBuyout: _build,
+        escapeCard: _escape,
+        chanceRule: _chance,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -2452,7 +2741,48 @@ describe("Authoritative private rooms", () => {
     expect(propertyRent(next, 4)).toBe(50_000);
   });
 
-  it("starts preexisting version-7 lobbies without the version-8 rules", async () => {
+  it("starts preexisting version-9 lobbies with the Escape card but the original deck", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='9' WHERE k='rulesVersion'",
+      ),
+    );
+    await evictDurableObject(stub);
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby).toMatchObject({
+      escapeCard: true,
+      chanceRule: "original",
+    });
+    expect(
+      await roomOp(inbox, "version-9-lobby-start", {
+        type: "start",
+        fillBots: true,
+      }),
+    ).toBe("ack");
+    const events = await inbox.next("events");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    expect(
+      created?.type === "GameCreated" ? created.state.config : null,
+    ).toMatchObject({ escapeCard: true, chanceRule: "original" });
+    const deck = await runInDurableObject(
+      stub,
+      (_instance, durableState) =>
+        (
+          JSON.parse(
+            durableState.storage.sql
+              .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+              .toArray()[0].json,
+          ) as GameState
+        ).deck,
+    );
+    expect(deck).toHaveLength(17);
+    expect(deck).toContain("Escape");
+    expect(deck).not.toContain("Power Cut");
+  });
+
+  it("starts preexisting version-7 lobbies without the version-8 and version-9 rules", async () => {
     const host = await create();
     const stub = env.GAME_ROOM.getByName(host.roomCode);
     await runInDurableObject(stub, (_instance, durableState) =>
@@ -2467,6 +2797,7 @@ describe("Authoritative private rooms", () => {
       resortFestivals: false,
       fourResortRent: false,
       buildAfterBuyout: false,
+      chanceRule: "original",
     });
     inbox.send({
       type: "lobby",
@@ -2477,7 +2808,11 @@ describe("Authoritative private rooms", () => {
     const created = events.events.find((event) => event.type === "GameCreated");
     expect(
       created?.type === "GameCreated" ? created.state.config : null,
-    ).toMatchObject({ fourResortRent: false, buildAfterBuyout: false });
+    ).toMatchObject({
+      fourResortRent: false,
+      buildAfterBuyout: false,
+      chanceRule: "original",
+    });
   });
 
   it("starts preexisting version-3 lobbies with the prototype economy", async () => {
@@ -2530,6 +2865,8 @@ describe("Authoritative private rooms", () => {
         worldTourRule: _tour,
         fourResortRent: _four,
         buildAfterBuyout: _build,
+        escapeCard: _escape,
+        chanceRule: _chance,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -2647,10 +2984,11 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 7, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
       // cannot carry its World Tour marker, version 6 cannot exclude resort
-      // festivals, version 7 the version-8 markers, and 999 is unknown.
+      // festivals, version 7 the version-8 markers, version 8 the Escape card,
+      // version 9 the reworked Chance deck, and 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -2668,7 +3006,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='7' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='10' WHERE k='rulesVersion'",
       ),
     );
   });
@@ -2886,6 +3224,8 @@ describe("Room leader, waiting room and shared screens", () => {
     expect(guest.seat).toBe(2);
     const guestSocket = await connect(guest);
     await guestSocket.next("welcome");
+    const guestTab = await connect(guest);
+    await guestTab.next("welcome");
     expect(
       await roomOp(guestSocket, "guest-local", {
         type: "add-local",
@@ -2915,14 +3255,21 @@ describe("Room leader, waiting room and shared screens", () => {
     expect((await leave(host)).status).toBe(200);
     expect(await closed).toEqual({ code: 1008, reason: "Left room" });
     const lobby = await lobbyOf(host.roomCode);
-    expect(lobby.hostSeat).toBe(guest.seat);
+    expect(lobby.hostSeat).toBe(0);
+    for (const inbox of [guestSocket, guestTab]) {
+      const shifted = await inbox.next("welcome");
+      expect(shifted.you).toEqual({ seat: 0, member: null });
+      expect(
+        shifted.lobby.seats.slice(0, 2).map((seat) => seat.online),
+      ).toEqual([true, true]);
+    }
     expect(
       lobby.seats.map((seat) => [seat.control, seat.controller, seat.online]),
     ).toEqual([
-      [null, null, false],
-      [null, null, false],
       ["human", null, true],
-      ["human", 2, true],
+      ["human", 0, true],
+      [null, null, false],
+      [null, null, false],
     ]);
     expect(
       await runInDurableObject(stub, (_instance, durableState) => ({
@@ -2930,7 +3277,7 @@ describe("Room leader, waiting room and shared screens", () => {
           .exec("SELECT seat,controller FROM local_seats ORDER BY seat")
           .toArray(),
         commands: durableState.storage.sql
-          .exec("SELECT seat,id FROM commands WHERE seat IN (0,1)")
+          .exec("SELECT seat,id FROM commands WHERE id='old-command'")
           .toArray(),
         takeover: durableState.storage.sql
           .exec("SELECT k FROM meta WHERE k IN ('takeover:0','takeover:1')")
@@ -2940,7 +3287,7 @@ describe("Room leader, waiting room and shared screens", () => {
           .toArray(),
       })),
     ).toEqual({
-      locals: [{ seat: 3, controller: 2 }],
+      locals: [{ seat: 1, controller: 0 }],
       commands: [],
       takeover: [],
       grace: [],
@@ -2951,7 +3298,105 @@ describe("Room leader, waiting room and shared screens", () => {
         locked: true,
       }),
     ).toBe("ack");
+    expect(
+      await roomOp(guestTab, "guest-local", {
+        type: "add-local",
+        seat: 2,
+        name: "Duplicate",
+      }),
+    ).toBe("duplicate");
+    await closeInbox(guestSocket);
+    await closeInbox(guestTab);
+    await evictDurableObject(stub);
+    const resumed = await connect(guest);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.you).toEqual({ seat: 0, member: null });
+    expect(welcome.lobby.seats[1]).toMatchObject({
+      name: "Kim",
+      controller: 0,
+      online: true,
+    });
     await expectRevoked(host);
+    const guestClosed = waitForClose(resumed);
+    expect((await leave(guest)).status).toBe(200);
+    await guestClosed;
+    expect(
+      (await lobbyOf(host.roomCode)).seats.every((seat) => !seat.control),
+    ).toBe(true);
+    await expectRevoked(guest);
+  });
+
+  it("compacts a removed local place and keeps the shifted device authorized for its local player", async () => {
+    const host = await create();
+    const hostSocket = await connect(host);
+    await hostSocket.next("welcome");
+    expect(
+      await roomOp(hostSocket, "first-local", {
+        type: "add-local",
+        seat: 2,
+        name: "Gap",
+      }),
+    ).toBe("seat-order");
+    expect(
+      await roomOp(hostSocket, "host-local", {
+        type: "add-local",
+        seat: 1,
+        name: "Sam",
+      }),
+    ).toBe("ack");
+    const guest = await joinSeated(host.roomCode, "Bo");
+    const guestSocket = await connect(guest);
+    await guestSocket.next("welcome");
+    expect(
+      await roomOp(guestSocket, "guest-local", {
+        type: "add-local",
+        seat: 3,
+        name: "Kim",
+      }),
+    ).toBe("ack");
+    expect(
+      await roomOp(hostSocket, "remove-sam", { type: "remove-local", seat: 1 }),
+    ).toBe("ack");
+    const shifted = await guestSocket.next("welcome");
+    expect(shifted.you).toEqual({ seat: 1, member: null });
+    expect(
+      shifted.lobby.seats.map((seat) => [seat.name, seat.controller]),
+    ).toEqual([
+      ["Alex", null],
+      ["Bo", null],
+      ["Kim", 1],
+      ["Place libre", null],
+    ]);
+    expect(
+      await roomOp(guestSocket, "guest-local", {
+        type: "add-local",
+        seat: 3,
+        name: "Duplicate",
+      }),
+    ).toBe("duplicate");
+    expect(
+      await roomOp(hostSocket, "start-compacted", {
+        type: "start",
+        fillBots: false,
+      }),
+    ).toBe("ack");
+    const started = await guestSocket.next("events");
+    const created = started.events.find(
+      (event) => event.type === "GameCreated",
+    );
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    const state = started.events.reduce(applyEvent, created.state);
+    guestSocket.send({
+      type: "intent",
+      id: "shifted-local-roll",
+      atSeq: started.toSeq,
+      seat: 2,
+      action: { type: "Roll" },
+    });
+    expect(await answer(guestSocket, "shifted-local-roll")).toBe(
+      state.activeSeat === 2 ? "ack" : "not-your-turn",
+    );
   });
 
   it("removes a departing waiting member and closes both of their connections", async () => {

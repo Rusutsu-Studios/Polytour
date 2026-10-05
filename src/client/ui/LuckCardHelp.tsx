@@ -2,12 +2,13 @@ import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  CHANCE_CARDS,
   type ChanceCard,
+  chanceDeck,
   type GameConfig,
 } from "../../shared/engine/index.js";
 import { useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
+import CardArt from "./CardArt.js";
 import {
   describeChanceCard,
   describeChanceCardDetails,
@@ -52,7 +53,7 @@ export default function LuckCardHelp({ config }: { config: GameConfig }) {
           )}
         </p>
         <ul className="luck-card-list">
-          {CHANCE_CARDS.map((entry) => {
+          {[...new Set(chanceDeck(config))].map((entry) => {
             const presentation = describeChanceCard(entry, config);
             return (
               <li key={entry}>
@@ -67,14 +68,7 @@ export default function LuckCardHelp({ config }: { config: GameConfig }) {
                     setSelected({ card: entry, trigger: event.currentTarget })
                   }
                 >
-                  <img
-                    src={`/cards/${presentation.art}.webp`}
-                    alt=""
-                    width="60"
-                    height="48"
-                    loading="lazy"
-                    decoding="async"
-                  />
+                  <CardArt className="luck-card-thumb" card={entry} />
                   <span>
                     <strong>{presentation.title}</strong>
                     <span className="luck-card-summary">
@@ -140,14 +134,7 @@ export default function LuckCardHelp({ config }: { config: GameConfig }) {
                   <Icon name="close" />
                 </button>
               </header>
-              <img
-                className="luck-card-art"
-                src={`/cards/${card.art}.webp`}
-                alt=""
-                width="600"
-                height="400"
-                decoding="async"
-              />
+              <CardArt className="luck-card-art" card={selected.card} />
               <div className="luck-card-copy">
                 <h2 ref={heading} id={`${id}-title`} tabIndex={-1}>
                   {card.title}

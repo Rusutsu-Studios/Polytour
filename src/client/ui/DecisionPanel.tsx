@@ -1,12 +1,17 @@
 import { motion } from "motion/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getBoard, ruleEconomy } from "../../shared/board/index.js";
+import {
+  CHANCE_AMOUNTS,
+  getBoard,
+  ruleEconomy,
+} from "../../shared/board/index.js";
 import type { BuildLevel } from "../../shared/board/types.js";
 import {
   type Action,
   actionCost,
   buyoutPriceAt,
+  cashRankedOpponent,
   championshipCost,
   economyRule,
   getProperty,
@@ -39,6 +44,7 @@ import {
   boardPickActions,
   isBoardPick,
 } from "./board-pick.js";
+import CardArt from "./CardArt.js";
 import CityIllustration from "./CityIllustration.js";
 import { cardName } from "./chance-display.js";
 import Icon from "./Icon.js";
@@ -72,12 +78,7 @@ const COPY = {
     "Settle your debt",
     "Choose a property to sell and raise cash for your debt.",
   ],
-  island: [
-    "Quitter l’île",
-    "Tentez un double pour repartir, ou payez la traversée.",
-    "Leave the Island",
-    "Roll doubles to leave, or pay the fare.",
-  ],
+  island: ["Quitter l’île", "", "Leave the Island", ""],
   travel: [
     "Choisissez votre destination",
     "Cliquez une case en surbrillance ou utilisez la liste.",
@@ -103,6 +104,58 @@ const COPY = {
     "Use a protection card or pay the rent.",
   ],
 } as const;
+/** What the chosen city will receive, for each card that asks for one. */
+function cardTargetCopy(
+  state: PublicState,
+  card: Extract<
+    NonNullable<PublicState["pending"]>,
+    { kind: "card-target" }
+  >["card"],
+  seat: Seat,
+): string {
+  const opponent = (most: boolean) =>
+    state.players.find(
+      (player) => player.seat === cashRankedOpponent(state, seat, most),
+    )?.name ?? t("un adversaire", "an opponent");
+  switch (card) {
+    case "Contractor":
+      return t(
+        "Choisissez votre ville qui recevra un niveau de construction offert.",
+        "Choose one of your cities to receive a free building level.",
+      );
+    case "Patron":
+      return t(
+        `Choisissez votre ville qui gagnera un niveau, payé par ${opponent(true)}.`,
+        `Choose your city to gain a level, paid for by ${opponent(true)}.`,
+      );
+    case "Power Cut":
+      return t(
+        `Choisissez la ville adverse privée de loyer pendant ${CHANCE_AMOUNTS.powerCutLaps} tours de son propriétaire.`,
+        `Choose the opponent’s city that earns no rent for its owner’s next ${CHANCE_AMOUNTS.powerCutLaps} laps.`,
+      );
+    case "Forced Sale":
+      return t(
+        "Choisissez la propriété adverse à vendre. Son propriétaire est remboursé ; un hôtel perd seulement un niveau.",
+        "Choose the opponent’s property to sell. Its owner is refunded; a Hotel only loses one level.",
+      );
+    case "Shield":
+      return t(
+        "Choisissez la propriété que le bouclier protégera de la prochaine attaque.",
+        "Choose the property the shield will guard against the next attack.",
+      );
+    case "Gift":
+      return t(
+        `Choisissez la ville que vous offrez à ${opponent(false)}.`,
+        `Choose the city you give to ${opponent(false)}.`,
+      );
+    case "Earthquake":
+    case "Land Swap":
+      return t(
+        "Choisissez la ville adverse qui perdra un niveau de construction.",
+        "Choose the opponent’s city that will lose a building level.",
+      );
+  }
+}
 function decisionCopy(kind: keyof typeof COPY): readonly [string, string] {
   const [frTitle, frDescription, enTitle, enDescription] = COPY[kind];
   return [t(frTitle, enTitle), t(frDescription, enDescription)];
@@ -130,6 +183,8 @@ function actionLabel(action: Action, state: PublicState): string {
         `Payer la traversée · ${money(actionCost(state, action))}`,
         `Pay the fare · ${money(actionCost(state, action))}`,
       );
+    case "UseEscapeCard":
+      return t("Utiliser la carte d’évasion", "Use the escape card");
     case "Buyout":
       return t(
         `Racheter · ${money(actionCost(state, action))}`,
@@ -156,7 +211,13 @@ function actionLabel(action: Action, state: PublicState): string {
             `Échanger ${tileName(pending.sourceTile, state.config)} contre ${tileName(action.tile, state.config)}`,
             `Swap ${tileName(pending.sourceTile, state.config)} for ${tileName(action.tile, state.config)}`,
           );
-        if (pending.card === "Contractor")
+        const city = tileName(action.tile, state.config);
+        if (pending.card === "Forced Sale")
+          return t(`Forcer la vente de ${city}`, `Force the sale of ${city}`);
+        if (pending.card === "Shield")
+          return t(`Protéger ${city}`, `Protect ${city}`);
+        if (pending.card === "Gift") return t(`Offrir ${city}`, `Give ${city}`);
+        if (pending.card === "Contractor" || pending.card === "Patron")
           return t(
             `Offrir un niveau à ${tileName(action.tile, state.config)}`,
             `Add a level to ${tileName(action.tile, state.config)}`,
@@ -165,6 +226,11 @@ function actionLabel(action: Action, state: PublicState): string {
           return t(
             `Retirer un niveau à ${tileName(action.tile, state.config)}`,
             `Remove a level from ${tileName(action.tile, state.config)}`,
+          );
+        if (pending.card === "Power Cut")
+          return t(
+            `Couper le courant à ${tileName(action.tile, state.config)}`,
+            `Cut the power in ${tileName(action.tile, state.config)}`,
           );
       }
       return t("Choisir cette ville", "Choose this city");
@@ -338,6 +404,11 @@ export default function DecisionPanel({
     (action): action is DestinationAction => "tile" in action,
   );
   const freeRoll = actions.find((action) => action.type === "Roll");
+  const islandChoices: readonly Action[] = [
+    { type: "Roll" },
+    { type: "PayIsland" },
+    { type: "UseEscapeCard" },
+  ];
   const boardPick = ownTurn && isBoardPick(state);
   const pickActions = boardPick ? boardPickActions(state, seat) : [];
   const pickedAction = pickActions.find((action) => action.tile === picked);
@@ -515,36 +586,51 @@ export default function DecisionPanel({
         ),
       )
     : 0;
+  const islandRollsLeft = Math.max(
+    0,
+    ruleEconomy(economyRule(state.config)).islandMaxFailedEscapes -
+      (active?.islandTurns ?? 0),
+  );
   const copy: readonly [string, string] =
-    pending?.kind === "card-target"
+    pending?.kind === "island"
       ? [
-          cardName(pending.card),
-          pending.card === "Land Swap" && pending.sourceTile !== undefined
-            ? t(
-                `Votre ville de ${tileName(pending.sourceTile, state.config)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
-                `Your city of ${tileName(pending.sourceTile, state.config)} will be swapped for the selected city. Buildings stay on each property.`,
-              )
-            : pending.card === "Contractor"
+          decisionCopy("island")[0],
+          `${
+            state.config.escapeCard === true
               ? t(
-                  "Choisissez votre ville qui recevra un niveau de construction offert.",
-                  "Choose one of your cities to receive a free building level.",
+                  `Faites un double, utilisez votre carte d’évasion ou payez ${money(pending.fee)} pour repartir.`,
+                  `Roll doubles, use your escape card or pay ${money(pending.fee)} to leave.`,
                 )
               : t(
-                  "Choisissez la ville adverse qui perdra un niveau de construction.",
-                  "Choose the opponent’s city that will lose a building level.",
-                ),
+                  `Faites un double ou payez ${money(pending.fee)} pour repartir.`,
+                  `Roll doubles or pay ${money(pending.fee)} to leave.`,
+                )
+          } ${t(
+            `Vous serez libéré après ${islandRollsLeft} lancer${islandRollsLeft === 1 ? "" : "s"} raté${islandRollsLeft === 1 ? "" : "s"} supplémentaire${islandRollsLeft === 1 ? "" : "s"}.`,
+            `You are released after ${islandRollsLeft} more failed roll${islandRollsLeft === 1 ? "" : "s"}.`,
+          )}`,
         ]
-      : pending?.kind === "buy" && resort
-        ? [t("Acheter une plage", "Buy a beach"), ""]
-        : pending?.kind === "host" && decline
-          ? [
-              decisionCopy("host")[0],
-              t(
-                `Déplacer le championnat coûte ${money(ruleEconomy(economyRule(state.config)).championshipFee)}, le renouveler est gratuit. Chaque édition ajoute ×1 au loyer de la ville hôte.`,
-                `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
-              ),
-            ]
-          : decisionCopy(pending?.kind ?? "roll");
+      : pending?.kind === "card-target"
+        ? [
+            cardName(pending.card),
+            pending.card === "Land Swap" && pending.sourceTile !== undefined
+              ? t(
+                  `Votre ville de ${tileName(pending.sourceTile, state.config)} sera échangée avec la ville choisie. Les constructions restent sur chaque propriété.`,
+                  `Your city of ${tileName(pending.sourceTile, state.config)} will be swapped for the selected city. Buildings stay on each property.`,
+                )
+              : cardTargetCopy(state, pending.card, pending.seat),
+          ]
+        : pending?.kind === "buy" && resort
+          ? [t("Acheter une plage", "Buy a beach"), ""]
+          : pending?.kind === "host" && decline
+            ? [
+                decisionCopy("host")[0],
+                t(
+                  `Déplacer le championnat coûte ${money(ruleEconomy(economyRule(state.config)).championshipFee)}, le renouveler est gratuit. Chaque édition ajoute ×1 au loyer de la ville hôte.`,
+                  `Moving the championship costs ${money(ruleEconomy(economyRule(state.config)).championshipFee)}; renewing it is free. Each edition adds ×1 to the host city’s rent.`,
+                ),
+              ]
+            : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
   useEffect(() => {
@@ -1092,7 +1178,13 @@ export default function DecisionPanel({
       }}
     >
       <div className="decision-popup-ribbon">
-        <span>{named(copy[0])}</span>
+        {pending?.kind === "island" ? (
+          <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
+            {named(copy[0])}
+          </h2>
+        ) : (
+          <span>{named(copy[0])}</span>
+        )}
       </div>
       <motion.div
         className="decision-popup-inner"
@@ -1114,13 +1206,15 @@ export default function DecisionPanel({
             <Icon name="minimize" size={17} />
           </button>
         </div>
-        <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
-          {bankruptcy
-            ? t("Déclarer faillite ?", "Declare bankruptcy?")
-            : decisionTile !== undefined
-              ? tileName(decisionTile, state.config)
-              : copy[0]}
-        </h2>
+        {pending?.kind !== "island" && (
+          <h2 ref={headingRef} tabIndex={-1} id="decision-heading">
+            {bankruptcy
+              ? t("Déclarer faillite ?", "Declare bankruptcy?")
+              : decisionTile !== undefined
+                ? tileName(decisionTile, state.config)
+                : copy[0]}
+          </h2>
+        )}
         {(bankruptcy || copy[1]) && (
           <p id="decision-description">
             {bankruptcy
@@ -1134,12 +1228,18 @@ export default function DecisionPanel({
 
         <div className="decision-popup-story">
           <div className="decision-illustration">
-            <CityIllustration
-              level={selectedLevel}
-              color={PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]}
-              resort={resort}
-              flag
-            />
+            {pending?.kind === "island" ? (
+              <CardArt className="decision-island-art" card="Stranded" />
+            ) : (
+              <CityIllustration
+                level={selectedLevel}
+                color={
+                  PLAYER_COLORS[construction ? seat : (owner?.seat ?? seat)]
+                }
+                resort={resort}
+                flag
+              />
+            )}
             {owner && (
               <span className="decision-property">
                 <span style={{ color: PLAYER_COLORS[owner.seat] }}>
@@ -1406,6 +1506,55 @@ export default function DecisionPanel({
                 </fieldset>
               )}
             </div>
+          ) : pending?.kind === "island" ? (
+            <fieldset
+              className="decision-other-choices"
+              aria-label={t(
+                "Choisir comment quitter l’île",
+                "Choose how to leave the Island",
+              )}
+            >
+              {islandChoices.map((action) => {
+                const legal = actions.find(
+                  (choice) => choice.type === action.type,
+                );
+                const reason = blocked
+                  ? unavailableReason
+                  : action.type === "UseEscapeCard"
+                    ? active?.heldCards.includes("Escape")
+                      ? t(
+                          "Cette carte ne peut pas être utilisée maintenant.",
+                          "This card cannot be used right now.",
+                        )
+                      : state.config.escapeCard === true
+                        ? t(
+                            "Vous n’avez pas de carte d’évasion. Obtenez-la sur une case Surprise.",
+                            "You do not have an escape card. Draw one on a Chance space.",
+                          )
+                        : t(
+                            "Les cartes d’évasion ne font pas partie des règles de cette salle.",
+                            "Escape cards are not part of this room’s rules.",
+                          )
+                    : t("Pas assez d’argent", "Not enough cash");
+                return (
+                  <ActionButton
+                    type="button"
+                    key={actionKey(action)}
+                    className="button secondary"
+                    data-locked={!legal}
+                    aria-pressed={
+                      legal ? selectedAction?.type === action.type : undefined
+                    }
+                    disabled={blocked || !legal}
+                    disabledReason={reason}
+                    onClick={() => legal && choose(legal)}
+                  >
+                    {!legal && <Icon name="lock" size={16} />}
+                    {actionLabel(action, state)}
+                  </ActionButton>
+                );
+              })}
+            </fieldset>
           ) : choices.length > 1 && !bankruptcy ? (
             <fieldset
               className="decision-other-choices"

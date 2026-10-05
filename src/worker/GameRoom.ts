@@ -87,12 +87,14 @@ const MAX_WAITING = 6;
 /** A lobby, or a lobby the leader brought back, expires after two hours. */
 const LOBBY_LIFETIME = 7_200_000;
 /**
- * 2–3 are original production rooms; 5 combines the board and reference rules;
+ * 2-3 are original production rooms; 5 combines the board and reference rules;
  * 6 lets World Tour reach the traveller's own properties as well as free ones;
  * 7 restricts initial festivals to cities;
- * 8 pays four resorts double the third's rent and lets a buyout be built on.
+ * 8 pays four resorts double the third's rent and lets a buyout be built on;
+ * 9 adds the saved Island Escape card;
+ * 10 reworks the Chance deck (see ChanceRule).
  */
-const RULES_VERSION = 8;
+const RULES_VERSION = 10;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -101,7 +103,9 @@ function frozenRules(version: number | null) {
     version !== 5 &&
     version !== 6 &&
     version !== 7 &&
-    version !== 8
+    version !== 8 &&
+    version !== 9 &&
+    version !== 10
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -114,7 +118,9 @@ function frozenRules(version: number | null) {
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
     fourResortRent: version >= 8,
     buildAfterBuyout: version >= 8,
+    chanceRule: version >= 10 ? ("reworked" as const) : ("original" as const),
     resortFestivals: version >= 4 && version < 7,
+    escapeCard: version >= 9,
   };
 }
 
@@ -289,7 +295,17 @@ export class GameRoom extends DurableObject<Env> {
     const fourResorts = state.config.fourResortRent;
     const buyoutBuild = state.config.buildAfterBuyout;
     const festivals = state.config.resortFestivals;
+    const escapeCard = state.config.escapeCard;
+    const chances = state.config.chanceRule;
     if (
+      // Older decks have no Escape card, including unmarked saved matches.
+      (rulesVersion !== null &&
+        escapeCard !== frozen.escapeCard &&
+        (rulesVersion >= 9 || escapeCard !== undefined)) ||
+      // Saves made before rules version 10 carry no Chance marker.
+      (rulesVersion !== null &&
+        chances !== frozen.chanceRule &&
+        (rulesVersion >= 10 || chances !== undefined)) ||
       // Version-7 matches require the marker; older unmarked saves keep their rules.
       (rulesVersion !== null &&
         festivals !== frozen.resortFestivals &&
@@ -367,6 +383,59 @@ export class GameRoom extends DurableObject<Env> {
   /** Rooms created before leaders existed keep their creator, seat 0. */
   private hostSeat(): Seat {
     return this.readMeta<Seat>("host") ?? 0;
+  }
+  /** Only a lobby can change places; match seats keep their state and colour. */
+  private compactLobbySeats(): void {
+    const seats = this.seats();
+    if (seats.every((entry, index) => entry.seat === index)) return;
+    const moved = new Map(
+      seats.map((entry, index) => [entry.seat, SEATS[index]]),
+    );
+    const locals = this.localSeats();
+    const host = moved.get(this.hostSeat()) ?? 0;
+    this.ctx.storage.transactionSync(() => {
+      // Moving left in seat order never overwrites a remaining occupant.
+      for (const entry of seats) {
+        const target = moved.get(entry.seat);
+        if (target === undefined || target === entry.seat) continue;
+        this.ctx.storage.sql.exec(
+          "UPDATE seats SET seat=? WHERE seat=?",
+          target,
+          entry.seat,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE commands SET seat=? WHERE seat=?",
+          target,
+          entry.seat,
+        );
+      }
+      this.ctx.storage.sql.exec("DELETE FROM local_seats");
+      for (const local of locals) {
+        const seat = moved.get(local.seat);
+        const controller = moved.get(local.controller);
+        if (seat !== undefined && controller !== undefined)
+          this.ctx.storage.sql.exec(
+            "INSERT INTO local_seats(seat,controller) VALUES(?,?)",
+            seat,
+            controller,
+          );
+      }
+      this.writeMeta("host", host);
+    });
+    const shifted: { socket: WebSocket; attachment: Attachment }[] = [];
+    for (const socket of this.openSockets()) {
+      const attachment = socket.deserializeAttachment() as Attachment | null;
+      if (!attachment || attachment.departing || attachment.seat === null)
+        continue;
+      const target = moved.get(attachment.seat);
+      if (target === undefined || target === attachment.seat) continue;
+      attachment.seat = target;
+      socket.serializeAttachment(attachment);
+      shifted.push({ socket, attachment });
+    }
+    // All attachments must be updated before a welcome reports lobby presence.
+    for (const { socket, attachment } of shifted)
+      if (attachment.synced) this.welcome(socket, attachment, null);
   }
   /** A person arriving takes an open place first, then a bot's place. */
   private freeSeat(): Seat | undefined {
@@ -550,7 +619,10 @@ export class GameRoom extends DurableObject<Env> {
       socket.serializeAttachment({ ...attachment, departing: true });
       socket.close(1008, "Left room");
     }
-    if (!saved) this.seatWaitingMembers();
+    if (!saved) {
+      this.compactLobbySeats();
+      this.seatWaitingMembers();
+    }
     this.broadcast({ type: "lobby", lobby: this.lobby() });
     if (entry && saved) {
       for (const seat of seats)
@@ -1059,6 +1131,8 @@ export class GameRoom extends DurableObject<Env> {
       );
       if (op.type === "add-local") {
         if (entry) return this.reject(socket, message.id, "seat-taken");
+        if (op.seat !== this.freeSeat())
+          return this.reject(socket, message.id, "seat-order");
         done(() => {
           this.ctx.storage.sql.exec(
             "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'human',NULL)",
@@ -1083,7 +1157,9 @@ export class GameRoom extends DurableObject<Env> {
           "DELETE FROM local_seats WHERE seat=?",
           op.seat,
         );
+        this.ctx.storage.sql.exec("DELETE FROM commands WHERE seat=?", op.seat);
       });
+      this.compactLobbySeats();
       this.seatWaitingMembers();
       return finish();
     }
@@ -1163,6 +1239,8 @@ export class GameRoom extends DurableObject<Env> {
       const entry = this.seats().find((candidate) => candidate.seat === target);
       if (op.type === "add-bot" && entry)
         return this.reject(socket, message.id, "seat-taken");
+      if (op.type === "add-bot" && target !== this.freeSeat())
+        return this.reject(socket, message.id, "seat-order");
       if (op.type === "remove-bot" && entry?.control !== "bot")
         return this.reject(socket, message.id, "not-a-bot");
       const adding = op.type === "add-bot";
@@ -1173,13 +1251,21 @@ export class GameRoom extends DurableObject<Env> {
             target,
             BOT_NAMES[target],
           );
-        else
+        else {
           this.ctx.storage.sql.exec(
             "DELETE FROM seats WHERE seat=? AND control='bot'",
             target,
           );
+          this.ctx.storage.sql.exec(
+            "DELETE FROM commands WHERE seat=?",
+            target,
+          );
+        }
       });
-      if (!adding) this.seatWaitingMembers();
+      if (!adding) {
+        this.compactLobbySeats();
+        this.seatWaitingMembers();
+      }
       return finish();
     }
     const seats = this.seats();
