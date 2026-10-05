@@ -795,7 +795,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     }));
     director.reset({
       ...snapshot,
-      // Landmarks exist only in saved prototype rooms (rules versions 2–3).
+      // Landmarks exist only in saved prototype rooms (rules versions 2-3).
       config: {
         ...snapshot.config,
         hotelPurchaseRule: "legacy-lap",

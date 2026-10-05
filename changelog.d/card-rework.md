@@ -30,3 +30,9 @@
 - The Lost Island decision shows the flat island drawing instead of a line
   icon, and the Escape card (#123) joins the reworked deck with its own drawing.
 - Protocol version 7: clients from before this release reload.
+
+### Fixed
+
+- Card ranges, the search description and the share-card text use the ASCII
+  hyphen (`1-6`, `2-4 players`) instead of en dashes. AGENTS.md now covers en
+  and em dashes too, and CI rejects them in code.

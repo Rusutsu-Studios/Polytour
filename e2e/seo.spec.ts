@@ -8,7 +8,7 @@ const EN_TITLE = "Polytour - Online Multiplayer Board Game";
 const FR_DESCRIPTION =
   "Jouez à Polytour, un jeu de plateau immobilier pour 2 à 4 joueurs. Achetez des villes, construisez et jouez entre amis ou contre des bots dans votre navigateur.";
 const EN_DESCRIPTION =
-  "Play Polytour, a property-trading board game for 2–4 players. Buy cities, build and play with friends or bots in your browser.";
+  "Play Polytour, a property-trading board game for 2-4 players. Buy cities, build and play with friends or bots in your browser.";
 
 function expectPng(bytes: Buffer, width: number, height: number) {
   expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");

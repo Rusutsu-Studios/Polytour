@@ -87,7 +87,7 @@ const MAX_WAITING = 6;
 /** A lobby, or a lobby the leader brought back, expires after two hours. */
 const LOBBY_LIFETIME = 7_200_000;
 /**
- * 2–3 are original production rooms; 5 combines the board and reference rules;
+ * 2-3 are original production rooms; 5 combines the board and reference rules;
  * 6 lets World Tour reach the traveller's own properties as well as free ones;
  * 7 restricts initial festivals to cities;
  * 8 pays four resorts double the third's rent and lets a buyout be built on;

@@ -393,7 +393,7 @@ export function describeChanceCard(
   roll?: number,
 ): CardPresentation {
   const base = { title: cardName(card), tone: "gain" as const };
-  const steps = roll === undefined ? "1–6" : `${roll}`;
+  const steps = roll === undefined ? "1-6" : `${roll}`;
   const rules = ruleEconomy(economyRule(config));
   // Landmarks guard prototype rooms; Hotels guard reference rooms from transfers.
   const reference = rules.topLevel === 4;
