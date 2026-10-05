@@ -206,7 +206,7 @@ for (const size of [
       dialog.getByText("Quitter l’île", { exact: true }),
     ).toHaveCount(1);
     await expect(dialog.getByRole("heading")).toHaveCount(1);
-    await expect(dialog.locator(".decision-island-art svg")).toBeVisible();
+    await expect(dialog.locator("svg.decision-island-art")).toBeVisible();
     await expect(dialog.locator(".city-art")).toHaveCount(0);
     await expect(dialog.locator("#decision-description")).toContainText(
       "utilisez votre carte d’évasion ou payez 200 k",
@@ -339,7 +339,7 @@ test("a drawn escape card explains its use and becomes available on the Island",
   ]);
   await expect(page.locator("#chance-title")).toHaveText("Escape card");
   await expect(page.locator("#chance-description")).toContainText(
-    "At the start of one of your turns on the Island",
+    "Keep it: leave the Island for free.",
   );
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   const dialog = page.locator('.decision-popup[data-kind="island"][open]');
