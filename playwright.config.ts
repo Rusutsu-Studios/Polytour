@@ -40,6 +40,7 @@ export default defineConfig({
       name: "production",
       testMatch: [
         "room-flow.spec.ts",
+        "bot-difficulty.spec.ts",
         "pause-game.spec.ts",
         "smoke.spec.ts",
         "seo.spec.ts",

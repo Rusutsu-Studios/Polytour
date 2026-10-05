@@ -109,6 +109,13 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
+- Protocol version 8 adds `botDifficulty: "easy" | "medium" | "hard"` to strict
+  room settings, lobby config and new match config. Missing settings default to
+  `medium`; unmarked saved matches keep Medium decisions. The room leader can
+  change this shared level only before starting. Permanent bots and temporary
+  disconnect replacements use the frozen match config. Older clients receive an
+  update or incompatible-response error and must refresh before resuming. No
+  state or rules version changes.
 - Protocol version 7 adds the `PowerCut {seat, tile, untilLap}`,
   `ShieldRaised {seat, tile}`, `ShieldBroken {seat, tile}` (the attacker's seat)
   and `PropertyGiven {seat, to, tile}` events, an optional `shielded: true` and

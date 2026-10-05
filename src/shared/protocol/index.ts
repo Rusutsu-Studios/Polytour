@@ -9,9 +9,8 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 7 adds the reworked Chance deck's events and die rolls; version 6
-// added the retained Escape card and island action. Stale clients reload.
-export const PROTOCOL_VERSION = 7;
+// Version 8 adds bot difficulty to strict room configs. Stale clients reload.
+export const PROTOCOL_VERSION = 8;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -32,6 +31,7 @@ export const RoomConfigSchema = z
     extraRollOnDouble: z.boolean().default(true),
     tripleDoubleToIsland: z.boolean().default(true),
     botCanBuild: z.boolean().default(true),
+    botDifficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),
     randomnessMode: z.enum(["secure", "drand"]).default("secure"),

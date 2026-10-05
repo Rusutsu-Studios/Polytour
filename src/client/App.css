@@ -1614,8 +1614,11 @@ input::placeholder {
   font-weight: 650;
 }
 .welcome-quick-settings .room-settings-main {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(218px, 1.45fr);
   gap: 24px;
+}
+.welcome-quick-settings .room-setting-bots--compact {
+  grid-column: auto;
 }
 .welcome-quick-settings .room-setting--wide {
   grid-column: auto;
@@ -1629,6 +1632,16 @@ input::placeholder {
 }
 .welcome-quick-settings .room-setting-heading output {
   font-size: 24px;
+}
+
+.welcome-quick-settings .room-setting-bot-description {
+  margin-top: 4px;
+}
+
+@media (max-width: 1050px) {
+  .welcome-quick-settings .room-settings-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .welcome-copy .welcome-play {
   background: #236cce;

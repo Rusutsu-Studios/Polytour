@@ -1,8 +1,10 @@
 import type { CSSProperties } from "react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import type { BotDifficulty } from "../../shared/engine/index.js";
 import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import { money } from "./board-display.js";
+import { botDifficultyName } from "./bot-display.js";
 import "./RoomSettings.css";
 
 export type RoomSettingsProps = {
@@ -157,47 +159,150 @@ function NumberSetting({
   );
 }
 
-/** The welcome screen exposes the three values most often adjusted before play. */
+function BotDifficultyDescription({
+  config,
+  id,
+}: {
+  config: RoomConfig;
+  id: string;
+}) {
+  const { t } = useLocale();
+  const difficulty = config.botDifficulty ?? "medium";
+  const description =
+    difficulty === "easy"
+      ? t(
+          "Achète des terrains nus, sans construire ni racheter vos villes.",
+          "Buys bare land, without building or buying out your cities.",
+        )
+      : difficulty === "hard"
+        ? t(
+            "Vise les collections, bloque vos victoires et garde une réserve pour les loyers.",
+            "Targets collections, blocks your wins and keeps cash for rent.",
+          )
+        : t(
+            config.botCanBuild
+              ? "Construit et rachète en gardant une petite réserve d’argent."
+              : "Achète des terrains nus et rachète les villes abordables.",
+            config.botCanBuild
+              ? "Builds and buys out while keeping a small cash reserve."
+              : "Buys bare land and affordable cities.",
+          );
+  return (
+    <>
+      <p id={`${id}-description`} className="room-setting-bot-description">
+        {description}
+      </p>
+      <p id={`${id}-rules`} className="room-setting-bot-rules">
+        {t(
+          "Même niveau pour tous les bots. Mêmes dés et règles que vous.",
+          "One level for all bots. The same dice and rules as you.",
+        )}
+        {!config.botCanBuild && (
+          <>
+            {" "}
+            {t(
+              "Construction désactivée pour tous les niveaux.",
+              "Building is disabled at every level.",
+            )}
+          </>
+        )}
+      </p>
+    </>
+  );
+}
+
+function BotDifficultySetting({
+  config,
+  onChange,
+  disabled = false,
+  compact = false,
+  descriptionId,
+}: RoomSettingsProps & { compact?: boolean; descriptionId?: string }) {
+  const { t } = useLocale();
+  const id = useId();
+  const copyId = descriptionId ?? id;
+  const difficulty = config.botDifficulty ?? "medium";
+  return (
+    <fieldset
+      className={`room-setting-choice room-setting-bots${compact ? " room-setting-bots--compact" : ""}`}
+      disabled={disabled}
+      aria-describedby={`${copyId}-description ${copyId}-rules`}
+    >
+      <legend>{t("Difficulté des bots", "Bot difficulty")}</legend>
+      <div className="room-setting-pills">
+        {(["easy", "medium", "hard"] as const).map((option: BotDifficulty) => (
+          <label className="room-setting-pill" key={option}>
+            <input
+              type="radio"
+              name={id}
+              value={option}
+              checked={option === difficulty}
+              disabled={disabled}
+              onChange={() => {
+                if (!disabled) onChange({ ...config, botDifficulty: option });
+              }}
+            />
+            <span>{botDifficultyName(option)}</span>
+          </label>
+        ))}
+      </div>
+      {!compact && <BotDifficultyDescription config={config} id={copyId} />}
+    </fieldset>
+  );
+}
+
+/** Quick economy and bot choices before opening a room. */
 export function QuickSettings({
   config,
   onChange,
   disabled = false,
 }: RoomSettingsProps) {
   const { t } = useLocale();
+  const descriptionId = useId();
   const update = (patch: Partial<RoomConfig>) => {
     if (!disabled) onChange({ ...config, ...patch });
   };
   return (
-    <div className="room-settings room-settings-main">
-      <NumberSetting
-        label={t("Capital de départ", "Starting cash")}
-        value={config.startingCash}
-        max={10_000_000}
-        step={10_000}
-        disabled={disabled}
-        onChange={(startingCash) => update({ startingCash })}
-        monetary
-        compact
-      />
-      <NumberSetting
-        label={t("Salaire au départ", "Salary per lap")}
-        value={config.startSalary}
-        max={1_000_000}
-        step={10_000}
-        disabled={disabled}
-        onChange={(startSalary) => update({ startSalary })}
-        monetary
-        compact
-      />
-      <NumberSetting
-        label={t("Festivals initiaux", "Starting festivals")}
-        value={config.festivalCount}
-        max={20}
-        step={1}
-        disabled={disabled}
-        onChange={(festivalCount) => update({ festivalCount })}
-        compact
-      />
+    <div className="room-settings">
+      <div className="room-settings-main">
+        <NumberSetting
+          label={t("Capital de départ", "Starting cash")}
+          value={config.startingCash}
+          max={10_000_000}
+          step={10_000}
+          disabled={disabled}
+          onChange={(startingCash) => update({ startingCash })}
+          monetary
+          compact
+        />
+        <NumberSetting
+          label={t("Salaire au départ", "Salary per lap")}
+          value={config.startSalary}
+          max={1_000_000}
+          step={10_000}
+          disabled={disabled}
+          onChange={(startSalary) => update({ startSalary })}
+          monetary
+          compact
+        />
+        <NumberSetting
+          label={t("Festivals initiaux", "Starting festivals")}
+          value={config.festivalCount}
+          max={20}
+          step={1}
+          disabled={disabled}
+          onChange={(festivalCount) => update({ festivalCount })}
+          compact
+        />
+        <BotDifficultySetting
+          config={config}
+          onChange={onChange}
+          disabled={disabled}
+          compact
+          descriptionId={descriptionId}
+        />
+      </div>
+      <BotDifficultyDescription config={config} id={descriptionId} />
     </div>
   );
 }
@@ -338,6 +443,11 @@ export function RoomSettings({
           suffix="s"
           disabled={disabled}
           onChange={(decisionSeconds) => update({ decisionSeconds })}
+        />
+        <BotDifficultySetting
+          config={config}
+          onChange={onChange}
+          disabled={disabled}
         />
       </div>
       <fieldset className="room-settings-rules" disabled={disabled}>

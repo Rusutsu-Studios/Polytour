@@ -316,6 +316,22 @@
   border-color: var(--settings-blue);
 }
 
+.room-setting-bots {
+  grid-column: 1 / -1;
+}
+
+.room-setting-bot-description {
+  margin: 10px 0 0;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.room-setting-bot-rules {
+  margin: 4px 0 0;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
 .room-settings input:focus-visible,
 .room-settings-fairness summary:focus-visible {
   outline: 3px solid var(--settings-blue);

@@ -1,0 +1,115 @@
+{
+  "purpose": "Issue #75 bot-difficulty proposal on current main rules",
+  "method": "Deterministic seeds excluded from the initial 0-299 comparison; each seed is used once per run. Difficulty assignments rotate across table seats. Same rules, resources and legal actions for every difficulty.",
+  "commands": [
+    "pnpm sim -- --games 1000 --seed-start 300 --players 3 --rounds 60 --levels \"easy,medium,hard\"",
+    "pnpm sim -- --games 200 --seed-start 300 --players 2 --rounds 60 --levels \"medium,hard\"",
+    "pnpm sim -- --games 200 --seed-start 300 --players 4 --rounds 60 --levels \"easy,medium,medium,hard\""
+  ],
+  "results": [
+    {
+      "games": 1000,
+      "seedStart": 300,
+      "economyRule": "reference",
+      "boardRule": "country",
+      "levels": ["easy", "medium", "hard"],
+      "difficultyWins": {
+        "easy": 4,
+        "medium": 435,
+        "hard": 561
+      },
+      "difficultySeats": {
+        "easy": 1,
+        "medium": 1,
+        "hard": 1
+      },
+      "config": "3 bots (levels rotate across seats), 60-round limit, 3 seeded festivals; reference grid and fees",
+      "medianRounds": 40,
+      "p90Rounds": 60,
+      "wins": {
+        "round-limit": 173,
+        "triple-monopoly": 626,
+        "line-monopoly": 50,
+        "last-standing": 151
+      },
+      "seatWins": [332, 331, 337, 0],
+      "turnPositionWins": [355, 308, 337, 0],
+      "landmarkBuilds": 0,
+      "landmarkRent": 0,
+      "modifiedHotelRent": 3750290500,
+      "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+      "note": "Reference rules have no Landmark; compare round-limit rate, bankruptcies and turnPositionWins with the prototype run"
+    },
+    {
+      "games": 200,
+      "seedStart": 300,
+      "economyRule": "reference",
+      "boardRule": "country",
+      "levels": ["medium", "hard"],
+      "difficultyWins": {
+        "easy": 0,
+        "medium": 82,
+        "hard": 118
+      },
+      "difficultySeats": {
+        "medium": 1,
+        "hard": 1
+      },
+      "config": "2 bots (levels rotate across seats), 60-round limit, 3 seeded festivals; reference grid and fees",
+      "medianRounds": 43,
+      "p90Rounds": 60,
+      "wins": {
+        "triple-monopoly": 108,
+        "last-standing": 47,
+        "line-monopoly": 11,
+        "round-limit": 34
+      },
+      "seatWins": [104, 96, 0, 0],
+      "turnPositionWins": [121, 79, 0, 0],
+      "landmarkBuilds": 0,
+      "landmarkRent": 0,
+      "modifiedHotelRent": 298716000,
+      "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+      "note": "Reference rules have no Landmark; compare round-limit rate, bankruptcies and turnPositionWins with the prototype run"
+    },
+    {
+      "games": 200,
+      "seedStart": 300,
+      "economyRule": "reference",
+      "boardRule": "country",
+      "levels": ["easy", "medium", "medium", "hard"],
+      "difficultyWins": {
+        "easy": 0,
+        "medium": 133,
+        "hard": 67
+      },
+      "difficultySeats": {
+        "easy": 1,
+        "medium": 2,
+        "hard": 1
+      },
+      "config": "4 bots (levels rotate across seats), 60-round limit, 3 seeded festivals; reference grid and fees",
+      "medianRounds": 50,
+      "p90Rounds": 60,
+      "wins": {
+        "triple-monopoly": 101,
+        "round-limit": 63,
+        "last-standing": 23,
+        "line-monopoly": 13
+      },
+      "seatWins": [48, 49, 55, 48],
+      "turnPositionWins": [56, 54, 51, 39],
+      "landmarkBuilds": 0,
+      "landmarkRent": 0,
+      "modifiedHotelRent": 1809177500,
+      "assertions": "All games terminated; per-event money conservation, event replay, card conservation, ownership and legal decisions passed",
+      "note": "Reference rules have no Landmark; compare round-limit rate, bankruptcies and turnPositionWins with the prototype run"
+    }
+  ],
+  "interpretation": [
+    "Three players: Easy wins 0.4%, Medium 43.5%, Hard 56.1%.",
+    "Two players: Medium wins 41%, Hard 59%.",
+    "Four players: Easy wins 0%; Hard wins 33.5%, compared with 33.25% per Medium seat (two Medium opponents). This sample shows no clear Hard advantage at four players."
+  ],
+  "limits": "These seeded bot-only matches use a 60-round cap and the default reference rules. They do not measure strength against humans, all custom settings or a guaranteed ordering in every match. Policies only inspect public state; dice and Chance rules remain unchanged."
+}

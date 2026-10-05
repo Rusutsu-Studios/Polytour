@@ -52,6 +52,7 @@ const publicState = z.object({
       roundLimit: integer,
       resortFestivals: z.boolean().optional(),
       escapeCard: z.boolean().optional(),
+      botDifficulty: z.enum(["easy", "medium", "hard"]).optional(),
     })
     .passthrough(),
   players: z.array(

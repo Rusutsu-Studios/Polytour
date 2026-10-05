@@ -1197,6 +1197,85 @@ describe("Authoritative private rooms", () => {
     },
   );
 
+  it.each(["easy", "medium", "hard"] as const)(
+    "persists %s bot difficulty through settings, eviction, reconnect and bot alarm",
+    async (level) => {
+      const host = await create("secure", 1);
+      const inbox = await connect(host);
+      const welcome = await inbox.next("welcome");
+      expect(welcome.lobby.config.botDifficulty).toBe("medium");
+      expect(
+        await roomOp(inbox, "set-level", {
+          type: "settings",
+          config: { ...welcome.lobby.config, botDifficulty: level },
+        }),
+      ).toBe("ack");
+      expect((await lobbyOf(host.roomCode)).config.botDifficulty).toBe(level);
+      expect(
+        await roomOp(inbox, "start-level", { type: "start", fillBots: false }),
+      ).toBe("ack");
+      await inbox.next("events");
+      expect(
+        await roomOp(inbox, "late-level", {
+          type: "settings",
+          config: { ...welcome.lobby.config, botDifficulty: "easy" },
+        }),
+      ).toBe("game-already-started");
+      await closeInbox(inbox);
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const state = JSON.parse(
+          sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState;
+        expect(state.config.botDifficulty).toBe(level);
+        sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...state,
+            activeSeat: 1,
+            players: state.players.map((player) =>
+              player.seat === 1
+                ? { ...player, position: 1, cash: 2_000_000 }
+                : player,
+            ),
+            pending: {
+              kind: "buy",
+              seat: 1,
+              tile: 1,
+              maxLevel: 2,
+              deadline: Date.now() + 60_000,
+            },
+          }),
+        );
+      });
+      await evictDurableObject(stub);
+      const resumed = await connect(host);
+      const recovered = await resumed.next("welcome");
+      expect(recovered.snapshot?.config.botDifficulty).toBe(level);
+      expect(recovered.lobby.config.botDifficulty).toBe(level);
+      await runInDurableObject(stub, async (_instance, durableState) => {
+        await durableState.storage.setAlarm(Date.now() + 30_000);
+        durableState.storage.sql.exec(
+          "UPDATE timers SET fire_at=? WHERE kind='bot'",
+          Date.now() - 1,
+        );
+      });
+      expect(await runDurableObjectAlarm(stub)).toBe(true);
+      const batch = await eventsWith(resumed, "PropertyBought");
+      expect(batch.events).toContainEqual(
+        expect.objectContaining({
+          type: "PropertyBought",
+          seat: 1,
+          tile: 1,
+          level: level === "easy" ? 0 : 2,
+        }),
+      );
+    },
+  );
+
   it("lets a bot act only after the animations of its previous move", async () => {
     const host = await create();
     const inbox = await connect(host);

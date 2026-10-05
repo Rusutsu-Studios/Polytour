@@ -54,6 +54,12 @@ Persisted alarms drive bots, decision deadlines, disconnect grace, real-time mat
 expiry and pause-vote expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
 survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
+The room's `botDifficulty` setting is frozen in match config at start. The same
+engine `botAction` policy drives permanent bots and temporary disconnect
+replacements; it reads only public state and legal actions. Missing saved fields
+retain Medium. Protocol version 8 requires stale clients to refresh; no state
+migration or rules-version change is required. See
+[BOT_DIFFICULTY.md](BOT_DIFFICULTY.md) for the proposal and its evaluation limits.
 Live Chance draws receive fresh Web Crypto through `EngineContext.chanceEntropy`
 and select uniformly among remaining cards with rejection sampling, without
 replacement. This is independent of seeded setup and applies to saved decks without

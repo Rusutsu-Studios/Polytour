@@ -61,6 +61,7 @@ import {
   boardPickKey,
   isBoardPick,
 } from "./ui/board-pick.js";
+import { botDifficultyName } from "./ui/bot-display.js";
 import CardMoment from "./ui/CardMoment.js";
 import Changelog from "./ui/Changelog.js";
 import CityCard from "./ui/CityCard.js";
@@ -1575,7 +1576,7 @@ function MatchView({
                           : mySeats.includes(player.seat)
                             ? t("Ce PC", "This PC")
                             : player.control === "bot"
-                              ? "Bot"
+                              ? `Bot · ${botDifficultyName(game.config.botDifficulty)}`
                               : t("Absent", "Away")}
                     </span>
                   )}

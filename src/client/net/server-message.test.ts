@@ -52,6 +52,47 @@ const diagnostics: RoomDiagnostics = {
 };
 
 describe("room debug server envelopes", () => {
+  it("validates frozen bot difficulty while preserving unmarked saved matches", () => {
+    const snapshot = createGame(
+      DEFAULT_GAME_CONFIG,
+      [
+        { playerId: "ada", name: "Ada", control: "human" },
+        { playerId: "bea", name: "Bea", control: "bot" },
+      ],
+      7,
+      { now: 0 },
+    ).state;
+    const { botDifficulty: _difficulty, ...oldConfig } = snapshot.config;
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          snapshot: { ...snapshot, config: oldConfig },
+        }),
+      ),
+    ).not.toHaveProperty("snapshot.config.botDifficulty");
+    for (const botDifficulty of ["easy", "medium", "hard"])
+      expect(
+        parseServerMessage(
+          JSON.stringify({
+            ...welcome,
+            snapshot: { ...snapshot, config: { ...oldConfig, botDifficulty } },
+          }),
+        ),
+      ).toMatchObject({ snapshot: { config: { botDifficulty } } });
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          snapshot: {
+            ...snapshot,
+            config: { ...oldConfig, botDifficulty: "expert" },
+          },
+        }),
+      ),
+    ).toThrow();
+  });
+
   it("accepts Escape in snapshots and preserves the optional frozen deck marker", () => {
     const snapshot = createGame(
       DEFAULT_GAME_CONFIG,

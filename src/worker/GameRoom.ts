@@ -653,7 +653,10 @@ export class GameRoom extends DurableObject<Env> {
         : saved.state.status === "finished"
           ? "finished"
           : "playing",
-      config: room.config,
+      config: {
+        ...room.config,
+        botDifficulty: room.config.botDifficulty ?? "medium",
+      },
       ...frozenRules(this.readMeta<number>("rulesVersion")),
       seats: SEATS.map((seat) => {
         const entry = seats.find((candidate) => candidate.seat === seat);

@@ -5,6 +5,7 @@ import type { LobbyState } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import ActionButton from "./ActionButton.js";
 import { PLAYER_COLORS } from "./board-display.js";
+import { botDifficultyName } from "./bot-display.js";
 import Icon from "./Icon.js";
 import PlayerAvatar from "./PlayerAvatar.js";
 import "./RoomPeople.css";
@@ -305,7 +306,7 @@ export function LobbySeats({
             <strong>{player.name}</strong>
             <span className="seat-status">
               {player.control === "bot"
-                ? "Bot"
+                ? `Bot · ${botDifficultyName(lobby?.config.botDifficulty)}`
                 : local
                   ? player.controller === you
                     ? t("Sur votre PC", "On your PC")
