@@ -531,11 +531,17 @@ function houseGeometry() {
       position: [0, wall, 0],
       scale: [width, rise, depth],
     },
-    // A lone door on the front, two identical windows on each side wall.
+    // A window and an off-centre door on the front, and two windows like it
+    // on each side wall.
+    {
+      geometry: box(0.05, 0.056, 0.01),
+      color: glass,
+      position: [-0.055, 0.105, front + 0.004],
+    },
     {
       geometry: box(0.06, 0.1, 0.012),
       color: "#8b5a3c",
-      position: [0, 0.08, front + 0.004],
+      position: [0.05, 0.08, front + 0.004],
     },
     ...[-1, 1].flatMap((side) =>
       [-0.07, 0.07].map((z) => ({
