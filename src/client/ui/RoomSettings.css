@@ -195,11 +195,51 @@
   font-weight: 500;
 }
 
-.room-setting-choice--duration .room-setting-pill > span {
+.room-setting-choice--time .room-setting-pill > span {
   flex-direction: column;
   gap: 0;
   padding: 4px 3px;
   line-height: 1.2;
+  height: 44px;
+}
+
+.room-setting-time-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.room-setting-time-row .room-setting-range {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.room-setting-time-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.room-setting-time-value input {
+  width: 66px;
+  min-height: 36px;
+  padding: 4px;
+  border: 1px solid #7999a2;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.room-setting-time-value input:disabled {
+  color: #47666c;
+  background: #e2e9df;
 }
 
 .room-setting-pill input:checked + span {

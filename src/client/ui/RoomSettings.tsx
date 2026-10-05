@@ -202,10 +202,12 @@ export function QuickSettings({
   );
 }
 
-function ChoiceSetting({
+function TimeSetting({
   label,
   value,
   choices,
+  min,
+  max,
   suffix,
   unlimitedLabel,
   disabled,
@@ -214,44 +216,102 @@ function ChoiceSetting({
   label: string;
   value: number | null;
   choices: readonly (number | null)[];
+  min: number;
+  max: number;
   suffix: string;
   unlimitedLabel?: string;
   disabled: boolean;
   onChange: (value: number | null) => void;
 }) {
   const id = useId();
-  // Keep valid settings from existing saved rooms visible, even outside the presets.
-  const options = choices.includes(value)
-    ? choices
-    : [...choices, value].sort((a, b) => (a ?? Infinity) - (b ?? Infinity));
+  const { t } = useLocale();
+  const [draft, setDraft] = useState(String(value ?? ""));
+  const editing = useRef(false);
+  useLayoutEffect(() => {
+    if (disabled) editing.current = false;
+    if (!editing.current) setDraft(String(value ?? ""));
+  }, [value, disabled]);
+  const sliderMax = max + (unlimitedLabel ? 1 : 0);
+  const sliderValue = value ?? sliderMax;
+  const commit = () => {
+    editing.current = false;
+    if (disabled) return;
+    const entered = Number(draft);
+    const next =
+      draft.trim() !== "" && Number.isFinite(entered)
+        ? Math.max(min, Math.min(max, Math.round(entered)))
+        : value;
+    setDraft(String(next ?? ""));
+    if (next !== value) onChange(next);
+  };
   return (
     <fieldset
-      className={`room-setting-choice${unlimitedLabel ? " room-setting-choice--duration" : ""}`}
+      className="room-setting-choice room-setting-choice--time"
       disabled={disabled}
     >
       <legend>{label}</legend>
-      <input
-        className="room-setting-range"
-        type="range"
-        min={0}
-        max={options.length - 1}
-        step={1}
-        value={options.indexOf(value)}
-        disabled={disabled}
-        aria-label={label}
-        aria-valuetext={value === null ? unlimitedLabel : `${value} ${suffix}`}
-        style={
-          {
-            "--setting-progress": `${(options.indexOf(value) / (options.length - 1)) * 100}%`,
-          } as CSSProperties
-        }
-        onChange={(event) => {
-          const choice = options[Number(event.currentTarget.value)];
-          if (!disabled && choice !== undefined) onChange(choice);
-        }}
-      />
+      <div className="room-setting-time-row">
+        <input
+          className="room-setting-range"
+          type="range"
+          min={min}
+          max={sliderMax}
+          step={1}
+          value={sliderValue}
+          disabled={disabled}
+          aria-label={label}
+          aria-valuetext={
+            value === null ? unlimitedLabel : `${value} ${suffix}`
+          }
+          style={
+            {
+              "--setting-progress": `${((sliderValue - min) / (sliderMax - min)) * 100}%`,
+            } as CSSProperties
+          }
+          onChange={(event) => {
+            const entered = Number(event.currentTarget.value);
+            if (!disabled) onChange(entered > max ? null : entered);
+          }}
+        />
+        <div className="room-setting-time-value">
+          <input
+            type="number"
+            min={min}
+            max={max}
+            step={1}
+            value={draft}
+            placeholder={value === null ? "∞" : undefined}
+            disabled={disabled}
+            aria-label={t(`${label} : valeur exacte`, `${label}: exact value`)}
+            onFocus={() => {
+              editing.current = true;
+            }}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+            }}
+            onChange={(event) => {
+              if (disabled) return;
+              const text = event.currentTarget.value;
+              setDraft(text);
+              const entered = Number(text);
+              if (
+                text !== "" &&
+                Number.isInteger(entered) &&
+                entered >= min &&
+                entered <= max
+              )
+                onChange(entered);
+            }}
+          />
+          <span>{suffix}</span>
+        </div>
+      </div>
       <div className="room-setting-pills">
-        {options.map((option) => (
+        {choices.map((option) => (
           <label className="room-setting-pill" key={option ?? "unlimited"}>
             <input
               type="radio"
@@ -333,24 +393,23 @@ export function RoomSettings({
           onChange={(festivalCount) => update({ festivalCount })}
           wide
         />
-        <ChoiceSetting
+        <TimeSetting
           label={t("Durée de partie", "Game duration")}
           value={config.timeLimitMinutes}
           choices={[20, 60, 120, null]}
+          min={1}
+          max={120}
           suffix="min"
           unlimitedLabel={t("Durée illimitée", "Unlimited duration")}
           disabled={disabled}
-          onChange={(timeLimitMinutes) =>
-            update({
-              timeLimitMinutes:
-                timeLimitMinutes as RoomConfig["timeLimitMinutes"],
-            })
-          }
+          onChange={(timeLimitMinutes) => update({ timeLimitMinutes })}
         />
-        <ChoiceSetting
+        <TimeSetting
           label={t("Temps de décision", "Decision timer")}
           value={config.decisionSeconds}
           choices={[15, 30, 45, 60]}
+          min={10}
+          max={60}
           suffix="s"
           disabled={disabled}
           onChange={(decisionSeconds) => {

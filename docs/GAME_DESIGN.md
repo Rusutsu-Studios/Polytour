@@ -103,7 +103,7 @@ Dubai and Bali.
 | Starting cash | 2,000,000 (configurable) |
 | Salary for passing/landing on Start | 400,000 (configurable) |
 | Players | 2–4; empty seats stay empty or take a bot |
-| Time limit | 20/60/120 minutes or ∞; default 120 (then highest net worth wins) |
+| Time limit | 1–120 whole minutes or ∞; shortcuts 20/60/120; default 120 (then highest net worth wins) |
 | Round limit | 10,000 safety cap for timed games; none for ∞; custom tests/simulations use shorter caps |
 | Initial festivals | 3 (configurable); cities only with ×2 rent (saved reference rooms: cities or resorts) |
 | Sell-back to bank | 100% of invested value (prototype: 50%) |

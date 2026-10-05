@@ -20,10 +20,7 @@ export const RoomConfigSchema = z
     startingCash: z.number().int().min(0).max(10_000_000).default(2_000_000),
     startSalary: z.number().int().min(0).max(1_000_000).default(400_000),
     roundLimit: z.number().int().min(1).max(10_000).default(10_000),
-    timeLimitMinutes: z
-      .union([z.literal(20), z.literal(60), z.literal(120)])
-      .nullable()
-      .default(120),
+    timeLimitMinutes: z.number().int().min(1).max(120).nullable().default(120),
     festivalCount: z.number().int().min(0).max(20).default(3),
     lineMonopoly: z.boolean().default(true),
     tripleMonopoly: z.boolean().default(true),

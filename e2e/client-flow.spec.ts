@@ -626,8 +626,37 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       dialog.getByRole("radio", { name: "120 min", exact: true }),
     ).toBeChecked();
-    await expect(duration).toHaveValue("2");
-    await expect(duration).toHaveAttribute("max", "3");
+    await expect(duration).toHaveValue("120");
+    await expect(duration).toHaveAttribute("max", "121");
+    const exactDuration = dialog.getByRole("spinbutton", {
+      name:
+        locale === "fr"
+          ? "Durée de partie : valeur exacte"
+          : "Game duration: exact value",
+      exact: true,
+    });
+    const exactDecision = dialog.getByRole("spinbutton", {
+      name:
+        locale === "fr"
+          ? "Temps de décision : valeur exacte"
+          : "Decision timer: exact value",
+      exact: true,
+    });
+    const decision = dialog.getByRole("slider", {
+      name: locale === "fr" ? "Temps de décision" : "Decision timer",
+      exact: true,
+    });
+    await exactDuration.fill("73");
+    await duration.focus();
+    await duration.press("ArrowRight");
+    await expect(exactDuration).toHaveValue("74");
+    await expect(wins).toContainText(
+      locale === "fr" ? "après 74 min" : "after 74 min",
+    );
+    await exactDecision.fill("37");
+    await decision.focus();
+    await decision.press("ArrowLeft");
+    await expect(exactDecision).toHaveValue("36");
     await duration.focus();
     await duration.press("End");
     await expect(unlimited).toBeChecked();
@@ -659,6 +688,12 @@ for (const locale of ["fr", "en"] as const) {
           .locator(".settings-dialog-body")
           .evaluate((element) => element.scrollWidth > element.clientWidth),
       ).toBe(false);
+      const heights = await dialog
+        .locator(".room-setting-choice--time .room-setting-pill > span")
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getBoundingClientRect().height),
+        );
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
       await page.screenshot({
         path: `.local/verification/infinite-settings-${locale}-${size.width}.png`,
       });
@@ -668,6 +703,7 @@ for (const locale of ["fr", "en"] as const) {
     await expect(page.locator(".lobby-seats")).toBeVisible();
     await page.locator(".settings-trigger").click();
     await expect(unlimited).toBeChecked();
+    await expect(exactDecision).toHaveValue("36");
     await page.keyboard.press("Escape");
     await command("start", () =>
       page
@@ -681,6 +717,7 @@ for (const locale of ["fr", "en"] as const) {
     await expect(clock).toHaveText("∞");
     await expect.poll(() => snapshot?.config.timeLimitMinutes).toBeNull();
     await expect.poll(() => snapshot?.matchDeadline).toBeNull();
+    await expect.poll(() => snapshot?.config.decisionSeconds).toBe(36);
     await page
       .getByRole("button", {
         name: locale === "fr" ? "Réglages de la partie" : "Game settings",
@@ -692,7 +729,13 @@ for (const locale of ["fr", "en"] as const) {
         .locator(".match-rules")
         .getByRole("radio", { name: unlimitedName, exact: true }),
     ).toBeDisabled();
-    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", {
+        name: locale === "fr" ? "Fermer les outils" : "Close tools",
+        exact: true,
+      })
+      .click();
+    await expect(page.locator(".match-rules")).toHaveCount(0);
     const roll = page.getByRole("button", {
       name: locale === "fr" ? "Lancer les dés" : "Roll the dice",
       exact: true,

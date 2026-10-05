@@ -255,6 +255,31 @@ afterEach(() => {
 });
 
 describe("Authoritative private rooms", () => {
+  it("accepts exact duration and decision settings and starts with the chosen deadline", async () => {
+    const response = await createRoom({
+      name: "Alex",
+      config: { timeLimitMinutes: 73, decisionSeconds: 37 },
+      bots: 1,
+    });
+    expect(response.status).toBe(201);
+    const host = await response.json<RoomCredentials>();
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby.config).toMatchObject({
+      timeLimitMinutes: 73,
+      decisionSeconds: 37,
+    });
+    expect(
+      await roomOp(inbox, "start-exact", { type: "start", fillBots: false }),
+    ).toBe("ack");
+    const events = await eventsWith(inbox, "GameCreated");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(created.state.config.decisionSeconds).toBe(37);
+    expect(created.state.matchDeadline).toBe(
+      created.state.startedAt + 73 * 60_000,
+    );
+  });
   it("persists unlimited settings across reconnect, schedules only decision timers and broadcasts an alarm roll", async () => {
     const response = await createRoom({
       name: "Alex",

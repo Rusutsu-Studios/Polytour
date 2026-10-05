@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { ActionSchema, RoomConfigSchema } from "./index.js";
 
 describe("Game duration settings", () => {
-  it("defaults to 120 minutes and accepts only timed presets or explicit unlimited duration", () => {
+  it("defaults to 120 minutes and accepts exact durations or explicit unlimited duration", () => {
     expect(RoomConfigSchema.parse({}).timeLimitMinutes).toBe(120);
-    for (const timeLimitMinutes of [20, 60, 120, null]) {
+    for (const timeLimitMinutes of [1, 20, 45, 60, 73, 120, null]) {
       expect(
         RoomConfigSchema.parse({ timeLimitMinutes }).timeLimitMinutes,
       ).toBe(timeLimitMinutes);
     }
-    for (const timeLimitMinutes of [0, -1, 30, "infinite"]) {
+    for (const timeLimitMinutes of [0, -1, 121, 20.5, "infinite"]) {
       expect(RoomConfigSchema.safeParse({ timeLimitMinutes }).success).toBe(
         false,
       );
