@@ -218,7 +218,7 @@ async function findBotTimer(actor: Actor) {
     const isBot =
       state.players.find((player) => player.seat === state.pending?.seat)
         ?.control === "bot";
-    if (isBot && nextAt !== null && nextAt > Date.now() + 1000) return nextAt;
+    if (isBot && nextAt !== null && nextAt > Date.now() + 2500) return nextAt;
     const previousSeq = actor.seq;
     if (!isBot) {
       const action: Action = botAction(state, state.pending.seat, "medium");

@@ -285,8 +285,16 @@ async function openSettings(page: Page) {
 }
 
 async function freezeClock(page: Page) {
-  const frozenAt = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(frozenAt + 1000);
+  // A loaded runner can outrun the margin; retry from a fresh reading.
+  for (let attempt = 0; ; attempt += 1) {
+    const now = await page.evaluate(() => Date.now());
+    try {
+      await page.clock.pauseAt(now + 1000);
+      return;
+    } catch (error) {
+      if (attempt >= 4) throw error;
+    }
+  }
 }
 
 async function completeProbe(page: Page, trigger: () => Promise<unknown>) {
