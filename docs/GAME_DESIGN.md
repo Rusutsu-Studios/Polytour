@@ -163,9 +163,10 @@ that player lands on their own Hotel; reference rooms stop at the Hotel. An acti
 is legal only when its full cost leaves the buyer with cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
-The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations; the server only
-creates version-7 rooms and cannot accept an internal rule marker through room
-settings. A stale pending choice cannot bypass the new cap. See
+The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations;
+new rooms use the current `RULES_VERSION` in `src/worker/GameRoom.ts` (version 10).
+The server cannot accept an internal rule marker through room settings. A stale
+pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
 

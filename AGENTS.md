@@ -21,15 +21,26 @@ a stylized 3D board with juicy, choreographed animations.
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
 > championship, a retained island Escape card, a reworked 36-card Chance deck (half bad
 > cards), Hotels that cannot be bought out and no Landmark. Festivals are
-> cities only; saved version-4/5/6 rooms keep resort festivals. World Tour
-> reaches free properties and the traveller's own (version 5: own only when none
+> cities only from version 7; saved version-4/5/6 rooms keep resort festivals. World Tour
+> reaches free properties and the traveller's own (versions 4/5: own only when none
 > is free). Four resorts pay 200 k rent, and a bought-out city can be built on
-> at once. Two houses
+> at once from version 8; version-7 and earlier rooms pay four resorts like three
+> and offer no immediate build after a buyout. Version-8 and earlier rooms keep the
+> original sixteen-card deck without the retained Escape card; version-9 rooms
+> keep that deck plus Escape. Two houses
 > before a first completed lap, three after; the Hotel follows on a later
 > visit to a three-house city. Direct
 > hotels are an explicit custom exception; saved version-2/3 rooms keep their original board and the
 > prototype economy. Keep these instructions current when changing commands or
 > paths.
+
+`RULES_VERSION` and `frozenRules()` in [src/worker/GameRoom.ts](src/worker/GameRoom.ts)
+define the new-room version and saved-room defaults. The reference economy starts
+at version 4; versions 2/3 retain the prototype economy. The country board starts
+at version 5; versions 2/3/4 retain the legacy board. Saved matches keep their
+stored config, which `readState()` validates against their frozen version. When
+changing `RULES_VERSION`, update the Status block and the saved-room notes in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deploys-and-games-in-progress).
 
 ## Read before working
 
