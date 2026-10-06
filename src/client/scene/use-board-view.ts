@@ -217,7 +217,7 @@ export function useBoardView({
         (event.ctrlKey && controlHeld) ||
         event.metaKey ||
         event.deltaY === 0 ||
-        !onBoard(event)
+        !(event.target instanceof HTMLCanvasElement)
       )
         return;
       event.preventDefault();

@@ -1737,6 +1737,12 @@ test("laptop trackpad pinch zooms the board without magnifying the page", async 
   for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     await page.setViewportSize(viewport);
     const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+    const bounds = await board.boundingBox();
+    if (!bounds) throw new Error("Expected the mounted board");
+    const background = {
+      x: bounds.x + 20,
+      y: bounds.y + bounds.height / 2,
+    };
     const pageSize = () =>
       page.evaluate(() => ({
         width: innerWidth,
@@ -1745,14 +1751,16 @@ test("laptop trackpad pinch zooms the board without magnifying the page", async 
         dpr: devicePixelRatio,
       }));
     const initial = await pageSize();
-    for (const [deltaY, zoom] of [
-      [-100, "1.1"],
-      [100, "1"],
+    for (const [point, deltaY, zoom] of [
+      [center, -100, "1.1"],
+      [center, 100, "1"],
+      [background, -100, "1.1"],
+      [background, 100, "1"],
     ] as const) {
       // Precision trackpads emit trusted Ctrl+wheel without a Control keydown.
       await input.send("Input.dispatchMouseEvent", {
         type: "mouseWheel",
-        ...center,
+        ...point,
         deltaX: 0,
         deltaY,
         modifiers: 2,

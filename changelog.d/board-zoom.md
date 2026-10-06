@@ -18,7 +18,8 @@
 - Preserve ordinary tile clicks and keep floating controls separate from board
   gestures, including when holding the roll button.
 - Zoom the board with laptop trackpad pinches without magnifying the browser
-  page, while preserving deliberate browser zoom shortcuts.
+  page, including over its empty background, while preserving deliberate browser
+  zoom shortcuts.
 - Keep touch and trackpad pinches from magnifying the page when board view is
   locked.
 - Stabilize pause-resume timing and small-screen settings checks in CI while
