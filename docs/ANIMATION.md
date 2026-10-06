@@ -24,8 +24,11 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   return to that frame and preserve access to the current decision. Geometry
   lives in `client/scene/board-layout.ts` and its orientation is unit-tested.
 - **Player view:** Video sets local board zoom from 80% to 200% in 10% steps,
-  saved for this browser. In a match, wheel, +/- keys and touch pinch zoom the
-  view. A left-button grab on the board's tiles, center or edges orbits gently
+  saved for this browser. In a match, wheel, +/- keys, touch pinch and laptop
+  trackpad pinch zoom the view. Trackpad Ctrl+wheel events without a physical
+  Control key press stay on the board; deliberate Ctrl+wheel and browser
+  keyboard zoom shortcuts keep their native behavior. A left-button grab on the
+  board's tiles, center or edges orbits gently
   after an 8px threshold: horizontal drag turns around it and vertical drag moves
   between a low and overhead view. Projection scale stays fixed while orbiting;
   wheel/pinch and explicit zoom controls alone change magnification. The high
@@ -36,7 +39,8 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   Reset board view in the game toolbar, Default view in Video (or 0 while unlocked)
   restores 100%, the initial orientation and centered pan. Lock board view is
   saved locally and blocks gestures, keyboard shortcuts and Video zoom controls;
-  the two reset buttons remain usable. Lobby previews use only Video controls.
+  touch and trackpad pinches cannot magnify the page while locked. The two reset
+  buttons remain usable. Lobby previews use only Video controls.
   The accessible flat-board fallback keeps camera controls unavailable.
   Input applies immediately without smoothing, including reduced motion.
   The Director never writes this preference or the user's board transform.

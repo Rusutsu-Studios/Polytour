@@ -1660,17 +1660,27 @@ test("board zoom uses wheel and keys, respects fields and dialogs, and persists 
   await expect(board).toHaveAttribute("data-board-zoom", "1.2");
   await page.keyboard.press("-");
   await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  const bounds = await board.boundingBox();
+  if (!bounds) throw new Error("Expected the mounted board");
+  const wheelPoint = {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+  await page.keyboard.down("Control");
   expect(
-    await board.evaluate((element) => {
+    await board.locator("canvas").evaluate((element, point) => {
       const event = new WheelEvent("wheel", {
         deltaY: -100,
         ctrlKey: true,
+        clientX: point.x,
+        clientY: point.y,
         bubbles: true,
         cancelable: true,
       });
       return element.dispatchEvent(event);
-    }),
+    }, wheelPoint),
   ).toBe(true);
+  await page.keyboard.up("Control");
   await expect(board).toHaveAttribute("data-board-zoom", "1.1");
   await page.keyboard.press("Control++");
   await expect(board).toHaveAttribute("data-board-zoom", "1.1");
@@ -1716,6 +1726,47 @@ test("board zoom uses wheel and keys, respects fields and dialogs, and persists 
       .filter((raw) => raw.startsWith("{"))
       .map((raw) => (JSON.parse(raw) as { type: string }).type),
   ).toEqual(["sync", "sync"]);
+});
+
+test("laptop trackpad pinch zooms the board without magnifying the page", async ({
+  page,
+}) => {
+  await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const input = await page.context().newCDPSession(page);
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+    const pageSize = () =>
+      page.evaluate(() => ({
+        width: innerWidth,
+        height: innerHeight,
+        scale: visualViewport?.scale,
+        dpr: devicePixelRatio,
+      }));
+    const initial = await pageSize();
+    for (const [deltaY, zoom] of [
+      [-100, "1.1"],
+      [100, "1"],
+    ] as const) {
+      // Precision trackpads emit trusted Ctrl+wheel without a Control keydown.
+      await input.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        ...center,
+        deltaX: 0,
+        deltaY,
+        modifiers: 2,
+      });
+      await expect(board).toHaveAttribute("data-board-zoom", zoom);
+      expect(await pageSize()).toEqual(initial);
+      if (zoom === "1.1") {
+        await page.screenshot({
+          path: `.local/verification/laptop-trackpad-${viewport.width}.png`,
+        });
+      }
+    }
+  }
+  await input.detach();
 });
 
 test("board pinch and rotation preserve click inspection and Default view resets", async ({
@@ -2220,6 +2271,17 @@ test("locked board freezes every gesture and zoom preference but toolbar reset r
   await page.keyboard.press("0");
   expect(await boardView(page)).toEqual(frozen);
   const touch = await page.context().newCDPSession(page);
+  const pageScale = await page.evaluate(() => visualViewport?.scale);
+  await expect(board).toHaveCSS("touch-action", "none");
+  await touch.send("Input.dispatchMouseEvent", {
+    type: "mouseWheel",
+    ...center,
+    deltaX: 0,
+    deltaY: -100,
+    modifiers: 2,
+  });
+  expect(await boardView(page)).toEqual(frozen);
+  expect(await page.evaluate(() => visualViewport?.scale)).toBe(pageScale);
   await touch.send("Emulation.setTouchEmulationEnabled", {
     enabled: true,
     maxTouchPoints: 2,
@@ -2243,6 +2305,7 @@ test("locked board freezes every gesture and zoom preference but toolbar reset r
   await touch.send("Emulation.setTouchEmulationEnabled", { enabled: false });
   await touch.detach();
   expect(await boardView(page)).toEqual(frozen);
+  expect(await page.evaluate(() => visualViewport?.scale)).toBe(pageScale);
   const reset = page.getByRole("button", {
     name: "Recentrer le plateau",
     exact: true,
@@ -2261,7 +2324,7 @@ test("locked board freezes every gesture and zoom preference but toolbar reset r
     page
       .locator(".game-tools")
       .getByRole("button", { name: "Mode streamer", exact: true }),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   const streamer = page
     .locator(".pause-dialog")
     .getByRole("button", { name: "Mode streamer", exact: true });

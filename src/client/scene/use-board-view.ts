@@ -14,6 +14,7 @@ import {
 export function useBoardView({
   layer,
   enabled,
+  locked,
   zoom,
   onZoom,
   resetKey,
@@ -25,6 +26,7 @@ export function useBoardView({
 }: {
   layer: RefObject<HTMLElement | null>;
   enabled: boolean;
+  locked: boolean;
   zoom: number;
   onZoom?: (zoom: number) => void;
   resetKey?: number;
@@ -37,6 +39,7 @@ export function useBoardView({
   const [pan, setPan] = useState(CENTERED_BOARD);
   const latest = useRef({
     enabled,
+    locked,
     zoom,
     onZoom,
     limits,
@@ -47,6 +50,7 @@ export function useBoardView({
   });
   latest.current = {
     enabled,
+    locked,
     zoom,
     onZoom,
     limits,
@@ -79,9 +83,11 @@ export function useBoardView({
     let dragged = false;
     let panGesture = false;
     let hovered = false;
+    let controlHeld = false;
     let pinch: { distance: number; zoom: number } | null = null;
-    const active = () =>
+    const active = (allowLocked = false) =>
       latest.current.enabled &&
+      (allowLocked || !latest.current.locked) &&
       !Array.from(
         document.querySelectorAll(
           "dialog[open], [role='dialog'], [role='alertdialog']",
@@ -207,19 +213,21 @@ export function useBoardView({
     };
     const wheel = (event: WheelEvent) => {
       if (
-        !active() ||
-        event.ctrlKey ||
+        !active(true) ||
+        (event.ctrlKey && controlHeld) ||
         event.metaKey ||
         event.deltaY === 0 ||
         !onBoard(event)
       )
         return;
       event.preventDefault();
+      if (latest.current.locked) return;
       changeZoom(
         latest.current.zoom - Math.sign(event.deltaY) * BOARD_ZOOM.step,
       );
     };
     const keydown = (event: KeyboardEvent) => {
+      controlHeld = event.ctrlKey;
       const target = event.target;
       if (
         !active() ||
@@ -246,6 +254,13 @@ export function useBoardView({
       } else return;
       event.preventDefault();
     };
+    // Trackpad pinch reports Ctrl+wheel without a physical Control key press.
+    const keyup = (event: KeyboardEvent) => {
+      controlHeld = event.ctrlKey;
+    };
+    const blur = () => {
+      controlHeld = false;
+    };
     const leave = () => {
       hovered = false;
     };
@@ -258,6 +273,8 @@ export function useBoardView({
     element.addEventListener("wheel", wheel, { passive: false });
     element.addEventListener("pointerleave", leave);
     window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    window.addEventListener("blur", blur);
     return () => {
       element.dataset.boardDragging = "false";
       element.removeEventListener("pointerdown", down, true);
@@ -269,6 +286,8 @@ export function useBoardView({
       element.removeEventListener("wheel", wheel);
       element.removeEventListener("pointerleave", leave);
       window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      window.removeEventListener("blur", blur);
     };
   }, [layer]);
   return effectivePan;

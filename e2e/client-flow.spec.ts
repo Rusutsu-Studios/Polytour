@@ -540,7 +540,8 @@ test("win conditions follow the settings draft and saved rules in both languages
     { width: 1920, height: 1080 },
   ]) {
     await page.setViewportSize(size);
-    await wins.scrollIntoViewIfNeeded();
+    await wins.evaluate((element) => element.scrollIntoView({ block: "end" }));
+    await expect(wins).toBeInViewport({ ratio: 1 });
     const layout = await dialog.evaluate((element) => {
       const body = element.querySelector(".pause-dialog-body") as HTMLElement;
       const summary = element.querySelector(
@@ -559,7 +560,7 @@ test("win conditions follow the settings draft and saved rules in both languages
     expect(layout.bottom).toBeLessThanOrEqual(size.height);
     expect(layout.bodyBottom).toBeLessThanOrEqual(layout.bottom);
     expect(layout.overflow).toBe(false);
-    expect(layout.ordered).toBe(true);
+    expect(layout.ordered, JSON.stringify({ size, ...layout })).toBe(true);
     await page.screenshot({
       path: `.local/verification/win-settings-en-${size.width}.png`,
     });

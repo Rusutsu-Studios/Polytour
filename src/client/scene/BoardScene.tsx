@@ -2744,12 +2744,9 @@ export default function BoardScene(props: BoardProps) {
   const pan = useBoardView({
     layer,
     enabled: Boolean(
-      props.interactiveZoom &&
-        !props.preview &&
-        !props.viewLocked &&
-        size.width &&
-        size.height,
+      props.interactiveZoom && !props.preview && size.width && size.height,
     ),
+    locked: Boolean(props.viewLocked),
     zoom,
     onZoom: props.onZoom,
     resetKey: props.viewResetKey,

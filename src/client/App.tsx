@@ -1439,6 +1439,11 @@ function MatchView({
         className="game-tools"
         aria-label={t("Outils de la partie", "Game tools")}
       >
+        <StreamerToggle
+          enabled={streamer}
+          onChange={onStreamerChange}
+          compact
+        />
         <ActionButton
           type="button"
           className="game-tool-button"

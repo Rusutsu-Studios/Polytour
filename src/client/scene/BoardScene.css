@@ -1,4 +1,5 @@
-.canvas-layer[data-interactive-zoom="true"] {
+.canvas-layer[data-interactive-zoom="true"],
+.game-shell .canvas-layer[data-board-view-locked="true"] {
   touch-action: none;
 }
 .canvas-layer[data-board-dragging="true"],
