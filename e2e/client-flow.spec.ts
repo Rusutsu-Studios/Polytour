@@ -1067,7 +1067,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     page.locator(".decision-actions .construction-choice"),
   ).toHaveCount(5);
   await expect(page.getByRole("button", { name: /^Acheter ·/ })).toBeEnabled();
-  await expect(page.locator(".decision-panel")).toContainText("Roubaix");
+  await expect(page.locator(".decision-panel")).toContainText("Lyon");
   await expect(page.locator(".construction-choice")).toHaveCount(5);
   await expect(
     page.getByRole("button", { name: /^Terrain · 60 k/ }),

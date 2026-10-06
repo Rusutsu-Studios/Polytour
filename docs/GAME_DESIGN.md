@@ -105,9 +105,14 @@ on its side; a two-city group may frame a resort or the tax office.
 | 7 | B3 | 15 | D2 | 23 | F3 | 31 | H2 |
 
 8 countries (A–H), 20 cities, 4 resorts, 3 Chance, 1 Tax. The current names run
-France (A), Spain (B), Portugal (C), Italy (D), United Kingdom (E), United States
-(F), South Korea (G) and Japan (H); the resorts are the French Riviera, Cyprus,
-Dubai and Bali.
+France (A: Lyon, Marseille, Paris), Italy (B: Naples, Milan, Rome), Portugal
+(C: Faro, Porto, Lisbon), Germany (D: Hamburg, Berlin), Switzerland (E: Geneva,
+Zurich), United States (F: Chicago, Los Angeles, New York), South Korea (G: Busan,
+Seoul) and Japan (H: Osaka, Tokyo). Cities within each country follow increasing
+municipal population, with the largest last. The resorts at tiles 4, 14, 18 and 25
+are Seychelles, Maldives, Bora Bora and Hawaii. Destination names are presentation
+only: tile positions, colour groups, purchase prices, construction costs and rents
+stay unchanged. Saved legacy boards retain their original destination names.
 
 ## Economy (starting values)
 
