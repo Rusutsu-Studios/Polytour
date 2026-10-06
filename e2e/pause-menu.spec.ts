@@ -798,7 +798,7 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
   await page
     .getByRole("button", { name: "Revenir au plateau", exact: true })
     .click();
-  await expect(page.locator(".pause-dialog")).toHaveCount(1);
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
   expect(await aborts()).toBe(beforeClosing);
   await setDocumentVisibility(page, false);
   await expect.poll(aborts).toBe(beforeClosing + 1);
@@ -941,7 +941,7 @@ test("the shared probe refreshes after network and room connection changes and p
   expect(requests).toBe(expectedRequests);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  await expect(page.locator(".pause-dialog")).toHaveCount(1);
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
   await completeProbe(page, () => setBrowserOnline(page, true));
   expectedRequests += 1;
   await expect(page.locator(".match-network")).toHaveText(/^FRA · \d+ ms$/);
@@ -1138,7 +1138,7 @@ test("the tiny match badge refreshes its shared sample every five seconds outsid
   await page
     .getByRole("button", { name: "Revenir au plateau", exact: true })
     .click();
-  await expect(page.locator(".pause-dialog")).toHaveCount(1);
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
   response = FRANKFURT_PROBE;
   await completeProbe(page, () => page.clock.runFor(5000));
   await expect.poll(() => requests).toBe(beforeClosing + 1);
@@ -1570,7 +1570,7 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
   await expect(
     page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".pause-dialog")).toHaveCount(1);
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
   expect(
     await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
   ).toBeNull();

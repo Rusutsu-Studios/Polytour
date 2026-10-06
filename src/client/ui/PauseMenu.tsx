@@ -40,6 +40,8 @@ export type PauseMenuProps = {
   rules?: RoomSettingsProps | null;
   /** False when this screen was opened only to be read, leaving a solo game running. */
   willPause?: boolean;
+  /** The control to focus again on close, when the opener knows it. */
+  returnFocus?: { current: HTMLElement | null };
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -68,6 +70,7 @@ export default function PauseMenu({
   bank,
   rules = null,
   willPause = true,
+  returnFocus,
 }: PauseMenuProps) {
   const { t } = useLocale();
   const { reducedMotion } = useDirector();
@@ -121,6 +124,8 @@ export default function PauseMenu({
     [onDebugActiveChange],
   );
 
+  const returnFocusRef = useRef(returnFocus);
+  returnFocusRef.current = returnFocus;
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -128,6 +133,11 @@ export default function PauseMenu({
     dialog.showModal();
     return () => {
       dialog.close();
+      const named = returnFocusRef.current?.current;
+      if (named?.isConnected) {
+        named.focus();
+        return;
+      }
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
         previousFocus.focus();
       }

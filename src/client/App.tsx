@@ -1134,7 +1134,12 @@ function MatchView({
       room.act({ type: "RequestPause" }, pauseSeat);
     }
   }, [solo, pauseSeat, pauseBlocked, pauseOpen, authoritative, room.act]);
-  const openPauseMenu = (settingsTab?: SettingsTab, pauseGame = true) => {
+  const openPauseMenu = (
+    settingsTab?: SettingsTab,
+    pauseGame = true,
+    trigger?: HTMLButtonElement,
+  ) => {
+    overlayTrigger.current = trigger ?? null;
     menuShouldPause.current = pauseGame;
     setMenuPauses(pauseGame);
     soloMenuPause.current = solo && pauseGame;
@@ -1451,7 +1456,9 @@ function MatchView({
           aria-label={t("Règles de la partie", "Game rules")}
           title={t("Règles de la partie", "Game rules")}
           aria-haspopup="dialog"
-          onClick={() => openPauseMenu("rules", false)}
+          onClick={(event) =>
+            openPauseMenu("rules", false, event.currentTarget)
+          }
         >
           <Icon name="sliders" size={18} />
         </button>
@@ -1832,6 +1839,7 @@ function MatchView({
           initialSettingsTab={pauseSettingsTab}
           rules={{ config, disabled: true, onChange: () => {} }}
           willPause={menuPauses}
+          returnFocus={overlayTrigger}
           game={authoritative}
           mySeats={mySeats}
           blocked={pauseBlocked}
