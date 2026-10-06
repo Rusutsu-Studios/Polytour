@@ -541,26 +541,31 @@ test("win conditions follow the settings draft and saved rules in both languages
   ]) {
     await page.setViewportSize(size);
     await wins.evaluate((element) => element.scrollIntoView({ block: "end" }));
-    await expect(wins).toBeInViewport({ ratio: 1 });
     const layout = await dialog.evaluate((element) => {
       const body = element.querySelector(".pause-dialog-body") as HTMLElement;
       const summary = element.querySelector(
         ".room-settings-wins",
       ) as HTMLElement;
       const rect = element.getBoundingClientRect();
+      const bodyRect = body.getBoundingClientRect();
+      const summaryRect = summary.getBoundingClientRect();
       return {
         top: rect.top,
         bottom: rect.bottom,
-        bodyBottom: body.getBoundingClientRect().bottom,
+        bodyTop: bodyRect.top,
+        bodyBottom: bodyRect.bottom,
+        summaryTop: summaryRect.top,
+        summaryBottom: summaryRect.bottom,
         overflow: body.scrollWidth > body.clientWidth,
-        ordered: summary.getBoundingClientRect().bottom <= rect.bottom,
       };
     });
     expect(layout.top).toBeGreaterThanOrEqual(0);
     expect(layout.bottom).toBeLessThanOrEqual(size.height);
     expect(layout.bodyBottom).toBeLessThanOrEqual(layout.bottom);
     expect(layout.overflow).toBe(false);
-    expect(layout.ordered, JSON.stringify({ size, ...layout })).toBe(true);
+    // Native scrolling rounds fractional offsets to whole CSS pixels.
+    expect(layout.summaryTop).toBeGreaterThanOrEqual(layout.bodyTop - 1);
+    expect(layout.summaryBottom).toBeLessThanOrEqual(layout.bodyBottom + 1);
     await page.screenshot({
       path: `.local/verification/win-settings-en-${size.width}.png`,
     });

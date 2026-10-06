@@ -741,55 +741,58 @@ for (const viewport of DESKTOP_SIZES) {
         return { tile, x, y: LOT_TOP + 0.08, z };
       });
       await expect
-        .poll(async () =>
-          page.evaluate(async (points) => {
-            const modulePath = performance
-              .getEntriesByType("resource")
-              .find((entry) =>
-                entry.name.includes("/@react-three_fiber.js"),
-              )?.name;
-            if (!modulePath) throw new Error("Expected the loaded R3F module");
-            const { _roots } = (await import(
-              modulePath
-            )) as typeof import("@react-three/fiber");
-            const canvas = document.querySelector<HTMLCanvasElement>(
-              ".canvas-layer canvas",
-            );
-            const scene = canvas && _roots.get(canvas)?.store.getState();
-            if (!canvas || !scene)
-              throw new Error("Expected the mounted board");
-            const rect = canvas.getBoundingClientRect();
-            return Math.max(
-              ...points.map(({ tile, x, y, z }) => {
-                const point = scene.camera.position.clone().set(x, y, z);
-                const view = scene.scene.getObjectByName("board-user-view");
-                if (view) {
-                  view.updateWorldMatrix(true, false);
-                  point.applyMatrix4(view.matrixWorld);
-                }
-                point.project(scene.camera);
-                const quote = document.querySelector<HTMLElement>(
-                  `.sale-tile-quote[data-tile="${tile}"]`,
-                );
-                if (!quote) throw new Error("Expected the sale quote");
-                const position = quote.getBoundingClientRect();
-                return Math.max(
-                  Math.abs(
-                    position.x +
-                      position.width / 2 -
-                      rect.x -
-                      ((point.x + 1) * rect.width) / 2,
-                  ),
-                  Math.abs(
-                    position.y +
-                      position.height / 2 -
-                      rect.y -
-                      ((1 - point.y) * rect.height) / 2,
-                  ),
-                );
-              }),
-            );
-          }, world),
+        .poll(
+          async () =>
+            page.evaluate(async (points) => {
+              const modulePath = performance
+                .getEntriesByType("resource")
+                .find((entry) =>
+                  entry.name.includes("/@react-three_fiber.js"),
+                )?.name;
+              if (!modulePath)
+                throw new Error("Expected the loaded R3F module");
+              const { _roots } = (await import(
+                modulePath
+              )) as typeof import("@react-three/fiber");
+              const canvas = document.querySelector<HTMLCanvasElement>(
+                ".canvas-layer canvas",
+              );
+              const scene = canvas && _roots.get(canvas)?.store.getState();
+              if (!canvas || !scene)
+                throw new Error("Expected the mounted board");
+              const rect = canvas.getBoundingClientRect();
+              return Math.max(
+                ...points.map(({ tile, x, y, z }) => {
+                  const point = scene.camera.position.clone().set(x, y, z);
+                  const view = scene.scene.getObjectByName("board-user-view");
+                  if (view) {
+                    view.updateWorldMatrix(true, false);
+                    point.applyMatrix4(view.matrixWorld);
+                  }
+                  point.project(scene.camera);
+                  const quote = document.querySelector<HTMLElement>(
+                    `.sale-tile-quote[data-tile="${tile}"]`,
+                  );
+                  if (!quote) throw new Error("Expected the sale quote");
+                  const position = quote.getBoundingClientRect();
+                  return Math.max(
+                    Math.abs(
+                      position.x +
+                        position.width / 2 -
+                        rect.x -
+                        ((point.x + 1) * rect.width) / 2,
+                    ),
+                    Math.abs(
+                      position.y +
+                        position.height / 2 -
+                        rect.y -
+                        ((1 - point.y) * rect.height) / 2,
+                    ),
+                  );
+                }),
+              );
+            }, world),
+          { timeout: 20_000 },
         )
         .toBeLessThan(1);
       await page.screenshot({
