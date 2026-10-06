@@ -241,6 +241,17 @@ upgrade, world-championship, royal-gift and croquet cards; a Hotel hit by Forced
 Sale drops to three houses instead of being exempt. These are Polytour choices,
 not reference values. Version-8 and earlier rooms keep the original deck.
 
+### Start landing bonus: rules version 11, 6 October 2026
+
+At the user's request, a clockwise landing exactly on Start pays 150% of the
+salary (600,000 at the default) instead of the flat amount, and new rooms freeze
+`rulesVersion: 11` with `startLandingBonus: true`. A move that crosses Start and
+stops elsewhere still pays it flat, so only the stop is rewarded; Grand Tour
+lands on Start and therefore collects the bonus too. This is a Polytour choice,
+not a reference value: the reference game pays one flat salary per crossing.
+An exact landing is roughly one in thirty-two stops, so the rule is a corner
+reward rather than a balance lever. Version-10 and earlier rooms pay flat.
+
 ## Capture from the running reference before adding an exact preset
 
 | Area | Evidence needed | Current status |

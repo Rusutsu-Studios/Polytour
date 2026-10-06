@@ -89,10 +89,11 @@ Pending legacy dice block all pause intents. While a commitment is unresolved,
 vote expiry waits as well, keeping the committed event sequence unchanged. Dice
 resolution clears an expired vote in the same persisted event batch as its result;
 no late acceptance can count and the commitment/proof remains unchanged.
-New rooms freeze rules version 10: country-grouped board, reference economy,
+New rooms freeze rules version 11: country-grouped board, reference economy,
 staged hotels, World Tour flights to free or own properties, a 200 k rent for
-four resorts, a build offer after a buyout, a keepable Island Escape card and
-the reworked Chance deck. Version-9 rooms keep the original sixteen cards plus
+four resorts, a build offer after a buyout, a keepable Island Escape card, the
+reworked Chance deck and 150% salary for a landing exactly on Start.
+Version-10 rooms pay that salary flat. Version-9 rooms keep the original sixteen cards plus
 Escape; version-8 and older rooms retain their original sixteen-card deck,
 without that card. Version-6 rooms pay four resorts
 like three and offer no build after a buyout; version-5 rooms also keep flights

@@ -52,6 +52,7 @@ const publicState = z.object({
       roundLimit: integer,
       resortFestivals: z.boolean().optional(),
       escapeCard: z.boolean().optional(),
+      startLandingBonus: z.boolean().optional(),
     })
     .passthrough(),
   players: z.array(
@@ -207,6 +208,7 @@ const lobby = z.object({
   fourResortRent: z.boolean().default(true),
   buildAfterBuyout: z.boolean().default(true),
   escapeCard: z.boolean().optional(),
+  startLandingBonus: z.boolean().optional(),
   chanceRule: z.enum(["reworked", "original"]).default("reworked"),
   resortFestivals: z.boolean().optional(),
   seats: z

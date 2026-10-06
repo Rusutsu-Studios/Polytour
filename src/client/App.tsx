@@ -2128,6 +2128,9 @@ function App() {
     chanceRule: room.lobby?.chanceRule ?? "reworked",
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
     escapeCard: room.lobby ? room.lobby.escapeCard === true : true,
+    startLandingBonus: room.lobby
+      ? room.lobby.startLandingBonus === true
+      : true,
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;

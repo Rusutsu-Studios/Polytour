@@ -92,9 +92,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 7 restricts initial festivals to cities;
  * 8 pays four resorts double the third's rent and lets a buyout be built on;
  * 9 adds the saved Island Escape card;
- * 10 reworks the Chance deck (see ChanceRule).
+ * 10 reworks the Chance deck (see ChanceRule);
+ * 11 pays 1.5x salary for a clockwise landing exactly on Start.
  */
-const RULES_VERSION = 10;
+const RULES_VERSION = 11;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -105,7 +106,8 @@ function frozenRules(version: number | null) {
     version !== 7 &&
     version !== 8 &&
     version !== 9 &&
-    version !== 10
+    version !== 10 &&
+    version !== 11
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -121,6 +123,7 @@ function frozenRules(version: number | null) {
     chanceRule: version >= 10 ? ("reworked" as const) : ("original" as const),
     resortFestivals: version >= 4 && version < 7,
     escapeCard: version >= 9,
+    startLandingBonus: version >= 11,
   };
 }
 
@@ -297,7 +300,12 @@ export class GameRoom extends DurableObject<Env> {
     const festivals = state.config.resortFestivals;
     const escapeCard = state.config.escapeCard;
     const chances = state.config.chanceRule;
+    const startBonus = state.config.startLandingBonus;
     if (
+      // Saves made before rules version 11 pay a flat salary on every crossing.
+      (rulesVersion !== null &&
+        startBonus !== frozen.startLandingBonus &&
+        (rulesVersion >= 11 || startBonus !== undefined)) ||
       // Older decks have no Escape card, including unmarked saved matches.
       (rulesVersion !== null &&
         escapeCard !== frozen.escapeCard &&

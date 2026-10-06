@@ -9,6 +9,7 @@ import {
   getTileBuildCost,
   getTileLandPrice,
   ruleEconomy,
+  startLandingSalary,
 } from "../../shared/board/index.js";
 import {
   boardRule,
@@ -506,10 +507,15 @@ function SpaceRule({ state, index }: { state: PublicState; index: number }) {
   const text = (() => {
     switch (getBoard(state.config)[index].kind) {
       case "start":
-        return t(
-          `Recevez ${money(state.config.startSalary)} en passant par le départ.`,
-          `Receive ${money(state.config.startSalary)} when passing Start.`,
-        );
+        return state.config.startLandingBonus === true
+          ? t(
+              `Recevez ${money(state.config.startSalary)} en passant par le départ, et ${money(startLandingSalary(state.config.startSalary))} en vous y arrêtant.`,
+              `Receive ${money(state.config.startSalary)} when passing Start, and ${money(startLandingSalary(state.config.startSalary))} for landing on it.`,
+            )
+          : t(
+              `Recevez ${money(state.config.startSalary)} en passant par le départ.`,
+              `Receive ${money(state.config.startSalary)} when passing Start.`,
+            );
       case "island":
         return state.config.escapeCard === true
           ? t(
