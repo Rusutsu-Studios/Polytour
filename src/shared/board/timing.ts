@@ -7,6 +7,9 @@ export const DECISION_TIMING = {
   roll: 10_000,
   choice: 15_000,
   sell: 30_000,
+  /** Opening wheel: 3.6 seconds of selection, then 3.4 seconds for the result. */
+  startAnimation: 7_000,
+  startSpinAnimation: 3_600,
   diceAnimation: 1_700,
   stepAnimation: 300,
   /** The longest walk (twelve hops): longer moves hop faster to fit it. */

@@ -52,7 +52,7 @@ class Director {
   private batch = 0;
   private generation = 0;
   private animator: SceneAnimator | null = null;
-  private presenter: SceneAnimator | null = null;
+  private presenters = new Set<SceneAnimator>();
 
   getSnapshot = () => this.value;
   subscribe = (listener: () => void) => {
@@ -73,11 +73,10 @@ class Director {
   }
   /** DOM moments join the same event queue without replacing the 3D scene. */
   registerPresenter(presenter: SceneAnimator) {
-    this.presenter?.cancel();
-    this.presenter = presenter;
+    this.presenters.add(presenter);
     presenter.snap(this.value.viewState);
     return () => {
-      if (this.presenter === presenter) this.presenter = null;
+      this.presenters.delete(presenter);
       presenter.cancel();
     };
   }
@@ -85,7 +84,7 @@ class Director {
     this.generation += 1;
     this.queue = [];
     this.animator?.cancel();
-    this.presenter?.cancel();
+    for (const presenter of this.presenters) presenter.cancel();
     this.update({
       serverState: state,
       viewState: state,
@@ -93,7 +92,7 @@ class Director {
       history: [],
     });
     this.animator?.snap(state);
-    this.presenter?.snap(state);
+    for (const presenter of this.presenters) presenter.snap(state);
   }
   receive(events: readonly GameEvent[]) {
     let state = this.value.serverState;
@@ -140,6 +139,11 @@ class Director {
             ? applyEvent(previous, event)
             : null;
       if (!moved) continue;
+      // Creation supplies the first view immediately, beneath its opening moment.
+      if (event.type === "GameCreated") {
+        this.update({ viewState: moved });
+        this.animator?.snap(moved);
+      }
       const next = salary ? applyEvent(moved, salary) : moved;
       let settled = false;
       const settle = () => {
@@ -148,7 +152,7 @@ class Director {
         settled = true;
         this.update({ viewState: applyEvent(view, salary) });
       };
-      if (this.animator || this.presenter) {
+      if (this.animator || this.presenters.size) {
         const context = {
           previous,
           next,
@@ -159,7 +163,9 @@ class Director {
         };
         await Promise.all([
           this.animator?.animate(event, context),
-          this.presenter?.animate(event, context),
+          ...Array.from(this.presenters, (presenter) =>
+            presenter.animate(event, context),
+          ),
         ]);
       }
       if (generation !== this.generation) return;
@@ -174,10 +180,11 @@ class Director {
     this.generation += 1;
     this.queue = [];
     this.animator?.cancel();
-    this.presenter?.cancel();
+    for (const presenter of this.presenters) presenter.cancel();
     this.update({ viewState: this.value.serverState, busy: false });
     this.animator?.snap(this.value.serverState);
-    this.presenter?.snap(this.value.serverState);
+    for (const presenter of this.presenters)
+      presenter.snap(this.value.serverState);
   };
   setReducedMotion(reducedMotion: boolean) {
     updateSettings({ reducedMotion: reducedMotion ? "on" : "off" });
