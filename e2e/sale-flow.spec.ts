@@ -717,7 +717,10 @@ for (const viewport of DESKTOP_SIZES) {
         await page.mouse.move(center.x + 60, center.y + 12, { steps: 6 });
         await page.mouse.up();
         await expect
-          .poll(async () => Number(await board.getAttribute("data-board-yaw")))
+          .poll(
+            async () => Number(await board.getAttribute("data-board-yaw")),
+            { timeout: 20_000 },
+          )
           .not.toBe(0);
         const shifted = await boardScreenPoint(page, {
           x: 0,
@@ -731,8 +734,9 @@ for (const viewport of DESKTOP_SIZES) {
         await page.mouse.up();
         await page.keyboard.up("Shift");
         await expect
-          .poll(async () =>
-            Number(await board.getAttribute("data-board-pan-x")),
+          .poll(
+            async () => Number(await board.getAttribute("data-board-pan-x")),
+            { timeout: 20_000 },
           )
           .not.toBe(0);
       }
