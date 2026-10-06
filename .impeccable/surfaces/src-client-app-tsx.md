@@ -47,14 +47,17 @@ The toolbar's pause icon opens Continue, Settings and Leave. Solo play pauses
 immediately and resumes on closing. Multiplayer requires every human's consent,
 including local players, with a 30-second vote and one request per room every five
 minutes. Any human can resume an agreed pause; dismissing the menu keeps multiplayer
-paused and its visible status reopens the menu. Personal settings use Game, Video,
-Audio and Debug tabs. Game holds
-language; Video holds High/Low graphics choices side by side, reduced motion and
-board size; Audio is marked coming soon. Graphics quality has no match-toolbar
-control. Board inspection opens only from a clicked space, without step arrows.
+paused and its visible status reopens the menu. Personal settings share one panel
+between the lobby gear and pause menu, with a language row above Video,
+Accessibility and Audio tabs. Video holds High/Low graphics, persisted board size
+and fullscreen; Accessibility offers System/On/Off reduced motion. Audio remains
+marked coming soon. A versioned browser preference store preserves legacy
+choices and synchronizes open tabs. Debug is last and appears only in development
+or with ?debug. Room rules use a separate sliders icon and clear rules label.
+Board inspection opens only from a clicked space, without step arrows.
 The room panel presents player avatars with names below; the leader chooses an
 eligible successor there. Avatars share one renderer prepared for custom portraits.
-The match HUD measures the HTTP round trip to a static Cloudflare asset every five
+In debug mode the match HUD measures the HTTP round trip to a static Cloudflare asset every five
 seconds while the match is connected and the browser page is visible and online,
 restarting on connectivity changes. Debug shares this stream,
 with the contacted host and Cloudflare entry point (code, location and region).
