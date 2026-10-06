@@ -112,13 +112,6 @@
   gap: 14px;
 }
 
-.pause-menu-actions .pause-settings {
-  justify-self: center;
-  width: 44px;
-  min-height: 44px;
-  padding: 0;
-}
-
 .pause-vote,
 .pause-request {
   margin-bottom: 24px;
@@ -230,7 +223,8 @@
 
 .pause-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: 4px;
   padding-bottom: 10px;
   border-bottom: 1px solid #b6c9c1;
@@ -295,21 +289,27 @@
   font-size: 15px;
 }
 
-.pause-game-settings,
-.pause-video-settings {
-  display: grid;
-  gap: 28px;
+.settings-language {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 1fr);
+  align-items: center;
+  margin-bottom: 22px;
 }
 
-.pause-streamer-setting {
+.pause-video-settings {
+  display: grid;
+  gap: 24px;
+}
+
+.settings-streamer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px 12px;
+  margin-bottom: 22px;
   font-size: 14px;
 }
 
-.pause-streamer-setting .streamer-toggle {
+.settings-streamer .streamer-toggle {
   display: inline-flex;
   align-items: center;
   justify-self: start;
@@ -322,7 +322,7 @@
   font-weight: 700;
 }
 
-.pause-streamer-setting p {
+.settings-streamer p {
   grid-column: 1 / -1;
   margin: 0;
   color: #47666c;
@@ -396,22 +396,76 @@
   outline: none;
 }
 
-.pause-reduced-motion,
-.pause-view-lock {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 30px;
-  font-size: 15px;
-  font-weight: 650;
+.settings-motion {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-.pause-reduced-motion input,
-.pause-view-lock input {
-  width: 20px;
-  height: 20px;
+.settings-motion legend {
+  margin-bottom: 12px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-motion-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-motion-options label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 8px;
+  border: 2px solid #759ca4;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-motion-options label:hover {
+  background: #e4f2e8;
+}
+
+.settings-motion-options label[data-selected="true"] {
+  border-color: #1856a7;
+  color: #fffaf0;
+  background: #236cce;
+}
+
+.settings-motion-options input {
+  width: 18px;
+  height: 18px;
   margin: 0;
-  accent-color: #236cce;
+  accent-color: #1856a7;
+}
+
+.settings-motion-options label:has(input:focus-visible) {
+  outline: 3px solid #173b45;
+  outline-offset: 4px;
+}
+
+.pause-dialog .settings-motion-options input:focus-visible {
+  outline: none;
+}
+
+.settings-description {
+  margin: 18px 0 0;
+  color: #47666c;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.settings-fullscreen {
+  min-height: 44px;
+  font-size: 15px;
 }
 
 .pause-zoom {
@@ -450,7 +504,20 @@
 }
 
 .pause-view-lock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
   margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.pause-view-lock input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #1856a7;
 }
 
 .pause-zoom-slider {
@@ -865,4 +932,72 @@
   .pause-zoom button {
     padding-inline: 9px;
   }
+}
+
+/* The room rules sheet, shown as a tab of the settings panel. */
+.pause-dialog[data-tab="rules"] {
+  width: min(900px, calc(100vw - 48px));
+}
+.pause-rules .field-note {
+  margin: 0 0 14px;
+  color: #355e67;
+  font-size: 14px;
+}
+.pause-rules .room-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto auto auto;
+  gap: 16px 32px;
+}
+
+.pause-rules .room-settings-main {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 18px 14px;
+}
+
+.pause-rules .room-setting {
+  grid-column: 1 / -1;
+}
+
+.pause-rules .room-settings-rules {
+  grid-column: 2;
+  grid-row: 1;
+  margin-top: 0;
+}
+
+.pause-rules .room-settings-rules legend {
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.pause-rules .room-settings-toggles {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.pause-rules .room-setting-toggle {
+  min-height: 44px;
+}
+
+.pause-rules .room-setting-toggle input {
+  width: 22px;
+  height: 22px;
+}
+
+.pause-rules .room-settings-fairness {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  margin-top: 0;
+  padding-top: 12px;
+}
+
+.pause-rules .room-settings-wins {
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 0;
 }

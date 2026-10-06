@@ -98,7 +98,7 @@ function observeRoomCommands(screen: Page) {
 /** Closing the sheet saves the leader's settings draft for the room. */
 async function saveSettings(page: Page) {
   await page
-    .locator(".settings-dialog-footer")
+    .locator(".pause-dialog")
     .getByRole("button", { name: "Fermer les réglages" })
     .click();
 }
@@ -204,7 +204,8 @@ test.describe("low graphics", () => {
     const homeSettings = page.locator(".personal-settings-trigger");
     const preview = page.locator(".welcome-board-preview .canvas-layer");
     await expect(homeSettings).toHaveAccessibleName("Réglages");
-    await expect(homeSettings).toHaveText("");
+    await expect(homeSettings).toHaveText("Réglages");
+    await expect(homeSettings.locator("svg + span")).toBeVisible();
     await expect(
       page.locator(".topbar-right [data-graphics-quality]"),
     ).toHaveCount(0);
@@ -232,6 +233,13 @@ test.describe("low graphics", () => {
       shadows: false,
       shadowLights: 0,
     });
+    await page
+      .getByRole("button", { name: "Zoomer le plateau", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Zoomer le plateau", exact: true })
+      .click();
+    await expect(preview).toHaveAttribute("data-board-zoom", "1.2");
     await page.keyboard.press("Escape");
     await expect(page.locator(".pause-dialog")).toHaveCount(0);
     await expect(homeSettings).toBeFocused();
@@ -240,6 +248,7 @@ test.describe("low graphics", () => {
     });
     await page.reload();
     await expect(preview).toHaveAttribute("data-low-graphics", "true");
+    await expect(preview).toHaveAttribute("data-board-zoom", "1.2");
     await homeSettings.click();
     await expect(
       homeGraphics.getByRole("radio", { name: "Faible", exact: true }),
@@ -247,6 +256,7 @@ test.describe("low graphics", () => {
     await page.keyboard.press("Escape");
     await chooseLanguage(page, "en");
     await expect(homeSettings).toHaveAccessibleName("Settings");
+    await expect(homeSettings).toHaveText("Settings");
     await homeSettings.click();
     await expect(
       page.getByRole("tab", { name: "Video", exact: true }),
@@ -270,6 +280,7 @@ test.describe("low graphics", () => {
     const scene = page.locator(".canvas-layer");
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    await expect(scene).toHaveAttribute("data-board-zoom", "1.2");
     const roll = page.getByRole("button", {
       name: "Lancer les dés",
       exact: true,
@@ -406,6 +417,7 @@ test.describe("low graphics", () => {
     await page.reload();
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
+    await expect(scene).toHaveAttribute("data-board-zoom", "1.2");
     await expect(toolbarGraphics).toHaveCount(0);
     await expect(page.locator(".match-connection")).toHaveAttribute(
       "data-state",
@@ -477,7 +489,7 @@ test("room lobby board fills its preview across desktop sizes", async ({
   }
   await page.locator(".settings-trigger").focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".settings-dialog")).toBeVisible();
+  await expect(page.locator(".pause-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-trigger")).toBeFocused();
 });
@@ -492,7 +504,7 @@ test("win conditions follow the settings draft and saved rules in both languages
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.locator(".lobby-seats")).toContainText("Atlas");
   await page.locator(".settings-trigger").click();
-  const dialog = page.locator(".settings-dialog");
+  const dialog = page.locator(".pause-dialog");
   const wins = dialog.getByRole("region", {
     name: "How to win with these settings",
   });
@@ -530,29 +542,22 @@ test("win conditions follow the settings draft and saved rules in both languages
     await page.setViewportSize(size);
     await wins.scrollIntoViewIfNeeded();
     const layout = await dialog.evaluate((element) => {
-      const body = element.querySelector(
-        ".settings-dialog-body",
-      ) as HTMLElement;
+      const body = element.querySelector(".pause-dialog-body") as HTMLElement;
       const summary = element.querySelector(
         ".room-settings-wins",
       ) as HTMLElement;
       const rect = element.getBoundingClientRect();
-      const footer = element.querySelector(
-        ".settings-dialog-footer",
-      ) as HTMLElement;
       return {
         top: rect.top,
         bottom: rect.bottom,
-        footerBottom: footer.getBoundingClientRect().bottom,
+        bodyBottom: body.getBoundingClientRect().bottom,
         overflow: body.scrollWidth > body.clientWidth,
-        ordered:
-          summary.getBoundingClientRect().bottom <=
-          footer.getBoundingClientRect().top,
+        ordered: summary.getBoundingClientRect().bottom <= rect.bottom,
       };
     });
     expect(layout.top).toBeGreaterThanOrEqual(0);
     expect(layout.bottom).toBeLessThanOrEqual(size.height);
-    expect(layout.footerBottom).toBeLessThanOrEqual(layout.bottom);
+    expect(layout.bodyBottom).toBeLessThanOrEqual(layout.bottom);
     expect(layout.overflow).toBe(false);
     expect(layout.ordered).toBe(true);
     await page.screenshot({
@@ -593,9 +598,9 @@ test("win conditions follow the settings draft and saved rules in both languages
     .getByRole("button", { name: "Lancer les dés", exact: true })
     .waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: "Réglages de la partie", exact: true })
+    .getByRole("button", { name: "Règles de la partie", exact: true })
     .click();
-  const matchRules = page.locator(".match-rules");
+  const matchRules = page.locator(".pause-rules");
   await expect(
     matchRules
       .getByRole("region", { name: "Comment gagner avec ces réglages" })
@@ -628,12 +633,12 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.locator(".settings-trigger").click();
   await expect(
     page
-      .locator(".settings-dialog")
+      .locator(".pause-dialog")
       .getByRole("slider", { name: "Capital de départ", exact: true }),
   ).toHaveValue("2000000");
   await expect(
     page
-      .locator(".settings-dialog")
+      .locator(".pause-dialog")
       .getByRole("slider", { name: "Salaire au départ", exact: true }),
   ).toHaveValue("400000");
   await expect(
@@ -643,7 +648,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   ).toBeChecked();
   await expect(
     page
-      .locator(".settings-dialog")
+      .locator(".pause-dialog")
       .getByRole("slider", { name: "Festivals initiaux", exact: true }),
   ).toHaveValue("3");
   await expect(
@@ -659,15 +664,15 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
   await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
+    "drand",
+  );
   await expect(
-    page.locator(".settings-dialog .room-settings"),
-  ).not.toContainText("drand");
-  await expect(
-    page.locator(".settings-dialog .room-settings-fairness"),
+    page.locator(".pause-dialog .room-settings-fairness"),
   ).toHaveCount(0);
-  await expect(
-    page.locator(".settings-dialog .room-settings"),
-  ).not.toContainText("Web Crypto");
+  await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
+    "Web Crypto",
+  );
   await saveSettings(page);
   await page.getByRole("button", { name: "Démarrer la partie" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
@@ -1051,11 +1056,20 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("button", { name: "Menu pause", exact: true }).click();
   await page.getByRole("button", { name: "Réglages", exact: true }).click();
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  await expect(page.getByLabel("Réduire les animations")).toBeChecked();
-  await page.getByLabel("Réduire les animations").uncheck();
-  await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
-  await page.getByLabel("Réduire les animations").check();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  await expect(
+    motion.getByRole("radio", { name: "Système", exact: true }),
+  ).toBeChecked();
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+  await motion.getByRole("radio", { name: "Activé", exact: true }).check();
   await expect(page.getByLabel("Vitesse des animations")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
@@ -1294,7 +1308,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
   await page.locator(".settings-trigger").click();
   // No intermediate blur or render wait: switching from a slider to the exact
   // field must preserve the entered amount, even while a draft sync is pending.
-  const capital = page.locator(".settings-dialog").getByRole("slider", {
+  const capital = page.locator(".pause-dialog").getByRole("slider", {
     name: "Capital de départ",
     exact: true,
   });
@@ -1304,9 +1318,9 @@ test("desktop room controls fit, create and join preserve the host settings", as
     .getByRole("spinbutton", { name: "Capital de départ : valeur exacte" })
     .fill("2000000");
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(
-    page.locator(".settings-dialog .room-settings"),
-  ).not.toContainText("drand");
+  await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
+    "drand",
+  );
   await page
     .getByRole("group", { name: "Durée de partie" })
     .getByRole("radio", { name: "20 min", exact: true })
@@ -1378,7 +1392,7 @@ test("desktop room controls fit, create and join preserve the host settings", as
     ).toBeChecked();
     await hostCommand("settings", () =>
       page
-        .locator(".settings-dialog-footer")
+        .locator(".pause-dialog")
         .getByRole("button", { name: "Fermer les réglages" })
         .click(),
     );
@@ -1390,7 +1404,10 @@ test("desktop room controls fit, create and join preserve the host settings", as
     await expect(
       page.getByRole("button", { name: "Démarrer la partie" }),
     ).toBeEnabled();
-    await second.getByRole("button", { name: "Revenir au plateau" }).click();
+    await second
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Fermer les réglages" })
+      .click();
     // Friends took the first two bots' places. Only the leader sends the last
     // bot away or seats one again on the open card.
     await expect(second.locator(".lobby-seats")).toContainText("Atlas");
@@ -1482,7 +1499,7 @@ test("illustrated cards play in order and cancel safely on recovery and reconnec
     .getByRole("group", { name: "Temps de décision" })
     .getByRole("radio", { name: "60 s", exact: true })
     .check();
-  const capital = page.locator(".settings-dialog").getByRole("slider", {
+  const capital = page.locator(".pause-dialog").getByRole("slider", {
     name: "Capital de départ",
     exact: true,
   });

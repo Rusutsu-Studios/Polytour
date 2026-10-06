@@ -686,16 +686,18 @@ test("roll button and informative timer remain usable through 4K and reduced mot
   expect(room.errors).toEqual([]);
 });
 
-test("forced-sale quotes follow the actual board view after zoom, rotation and pan", async ({
-  page,
-}) => {
-  await page.addInitScript(() =>
-    localStorage.setItem("polytour.lowGraphics", "true"),
-  );
-  const room = await enterSaleRoom(page);
-  const board = page.locator(".canvas-layer");
-  for (const viewport of DESKTOP_SIZES) {
+// One test per viewport: a single pass over every desktop size outgrew the
+// 120 s budget on CI, where WebGL is software rendered.
+for (const viewport of DESKTOP_SIZES) {
+  test(`forced-sale quotes follow the actual board view after zoom, rotation and pan at ${viewport.width}`, async ({
+    page,
+  }) => {
     await page.setViewportSize(viewport);
+    await page.addInitScript(() =>
+      localStorage.setItem("polytour.lowGraphics", "true"),
+    );
+    const room = await enterSaleRoom(page);
+    const board = page.locator(".canvas-layer");
     for (const zoom of [0.8, 2]) {
       await page
         .getByRole("button", { name: "Menu pause", exact: true })
@@ -794,7 +796,7 @@ test("forced-sale quotes follow the actual board view after zoom, rotation and p
         path: `.local/verification/board-zoom-sale-${viewport.width}-${zoom}.png`,
       });
     }
-  }
-  expect(room.intents).toHaveLength(0);
-  expect(room.errors).toEqual([]);
-});
+    expect(room.intents).toHaveLength(0);
+    expect(room.errors).toEqual([]);
+  });
+}

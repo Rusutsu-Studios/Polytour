@@ -229,7 +229,7 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
   });
   // Track timers before the shared home/match probe creates its first cadence.
   if (!options.realClock) await page.clock.install({ time: Date.now() });
-  await page.goto("/");
+  await page.goto("/?debug");
   if (options.observePongs) {
     // The route mock is installed during navigation; observe it before joining.
     await page.evaluate((pong) => {
@@ -292,7 +292,7 @@ async function openSettings(page: Page) {
   await page.getByRole("button", { name: "Menu pause", exact: true }).click();
   await page.getByRole("button", { name: "Réglages", exact: true }).click();
   await expect(
-    page.getByRole("tab", { name: "Jeu", exact: true }),
+    page.getByRole("tab", { name: "Vidéo", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
 }
 
@@ -359,7 +359,7 @@ for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     });
     await page.setViewportSize(viewport);
     await page.clock.install({ time: Date.now() });
-    await page.goto("/");
+    await page.goto("/?debug");
     const badge = page.locator(".lobby-network");
     await expect(badge).toHaveAccessibleName("Débogage réseau");
     await expect(badge).toHaveText(/^FRA · \d+ ms$/);
@@ -396,7 +396,6 @@ for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     await completeProbe(page, () => page.clock.runFor(5000));
     expect(probes).toBe(beforeOpening + 1);
     await expectSharedPing(panel, "FRA", ".lobby-network");
-    await modal.getByRole("tab", { name: "Jeu", exact: true }).click();
     await modal.getByLabel("Langue", { exact: true }).selectOption("en");
     await modal.getByRole("tab", { name: "Debug", exact: true }).click();
     await expect(badge).toHaveAccessibleName("Network debug");
@@ -404,7 +403,7 @@ for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     await page.keyboard.press("Escape");
     await expect(modal).toHaveCount(0);
     await expect(badge).toBeFocused();
-    await expect(page.locator(".language-trigger")).toHaveText("EN");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
     expect(roomRequests).toEqual([]);
     expect(sockets).toEqual([]);
     expect(
@@ -441,7 +440,8 @@ test("the match network button opens Debug directly without requesting a multipl
   await page.keyboard.press("Escape");
   const gear = modal.getByRole("button", { name: "Réglages", exact: true });
   await expect(gear).toBeFocused();
-  await expect(gear).toHaveText("");
+  await expect(gear).toHaveText("Réglages");
+  await expect(gear.locator("svg + span")).toBeVisible();
   await expect(gear.locator("svg")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
@@ -476,9 +476,17 @@ test("opening a multiplayer pause menu keeps clocks and authoritative updates ru
     name: "Réglages",
     exact: true,
   });
-  await expect(settingsGear).toHaveText("");
+  await expect(settingsGear).toHaveText("Réglages");
+  await expect(settingsGear.locator("svg + span")).toBeVisible();
   await expect(settingsGear.locator("svg")).toBeVisible();
   await page.screenshot({ path: ".local/verification/pause-menu.png" });
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(settingsGear.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/pause-menu-settings-fr-${viewport.width}.png`,
+    });
+  }
   const previousTime = await page.locator(".match-clock").innerText();
   await expect
     .poll(() => page.locator(".match-clock").innerText())
@@ -542,15 +550,16 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     sessionStorage.getItem("polytour-room-v1"),
   );
   await openSettings(page);
-  const game = page.getByRole("tab", { name: "Jeu", exact: true });
-  await game.focus();
-  await game.press("ArrowRight");
+  const video = page.getByRole("tab", { name: "Vidéo", exact: true });
+  await video.focus();
+  await video.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "Vidéo", exact: true }),
+    page.getByRole("tab", { name: "Accessibilité", exact: true }),
   ).toBeFocused();
   await expect(
-    page.getByRole("tab", { name: "Vidéo", exact: true }),
+    page.getByRole("tab", { name: "Accessibilité", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  await video.click();
   const graphics = page.locator(".pause-dialog .graphics-quality");
   await expect(graphics).toHaveAccessibleName("Graphismes");
   const highGraphics = graphics.getByRole("radio", {
@@ -572,18 +581,34 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     "true",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("polytour.lowGraphics")),
-  ).toBe("true");
-  await expect(page.getByLabel("Réduire les animations")).toBeChecked();
-  await page.getByLabel("Réduire les animations").uncheck();
-  await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
-  await page.getByLabel("Réduire les animations").check();
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("polytour.settings.v1") ?? "null"),
+    ),
+  ).toMatchObject({ graphics: "low" });
   await page
     .getByRole("button", { name: "Zoomer le plateau", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Vue par défaut", exact: true })
     .click();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  await expect(
+    motion.getByRole("radio", { name: "Système", exact: true }),
+  ).toBeChecked();
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+  await motion.getByRole("radio", { name: "Activé", exact: true }).check();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
   await expect(page.getByLabel("Vitesse des animations")).toHaveCount(0);
   await expect(
     page.getByRole("button", {
@@ -618,13 +643,12 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
       path: `.local/verification/pause-settings-${viewport.width}.png`,
     });
   }
-  await game.click();
   await page
     .locator(".pause-dialog")
     .getByLabel("Langue", { exact: true })
     .selectOption("en");
   await expect(
-    page.getByRole("tab", { name: "Game", exact: true }),
+    page.getByRole("tab", { name: "Video", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(
     page.getByRole("tab", { name: "Video", exact: true }),
@@ -641,6 +665,18 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     graphics.getByRole("radio", { name: "High", exact: true }),
   ).not.toBeChecked();
   await page.keyboard.press("Escape");
+  const settings = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Settings", exact: true });
+  await expect(settings).toHaveText("Settings");
+  await expect(settings.locator("svg + span")).toBeVisible();
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(settings.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/pause-menu-settings-en-${viewport.width}.png`,
+    });
+  }
   await expect(
     page
       .locator(".pause-dialog")
@@ -1029,7 +1065,6 @@ test("Cloudflare probe details translate and distinguish local or unmapped entry
     diagnosticValue(panel, "Point d’entrée Cloudflare"),
   ).toContainText("FRA");
   await expect(diagnosticValue(panel, "Région")).toHaveText("Europe");
-  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
   await page
     .locator(".pause-dialog")
     .getByLabel("Langue", { exact: true })
@@ -1288,7 +1323,6 @@ test("room diagnostics show connected ingress routes and SQLite with bounded mea
   await expect(chart.locator("circle")).toHaveCount(60);
   expect(match.metadataRequests()).toBe(1);
   expect(match.connections()).toBe(1);
-  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
   await page
     .locator(".pause-dialog")
     .getByLabel("Langue", { exact: true })
@@ -1499,19 +1533,26 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
 }) => {
   const match = await enterMatch(page);
   await page
-    .getByRole("button", { name: "Réglages de la partie", exact: true })
+    .getByRole("button", { name: "Règles de la partie", exact: true })
     .click();
-  await expect(page.locator(".match-rules")).toContainText(
+  await expect(page.locator(".pause-rules")).toContainText(
     "Les réglages sont fixés pour toute la durée de cette partie.",
   );
-  const controls = page.locator(".match-rules").locator("input, select");
+  const controls = page.locator(".pause-rules").locator("input, select");
   expect(await controls.count()).toBeGreaterThan(0);
   for (const control of await controls.all())
     await expect(control).toBeDisabled();
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Réglages de la partie", exact: true }),
+    page
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Réglages", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Règles de la partie", exact: true }),
   ).toBeFocused();
   await page
     .getByRole("button", { name: "Inviter des joueurs", exact: true })
@@ -1565,22 +1606,29 @@ test("a reduced-motion answer outlasts a reload and outranks the system setting"
 }) => {
   await enterMatch(page);
   await openSettings(page);
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  const reduce = page.getByLabel("Réduire les animations");
-  // This browser asks for reduced motion, so the box starts checked.
-  await expect(reduce).toBeChecked();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  // The system preference applies until a personal override is selected.
+  await expect(
+    motion.getByRole("radio", { name: "Système", exact: true }),
+  ).toBeChecked();
   await expect(page.locator("main")).toHaveAttribute(
     "data-reduced-motion",
     "true",
   );
-  await reduce.uncheck();
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
   await expect(page.locator("main")).toHaveAttribute(
     "data-reduced-motion",
     "false",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("polytour.reducedMotion")),
-  ).toBe("false");
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("polytour.settings.v1") ?? "null"),
+    ),
+  ).toMatchObject({ reducedMotion: "off" });
   await page.reload();
   // The stored answer wins. The system no longer turns the animations off.
   await expect(page.locator("main")).toHaveAttribute(
@@ -1659,7 +1707,6 @@ test("board zoom uses wheel and keys, respects fields and dialogs, and persists 
   await expect(
     page.getByRole("button", { name: "Dézoomer le plateau", exact: true }),
   ).toBeDisabled();
-  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
   const field = page.getByLabel("Langue", { exact: true });
   await field.focus();
   await page.keyboard.press("0");
@@ -1857,7 +1904,10 @@ test("the accessible flat board keeps camera controls inert", async ({
           : Reflect.apply(original, this, [contextId, options]);
       },
     });
-    localStorage.setItem("polytour.boardZoom", "1.4");
+    localStorage.setItem(
+      "polytour.settings.v1",
+      JSON.stringify({ version: 1, boardZoom: 1.4 }),
+    );
   });
   await enterMatch(page, { flatBoard: true });
   await openSettings(page);
@@ -1879,8 +1929,15 @@ test("the accessible flat board keeps camera controls inert", async ({
   await page.locator(".flat-board button").first().focus();
   await page.keyboard.press("+");
   expect(
-    await page.evaluate(() => localStorage.getItem("polytour.boardZoom")),
-  ).toBe("1.4");
+    await page.evaluate(
+      () =>
+        (
+          JSON.parse(
+            localStorage.getItem("polytour.settings.v1") ?? "null",
+          ) as { boardZoom: number } | null
+        )?.boardZoom,
+    ),
+  ).toBe(1.4);
 });
 
 async function dragBoard(
@@ -1948,14 +2005,12 @@ test("home preview fills its stage and personal settings mirror the welcome stre
   await expect(
     page.getByRole("button", { name: "Vue par défaut", exact: true }),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
   const setting = page
     .locator(".pause-dialog")
     .getByRole("button", { name: "Mode streamer", exact: true });
   await expect(setting).toHaveAttribute("aria-pressed", "true");
   await setting.click();
   await expect(shortcut).toHaveAttribute("aria-pressed", "false");
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
   await page
     .getByLabel("Verrouiller la vue du plateau", { exact: true })
     .check();

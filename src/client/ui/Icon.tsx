@@ -17,6 +17,7 @@ type IconName =
   | "journal"
   | "shield"
   | "settings"
+  | "sliders"
   | "search"
   | "exit"
   | "pause"
@@ -52,6 +53,8 @@ const paths: Record<IconName, string> = {
   shield: "m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-5 10 3 3 7-7",
   settings:
     "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7ZM10 2h4v3l2 1 2-2 2 2-2 2 1 2h3v4h-3l-1 2 2 2-2 2-2-2-2 1v3h-4v-3l-2-1-2 2-2-2 2-2-1-2H2v-4h3l1-2-2-2 2-2 2 2 2-1V2Z",
+  sliders:
+    "M4 3v5m0 4v9M12 3v9m0 4v5M20 3v2m0 4v12M1 8h6v4H1V8Zm8 4h6v4H9v-4Zm8-7h6v4h-6V5Z",
   search: "M21 21l-5-5m-6 2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
   exit: "M9 3H3v18h6m-2-9h14m-5-5 5 5-5 5",
   pause: "M8 5v14M16 5v14",
