@@ -1395,12 +1395,23 @@ function MatchView({
       <header className="match-topbar">
         <Logo small />
         <div className="match-time">
-          {game.config.roundLimit < 10_000 && (
-            <span>
-              {t(
-                `Manche ${game.round}/${game.config.roundLimit}`,
-                `Round ${game.round}/${game.config.roundLimit}`,
-              )}
+          {game.config.timeLimitMinutes !== null &&
+            game.config.roundLimit < 10_000 && (
+              <span>
+                {t(
+                  `Manche ${game.round}/${game.config.roundLimit}`,
+                  `Round ${game.round}/${game.config.roundLimit}`,
+                )}
+              </span>
+            )}
+          {game.config.timeLimitMinutes === null && (
+            <span
+              className="match-clock"
+              role="img"
+              aria-label={t("Durée illimitée", "Unlimited duration")}
+              title={t("Durée illimitée", "Unlimited duration")}
+            >
+              ∞
             </span>
           )}
           <MatchClock

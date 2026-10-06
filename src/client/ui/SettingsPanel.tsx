@@ -241,22 +241,19 @@ export default function SettingsPanel({
         >
           {value === "rules" && rules && (
             <div className="pause-rules">
-              <p className="field-note">
-                {rules.disabled
-                  ? t(
-                      "Les réglages sont fixés pour toute la durée de cette partie.",
-                      "Settings are fixed for the duration of this game.",
-                    )
-                  : rules.save
+              {(rules.disabled || !rules.save) && (
+                <p className="field-note">
+                  {rules.disabled
                     ? t(
-                        "Vos changements sont enregistrés à la fermeture.",
-                        "Your changes are saved when you close this window.",
+                        "Les réglages sont fixés pour toute la durée de cette partie.",
+                        "Settings are fixed for the duration of this game.",
                       )
                     : t(
                         "Choisissez les règles de votre prochaine partie.",
                         "Choose the rules for your next game.",
                       )}
-              </p>
+                </p>
+              )}
               <RoomSettingsFields {...rules} />
             </div>
           )}
