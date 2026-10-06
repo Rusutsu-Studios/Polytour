@@ -151,6 +151,7 @@ test.describe("low graphics", () => {
   test("persists, changes render cost in place and supports a real roll and reconnect", async ({
     page,
   }) => {
+    const roomCommand = observeRoomCommands(page);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     async function openVideoSettings() {
@@ -278,8 +279,10 @@ test.describe("low graphics", () => {
       .getByRole("group", { name: "Temps de décision" })
       .getByRole("radio", { name: "60 s", exact: true })
       .check();
-    await saveSettings(page);
-    await page.getByRole("button", { name: "Démarrer la partie" }).click();
+    await roomCommand("settings", () => saveSettings(page));
+    await roomCommand("start", () =>
+      page.getByRole("button", { name: "Démarrer la partie" }).click(),
+    );
     const scene = page.locator(".canvas-layer");
     await expect(scene).toHaveAttribute("data-scene-ready", "true");
     await expect(scene).toHaveAttribute("data-low-graphics", "true");
@@ -327,15 +330,17 @@ test.describe("low graphics", () => {
     expect(highBox).not.toBeNull();
     expect(lowBox).not.toBeNull();
     expect(highBox?.y).toBe(lowBox?.y);
-    expect((highBox?.x ?? 0) + (highBox?.width ?? 0)).toBeLessThan(
+    const potatoBox = await potatoGraphics.locator("..").boundingBox();
+    expect(potatoBox).not.toBeNull();
+    expect(potatoBox?.y).toBe(lowBox?.y);
+    expect((potatoBox?.x ?? 0) + (potatoBox?.width ?? 0)).toBeLessThan(
       lowBox?.x ?? 0,
     );
-    const potatoBox = await potatoGraphics.locator("..").boundingBox();
-    expect(potatoBox?.y).toBeGreaterThan(
-      (lowBox?.y ?? 0) + (lowBox?.height ?? 0),
+    expect((lowBox?.x ?? 0) + (lowBox?.width ?? 0)).toBeLessThan(
+      highBox?.x ?? 0,
     );
     await lowGraphics.focus();
-    await lowGraphics.press("ArrowLeft");
+    await lowGraphics.press("ArrowRight");
     await expect(highGraphics).toBeChecked();
     await expect(lowGraphics).not.toBeChecked();
     await expect.poll(rendering).toMatchObject({
@@ -363,7 +368,7 @@ test.describe("low graphics", () => {
       .poll(async () => (await rendering(true)).idleFrames)
       .toBeGreaterThan(0);
     await openVideoSettings();
-    await highGraphics.press("ArrowRight");
+    await highGraphics.press("ArrowLeft");
     await expect(lowGraphics).toBeChecked();
     await expect(highGraphics).not.toBeChecked();
     await expect(toolbarGraphics).toHaveCount(0);
@@ -379,9 +384,9 @@ test.describe("low graphics", () => {
       }, original),
     ).toBe(true);
     // The third tier changes the existing renderer, leaving the camera and
-    // Director in place. Native radio keys reach the option below Low.
+    // Director in place. Native radio keys follow Potato PC, Low, High.
     await lowGraphics.focus();
-    await lowGraphics.press("ArrowRight");
+    await lowGraphics.press("ArrowLeft");
     await expect(potatoGraphics).toBeChecked();
     await expect(scene).toHaveAttribute("data-graphics-quality", "potato");
     await expect.poll(rendering).toMatchObject({

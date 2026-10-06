@@ -346,7 +346,7 @@
 
 .graphics-quality-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -368,10 +368,6 @@
 
 .graphics-quality-option:hover {
   background: #e4f2e8;
-}
-
-.graphics-quality-option[data-quality="potato"] {
-  grid-column: 1 / -1;
 }
 
 .graphics-quality-option[data-selected="true"] {

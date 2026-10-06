@@ -2,7 +2,7 @@
 
 ## Potato PC proposal — 6 October 2026
 
-Video settings now offer High and Low side by side, with **Potato PC** below.
+Video settings now offer **Potato PC**, Low and High side by side, in that order.
 The new tier is opt-in and saved in the existing local settings record; existing
 High/Low and legacy preferences retain their meaning. It applies to the welcome
 preview, room lobby and match, and synchronizes across open tabs.
@@ -11,8 +11,15 @@ Potato PC uses DPR 0.75 and Low's disabled shadows and ambient animation. It
 removes the central town, cash reserves, beach parasols and the three corner
 models. Corner names, property levels and ownership, festival and championship
 markers, shields, kept cards, dice, pawns, money transfers and legal board
-selection remain. All rules and Director event timing are unchanged. Switching
-preserves the Canvas, WebGL context, zoom and camera framing.
+selection remain. Switching preserves the Canvas, WebGL context, zoom and camera
+framing. Selecting Potato PC sets reduced motion to On; selecting High sets it
+to Off. Low keeps the current motion preference. Accessibility settings can
+override these defaults afterward, and the answer survives reload. Game rules
+and the existing Director handlers are unchanged.
+
+Streamer mode lives in Accessibility, with a shortcut on the welcome screen.
+The lobby and match toolbars do not duplicate the control. Code masking and the
+saved privacy preference are preserved.
 
 At the same CSS size, DPR 0.75 draws 43.75% fewer pixels than Low's DPR 1. The
 DOM HUD, decision dialogs and projected sale labels retain full resolution.
@@ -31,8 +38,9 @@ Local fixture results and screenshots are saved under `.local/performance/`;
 exact FPS depends on host load and does not establish performance on a physical
 low-end laptop.
 
-Browser regression coverage checks keyboard access to the third tier, its row
-below Low, persistence and cross-tab updates, the unchanged context/frustum,
+Browser regression coverage checks keyboard access and the three choices on one
+row, persistence and cross-tab updates, motion defaults and overrides, streamer
+privacy through Accessibility, the unchanged context/frustum,
 a real roll and reconnect, reduced motion, and developed-property sale picking
 and inspection at 1280 × 720, 1440 × 900 and 1920 × 1080. High and Low keep
 their previous rendering settings. The proposal still needs an affected laptop

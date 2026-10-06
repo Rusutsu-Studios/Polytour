@@ -4,7 +4,7 @@ import { updateSettings, useSettings } from "../settings/store.js";
 
 export default function GraphicsToggle() {
   const { t } = useLocale();
-  const { graphics } = useSettings();
+  const { graphics, reducedMotion } = useSettings();
   const labels = {
     high: t("Élevé", "High"),
     low: t("Faible", "Low"),
@@ -15,7 +15,7 @@ export default function GraphicsToggle() {
     <fieldset className="graphics-quality">
       <legend>{t("Graphismes", "Graphics")}</legend>
       <div className="graphics-quality-options">
-        {(["high", "low", "potato"] as const).map((quality) => (
+        {(["potato", "low", "high"] as const).map((quality) => (
           <label
             key={quality}
             className="graphics-quality-option"
@@ -27,18 +27,22 @@ export default function GraphicsToggle() {
               name={name}
               value={quality}
               checked={graphics === quality}
-              onChange={() => updateSettings({ graphics: quality })}
+              onChange={() =>
+                updateSettings({
+                  graphics: quality,
+                  reducedMotion:
+                    quality === "potato"
+                      ? "on"
+                      : quality === "high"
+                        ? "off"
+                        : reducedMotion,
+                })
+              }
             />
             <span>{labels[quality]}</span>
           </label>
         ))}
       </div>
-      <p className="settings-description">
-        {t(
-          "Potato PC : plateau 3D allégé, sans décor central, pour les ordinateurs peu puissants.",
-          "Potato PC: a lighter 3D board without central scenery for slower computers.",
-        )}
-      </p>
     </fieldset>
   );
 }

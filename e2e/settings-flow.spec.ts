@@ -127,6 +127,81 @@ test("legacy preferences migrate intact and shared settings update another open 
   await otherTab.close();
 });
 
+test("graphics presets set motion defaults while manual overrides survive reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator(".personal-settings-trigger").click();
+  const video = page.getByRole("tab", { name: "Vidéo", exact: true });
+  const accessibility = page.getByRole("tab", {
+    name: "Accessibilité",
+    exact: true,
+  });
+  const graphics = page.getByRole("group", { name: "Graphismes", exact: true });
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  await expect(graphics.locator("label")).toHaveText([
+    "Potato PC",
+    "Faible",
+    "Élevé",
+  ]);
+  await expect(graphics.locator(".settings-description")).toHaveCount(0);
+  await graphics.getByRole("radio", { name: "Potato PC", exact: true }).check();
+  await accessibility.click();
+  await expect(
+    motion.getByRole("radio", { name: "Activé", exact: true }),
+  ).toBeChecked();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
+  await page.reload();
+  await page.locator(".personal-settings-trigger").click();
+  await expect(
+    graphics.getByRole("radio", { name: "Potato PC", exact: true }),
+  ).toBeChecked();
+  await accessibility.click();
+  await expect(
+    motion.getByRole("radio", { name: "Désactivé", exact: true }),
+  ).toBeChecked();
+  await motion.getByRole("radio", { name: "Activé", exact: true }).check();
+  await video.click();
+  await graphics.getByRole("radio", { name: "Élevé", exact: true }).check();
+  await accessibility.click();
+  await expect(
+    motion.getByRole("radio", { name: "Désactivé", exact: true }),
+  ).toBeChecked();
+  await motion.getByRole("radio", { name: "Activé", exact: true }).check();
+  await video.click();
+  await expect(
+    graphics.getByRole("radio", { name: "Élevé", exact: true }),
+  ).toBeChecked();
+  await graphics.getByRole("radio", { name: "Faible", exact: true }).check();
+  await accessibility.click();
+  await expect(
+    motion.getByRole("radio", { name: "Activé", exact: true }),
+  ).toBeChecked();
+  await page.reload();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
+  await page.locator(".personal-settings-trigger").click();
+  await video.click();
+  await graphics.getByRole("radio", { name: "Élevé", exact: true }).check();
+  await accessibility.click();
+  await expect(
+    motion.getByRole("radio", { name: "Désactivé", exact: true }),
+  ).toBeChecked();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+});
+
 test("System follows operating-system motion changes while explicit answers survive reload", async ({
   page,
 }) => {

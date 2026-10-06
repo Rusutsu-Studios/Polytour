@@ -1438,11 +1438,6 @@ function MatchView({
         className="game-tools"
         aria-label={t("Outils de la partie", "Game tools")}
       >
-        <StreamerToggle
-          enabled={streamer}
-          onChange={onStreamerChange}
-          compact
-        />
         <ActionButton
           type="button"
           className="game-tool-button"
@@ -2143,7 +2138,9 @@ function App() {
             <Logo small={Boolean(isGame)} />
           </span>
           <div className="topbar-right">
-            <StreamerToggle enabled={streamer} onChange={changeStreamer} />
+            {!credentials && (
+              <StreamerToggle enabled={streamer} onChange={changeStreamer} />
+            )}
             <button
               type="button"
               className="text-button personal-settings-trigger"
