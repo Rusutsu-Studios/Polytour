@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { Seat } from "../../shared/engine/index.js";
+import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
@@ -17,6 +18,7 @@ import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
 import RoomDebug, { translatedRegion } from "./RoomDebug.js";
 import RoomSettingsFields, { type RoomSettingsProps } from "./RoomSettings.js";
+import StreamerToggle from "./StreamerToggle.js";
 
 export type SettingsTab =
   | "rules"
@@ -32,6 +34,12 @@ const PERSONAL_TABS: readonly SettingsTab[] = [
 
 export type SettingsPanelProps = {
   initialTab?: SettingsTab;
+  /** Recentres the 3D board; the control is disabled without it. */
+  onViewReset: () => void;
+  /** False while the flat fallback board is on screen. */
+  zoomAvailable: boolean;
+  streamer: boolean;
+  onStreamerChange: (enabled: boolean) => void;
   debugAvailable: boolean;
   hasGame: boolean;
   connection: string;
@@ -49,6 +57,10 @@ export type SettingsPanelProps = {
 /** Personal preferences shared by the lobby and the match pause dialog. */
 export default function SettingsPanel({
   initialTab = "video",
+  onViewReset,
+  zoomAvailable,
+  streamer,
+  onStreamerChange,
   debugAvailable,
   hasGame,
   connection,
@@ -61,7 +73,7 @@ export default function SettingsPanel({
   onTabChange,
 }: SettingsPanelProps) {
   const { locale, setLocale, t } = useLocale();
-  const { boardZoom, reducedMotion } = useSettings();
+  const { boardZoom, boardViewLocked, reducedMotion } = useSettings();
   const id = useId();
   const tabs: readonly SettingsTab[] = [
     ...(rules ? (["rules"] as const) : []),
@@ -137,6 +149,16 @@ export default function SettingsPanel({
     on: t("Activé", "On"),
     off: t("Désactivé", "Off"),
   };
+  const zoomDisabled = !zoomAvailable || boardViewLocked;
+  const zoomDisabledReason = !zoomAvailable
+    ? t(
+        "Le zoom est disponible sur le plateau 3D.",
+        "Zoom is available on the 3D board.",
+      )
+    : t(
+        "Déverrouillez la vue du plateau pour ajuster le zoom.",
+        "Unlock the board view to adjust zoom.",
+      );
   const sample = ping.status === "success" ? ping.value : null;
   const unavailable = t("Indisponible", "Unavailable");
   const entryPoint =
@@ -169,6 +191,18 @@ export default function SettingsPanel({
           <option value="fr">Français</option>
           <option value="en">English</option>
         </select>
+      </div>
+      <div className="settings-streamer">
+        <StreamerToggle enabled={streamer} onChange={onStreamerChange} />
+        <strong aria-hidden="true">
+          {streamer ? t("Activé", "On") : t("Désactivé", "Off")}
+        </strong>
+        <p>
+          {t(
+            "Masque le code de salle et de connexion.",
+            "Hides the room code and masks it when joining.",
+          )}
+        </p>
       </div>
       <div
         className="pause-tabs"
@@ -230,8 +264,31 @@ export default function SettingsPanel({
             <div className="pause-video-settings">
               <GraphicsToggle />
               <div className="pause-setting">
+                <ActionButton
+                  type="button"
+                  className="pause-action pause-primary pause-view-default"
+                  disabled={!zoomAvailable}
+                  disabledReason={t(
+                    "Le recentrage est disponible sur le plateau 3D.",
+                    "Reset view is available on the 3D board.",
+                  )}
+                  onClick={onViewReset}
+                >
+                  <Icon name="reset" size={20} />
+                  {t("Vue par défaut", "Default view")}
+                </ActionButton>
+                <label className="pause-view-lock">
+                  <input
+                    type="checkbox"
+                    checked={boardViewLocked}
+                    onChange={(event) =>
+                      updateSettings({ boardViewLocked: event.target.checked })
+                    }
+                  />
+                  {t("Verrouiller la vue du plateau", "Lock board view")}
+                </label>
                 <span id={`${id}-zoom-label`}>
-                  {t("Taille du plateau", "Board size")}
+                  {t("Zoom du plateau", "Board zoom")}
                 </span>
                 <fieldset
                   className="pause-zoom"
@@ -240,37 +297,55 @@ export default function SettingsPanel({
                   <ActionButton
                     type="button"
                     aria-label={t("Dézoomer le plateau", "Zoom out")}
-                    disabled={boardZoom <= 0.8}
-                    disabledReason={t(
-                      "Le plateau est déjà dézoomé au maximum.",
-                      "The board is already zoomed out as far as possible.",
-                    )}
+                    disabled={zoomDisabled || boardZoom <= BOARD_ZOOM.min}
+                    disabledReason={
+                      zoomDisabled
+                        ? zoomDisabledReason
+                        : t(
+                            "Le plateau est déjà dézoomé au maximum.",
+                            "The board is already zoomed out as far as possible.",
+                          )
+                    }
                     onClick={() =>
                       updateSettings({
-                        boardZoom: Math.round((boardZoom - 0.1) * 10) / 10,
+                        boardZoom: clampBoardZoom(boardZoom - BOARD_ZOOM.step),
                       })
                     }
                   >
                     -
                   </ActionButton>
-                  <button
-                    type="button"
-                    className="pause-zoom-reset"
-                    onClick={() => updateSettings({ boardZoom: 1 })}
-                  >
-                    {t("Recentrer", "Reset view")}
-                  </button>
+                  <input
+                    type="range"
+                    className="pause-zoom-slider"
+                    min={BOARD_ZOOM.min}
+                    max={BOARD_ZOOM.max}
+                    step={BOARD_ZOOM.step}
+                    value={boardZoom}
+                    disabled={zoomDisabled}
+                    aria-labelledby={`${id}-zoom-label`}
+                    aria-describedby={`${id}-view-help`}
+                    aria-valuetext={`${Math.round(boardZoom * 100)} %`}
+                    onChange={(event) =>
+                      updateSettings({
+                        boardZoom: clampBoardZoom(Number(event.target.value)),
+                      })
+                    }
+                  />
                   <ActionButton
                     type="button"
                     aria-label={t("Zoomer le plateau", "Zoom in")}
-                    disabled={boardZoom >= 1.3}
-                    disabledReason={t(
-                      "Le plateau est déjà zoomé au maximum.",
-                      "The board is already zoomed in as far as possible.",
-                    )}
+                    disabled={zoomDisabled || boardZoom >= BOARD_ZOOM.max}
+                    disabledReason={
+                      zoomDisabled
+                        ? zoomDisabledReason
+                        : t(
+                            "Le plateau est déjà zoomé au maximum.",
+                            "The board is already zoomed in as far as possible.",
+                          )
+                    }
                     onClick={() =>
                       updateSettings({
-                        boardZoom: Math.round((boardZoom + 0.1) * 10) / 10,
+                        boardZoom: clampBoardZoom(boardZoom + BOARD_ZOOM.step),
                       })
                     }
                   >
@@ -280,6 +355,17 @@ export default function SettingsPanel({
                     {Math.round(boardZoom * 100)} %
                   </output>
                 </fieldset>
+                <p className="pause-zoom-help" id={`${id}-view-help`}>
+                  {zoomAvailable
+                    ? t(
+                        "En partie : glisser horizontalement pour tourner autour du plateau, verticalement pour passer d’une vue basse à une vue de dessus. Maj + glisser pour déplacer. Molette, pincer ou + / - pour zoomer. 0 pour la vue par défaut. Le verrouillage bloque les gestes et le zoom.",
+                        "In a match: drag sideways to turn around the board, up/down to move between a low and overhead view. Shift + drag to move. Wheel, pinch or + / - to zoom. 0 for the default view. Locking blocks gestures and zoom.",
+                      )
+                    : t(
+                        "Le plateau simplifié ne permet pas de zoomer ni de déplacer la vue.",
+                        "The flat board does not support zooming or moving the view.",
+                      )}
+                </p>
               </div>
               <ActionButton
                 type="button"

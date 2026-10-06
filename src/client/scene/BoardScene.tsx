@@ -26,6 +26,7 @@ import {
   propertyRefund,
   propertyRent,
 } from "../../shared/engine/index.js";
+import { clampBoardZoom } from "../board-view.js";
 import type { AnimationContext } from "../director/director.js";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
@@ -39,6 +40,15 @@ import {
 } from "../ui/board-display.js";
 import "./BoardScene.css";
 import { useAmbientMotion } from "./ambient.js";
+import {
+  type BoardOrientation,
+  type BoardPan,
+  boardScreenHit,
+  boardViewRotation,
+  DEFAULT_BOARD_ORIENTATION,
+  frameBoard,
+  initializeBoardCamera,
+} from "./board-framing.js";
 import {
   BOARD_BOTTOM,
   BOARD_HALF,
@@ -81,8 +91,11 @@ import {
   shieldTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
-import { BeachUmbrella, LANDMARK_PEAKS, Landmarks } from "./Landmarks.js";
+import { BeachUmbrella, Landmarks } from "./Landmarks.js";
+import { useBoardView } from "./use-board-view.js";
 
+const DEFAULT_BOARD_ROTATION = new THREE.Quaternion();
+type BoardHitTest = (x: number, y: number) => boolean;
 type BoardProps = {
   state: PublicState | null;
   /** Frozen room rules for a lobby preview before the first game snapshot. */
@@ -96,6 +109,14 @@ type BoardProps = {
   pickSeat?: Seat;
   preview?: boolean;
   zoom?: number;
+  onZoom?: (zoom: number) => void;
+  viewResetKey?: number;
+  interactiveZoom?: boolean;
+  viewLocked?: boolean;
+  rotation?: THREE.Quaternion;
+  onBoardHitTest?: (test: BoardHitTest) => void;
+  onWebGlAvailableChange?: (available: boolean) => void;
+  pan?: BoardPan;
   graphics?: ClientSettings["graphics"];
   /** Where the roll button sits on screen, in canvas pixels. */
   onRollAnchor?: (point: { x: number; y: number }) => void;
@@ -261,11 +282,12 @@ function TileFace({
   const [x, z] = tileCenter(index);
   const [along, depth] = tileSize(index);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: R3F meshes are inspected with the accessible board controls.
     <mesh
       position={[x, LOT_TOP + 0.0015, z]}
       rotation={[-Math.PI / 2, 0, faceRotation(index)]}
       receiveShadow
-      onPointerDown={(event) => {
+      onClick={(event) => {
         if (preview || !pickable) return;
         event.stopPropagation();
         onSelect(index);
@@ -348,12 +370,13 @@ function BoardTiles({
   const salary = boardConfig?.startSalary ?? ECONOMY.startSalary;
   return (
     <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: R3F meshes are inspected with the accessible board controls. */}
       <instancedMesh
         ref={mesh}
         args={[undefined, undefined, board.length]}
         receiveShadow
         castShadow
-        onPointerDown={(event) => {
+        onClick={(event) => {
           if (
             preview ||
             event.instanceId === undefined ||
@@ -1509,7 +1532,6 @@ function cashTransfer(event: GameEvent): CashTransfer | null {
   }
 }
 
-/** Fit the whole board between the HUD's reserved top and bottom bands. */
 /** The DOM interface zoom set by CSS media steps on large screens. */
 function interfaceZoom() {
   const value = Number.parseFloat(
@@ -1518,64 +1540,11 @@ function interfaceZoom() {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
-function frameBoard(
-  camera: THREE.OrthographicCamera,
-  width: number,
-  height: number,
-  preview: boolean,
-  zoom: number,
-) {
-  // The HUD grows on large screens, so its reserved bands grow with it.
-  const ui = interfaceZoom();
-  const insets = preview
-    ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }
-    : {
-        // The match title and tools above, the current choice below.
-        top: THREE.MathUtils.clamp(height * 0.11, 78 * ui, 118 * ui),
-        bottom: THREE.MathUtils.clamp(height * 0.125, 86 * ui, 134 * ui),
-        side: width * 0.04,
-      };
-  const bounds = new THREE.Box3();
-  const point = new THREE.Vector3();
-  const add = (x: number, y: number, z: number) =>
-    bounds.expandByPoint(
-      point.set(x, y, z).applyMatrix4(camera.matrixWorldInverse),
-    );
-  const edge = BOARD_HALF + 0.08;
-  for (const x of [-edge, edge])
-    for (const z of [-edge, edge]) {
-      add(x, BOARD_BOTTOM, z);
-      add(x, LOT_TOP, z);
-    }
-  // Landmarks and buildings rise above the far corner and the back lots.
-  for (let tile = 0; tile < BOARD_SIZE; tile++) {
-    const [x, z] = tileCenter(tile);
-    add(x, LOT_TOP + (isCorner(tile) ? 0.95 : 0.8), z);
-  }
-  for (const [x, y, z] of LANDMARK_PEAKS) add(x, y, z);
-  const availableWidth = Math.max(1, width - insets.side * 2);
-  const availableHeight = Math.max(1, height - insets.top - insets.bottom);
-  const unitsPerPixel = Math.max(
-    (bounds.max.x - bounds.min.x) / availableWidth,
-    (bounds.max.y - bounds.min.y) / availableHeight,
-  );
-  const centerX = (bounds.min.x + bounds.max.x) / 2;
-  const centerY = (bounds.min.y + bounds.max.y) / 2;
-  // Place the board's center at the center of the free band, in pixels.
-  const pixelX = width / 2;
-  const pixelY = insets.top + availableHeight / 2;
-  camera.left = centerX - pixelX * unitsPerPixel;
-  camera.right = camera.left + width * unitsPerPixel;
-  camera.top = centerY + pixelY * unitsPerPixel;
-  camera.bottom = camera.top - height * unitsPerPixel;
-  camera.zoom = zoom;
-  camera.updateProjectionMatrix();
-}
-
 function SceneContent(props: BoardProps) {
-  const { state, preview, zoom = 1, onRollAnchor } = props;
+  const { state, preview, zoom = 1, pan, onRollAnchor, onBoardHitTest } = props;
   const potato = props.graphics === "potato";
-  const lowGraphics = props.graphics !== undefined && props.graphics !== "high";
+  const lowGraphics = (props.graphics ?? "high") !== "high";
+  const rotation = props.rotation ?? DEFAULT_BOARD_ROTATION;
   const boardConfig = state?.config ?? props.config;
   const rule = boardConfig ? boardRule(boardConfig) : "country";
   const chosen =
@@ -1643,13 +1612,21 @@ function SceneContent(props: BoardProps) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: R3F resets the orthographic frustum on DPR changes; restore the board framing.
   useEffect(() => {
-    camera.position.set(...CAMERA_OFFSET);
-    camera.lookAt(0, LOT_TOP, 0);
-    camera.updateMatrixWorld();
     if (camera instanceof THREE.OrthographicCamera)
-      frameBoard(camera, size.width, size.height, Boolean(preview), zoom);
+      frameBoard(
+        camera,
+        size.width,
+        size.height,
+        Boolean(preview),
+        zoom,
+        pan,
+        interfaceZoom(),
+        rotation,
+      );
     if (onRollAnchor) {
-      const spot = new THREE.Vector3(...ROLL_SPOT).project(camera);
+      const spot = new THREE.Vector3(...ROLL_SPOT)
+        .applyQuaternion(rotation)
+        .project(camera);
       onRollAnchor({
         x: ((spot.x + 1) / 2) * size.width,
         y: ((1 - spot.y) / 2) * size.height,
@@ -1662,11 +1639,28 @@ function SceneContent(props: BoardProps) {
     size.height,
     viewport.dpr,
     zoom,
+    pan,
+    rotation,
     preview,
     invalidate,
     onRollAnchor,
   ]);
 
+  useEffect(() => {
+    if (!onBoardHitTest) return;
+    onBoardHitTest((x, y) => {
+      const bounds = gl.domElement.getBoundingClientRect();
+      return boardScreenHit(
+        camera,
+        bounds.width,
+        bounds.height,
+        x - bounds.left,
+        y - bounds.top,
+        rotation,
+      );
+    });
+    return () => onBoardHitTest(() => false);
+  }, [camera, gl, onBoardHitTest, rotation]);
   useEffect(() => {
     if (preview) return;
     let propertyEffectGeneration = 0;
@@ -2473,160 +2467,162 @@ function SceneContent(props: BoardProps) {
         shadow-normalBias={0.035}
         shadow-radius={3}
       />
-      <BoardBase
-        boardRule={rule}
-        onRendered={() => {
-          if (rendered.current) return;
-          rendered.current = true;
-          gl.domElement.dataset.sceneReady = "true";
-          gl.domElement
-            .closest(".canvas-layer")
-            ?.setAttribute("data-scene-ready", "true");
-        }}
-      />
-      {!potato && !preview && state && <CashReserves state={state} />}
-      {!preview &&
-        state &&
-        KEEP_CARDS.map((card) => (
-          <HeldCards key={card} state={state} card={card} />
-        ))}
-      <BoardTiles {...props} />
-      <TileFocus {...props} />
-      {!preview && props.targets && (
-        <PickHighlights
-          key={props.pickKey}
-          targets={props.targets}
-          picked={
-            chosen != null && props.targets.includes(chosen) ? chosen : null
-          }
-          color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
-          lowGraphics={lowGraphics}
+      <group name="board-user-view" quaternion={rotation}>
+        <BoardBase
+          boardRule={rule}
+          onRendered={() => {
+            if (rendered.current) return;
+            rendered.current = true;
+            gl.domElement.dataset.sceneReady = "true";
+            gl.domElement
+              .closest(".canvas-layer")
+              ?.setAttribute("data-scene-ready", "true");
+          }}
         />
-      )}
-      <Towns
-        state={state}
-        config={boardConfig}
-        preview={preview}
-        handle={towns}
-      />
-      {!potato && (
-        <>
-          <Downtown
-            state={state}
-            config={boardConfig}
-            preview={preview}
-            animated={ambient}
-            handle={downtown}
+        {!potato && !preview && state && <CashReserves state={state} />}
+        {!preview &&
+          state &&
+          KEEP_CARDS.map((card) => (
+            <HeldCards key={card} state={state} card={card} />
+          ))}
+        <BoardTiles {...props} />
+        <TileFocus {...props} />
+        {!preview && props.targets && (
+          <PickHighlights
+            key={props.pickKey}
+            targets={props.targets}
+            picked={
+              chosen != null && props.targets.includes(chosen) ? chosen : null
+            }
+            color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
+            lowGraphics={lowGraphics}
           />
-          <ResortProps boardRule={rule} />
-        </>
-      )}
-      <FestivalMarkers state={state} />
-      {!preview && <ShieldMarkers state={state} />}
-      <Landmarks
-        boardRule={rule}
-        state={state}
-        animated={ambient}
-        lowGraphics={lowGraphics}
-        potato={potato}
-      />
-      {(state && !preview
-        ? state.players.map((player) => player.seat)
-        : ([0, 1, 2, 3] as const)
-      ).map((seat) => (
-        <Pawn
-          key={seat}
-          seat={seat}
-          active={
-            !preview &&
-            state?.status === "active" &&
-            (state.pending?.seat ?? state.activeSeat) === seat
-          }
-          groupRef={(group) => {
-            pawns.current[seat] = group;
-          }}
+        )}
+        <Towns
+          state={state}
+          config={boardConfig}
+          preview={preview}
+          handle={towns}
         />
-      ))}
-      {DIE_REST.map((position, index) => (
-        <Die
-          key={position.join(",")}
-          position={position}
-          geometry={dieGeometry}
-          groupRef={(group) => {
-            dice.current[index] = group;
-          }}
-          materialRef={(material) => {
-            diceMaterials.current[index] = material;
-          }}
+        {!potato && (
+          <>
+            <Downtown
+              state={state}
+              config={boardConfig}
+              preview={preview}
+              animated={ambient}
+              handle={downtown}
+            />
+            <ResortProps boardRule={rule} />
+          </>
+        )}
+        <FestivalMarkers state={state} />
+        {!preview && <ShieldMarkers state={state} />}
+        <Landmarks
+          boardRule={rule}
+          state={state}
+          animated={ambient}
+          lowGraphics={lowGraphics}
+          potato={potato}
         />
-      ))}
-      <sprite
-        ref={score}
-        visible={false}
-        position={[0, DIE_REST_Y + 1.15, 0]}
-        scale={[0.7, 0.7, 1]}
-        renderOrder={5}
-      >
-        <spriteMaterial depthTest={false} transparent toneMapped={false} />
-      </sprite>
-      <mesh
-        ref={destination}
-        visible={false}
-        geometry={destinationOutlines.lot}
-        renderOrder={2}
-      >
-        <meshBasicMaterial color="#e8a321" toneMapped={false} />
-      </mesh>
-      <sprite ref={gain} visible={false} renderOrder={6}>
-        <spriteMaterial depthTest={false} transparent toneMapped={false} />
-      </sprite>
-      <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.42, 0.5, 28]} />
-        <meshBasicMaterial
-          color="#ffda72"
-          transparent
-          opacity={0.85}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-      <instancedMesh
-        ref={sparks}
-        visible={false}
-        args={[undefined, undefined, 8]}
-        frustumCulled={false}
-      >
-        <boxGeometry />
-        <meshBasicMaterial color="#ffcf59" toneMapped={false} />
-      </instancedMesh>
-      <group ref={cashFlight} visible={false}>
-        <instancedMesh
-          ref={cashNotes}
-          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
-          frustumCulled={false}
-          castShadow
+        {(state && !preview
+          ? state.players.map((player) => player.seat)
+          : ([0, 1, 2, 3] as const)
+        ).map((seat) => (
+          <Pawn
+            key={seat}
+            seat={seat}
+            active={
+              !preview &&
+              state?.status === "active" &&
+              (state.pending?.seat ?? state.activeSeat) === seat
+            }
+            groupRef={(group) => {
+              pawns.current[seat] = group;
+            }}
+          />
+        ))}
+        {DIE_REST.map((position, index) => (
+          <Die
+            key={position.join(",")}
+            position={position}
+            geometry={dieGeometry}
+            groupRef={(group) => {
+              dice.current[index] = group;
+            }}
+            materialRef={(material) => {
+              diceMaterials.current[index] = material;
+            }}
+          />
+        ))}
+        <sprite
+          ref={score}
+          visible={false}
+          position={[0, DIE_REST_Y + 1.15, 0]}
+          scale={[0.7, 0.7, 1]}
+          renderOrder={5}
         >
-          <boxGeometry args={[0.94, 0.12, 0.48]} />
-          <meshStandardMaterial color="#dae4bd" roughness={0.85} />
-        </instancedMesh>
+          <spriteMaterial depthTest={false} transparent toneMapped={false} />
+        </sprite>
+        <mesh
+          ref={destination}
+          visible={false}
+          geometry={destinationOutlines.lot}
+          renderOrder={2}
+        >
+          <meshBasicMaterial color="#e8a321" toneMapped={false} />
+        </mesh>
+        <sprite ref={gain} visible={false} renderOrder={6}>
+          <spriteMaterial depthTest={false} transparent toneMapped={false} />
+        </sprite>
+        <mesh ref={pulse} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.42, 0.5, 28]} />
+          <meshBasicMaterial
+            color="#ffda72"
+            transparent
+            opacity={0.85}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
         <instancedMesh
-          ref={cashFaces}
-          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+          ref={sparks}
+          visible={false}
+          args={[undefined, undefined, 8]}
           frustumCulled={false}
         >
-          <boxGeometry args={[0.95, 0.012, 0.49]} />
-          <meshStandardMaterial map={cashTexture} roughness={0.9} />
+          <boxGeometry />
+          <meshBasicMaterial color="#ffcf59" toneMapped={false} />
         </instancedMesh>
-        <instancedMesh
-          ref={cashBands}
-          args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
-          frustumCulled={false}
-        >
-          <boxGeometry args={[0.16, 0.145, 0.51]} />
-          <meshStandardMaterial roughness={0.7} />
-        </instancedMesh>
+        <group ref={cashFlight} visible={false}>
+          <instancedMesh
+            ref={cashNotes}
+            args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+            frustumCulled={false}
+            castShadow
+          >
+            <boxGeometry args={[0.94, 0.12, 0.48]} />
+            <meshStandardMaterial color="#dae4bd" roughness={0.85} />
+          </instancedMesh>
+          <instancedMesh
+            ref={cashFaces}
+            args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+            frustumCulled={false}
+          >
+            <boxGeometry args={[0.95, 0.012, 0.49]} />
+            <meshStandardMaterial map={cashTexture} roughness={0.9} />
+          </instancedMesh>
+          <instancedMesh
+            ref={cashBands}
+            args={[undefined, undefined, CASH_TRANSFER_BUNDLES]}
+            frustumCulled={false}
+          >
+            <boxGeometry args={[0.16, 0.145, 0.51]} />
+            <meshStandardMaterial roughness={0.7} />
+          </instancedMesh>
+        </group>
+        <FrameMonitor />
       </group>
-      <FrameMonitor />
     </>
   );
 }
@@ -2655,19 +2651,27 @@ function SaleLabels({
   saleSeat,
   saleBlocked,
   zoom = 1,
+  pan,
+  rotation = DEFAULT_BOARD_ROTATION,
   width,
   height,
 }: BoardProps & { width: number; height: number }) {
   const { t } = useLocale();
   const targets = saleTargets(state, saleSeat);
   const camera = useMemo(() => {
-    const value = new THREE.OrthographicCamera();
-    value.position.set(...CAMERA_OFFSET);
-    value.lookAt(0, LOT_TOP, 0);
-    value.updateMatrixWorld();
-    frameBoard(value, width, height, false, zoom);
+    const value = initializeBoardCamera(new THREE.OrthographicCamera());
+    frameBoard(
+      value,
+      width,
+      height,
+      false,
+      zoom,
+      pan,
+      interfaceZoom(),
+      rotation,
+    );
     return value;
-  }, [width, height, zoom]);
+  }, [width, height, zoom, pan, rotation]);
   if (!state || !targets.length || !width || !height) return null;
   return (
     <fieldset
@@ -2679,7 +2683,9 @@ function SaleLabels({
     >
       {targets.map((tile) => {
         const [x, z] = tilePoint(tile, 0, 0.3);
-        const point = new THREE.Vector3(x, LOT_TOP + 0.08, z).project(camera);
+        const point = new THREE.Vector3(x, LOT_TOP + 0.08, z)
+          .applyQuaternion(rotation)
+          .project(camera);
         const amount = money(propertyRefund(state, tile));
         const chosen = tile === selected;
         return (
@@ -2714,10 +2720,60 @@ function SaleLabels({
 export default function BoardScene(props: BoardProps) {
   const graphics = props.graphics ?? "high";
   const lowGraphics = graphics !== "high";
-  const resolvedProps = { ...props, targets: choiceTargets(props) };
+  const { t } = useLocale();
   const config = props.state?.config ?? props.config;
-  const layer = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [orientation, setOrientation] = useState<BoardOrientation>(
+    DEFAULT_BOARD_ORIENTATION,
+  );
+  const rotation = useMemo(() => boardViewRotation(orientation), [orientation]);
+  const hitTest = useRef<BoardHitTest>(() => false);
+  const setHitTest = useCallback((test: BoardHitTest) => {
+    hitTest.current = test;
+  }, []);
+  const canStartGesture = useCallback(
+    (x: number, y: number) => hitTest.current(x, y),
+    [],
+  );
+  const zoom = clampBoardZoom(props.zoom ?? 1);
+  const framing = useMemo(
+    () =>
+      frameBoard(
+        initializeBoardCamera(new THREE.OrthographicCamera()),
+        size.width,
+        size.height,
+        Boolean(props.preview),
+        zoom,
+        undefined,
+        interfaceZoom(),
+        rotation,
+      ),
+    [size.width, size.height, props.preview, zoom, rotation],
+  );
+  const pan = useBoardView({
+    layer,
+    enabled: Boolean(
+      props.interactiveZoom && !props.preview && size.width && size.height,
+    ),
+    locked: Boolean(props.viewLocked),
+    zoom,
+    onZoom: props.onZoom,
+    resetKey: props.viewResetKey,
+    limits: framing.limits,
+    unitsPerPixel: framing.unitsPerPixel,
+    orientation,
+    onOrientation: setOrientation,
+    canStartGesture,
+  });
+  const resolvedProps = {
+    ...props,
+    zoom,
+    pan,
+    rotation,
+    onBoardHitTest: setHitTest,
+    targets: choiceTargets(props),
+  };
   useEffect(() => {
     const element = layer.current;
     if (!element) return;
@@ -2731,14 +2787,24 @@ export default function BoardScene(props: BoardProps) {
     return () => observer.disconnect();
   }, []);
   return (
-    <div
+    <section
       ref={layer}
       className="canvas-layer"
+      aria-label={t("Plateau de jeu", "Game board")}
+      tabIndex={props.interactiveZoom ? 0 : undefined}
+      data-board-zoom={zoom}
+      data-board-yaw={orientation.yaw}
+      data-board-pitch={orientation.pitch}
+      data-board-view-locked={Boolean(props.viewLocked)}
+      data-board-pan-x={pan.x}
+      data-board-pan-y={pan.y}
+      data-interactive-zoom={Boolean(
+        props.interactiveZoom && !props.preview && !props.viewLocked,
+      )}
       data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
       data-low-graphics={lowGraphics}
       data-graphics-quality={graphics}
-      data-board-zoom={props.zoom ?? 1}
       data-sale-active={
         !props.preview && saleTargets(props.state, props.saleSeat).length > 0
       }
@@ -2754,10 +2820,14 @@ export default function BoardScene(props: BoardProps) {
           alpha: true,
           toneMapping: THREE.NeutralToneMapping,
         }}
+        onCreated={({ camera }) => {
+          initializeBoardCamera(camera);
+          props.onWebGlAvailableChange?.(true);
+        }}
       >
         <SceneContent {...resolvedProps} />
       </Canvas>
-      {!props.preview && <SaleLabels {...props} {...size} />}
-    </div>
+      {!props.preview && <SaleLabels {...resolvedProps} {...size} />}
+    </section>
   );
 }

@@ -48,9 +48,10 @@ immediately and resumes on closing. Multiplayer requires every human's consent,
 including local players, with a 30-second vote and one request per room every five
 minutes. Any human can resume an agreed pause; dismissing the menu keeps multiplayer
 paused and its visible status reopens the menu. Personal settings share one panel
-between the lobby gear and pause menu, with a language row above Video,
-Accessibility and Audio tabs. Video holds High/Low graphics, persisted board size
-and fullscreen; Accessibility offers System/On/Off reduced motion. Audio remains
+between the lobby gear and pause menu, with a language row and the streamer-mode
+shortcut above Video, Accessibility and Audio tabs. Video holds High/Low
+graphics, Default view, a board view lock, a persisted 80-200 % board zoom
+slider and fullscreen; Accessibility offers System/On/Off reduced motion. Audio remains
 marked coming soon. A versioned browser preference store preserves legacy
 choices and synchronizes open tabs. Debug is last and appears only in development
 or with ?debug. Room rules use a separate sliders icon and clear rules label.

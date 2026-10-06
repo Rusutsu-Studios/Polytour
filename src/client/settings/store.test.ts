@@ -93,6 +93,7 @@ describe("local settings", () => {
       version: 1,
       graphics: "low",
       boardZoom: 1,
+      boardViewLocked: false,
       reducedMotion: "off",
       locale: "fr",
     });
@@ -131,6 +132,7 @@ describe("local settings", () => {
         version: 1,
         graphics: "high",
         boardZoom: 1,
+        boardViewLocked: false,
         reducedMotion: "system",
         locale: "en",
       });
@@ -145,6 +147,7 @@ describe("local settings", () => {
           version: 1,
           graphics: "ultra",
           boardZoom: "1.2",
+          boardViewLocked: "yes",
           reducedMotion: true,
           locale: "de",
         }),
@@ -153,11 +156,14 @@ describe("local settings", () => {
     expect(store.getSettings()).toMatchObject({
       graphics: "high",
       boardZoom: 1,
+      boardViewLocked: false,
       reducedMotion: "system",
       locale: "en",
     });
+    store.updateSettings({ boardViewLocked: true });
+    expect(store.getSettings().boardViewLocked).toBe(true);
     store.updateSettings({ boardZoom: 99 });
-    expect(store.getSettings().boardZoom).toBe(1.3);
+    expect(store.getSettings().boardZoom).toBe(2);
     store.updateSettings({ boardZoom: -99 });
     expect(store.getSettings().boardZoom).toBe(0.8);
     store.updateSettings({ boardZoom: Number.NaN });
