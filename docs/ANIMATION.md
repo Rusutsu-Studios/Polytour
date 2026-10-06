@@ -270,7 +270,12 @@ Consistency matters more than any single animation: reuse these presets from
   shadows and pauses decorative town and selection motion. Game-event animations
   remain enabled. High keeps DPR ≤ 1.5 and a 2048² shadow map. Before joining,
   a compact monitor button switches High/Low. During a match, Pause > Video
-  presents High and Low as two side-by-side choices for the same saved preference. See
+  presents High and Low side by side, with **Potato PC** below them. Potato PC
+  uses DPR 0.75, no live shadows or ambient motion, and omits the central town,
+  cash reserves, beach parasols and corner models. It retains corner labels,
+  property buildings, flags, shields, kept cards, money transfers, dice, pawns
+  and Director choreography. Switching tiers keeps the Canvas and WebGL context.
+  All three use the same saved personal preference before joining and in a match. See
   [PERFORMANCE.md](PERFORMANCE.md) for the software-rendering comparison and limits.
 - Particles: one pooled `InstancedMesh` per particle type, recycled.
 - Text in 3D (multiplier badges, floating numbers): drei `<Text>` with a pre-generated

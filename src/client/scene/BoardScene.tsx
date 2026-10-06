@@ -29,6 +29,7 @@ import {
 import type { AnimationContext } from "../director/director.js";
 import { director, useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
+import type { ClientSettings } from "../settings/store.js";
 import {
   money,
   PLAYER_COLORS,
@@ -95,7 +96,7 @@ type BoardProps = {
   pickSeat?: Seat;
   preview?: boolean;
   zoom?: number;
-  lowGraphics?: boolean;
+  graphics?: ClientSettings["graphics"];
   /** Where the roll button sits on screen, in canvas pixels. */
   onRollAnchor?: (point: { x: number; y: number }) => void;
   saleSeat?: Seat;
@@ -1573,6 +1574,8 @@ function frameBoard(
 
 function SceneContent(props: BoardProps) {
   const { state, preview, zoom = 1, onRollAnchor } = props;
+  const potato = props.graphics === "potato";
+  const lowGraphics = props.graphics !== undefined && props.graphics !== "high";
   const boardConfig = state?.config ?? props.config;
   const rule = boardConfig ? boardRule(boardConfig) : "country";
   const chosen =
@@ -1581,7 +1584,7 @@ function SceneContent(props: BoardProps) {
   const ambient = useAmbientMotion({
     state,
     preview,
-    lowGraphics: props.lowGraphics,
+    lowGraphics,
   });
   const pawns = useRef<(THREE.Group | null)[]>([]);
   const dice = useRef<(THREE.Group | null)[]>([]);
@@ -2461,7 +2464,7 @@ function SceneContent(props: BoardProps) {
         position={[-6, 11, 4]}
         intensity={1.45}
         color="#fff4dc"
-        castShadow={!props.lowGraphics}
+        castShadow={!lowGraphics}
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-9}
         shadow-camera-right={9}
@@ -2481,7 +2484,7 @@ function SceneContent(props: BoardProps) {
             ?.setAttribute("data-scene-ready", "true");
         }}
       />
-      {!preview && state && <CashReserves state={state} />}
+      {!potato && !preview && state && <CashReserves state={state} />}
       {!preview &&
         state &&
         KEEP_CARDS.map((card) => (
@@ -2497,7 +2500,7 @@ function SceneContent(props: BoardProps) {
             chosen != null && props.targets.includes(chosen) ? chosen : null
           }
           color={PLAYER_COLORS[props.pickSeat ?? state?.pending?.seat ?? 0]}
-          lowGraphics={props.lowGraphics}
+          lowGraphics={lowGraphics}
         />
       )}
       <Towns
@@ -2506,21 +2509,26 @@ function SceneContent(props: BoardProps) {
         preview={preview}
         handle={towns}
       />
-      <Downtown
-        state={state}
-        config={boardConfig}
-        preview={preview}
-        animated={ambient}
-        handle={downtown}
-      />
-      <ResortProps boardRule={rule} />
+      {!potato && (
+        <>
+          <Downtown
+            state={state}
+            config={boardConfig}
+            preview={preview}
+            animated={ambient}
+            handle={downtown}
+          />
+          <ResortProps boardRule={rule} />
+        </>
+      )}
       <FestivalMarkers state={state} />
       {!preview && <ShieldMarkers state={state} />}
       <Landmarks
         boardRule={rule}
         state={state}
         animated={ambient}
-        lowGraphics={props.lowGraphics}
+        lowGraphics={lowGraphics}
+        potato={potato}
       />
       {(state && !preview
         ? state.players.map((player) => player.seat)
@@ -2704,6 +2712,8 @@ function SaleLabels({
 }
 
 export default function BoardScene(props: BoardProps) {
+  const graphics = props.graphics ?? "high";
+  const lowGraphics = graphics !== "high";
   const resolvedProps = { ...props, targets: choiceTargets(props) };
   const config = props.state?.config ?? props.config;
   const layer = useRef<HTMLDivElement>(null);
@@ -2726,7 +2736,8 @@ export default function BoardScene(props: BoardProps) {
       className="canvas-layer"
       data-board-rule={config ? boardRule(config) : "country"}
       data-scene-ready="false"
-      data-low-graphics={Boolean(props.lowGraphics)}
+      data-low-graphics={lowGraphics}
+      data-graphics-quality={graphics}
       data-board-zoom={props.zoom ?? 1}
       data-sale-active={
         !props.preview && saleTargets(props.state, props.saleSeat).length > 0
@@ -2734,9 +2745,9 @@ export default function BoardScene(props: BoardProps) {
     >
       <Canvas
         orthographic
-        shadows={props.lowGraphics ? false : { type: THREE.PCFShadowMap }}
+        shadows={lowGraphics ? false : { type: THREE.PCFShadowMap }}
         frameloop="demand"
-        dpr={props.lowGraphics ? 1 : [1, 1.5]}
+        dpr={graphics === "potato" ? 0.75 : lowGraphics ? 1 : [1, 1.5]}
         camera={{ position: [...CAMERA_OFFSET], near: 0.1, far: 100, zoom: 1 }}
         gl={{
           antialias: true,

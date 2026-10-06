@@ -5,31 +5,40 @@ import { updateSettings, useSettings } from "../settings/store.js";
 export default function GraphicsToggle() {
   const { t } = useLocale();
   const { graphics } = useSettings();
-  const lowGraphics = graphics === "low";
+  const labels = {
+    high: t("Élevé", "High"),
+    low: t("Faible", "Low"),
+    potato: "Potato PC",
+  };
   const name = useId();
   return (
     <fieldset className="graphics-quality">
       <legend>{t("Graphismes", "Graphics")}</legend>
       <div className="graphics-quality-options">
-        {([false, true] as const).map((low) => (
+        {(["high", "low", "potato"] as const).map((quality) => (
           <label
-            key={low ? "low" : "high"}
+            key={quality}
             className="graphics-quality-option"
-            data-selected={lowGraphics === low}
+            data-quality={quality}
+            data-selected={graphics === quality}
           >
             <input
               type="radio"
               name={name}
-              value={low ? "low" : "high"}
-              checked={lowGraphics === low}
-              onChange={() =>
-                updateSettings({ graphics: low ? "low" : "high" })
-              }
+              value={quality}
+              checked={graphics === quality}
+              onChange={() => updateSettings({ graphics: quality })}
             />
-            <span>{low ? t("Faible", "Low") : t("Élevé", "High")}</span>
+            <span>{labels[quality]}</span>
           </label>
         ))}
       </div>
+      <p className="settings-description">
+        {t(
+          "Potato PC : plateau 3D allégé, sans décor central, pour les ordinateurs peu puissants.",
+          "Potato PC: a lighter 3D board without central scenery for slower computers.",
+        )}
+      </p>
     </fieldset>
   );
 }

@@ -1406,12 +1406,14 @@ export function Landmarks({
   state = null,
   animated = false,
   lowGraphics = false,
+  potato = false,
 }: {
   boardRule?: BoardRule;
   state?: PublicState | null;
   /** Ambient life plays; see `useAmbientMotion`, which keeps frames coming. */
   animated?: boolean;
   lowGraphics?: boolean;
+  potato?: boolean;
 }) {
   const glaze = useDisposable(glassMatcap);
   const host = state?.championshipHost ?? null;
@@ -1419,15 +1421,19 @@ export function Landmarks({
     state && host ? (getProperty(state, host.tile)?.owner ?? null) : null;
   return (
     <group>
-      <Island />
-      <Stadium
-        hosted={host !== null}
-        hostSeat={hostSeat}
-        animated={animated}
-        lowGraphics={lowGraphics}
-        glaze={glaze}
-      />
-      <Airport animated={animated} glaze={glaze} />
+      {!potato && (
+        <>
+          <Island />
+          <Stadium
+            hosted={host !== null}
+            hostSeat={hostSeat}
+            animated={animated}
+            lowGraphics={lowGraphics}
+            glaze={glaze}
+          />
+          <Airport animated={animated} glaze={glaze} />
+        </>
+      )}
       {getBoard(boardRule)
         .filter((tile) => tile.index % 8 === 0 && tile.kind !== "start")
         .map((tile) => (

@@ -1048,7 +1048,6 @@ function MatchView({
   cloudflarePing: PingState;
 }) {
   const { boardZoom: zoom, graphics } = useSettings();
-  const lowGraphics = graphics === "low";
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
   const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
@@ -1363,7 +1362,7 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={controlSeat ?? undefined}
               zoom={zoom}
-              lowGraphics={lowGraphics}
+              graphics={graphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? salePending.seat : undefined}
               saleBlocked={saleBlocked}
@@ -1954,7 +1953,6 @@ function App() {
   );
   const [copied, setCopied] = useState(false);
   const { boardZoom: zoom, graphics } = useSettings();
-  const lowGraphics = graphics === "low";
   const debug =
     import.meta.env.DEV ||
     new URLSearchParams(window.location.search).has("debug");
@@ -2259,7 +2257,7 @@ function App() {
                     onSelect={setSelected}
                     preview
                     zoom={zoom}
-                    lowGraphics={lowGraphics}
+                    graphics={graphics}
                   />
                 </Suspense>
               </SceneBoundary>
@@ -2442,7 +2440,7 @@ function App() {
                   onSelect={setSelected}
                   preview
                   zoom={zoom}
-                  lowGraphics={lowGraphics}
+                  graphics={graphics}
                 />
               </Suspense>
             </SceneBoundary>

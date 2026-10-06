@@ -1,4 +1,42 @@
-# Desktop rendering review - 3 October 2026
+# Desktop rendering review — 3 October 2026
+
+## Potato PC proposal — 6 October 2026
+
+Video settings now offer High and Low side by side, with **Potato PC** below.
+The new tier is opt-in and saved in the existing local settings record; existing
+High/Low and legacy preferences retain their meaning. It applies to the welcome
+preview, room lobby and match, and synchronizes across open tabs.
+
+Potato PC uses DPR 0.75 and Low's disabled shadows and ambient animation. It
+removes the central town, cash reserves, beach parasols and the three corner
+models. Corner names, property levels and ownership, festival and championship
+markers, shields, kept cards, dice, pawns, money transfers and legal board
+selection remain. All rules and Director event timing are unchanged. Switching
+preserves the Canvas, WebGL context, zoom and camera framing.
+
+At the same CSS size, DPR 0.75 draws 43.75% fewer pixels than Low's DPR 1. The
+DOM HUD, decision dialogs and projected sale labels retain full resolution.
+Printed board text softens; this is a manual tradeoff for weaker computers.
+MSAA stays enabled so switching never recreates the graphics context during an
+event. No automatic hardware detection, new dependency or renderer is added.
+
+The diagnostic developed-board fixture at 1440 × 900 uses forced Chromium
+SwiftShader, requesting direct scene draws for four seconds per sample, in
+Low → Potato PC → Low → Potato PC order on the same developed snapshot.
+Low submitted 190 draw calls and 33,625 triangles; Potato PC
+submitted 113 calls and 12,709 triangles, approximately 40% fewer draw calls and
+62% fewer triangles. Active samples were 16.3–21.0 FPS in Low and 37.6–40.3 FPS
+in Potato PC. These isolate rendering cost, not whole-turn responsiveness.
+Local fixture results and screenshots are saved under `.local/performance/`;
+exact FPS depends on host load and does not establish performance on a physical
+low-end laptop.
+
+Browser regression coverage checks keyboard access to the third tier, its row
+below Low, persistence and cross-tab updates, the unchanged context/frustum,
+a real roll and reconnect, reduced motion, and developed-property sale picking
+and inspection at 1280 × 720, 1440 × 900 and 1920 × 1080. High and Low keep
+their previous rendering settings. The proposal still needs an affected laptop
+for target-hardware frame-time validation.
 
 ## Scope and baseline
 

@@ -110,6 +110,10 @@ test("legacy preferences migrate intact and shared settings update another open 
   await expect(
     page.getByRole("radio", { name: "High", exact: true }),
   ).toBeChecked();
+  await otherTab.getByRole("radio", { name: "Potato PC", exact: true }).check();
+  await expect(
+    page.getByRole("radio", { name: "Potato PC", exact: true }),
+  ).toBeChecked();
   await otherTab.getByLabel("Language", { exact: true }).selectOption("fr");
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
   await expect(page.getByLabel("Langue", { exact: true })).toHaveValue("fr");
@@ -117,7 +121,7 @@ test("legacy preferences migrate intact and shared settings update another open 
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
   await page.locator(".personal-settings-trigger").click();
   await expect(
-    page.getByRole("radio", { name: "Élevé", exact: true }),
+    page.getByRole("radio", { name: "Potato PC", exact: true }),
   ).toBeChecked();
   await otherTab.close();
 });

@@ -340,6 +340,10 @@
   background: #e4f2e8;
 }
 
+.graphics-quality-option[data-quality="potato"] {
+  grid-column: 1 / -1;
+}
+
 .graphics-quality-option[data-selected="true"] {
   border-color: #1856a7;
   color: #fffaf0;

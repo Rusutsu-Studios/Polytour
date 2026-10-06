@@ -195,6 +195,61 @@ async function enterSaleRoom(
 const quote = (page: Page, tile: number) =>
   page.locator(`.sale-tile-quote[data-tile="${tile}"]`);
 
+test("Potato PC preserves developed properties, sale picking and city inspection", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "polytour.settings.v1",
+      JSON.stringify({
+        version: 1,
+        graphics: "potato",
+        boardZoom: 1,
+        reducedMotion: "system",
+        locale: "fr",
+      }),
+    );
+  });
+  const room = await enterSaleRoom(page, true, true);
+  // This developed-board fixture tests inspection after the sale, rather
+  // than ending immediately because its owner holds every collection.
+  room.snapshot({
+    ...room.state(),
+    config: {
+      ...room.state().config,
+      lineMonopoly: false,
+      tripleMonopoly: false,
+      resortMonopoly: false,
+    },
+  });
+  await expect(page.locator(".canvas-layer")).toHaveAttribute(
+    "data-graphics-quality",
+    "potato",
+  );
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await clickBoardSpace(page, 11);
+    await expect(quote(page, 11)).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".sale-confirm")).toBeEnabled();
+    await page.screenshot({
+      path: `.local/verification/potato-developed-sale-${viewport.width}.png`,
+    });
+  }
+  await page.locator(".sale-confirm").click();
+  await expect.poll(() => room.intents.length).toBe(1);
+  expect(room.intents[0].action).toEqual({ type: "Sell", tile: 11 });
+  room.commit(0);
+  await expect(page.locator(".decision-sale")).toHaveCount(0);
+  await clickBoardSpace(page, 1);
+  await expect(page.locator(".city-card")).toBeVisible();
+  await page.screenshot({
+    path: ".local/verification/potato-city-inspection.png",
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".city-card")).not.toBeVisible();
+  expect(room.errors).toEqual([]);
+});
+
 async function boardTileClickPoint(page: Page, tile: number) {
   // Two rendered quote anchors calibrate the board projection. Click the
   // printed city face away from its label, exercising the actual 3D picking.

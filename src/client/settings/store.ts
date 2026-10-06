@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 export type ClientSettings = {
   version: 1;
-  graphics: "high" | "low";
+  graphics: "high" | "low" | "potato";
   boardZoom: number;
   reducedMotion: "system" | "on" | "off";
   locale: "fr" | "en";
@@ -40,7 +40,9 @@ function validate(value: unknown, fallback: ClientSettings): ClientSettings {
   return {
     version: 1,
     graphics:
-      record.graphics === "high" || record.graphics === "low"
+      record.graphics === "high" ||
+      record.graphics === "low" ||
+      record.graphics === "potato"
         ? record.graphics
         : fallback.graphics,
     boardZoom:

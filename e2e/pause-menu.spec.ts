@@ -558,7 +558,7 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     name: "Faible",
     exact: true,
   });
-  await expect(graphics.getByRole("radio")).toHaveCount(2);
+  await expect(graphics.getByRole("radio")).toHaveCount(3);
   await expect(highGraphics).toBeChecked();
   await expect(lowGraphics).not.toBeChecked();
   await lowGraphics.press("Space");
