@@ -1531,6 +1531,13 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
   await expect(page.locator(".pause-dialog")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(
+    page
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Réglages", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(
     page.getByRole("button", { name: "Règles de la partie", exact: true }),
   ).toBeFocused();
   await page

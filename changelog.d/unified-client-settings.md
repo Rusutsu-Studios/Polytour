@@ -19,3 +19,5 @@
   once the match starts, saving a leader draft when the panel closes.
 - Leave a solo game running while its rules are read; only the pause menu itself
   still pauses.
+- Verify that Escape returns from match rules to the pause menu, then closes
+  the menu and restores focus to the rules button (#136).
