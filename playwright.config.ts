@@ -33,6 +33,7 @@ export default defineConfig({
         "invitation-flow.spec.ts",
         "sale-flow.spec.ts",
         "privacy-flow.spec.ts",
+        "turn-order.spec.ts",
         "settings-flow.spec.ts",
       ],
       use: { baseURL: remoteBaseURL ?? devURL },

@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 10, `economyRule: "reference"`) follow the reference
+New rooms (rules version 12, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -42,9 +42,14 @@ the tie.
 
 ## Match setup, laps, and rounds
 
-1. The server shuffles occupied seats with the match PRNG to create `turnOrder`.
-   Every player starts on Start with configured cash (default 2,000,000), no property, no cards, and zero
-   completed laps. The first seat in `turnOrder` starts round 1.
+1. The server chooses a random occupied starting seat with the match PRNG, then
+   keeps a fixed cycle around the board: bottom-right → bottom-left → top-left →
+   top-right (table seats 3 → 0 → 1 → 2), skipping empty and bankrupt places.
+   `turnOrder` rotates that cycle so the selected starter comes first. The opening
+   wheel reveals the server's choice before the first decision clock and bot move.
+   Every player starts on Start with configured cash (default 2,000,000), no property,
+   no cards, and zero completed laps. Saved rooms and lobbies through version 10
+   retain their original shuffled order; active matches never reorder on reconnect.
 2. A **lap** is a clockwise crossing from tile 31 to tile 0. Crossing it immediately
    pays the Start salary and increments that player's lap count. Landing on Start by
    clockwise movement *is* that crossing: salary is paid once and one lap is counted,
@@ -65,11 +70,19 @@ the tie.
    monopoly condition or the last player standing. Decision timers still apply.
    Missing duration in legacy round-only games retains their round cap.
    Twenty rounds are not labelled twenty minutes.
-5. Three initial festivals are selected by the seeded shuffle by default, among
-   cities only. Saved reference rooms (versions 4–6) retain festivals on cities
-   or resorts; prototype rooms also use cities only. Each doubles the rent of its
-   tile for the whole match and combines with the other modifiers (see Economy).
-   Festival count is configurable.
+5. Three initial festivals are selected among cities only by default. New rooms
+   spread them across different countries: with three configured festivals, a
+   country receives more than one in about 3% of matches. For two through eight
+   festivals, the chance of a repeated country is one percentage point per
+   configured festival. All countries use the same rule; Portugal has no special
+   weighting. A rare draw can still put all three in one country. Above eight
+   festivals, repetition is unavoidable: every country receives one before the
+   remaining festivals are assigned to other distinct cities. The configured
+   count is always retained, with no duplicate tiles. Rooms through version 11
+   keep their original unrestricted seeded shuffle. Saved reference rooms
+   (versions 4–6) retain festivals on cities or resorts; prototype rooms also use
+   cities only. Each doubles the rent of its tile for the whole match and combines
+   with the other modifiers (see Economy). Festival count is configurable.
 
 > Mechanics are not protected by copyright, but names and art are trademarks. Board
 > theme, city names, card names, and visuals must be our own.
@@ -329,7 +342,8 @@ line ownership.
 
 **Standings** (used for the game-over screen, `placement`, and ratings): the winner
 is first. Remaining non-bankrupt players follow, ranked by net worth, then cash,
-then number of resorts, then earliest position in the randomized `turnOrder`.
+then number of resorts, then earliest position in `turnOrder` from the randomly
+selected starter.
 Bankrupt players come last, the most recently eliminated first. At the round limit
 the same ordering picks the winner, so every match has exactly one winner.
 

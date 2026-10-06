@@ -22,6 +22,7 @@ import {
   applyEvent,
   botDecisionAt,
   CHANCE_CARDS,
+  decisionWindow,
   propertyRent,
   toPublic,
 } from "../src/shared/engine/index.js";
@@ -2320,7 +2321,302 @@ describe("Authoritative private rooms", () => {
     ).toBe(0);
   });
 
-  it("freezes new rooms on rules version 10 with the Escape card, the reworked deck and the current economy", async () => {
+  it("reserves the starter reveal before scheduling the first bot and ignores an early alarm", async () => {
+    const host = await create();
+    const inbox = await connect(host);
+    await inbox.next("welcome");
+    const entropy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementationOnce(((array: Uint32Array) => {
+        array.fill(0);
+        return array;
+      }) as typeof crypto.getRandomValues);
+    try {
+      inbox.send({
+        type: "lobby",
+        id: "start",
+        op: { type: "start", fillBots: true },
+      });
+      const batch = await inbox.next("events");
+      const created = batch.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      if (created?.type !== "GameCreated")
+        throw new Error("GameCreated expected");
+      const state = created.state;
+      expect(state.startingTurnOrder).toEqual([3, 0, 1, 2]);
+      expect(state.pending?.deadline).toBe(
+        state.startedAt +
+          DECISION_TIMING.startAnimation +
+          decisionWindow(state.config, "roll"),
+      );
+      const stub = env.GAME_ROOM.getByName(host.roomCode);
+      const timing = await runInDurableObject(
+        stub,
+        async (instance, durableState) => {
+          const sql = durableState.storage.sql;
+          const room = instance as unknown as { alarm(): Promise<void> };
+          await room.alarm();
+          return {
+            seq: sql
+              .exec<{ seq: number }>("SELECT seq FROM state WHERE id=1")
+              .toArray()[0].seq,
+            timers: sql
+              .exec<{ kind: string; fire_at: number }>(
+                "SELECT kind,fire_at FROM timers WHERE kind IN ('bot','decision')",
+              )
+              .toArray(),
+          };
+        },
+      );
+      expect(timing.seq).toBe(batch.toSeq);
+      expect(timing.timers).toEqual([
+        {
+          kind: "bot",
+          fire_at:
+            state.startedAt + DECISION_TIMING.startAnimation + BOT_TIMING.roll,
+        },
+      ]);
+      expect(
+        inbox.received.some(
+          (message) =>
+            message.type === "events" &&
+            message.events.some((event) => event.type === "DiceRolled"),
+        ),
+      ).toBe(false);
+    } finally {
+      entropy.mockRestore();
+    }
+  });
+  it("starts saved version-10 lobbies with their original shuffle and keeps that order after eviction", async () => {
+    const host = await create();
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='10' WHERE k='rulesVersion'",
+      );
+    });
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby.turnOrderRule).toBe("shuffled");
+    const entropy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementationOnce(((array: Uint32Array) => {
+        array.fill(0);
+        return array;
+      }) as typeof crypto.getRandomValues);
+    let original: PublicState;
+    try {
+      inbox.send({
+        type: "lobby",
+        id: "start",
+        op: { type: "start", fillBots: true },
+      });
+      const batch = await inbox.next("events");
+      const created = batch.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      if (created?.type !== "GameCreated")
+        throw new Error("GameCreated expected");
+      original = created.state;
+      expect(original.startingTurnOrder).toEqual([3, 2, 0, 1]);
+      expect(original.config.turnOrderRule).toBe("shuffled");
+      expect(original.pending?.deadline).toBe(
+        original.startedAt + decisionWindow(original.config, "roll"),
+      );
+    } finally {
+      entropy.mockRestore();
+    }
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    const snapshot = (await resumed.next("welcome")).snapshot;
+    expect(snapshot?.startingTurnOrder).toEqual(original.startingTurnOrder);
+    expect(snapshot?.turnOrder).toEqual(original.turnOrder);
+  });
+  it("starts saved version-11 lobbies with the original random festivals and keeps them after eviction", async () => {
+    const host = await create();
+    await Promise.all(
+      ["Bo", "Cam", "Dee"].map((name) => join(host.roomCode, name)),
+    );
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      durableState.storage.sql.exec(
+        "UPDATE meta SET v='11' WHERE k='rulesVersion'",
+      );
+    });
+    await evictDurableObject(stub);
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby).toMatchObject({
+      festivalDistribution: "random",
+      turnOrderRule: "clockwise",
+    });
+    const entropy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementationOnce(((array: Uint32Array) => {
+        array.fill(0);
+        return array;
+      }) as typeof crypto.getRandomValues);
+    let original: PublicState;
+    try {
+      expect(
+        await roomOp(inbox, "version-11-festivals-start", {
+          type: "start",
+          fillBots: false,
+        }),
+      ).toBe("ack");
+      const batch = await eventsWith(inbox, "GameCreated");
+      const created = batch.events.find(
+        (event) => event.type === "GameCreated",
+      );
+      if (created?.type !== "GameCreated")
+        throw new Error("GameCreated expected");
+      original = created.state;
+      expect(original.config.festivalDistribution).toBe("random");
+      // The old seed-0 setup shuffles all cities before taking its prefix.
+      expect(original.festivalTiles).toEqual([3, 21, 17]);
+    } finally {
+      entropy.mockRestore();
+    }
+    await evictDurableObject(stub);
+    const resumed = await connect(host);
+    const welcome = await resumed.next("welcome");
+    expect(welcome.lobby.festivalDistribution).toBe("random");
+    expect(welcome.snapshot?.config.festivalDistribution).toBe("random");
+    expect(welcome.snapshot?.festivalTiles).toEqual(original.festivalTiles);
+  });
+
+  it("restores an unmarked version-11 active save without redistributing its festivals", async () => {
+    const game = await startFour();
+    const active = game.state.activeSeat;
+    const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const sql = durableState.storage.sql;
+      const saved = JSON.parse(
+        sql
+          .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+          .toArray()[0].json,
+      ) as GameState;
+      const { festivalDistribution: _distribution, ...config } = saved.config;
+      sql.exec("UPDATE meta SET v='11' WHERE k='rulesVersion'");
+      sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({
+          ...saved,
+          config,
+          festivalTiles: [1, 2, 3],
+          players: saved.players.map((player) =>
+            player.seat === active ? { ...player, position: 5 } : player,
+          ),
+          pending: {
+            kind: "buy",
+            seat: active,
+            tile: 5,
+            maxLevel: 2,
+            deadline: Date.now() + 30_000,
+          },
+          resolutionQueue: [{ kind: "finish" }],
+        }),
+      );
+    });
+    await evictDurableObject(stub);
+    const inbox = await connect(game.credentials[active]);
+    const welcome = await inbox.next("welcome");
+    expect(welcome.lobby.festivalDistribution).toBe("random");
+    if (!welcome.snapshot) throw new Error("Expected saved match snapshot");
+    expect(welcome.snapshot.config.festivalDistribution).toBeUndefined();
+    expect(welcome.snapshot.festivalTiles).toEqual([1, 2, 3]);
+    inbox.send({
+      type: "intent",
+      id: "unmarked-version-11-festivals",
+      atSeq: welcome.seq,
+      action: { type: "Decline" },
+    });
+    const events = await inbox.next("events");
+    const next = events.events.reduce(applyEvent, welcome.snapshot);
+    expect(next.festivalTiles).toEqual([1, 2, 3]);
+    expect(next.config.festivalDistribution).toBeUndefined();
+  });
+
+  it.each([
+    { version: 11, marker: "spread" },
+    { version: 12, marker: "random" },
+    { version: 12, marker: undefined },
+  ])(
+    "rejects version-$version saves with the incompatible festival marker $marker",
+    async ({ version, marker }) => {
+      const game = await startFour();
+      const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const saved = JSON.parse(
+          sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState;
+        sql.exec(
+          "UPDATE meta SET v=? WHERE k='rulesVersion'",
+          JSON.stringify(version),
+        );
+        sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            config: { ...saved.config, festivalDistribution: marker },
+          }),
+        );
+      });
+      try {
+        const response = await exports.default.fetch(
+          new Request(`${origin}/api/rooms/${game.credentials[0].roomCode}`),
+        );
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({
+          error: "incompatible-saved-match",
+        });
+      } finally {
+        await runInDurableObject(stub, (_instance, durableState) => {
+          const sql = durableState.storage.sql;
+          const saved = JSON.parse(
+            sql
+              .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+              .toArray()[0].json,
+          ) as GameState;
+          sql.exec("UPDATE meta SET v='12' WHERE k='rulesVersion'");
+          sql.exec(
+            "UPDATE state SET json=? WHERE id=1",
+            JSON.stringify({
+              ...saved,
+              config: { ...saved.config, festivalDistribution: "spread" },
+            }),
+          );
+        });
+      }
+    },
+  );
+
+  it.each(["spread", "random"])(
+    "rejects the server-owned festival distribution %s in room settings",
+    async (marker) => {
+      const host = await create();
+      const inbox = await connect(host);
+      const welcome = await inbox.next("welcome");
+      inbox.send({
+        type: "lobby",
+        id: "override-festival-distribution",
+        op: {
+          type: "settings",
+          config: { ...welcome.lobby.config, festivalDistribution: marker },
+        },
+      });
+      expect(await inbox.next("reject")).toMatchObject({
+        id: "invalid",
+        reason: "malformed",
+      });
+      const lobby = await readLobby(host.roomCode);
+      expect(lobby.config).toEqual(welcome.lobby.config);
+      expect(lobby.festivalDistribution).toBe("spread");
+    },
+  );
+  it("freezes new rooms on rules version 12 with the Escape card, the reworked deck and the current economy", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -2331,7 +2627,9 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.fourResortRent).toBe(true);
     expect(game.state.config.buildAfterBuyout).toBe(true);
     expect(game.state.config.chanceRule).toBe("reworked");
+    expect(game.state.config.turnOrderRule).toBe("clockwise");
     expect(game.state.config.resortFestivals).toBe(false);
+    expect(game.state.config.festivalDistribution).toBe("spread");
     expect(game.state.config.escapeCard).toBe(true);
     const cities = getBoard(game.state.config)
       .filter(isCityTile)
@@ -2351,15 +2649,20 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("10");
+    expect(rules).toBe("12");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
     expect(welcome.lobby.resortFestivals).toBe(false);
+    expect(welcome.lobby.festivalDistribution).toBe("spread");
+    expect(welcome.snapshot?.config.festivalDistribution).toBe("spread");
     expect(welcome.snapshot?.config.resortFestivals).toBe(false);
     expect(welcome.lobby.escapeCard).toBe(true);
     expect(welcome.snapshot?.config.escapeCard).toBe(true);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
+    expect(welcome.snapshot?.startingTurnOrder).toEqual(
+      game.state.startingTurnOrder,
+    );
   });
 
   it.each([
@@ -2383,7 +2686,8 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
-        const { chanceRule: _chance, ...v9 } = saved.config;
+        const { festivalDistribution: _distribution, ...v11 } = saved.config;
+        const { chanceRule: _chance, ...v9 } = v11;
         const { escapeCard: _escape, ...v8 } = v9;
         const {
           resortFestivals: _festival,
@@ -2397,7 +2701,7 @@ describe("Authoritative private rooms", () => {
         // marker, and before 6 the World Tour marker.
         const config =
           version === "10"
-            ? saved.config
+            ? v11
             : version === "9"
               ? v9
               : version === "8"
@@ -2499,6 +2803,7 @@ describe("Authoritative private rooms", () => {
       const saved = JSON.parse(row.json) as GameState;
       const {
         escapeCard: _escape,
+        festivalDistribution: _distribution,
         chanceRule: _chance,
         ...config
       } = saved.config;
@@ -2633,6 +2938,8 @@ describe("Authoritative private rooms", () => {
       { escapeCard: false },
       { chanceRule: "reworked" },
       { chanceRule: "original" },
+      { festivalDistribution: "spread" },
+      { festivalDistribution: "random" },
     ]) {
       const response = await exports.default.fetch(
         new Request(`${origin}/api/rooms`, {
@@ -2661,6 +2968,7 @@ describe("Authoritative private rooms", () => {
         fourResortRent: _four,
         buildAfterBuyout: _build,
         escapeCard: _escape,
+        festivalDistribution: _distribution,
         chanceRule: _chance,
         ...oldConfig
       } = saved.config;
@@ -2779,6 +3087,7 @@ describe("Authoritative private rooms", () => {
         fourResortRent: _four,
         buildAfterBuyout: _build,
         escapeCard: _escape,
+        festivalDistribution: _distribution,
         chanceRule: _chance,
         ...oldConfig
       } = saved.config;
@@ -2955,6 +3264,7 @@ describe("Authoritative private rooms", () => {
         fourResortRent: _four,
         buildAfterBuyout: _build,
         escapeCard: _escape,
+        festivalDistribution: _distribution,
         chanceRule: _chance,
         ...oldConfig
       } = saved.config;
@@ -3073,11 +3383,11 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 11, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
       // cannot carry its World Tour marker, version 6 cannot exclude resort
       // festivals, version 7 the version-8 markers, version 8 the Escape card,
-      // version 9 the reworked Chance deck, and 999 is unknown.
+      // version 9 the reworked Chance deck, version 11 the spread marker, and 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -3095,7 +3405,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='10' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='12' WHERE k='rulesVersion'",
       ),
     );
   });
