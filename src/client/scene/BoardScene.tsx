@@ -532,7 +532,12 @@ function houseGeometry() {
       scale: [width, rise, depth],
     },
     // A window and an off-centre door on the front, and two windows like it
-    // on each side wall.
+    // on every other wall, so the house reads from any side.
+    ...[-0.055, 0.055].map((x) => ({
+      geometry: box(0.05, 0.056, 0.01),
+      color: glass,
+      position: [x, 0.105, -front - 0.004] as const,
+    })),
     {
       geometry: box(0.05, 0.056, 0.01),
       color: glass,
