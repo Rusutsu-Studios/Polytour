@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # RELEASE_TOKEN (a PAT or app token) makes CI run on the release PR;
-          # a PR opened with the default token does not trigger workflows.
+          # a PR opened with the default token requires approval to run CI.
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
       - uses: ./.github/actions/setup
       - name: Prepare release
@@ -53,6 +53,18 @@ jobs:
           if gh pr view release/next --json state --jq .state 2>/dev/null | grep -q OPEN; then
             gh pr edit release/next --title "Release v$VERSION"
           else
-            gh pr create --base main --head release/next --title "Release v$VERSION" \
-              --body "Folds the pending changelog fragments into CHANGELOG.md and bumps the version. Merge to release; this PR is rebuilt on every push to main."
+            if gh pr create --base main --head release/next --title "Release v$VERSION" \
+              --body "Folds the pending changelog fragments into CHANGELOG.md and bumps the version. Merge to release; this PR is rebuilt on every push to main." \
+              2> "$RUNNER_TEMP/release-pr-error"; then
+              echo "Release PR created."
+            else
+              status=$?
+              if grep -Fq 'GitHub Actions is not permitted to create or approve pull requests' "$RUNNER_TEMP/release-pr-error"; then
+                echo "::warning::GitHub policy blocks automatic PR creation. Open the prepared release PR using the link in the job summary."
+                echo "[Open release v$VERSION PR]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...release/next?expand=1)" >> "$GITHUB_STEP_SUMMARY"
+              else
+                cat "$RUNNER_TEMP/release-pr-error" >&2
+                exit "$status"
+              fi
+            fi
           fi

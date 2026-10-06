@@ -96,7 +96,12 @@ The `Release PR` workflow (`.github/workflows/release-pr.yml`) does this for you
 every push to `main` it rebuilds one rolling `release/next` pull request that folds
 the pending fragments into the changelog and version. Merge it to ship. Add a
 `RELEASE_TOKEN` secret (PAT or app token with contents and pull-request write) so
-CI runs on that PR; without it, close and reopen the PR to trigger CI.
+CI runs on that PR without a separate workflow approval. With the default token,
+approve the workflows on the PR, or close and reopen it to trigger CI.
+If repository or organization policy forbids Actions from creating pull requests,
+the workflow still prepares and pushes `release/next`, then warns and links to the
+manual PR form in its job summary. Open that PR yourself; later runs update the
+existing PR. Other creation errors still fail the workflow.
 To do it by hand instead, open a release pull request:
 
 ```sh
