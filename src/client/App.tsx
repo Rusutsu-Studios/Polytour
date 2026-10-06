@@ -83,8 +83,7 @@ import {
   WaitingNotice,
   WaitingRoom,
 } from "./ui/RoomPeople.js";
-import RoomSettings from "./ui/RoomRulesDialog.js";
-import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
+import { QuickSettings } from "./ui/RoomSettings.js";
 import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
 
@@ -976,7 +975,7 @@ function TurnTimer({
   );
 }
 
-type GameTool = "journal" | "proof" | "rules" | "room" | null;
+type GameTool = "journal" | "proof" | "room" | null;
 
 function NetworkStatus({
   ping,
@@ -1054,6 +1053,9 @@ function MatchView({
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
   const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
   const soloMenuPause = useRef(game.pause?.kind === "paused");
+  // Panels opened only to be read leave a solo game running.
+  const menuShouldPause = useRef(true);
+  const [menuPauses, setMenuPauses] = useState(true);
   const soloObservedPause = useRef(game.pause?.kind === "paused");
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
@@ -1123,6 +1125,7 @@ function MatchView({
       setPauseOpen(false);
     } else if (
       pauseOpen &&
+      menuShouldPause.current &&
       !authoritative.pause &&
       authoritative.pending &&
       authoritative.pending.deadline > Date.now()
@@ -1131,8 +1134,10 @@ function MatchView({
       room.act({ type: "RequestPause" }, pauseSeat);
     }
   }, [solo, pauseSeat, pauseBlocked, pauseOpen, authoritative, room.act]);
-  const openPauseMenu = (settingsTab?: SettingsTab) => {
-    soloMenuPause.current = solo;
+  const openPauseMenu = (settingsTab?: SettingsTab, pauseGame = true) => {
+    menuShouldPause.current = pauseGame;
+    setMenuPauses(pauseGame);
+    soloMenuPause.current = solo && pauseGame;
     setPauseSettingsTab(settingsTab);
     setTool(null);
     setInspectorOpen(false);
@@ -1227,9 +1232,7 @@ function MatchView({
       ? t("Carnet de voyage", "Game log")
       : tool === "proof"
         ? diceToolLabel
-        : tool === "rules"
-          ? t("Règles de la partie", "Game rules")
-          : t("Votre salle", "Your room");
+        : t("Votre salle", "Your room");
   const journalEntries = history
     .map((event, index) => ({ content: eventText(event, game), key: index }))
     .filter((item) => item.content !== null)
@@ -1447,8 +1450,8 @@ function MatchView({
           className="game-tool-button"
           aria-label={t("Règles de la partie", "Game rules")}
           title={t("Règles de la partie", "Game rules")}
-          aria-expanded={tool === "rules"}
-          onClick={(event) => showTool("rules", event.currentTarget)}
+          aria-haspopup="dialog"
+          onClick={() => openPauseMenu("rules", false)}
         >
           <Icon name="sliders" size={18} />
         </button>
@@ -1675,7 +1678,7 @@ function MatchView({
             id="game-tool-panel"
             ref={toolRef}
             key={tool}
-            className={`tool-drawer${tool === "journal" ? " tool-drawer--journal" : tool === "rules" ? " tool-drawer--rules" : ""}`}
+            className={`tool-drawer${tool === "journal" ? " tool-drawer--journal" : ""}`}
             aria-labelledby="tool-title"
             initial={reducedMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1731,21 +1734,6 @@ function MatchView({
                 }}
                 expanded
               />
-            )}
-            {tool === "rules" && (
-              <div className="match-rules">
-                <p className="field-note">
-                  {t(
-                    "Les réglages sont fixés pour toute la durée de cette partie.",
-                    "Settings are fixed for the duration of this game.",
-                  )}
-                </p>
-                <RoomSettingsFields
-                  config={config}
-                  disabled
-                  onChange={() => {}}
-                />
-              </div>
             )}
             {tool === "room" && (
               <div className="room-tool">
@@ -1842,6 +1830,8 @@ function MatchView({
       {pauseOpen && (
         <PauseMenu
           initialSettingsTab={pauseSettingsTab}
+          rules={{ config, disabled: true, onChange: () => {} }}
+          willPause={menuPauses}
           game={authoritative}
           mySeats={mySeats}
           blocked={pauseBlocked}
@@ -2401,19 +2391,24 @@ function App() {
             {you === null && room.you && (
               <WaitingNotice lobby={room.lobby} member={room.you.member} />
             )}
-            <RoomSettings
-              config={config}
-              disabled={!leader || roomOffline}
-              onChange={setConfig}
-              save={
-                leader
-                  ? {
-                      dirty: settingsDirty,
-                      onSave: () => room.settings(config),
-                    }
-                  : undefined
-              }
-            />
+            <button
+              type="button"
+              className="settings-trigger"
+              aria-haspopup="dialog"
+              aria-expanded={homeSettingsTab === "rules"}
+              onClick={() => setHomeSettingsTab("rules")}
+            >
+              <Icon name="sliders" size={21} />
+              <span className="settings-trigger-title">
+                {t("Règles de la partie", "Game rules")}
+              </span>
+              <span className="settings-trigger-hint">
+                {leader
+                  ? t("Personnaliser", "Customize")
+                  : t("Consulter", "View")}
+              </span>
+              <Icon name="arrow" size={17} />
+            </button>
           </div>
           <div className="room-preview">
             <SceneBoundary
@@ -2524,6 +2519,21 @@ function App() {
           ownSeat={room.you?.seat ?? null}
           onDebugActiveChange={room.setDebugActive}
           bank={null}
+          rules={
+            room.lobby
+              ? {
+                  config,
+                  disabled: !leader || roomOffline,
+                  onChange: setConfig,
+                  save: leader
+                    ? {
+                        dirty: settingsDirty,
+                        onSave: () => room.settings(config),
+                      }
+                    : undefined,
+                }
+              : null
+          }
         />
       )}
       {!isGame && (

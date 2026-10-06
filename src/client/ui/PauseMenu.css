@@ -859,3 +859,72 @@
     padding-inline: 9px;
   }
 }
+
+/* The room rules sheet, shown as a tab of the settings panel. */
+.pause-dialog[data-tab="rules"] {
+  width: min(900px, calc(100vw - 48px));
+}
+.pause-rules .field-note {
+  margin: 0 0 14px;
+  color: #355e67;
+  font-size: 14px;
+}
+.pause-rules .room-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto auto auto;
+  gap: 16px 32px;
+}
+
+.pause-rules .room-settings-main {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 18px 14px;
+}
+
+.pause-rules .room-setting {
+  grid-column: 1 / -1;
+}
+
+.pause-rules .room-settings-rules {
+  grid-column: 2;
+  grid-row: 1;
+  margin-top: 0;
+}
+
+.pause-rules .room-settings-rules legend {
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.pause-rules .room-settings-toggles {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.pause-rules .room-setting-toggle {
+  min-height: 44px;
+}
+
+.pause-rules .room-setting-toggle input {
+  width: 22px;
+  height: 22px;
+}
+
+.pause-rules .room-settings-fairness {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  margin-top: 0;
+  padding-top: 12px;
+}
+
+.pause-rules .room-settings-wins {
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 0;
+}
+

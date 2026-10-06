@@ -7,6 +7,7 @@ import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
 import Icon from "./Icon.js";
+import type { RoomSettingsProps } from "./RoomSettings.js";
 import SettingsPanel, { type SettingsTab } from "./SettingsPanel.js";
 import "./PauseMenu.css";
 
@@ -35,6 +36,10 @@ export type PauseMenuProps = {
   onDebugActiveChange: (active: boolean) => void;
   /** The bank's running totals, from the authoritative match state. */
   bank: { received: number; paidOut: number; balance: number } | null;
+  /** The room rules, when this screen belongs to a room. Null on the home screen. */
+  rules?: RoomSettingsProps | null;
+  /** False when this screen was opened only to be read, leaving a solo game running. */
+  willPause?: boolean;
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -61,6 +66,8 @@ export default function PauseMenu({
   ownSeat,
   onDebugActiveChange,
   bank,
+  rules = null,
+  willPause = true,
 }: PauseMenuProps) {
   const { t } = useLocale();
   const { reducedMotion } = useDirector();
@@ -68,6 +75,7 @@ export default function PauseMenu({
     !game || initialSettingsTab ? "settings" : "menu",
   );
   const [debugActive, setDebugActive] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("video");
   const [now, setNow] = useState(Date.now());
   const paused = game?.pause?.kind === "paused";
   const vote = game?.pause?.kind === "vote" ? game.pause : null;
@@ -83,7 +91,7 @@ export default function PauseMenu({
         "La partie est en pause. Les tours et les chronomètres sont arrêtés.",
         "The game is paused. Turns and clocks are stopped.",
       )
-    : solo && eligible.length > 0 && game?.status === "active"
+    : willPause && solo && eligible.length > 0 && game?.status === "active"
       ? t("Mise en pause de la partie…", "Pausing the game…")
       : null;
   const cooldown = Math.max(
@@ -160,7 +168,28 @@ export default function PauseMenu({
     returnTo.current = page === "settings" ? "settings" : "leave";
     setPage("menu");
   };
+  // Leaders send their rule changes once, whichever way the panel closes.
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+  const flushed = useRef(false);
+  const dirty = Boolean(rules?.save?.dirty);
+  useEffect(() => {
+    if (dirty) flushed.current = false;
+  }, [dirty]);
+  const flushRules = useCallback(() => {
+    const current = rulesRef.current;
+    if (flushed.current || !current || current.disabled) return;
+    if (!current.save?.dirty) return;
+    flushed.current = true;
+    current.save.onSave();
+  }, []);
+  useEffect(() => flushRules, [flushRules]);
+  const closePanel = () => {
+    flushRules();
+    onClose();
+  };
   const dismiss = () => {
+    flushRules();
     if (!game || page === "menu") onClose();
     else backToMenu();
   };
@@ -176,6 +205,7 @@ export default function PauseMenu({
       ref={dialogRef}
       className="pause-dialog"
       data-debug={debugActive}
+      data-tab={page === "settings" ? activeTab : undefined}
       aria-labelledby={`${id}-title`}
       aria-describedby={pauseNote ? `${id}-note` : undefined}
       onCancel={(event) => {
@@ -218,7 +248,7 @@ export default function PauseMenu({
                 ? t("Revenir au plateau", "Back to the board")
                 : t("Fermer les réglages", "Close settings")
             }
-            onClick={onClose}
+            onClick={closePanel}
           >
             <Icon name="close" size={23} />
           </button>
@@ -397,6 +427,8 @@ export default function PauseMenu({
           {page === "settings" && (
             <SettingsPanel
               initialTab={initialSettingsTab}
+              rules={rules}
+              onTabChange={setActiveTab}
               debugAvailable={debugAvailable}
               hasGame={Boolean(game)}
               connection={connection}

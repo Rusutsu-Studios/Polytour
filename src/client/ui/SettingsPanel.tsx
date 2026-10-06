@@ -16,8 +16,14 @@ import { fullMoney } from "./board-display.js";
 import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
 import RoomDebug, { translatedRegion } from "./RoomDebug.js";
+import RoomSettingsFields, { type RoomSettingsProps } from "./RoomSettings.js";
 
-export type SettingsTab = "video" | "accessibility" | "audio" | "debug";
+export type SettingsTab =
+  | "rules"
+  | "video"
+  | "accessibility"
+  | "audio"
+  | "debug";
 const PERSONAL_TABS: readonly SettingsTab[] = [
   "video",
   "accessibility",
@@ -34,6 +40,10 @@ export type SettingsPanelProps = {
   ownSeat: Seat | null;
   onDebugActiveChange: (active: boolean) => void;
   bank: { received: number; paidOut: number; balance: number } | null;
+  /** The room rules, when this screen belongs to a room. Null on the home screen. */
+  rules?: RoomSettingsProps | null;
+  /** Lets the dialog shell size itself for the tab in view. */
+  onTabChange?: (tab: SettingsTab) => void;
 };
 
 /** Personal preferences shared by the lobby and the match pause dialog. */
@@ -47,18 +57,23 @@ export default function SettingsPanel({
   ownSeat,
   onDebugActiveChange,
   bank,
+  rules = null,
+  onTabChange,
 }: SettingsPanelProps) {
   const { locale, setLocale, t } = useLocale();
   const { boardZoom, reducedMotion } = useSettings();
   const id = useId();
-  const [selectedTab, setTab] = useState<SettingsTab>(
-    initialTab === "debug" && !debugAvailable ? "video" : initialTab,
-  );
-  const tab =
-    selectedTab === "debug" && !debugAvailable ? "video" : selectedTab;
-  const tabs = debugAvailable
-    ? [...PERSONAL_TABS, "debug" as const]
-    : PERSONAL_TABS;
+  const tabs: readonly SettingsTab[] = [
+    ...(rules ? (["rules"] as const) : []),
+    ...PERSONAL_TABS,
+    ...(debugAvailable ? (["debug"] as const) : []),
+  ];
+  const [selectedTab, setTab] = useState<SettingsTab>(initialTab);
+  // A tab this screen does not offer falls back to the first one it has.
+  const tab = tabs.includes(selectedTab) ? selectedTab : (tabs[0] ?? "video");
+  useEffect(() => {
+    onTabChange?.(tab);
+  }, [tab, onTabChange]);
   const tabRefs = useRef<
     Partial<Record<SettingsTab, HTMLButtonElement | null>>
   >({});
@@ -111,6 +126,7 @@ export default function SettingsPanel({
     tabRefs.current[next]?.focus();
   };
   const tabLabels: Record<SettingsTab, string> = {
+    rules: t("Règles", "Rules"),
     video: t("Vidéo", "Video"),
     accessibility: t("Accessibilité", "Accessibility"),
     audio: "Audio",
@@ -189,6 +205,27 @@ export default function SettingsPanel({
           // biome-ignore lint/a11y/noNoninteractiveTabindex: WAI-ARIA panels without controls need a keyboard focus target.
           tabIndex={0}
         >
+          {value === "rules" && rules && (
+            <div className="pause-rules">
+              <p className="field-note">
+                {rules.disabled
+                  ? t(
+                      "Les réglages sont fixés pour toute la durée de cette partie.",
+                      "Settings are fixed for the duration of this game.",
+                    )
+                  : rules.save
+                    ? t(
+                        "Vos changements sont enregistrés à la fermeture.",
+                        "Your changes are saved when you close this window.",
+                      )
+                    : t(
+                        "Choisissez les règles de votre prochaine partie.",
+                        "Choose the rules for your next game.",
+                      )}
+              </p>
+              <RoomSettingsFields {...rules} />
+            </div>
+          )}
           {value === "video" && (
             <div className="pause-video-settings">
               <GraphicsToggle />

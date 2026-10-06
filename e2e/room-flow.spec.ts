@@ -311,7 +311,7 @@ for (const viewport of [
       ).toContainText("Leader");
 
       await guestPage.locator(".settings-trigger").click();
-      const settings = guestPage.locator(".settings-dialog");
+      const settings = guestPage.locator(".pause-dialog");
       const salary = settings.getByRole("spinbutton", {
         name: "Salary per lap: exact value",
         exact: true,

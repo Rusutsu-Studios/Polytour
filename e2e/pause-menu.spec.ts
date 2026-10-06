@@ -798,7 +798,7 @@ test("Cloudflare HTTP ping refreshes every five seconds throughout a visible onl
   await page
     .getByRole("button", { name: "Revenir au plateau", exact: true })
     .click();
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   expect(await aborts()).toBe(beforeClosing);
   await setDocumentVisibility(page, false);
   await expect.poll(aborts).toBe(beforeClosing + 1);
@@ -941,7 +941,7 @@ test("the shared probe refreshes after network and room connection changes and p
   expect(requests).toBe(expectedRequests);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   await completeProbe(page, () => setBrowserOnline(page, true));
   expectedRequests += 1;
   await expect(page.locator(".match-network")).toHaveText(/^FRA · \d+ ms$/);
@@ -1138,7 +1138,7 @@ test("the tiny match badge refreshes its shared sample every five seconds outsid
   await page
     .getByRole("button", { name: "Revenir au plateau", exact: true })
     .click();
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   response = FRANKFURT_PROBE;
   await completeProbe(page, () => page.clock.runFor(5000));
   await expect.poll(() => requests).toBe(beforeClosing + 1);
@@ -1521,14 +1521,14 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
   await page
     .getByRole("button", { name: "Règles de la partie", exact: true })
     .click();
-  await expect(page.locator(".match-rules")).toContainText(
+  await expect(page.locator(".pause-rules")).toContainText(
     "Les réglages sont fixés pour toute la durée de cette partie.",
   );
-  const controls = page.locator(".match-rules").locator("input, select");
+  const controls = page.locator(".pause-rules").locator("input, select");
   expect(await controls.count()).toBeGreaterThan(0);
   for (const control of await controls.all())
     await expect(control).toBeDisabled();
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Règles de la partie", exact: true }),
@@ -1570,7 +1570,7 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
   await expect(
     page.getByRole("button", { name: "Jouer", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   expect(
     await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
   ).toBeNull();
