@@ -117,9 +117,13 @@
     background 150ms,
     transform 150ms;
 }
-.game-tool-button:hover {
+.game-tool-button:hover:not(:is(:disabled, [aria-disabled="true"])) {
   background: #fffaf0;
   transform: translateY(-1px);
+}
+.game-tool-button:is(:disabled, [aria-disabled="true"]) {
+  opacity: 0.45;
+  cursor: default;
 }
 .game-tool-button[aria-expanded="true"] {
   background: #fffaf0;
@@ -507,9 +511,18 @@
   .decision-compact[data-kind="roll"][data-own="true"][data-busy="false"]
 ) {
   zoom: 1;
-  top: var(--roll-y, 50%);
+  /* Keep the required roll action clear of HUDs when the board is panned. */
+  top: clamp(
+    calc(170px * var(--ui-zoom)),
+    var(--roll-y, 50%),
+    calc(100% - 160px * var(--ui-zoom))
+  );
   bottom: auto;
-  left: var(--roll-x, 50%);
+  left: clamp(
+    min(calc(320px * var(--ui-zoom)), 50vw),
+    var(--roll-x, 50%),
+    max(calc(100% - 320px * var(--ui-zoom)), 50vw)
+  );
   translate: -50% -50%;
   width: auto;
   max-height: none;
@@ -1595,7 +1608,8 @@ input::placeholder {
 .invitation-entry .welcome-world {
   grid-template-rows: minmax(0, 1fr);
 }
-.welcome-board-preview > div:not(.flat-board) {
+.welcome-board-preview > .canvas-layer,
+.welcome-board-preview > .scene-loading {
   height: 100%;
 }
 .welcome-quick-settings {
@@ -1699,6 +1713,12 @@ input::placeholder {
       1.1fr
     );
   gap: calc(70px * var(--ui-zoom));
+}
+@media (min-width: 1051px) {
+  .room-lobby {
+    grid-template-columns: calc(450px * var(--ui-zoom)) minmax(0, 1fr);
+    gap: calc(28px * var(--ui-zoom));
+  }
 }
 .room-lobby h1 {
   font-size: clamp(3rem, 4.2vw, 4.4rem);

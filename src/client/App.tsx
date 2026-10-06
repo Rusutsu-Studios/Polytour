@@ -33,6 +33,7 @@ import type {
   RoomCredentials,
 } from "../shared/protocol/index.js";
 import { RoomCodeSchema, RoomConfigSchema } from "../shared/protocol/index.js";
+import { BOARD_ZOOM } from "./board-view.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
 import {
@@ -45,7 +46,7 @@ import {
   type PingState,
   useCloudflarePing,
 } from "./net/use-cloudflare-ping.js";
-import { useSettings } from "./settings/store.js";
+import { updateSettings, useSettings } from "./settings/store.js";
 import ActionButton from "./ui/ActionButton.js";
 import {
   fullMoney,
@@ -90,7 +91,7 @@ import "./App.css";
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
 const DEFAULT_CONFIG = RoomConfigSchema.parse({});
 class SceneBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
+  { children: ReactNode; fallback: ReactNode; onError?: () => void },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -99,6 +100,7 @@ class SceneBoundary extends Component<
   }
   componentDidCatch(_error: Error, _info: ErrorInfo) {
     /* Keep the accessible board available without WebGL. */
+    this.props.onError?.();
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
@@ -1023,6 +1025,8 @@ function MatchView({
   config,
   selected,
   onSelect,
+  viewResetKey,
+  onViewReset,
   streamer,
   onStreamerChange,
   copied,
@@ -1038,6 +1042,9 @@ function MatchView({
   config: RoomConfig;
   selected: number | null;
   onSelect: (tile: number) => void;
+  /** Bumped to put the board back to its default framing. */
+  viewResetKey: number;
+  onViewReset: () => void;
   streamer: boolean;
   onStreamerChange: (enabled: boolean) => void;
   copied: boolean;
@@ -1047,8 +1054,13 @@ function MatchView({
   debug: boolean;
   cloudflarePing: PingState;
 }) {
-  const { boardZoom: zoom, graphics } = useSettings();
+  const {
+    boardZoom: zoom,
+    boardViewLocked: viewLocked,
+    graphics,
+  } = useSettings();
   const lowGraphics = graphics === "low";
+  const [boardZoomAvailable, setBoardZoomAvailable] = useState(false);
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
   const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
@@ -1334,6 +1346,7 @@ function MatchView({
     <>
       <div className="board-stage">
         <SceneBoundary
+          onError={() => setBoardZoomAvailable(false)}
           fallback={
             <BoardFallback
               state={game}
@@ -1363,6 +1376,11 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={controlSeat ?? undefined}
               zoom={zoom}
+              onZoom={(next) => updateSettings({ boardZoom: next })}
+              viewResetKey={viewResetKey}
+              viewLocked={viewLocked}
+              interactiveZoom
+              onWebGlAvailableChange={setBoardZoomAvailable}
               lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? salePending.seat : undefined}
@@ -1426,6 +1444,20 @@ function MatchView({
           onChange={onStreamerChange}
           compact
         />
+        <ActionButton
+          type="button"
+          className="game-tool-button"
+          aria-label={t("Recentrer le plateau", "Reset board view")}
+          title={t("Recentrer le plateau", "Reset board view")}
+          disabled={!boardZoomAvailable}
+          disabledReason={t(
+            "Le recentrage est disponible sur le plateau 3D.",
+            "Reset view is available on the 3D board.",
+          )}
+          onClick={onViewReset}
+        >
+          <Icon name="target" size={18} />
+        </ActionButton>
         <button
           type="button"
           className="game-tool-button"
@@ -1863,6 +1895,10 @@ function MatchView({
             setPauseOpen(false);
             onLeave();
           }}
+          onViewReset={onViewReset}
+          zoomAvailable={boardZoomAvailable}
+          streamer={streamer}
+          onStreamerChange={onStreamerChange}
           debugAvailable={debug}
           connection={room.connection}
           ping={cloudflarePing}
@@ -1953,8 +1989,18 @@ function App() {
     null,
   );
   const [copied, setCopied] = useState(false);
-  const { boardZoom: zoom, graphics } = useSettings();
+  const {
+    boardZoom: zoom,
+    boardViewLocked: viewLocked,
+    graphics,
+  } = useSettings();
   const lowGraphics = graphics === "low";
+  const [viewResetKey, setViewResetKey] = useState(0);
+  const [previewZoomAvailable, setPreviewZoomAvailable] = useState(false);
+  function resetBoardView() {
+    updateSettings({ boardZoom: BOARD_ZOOM.default });
+    setViewResetKey((key) => key + 1);
+  }
   const debug =
     import.meta.env.DEV ||
     new URLSearchParams(window.location.search).has("debug");
@@ -2236,6 +2282,7 @@ function App() {
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
+                onError={() => setPreviewZoomAvailable(false)}
                 fallback={
                   <BoardFallback
                     state={null}
@@ -2259,6 +2306,9 @@ function App() {
                     onSelect={setSelected}
                     preview
                     zoom={zoom}
+                    viewResetKey={viewResetKey}
+                    viewLocked={viewLocked}
+                    onWebGlAvailableChange={setPreviewZoomAvailable}
                     lowGraphics={lowGraphics}
                   />
                 </Suspense>
@@ -2420,6 +2470,7 @@ function App() {
           </div>
           <div className="room-preview">
             <SceneBoundary
+              onError={() => setPreviewZoomAvailable(false)}
               fallback={
                 <BoardFallback
                   state={null}
@@ -2442,6 +2493,9 @@ function App() {
                   onSelect={setSelected}
                   preview
                   zoom={zoom}
+                  viewResetKey={viewResetKey}
+                  viewLocked={viewLocked}
+                  onWebGlAvailableChange={setPreviewZoomAvailable}
                   lowGraphics={lowGraphics}
                 />
               </Suspense>
@@ -2456,6 +2510,8 @@ function App() {
           config={config}
           selected={selected ?? activePosition ?? null}
           onSelect={setSelected}
+          viewResetKey={viewResetKey}
+          onViewReset={resetBoardView}
           streamer={streamer}
           onStreamerChange={changeStreamer}
           copied={copied}
@@ -2520,6 +2576,10 @@ function App() {
           error={null}
           onClose={() => setHomeSettingsTab(null)}
           onLeave={() => {}}
+          onViewReset={resetBoardView}
+          zoomAvailable={previewZoomAvailable}
+          streamer={streamer}
+          onStreamerChange={changeStreamer}
           debugAvailable={debug}
           connection={room.connection}
           ping={cloudflarePing}

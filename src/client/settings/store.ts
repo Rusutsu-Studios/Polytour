@@ -1,9 +1,12 @@
 import { useSyncExternalStore } from "react";
+import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 
 export type ClientSettings = {
   version: 1;
   graphics: "high" | "low";
   boardZoom: number;
+  /** Keeps the board still: no orbit, pan or zoom while it is on. */
+  boardViewLocked: boolean;
   reducedMotion: "system" | "on" | "off";
   locale: "fr" | "en";
 };
@@ -26,7 +29,8 @@ function defaults(): ClientSettings {
   return {
     version: 1,
     graphics: "high",
-    boardZoom: 1,
+    boardZoom: BOARD_ZOOM.default,
+    boardViewLocked: false,
     reducedMotion: "system",
     locale: browserLocale(),
   };
@@ -45,8 +49,12 @@ function validate(value: unknown, fallback: ClientSettings): ClientSettings {
         : fallback.graphics,
     boardZoom:
       typeof record.boardZoom === "number" && Number.isFinite(record.boardZoom)
-        ? Math.max(0.8, Math.min(1.3, record.boardZoom))
+        ? clampBoardZoom(record.boardZoom)
         : fallback.boardZoom,
+    boardViewLocked:
+      typeof record.boardViewLocked === "boolean"
+        ? record.boardViewLocked
+        : fallback.boardViewLocked,
     reducedMotion:
       record.reducedMotion === "system" ||
       record.reducedMotion === "on" ||
@@ -121,6 +129,7 @@ function apply(next: ClientSettings) {
   if (
     next.graphics === settings.graphics &&
     next.boardZoom === settings.boardZoom &&
+    next.boardViewLocked === settings.boardViewLocked &&
     next.reducedMotion === settings.reducedMotion &&
     next.locale === settings.locale
   )

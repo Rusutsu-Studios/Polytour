@@ -89,10 +89,44 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
     .click();
   await expect(page.locator(".room-tool-code")).toContainText("Code hidden");
   await expect(page.locator("body")).not.toContainText(roomCode);
-  await toggle.click();
+  const matchToggle = page
+    .locator(".game-tools")
+    .getByRole("button", { name: "Streamer mode", exact: true });
+  await expect(page.locator(".game-tools button").first()).toHaveAccessibleName(
+    "Streamer mode",
+  );
+  await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
+  await matchToggle.click();
+  await expect(matchToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".room-tool-code")).toContainText(roomCode);
-  await toggle.click();
+  expect(
+    await page.evaluate(() => localStorage.getItem("polytour.streamer")),
+  ).toBe("false");
+  await page.getByRole("button", { name: "Pause menu", exact: true }).click();
+  await page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const setting = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Streamer mode", exact: true });
+  await expect(setting).toHaveAttribute("aria-pressed", "false");
+  await setting.click();
+  await expect(setting).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Invite players", exact: true })
+    .click();
   await expect(page.locator(".room-tool-code")).toContainText("Code hidden");
+  expect(new URL(page.url()).searchParams.has("room")).toBe(false);
+  expect(
+    await page.evaluate(() => localStorage.getItem("polytour.streamer")),
+  ).toBe("true");
+  expect(
+    await page.locator("body").evaluate((body) => body.outerHTML),
+  ).not.toContain(roomCode);
 });
 
 test("streamer invitations keep the code out of markup and the address bar", async ({
