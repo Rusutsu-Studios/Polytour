@@ -23,9 +23,9 @@ event. No automatic hardware detection, new dependency or renderer is added.
 The diagnostic developed-board fixture at 1440 × 900 uses forced Chromium
 SwiftShader, requesting direct scene draws for four seconds per sample, in
 Low → Potato PC → Low → Potato PC order on the same developed snapshot.
-Low submitted 190 draw calls and 33,625 triangles; Potato PC
-submitted 113 calls and 12,709 triangles, approximately 40% fewer draw calls and
-62% fewer triangles. Active samples were 16.3–21.0 FPS in Low and 37.6–40.3 FPS
+Low submitted 189 draw calls and 33,671 triangles; Potato PC
+submitted 112 calls and 12,707 triangles, approximately 41% fewer draw calls and
+62% fewer triangles. Active samples were 19.0–22.1 FPS in Low and 33.7–39.2 FPS
 in Potato PC. These isolate rendering cost, not whole-turn responsiveness.
 Local fixture results and screenshots are saved under `.local/performance/`;
 exact FPS depends on host load and does not establish performance on a physical
