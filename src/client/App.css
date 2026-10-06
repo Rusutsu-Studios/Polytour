@@ -2918,4 +2918,3 @@ button.seat-open:is(:disabled, [aria-disabled="true"]) {
 .settings-trigger:active {
   translate: 0 1px;
 }
-

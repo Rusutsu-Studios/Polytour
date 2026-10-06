@@ -515,9 +515,7 @@ test("win conditions follow the settings draft and saved rules in both languages
     await page.setViewportSize(size);
     await wins.scrollIntoViewIfNeeded();
     const layout = await dialog.evaluate((element) => {
-      const body = element.querySelector(
-        ".pause-dialog-body",
-      ) as HTMLElement;
+      const body = element.querySelector(".pause-dialog-body") as HTMLElement;
       const summary = element.querySelector(
         ".room-settings-wins",
       ) as HTMLElement;
@@ -639,15 +637,15 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
   await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(
-    page.locator(".pause-dialog .room-settings"),
-  ).not.toContainText("drand");
+  await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
+    "drand",
+  );
   await expect(
     page.locator(".pause-dialog .room-settings-fairness"),
   ).toHaveCount(0);
-  await expect(
-    page.locator(".pause-dialog .room-settings"),
-  ).not.toContainText("Web Crypto");
+  await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
+    "Web Crypto",
+  );
   await saveSettings(page);
   await page.getByRole("button", { name: "Démarrer la partie" }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
@@ -1293,9 +1291,9 @@ test("desktop room controls fit, create and join preserve the host settings", as
     .getByRole("spinbutton", { name: "Capital de départ : valeur exacte" })
     .fill("2000000");
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
-  await expect(
-    page.locator(".pause-dialog .room-settings"),
-  ).not.toContainText("drand");
+  await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
+    "drand",
+  );
   await page
     .getByRole("group", { name: "Durée de partie" })
     .getByRole("radio", { name: "20 min", exact: true })
