@@ -256,6 +256,95 @@ afterEach(() => {
 });
 
 describe("Authoritative private rooms", () => {
+  it("accepts exact duration and decision settings and starts with the chosen deadline", async () => {
+    const response = await createRoom({
+      name: "Alex",
+      config: { timeLimitMinutes: 200, decisionSeconds: 37 },
+      bots: 1,
+    });
+    expect(response.status).toBe(201);
+    const host = await response.json<RoomCredentials>();
+    const inbox = await connect(host);
+    expect((await inbox.next("welcome")).lobby.config).toMatchObject({
+      timeLimitMinutes: 200,
+      decisionSeconds: 37,
+    });
+    expect(
+      await roomOp(inbox, "start-exact", { type: "start", fillBots: false }),
+    ).toBe("ack");
+    const events = await eventsWith(inbox, "GameCreated");
+    const created = events.events.find((event) => event.type === "GameCreated");
+    if (created?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(created.state.config.decisionSeconds).toBe(37);
+    expect(created.state.matchDeadline).toBe(
+      created.state.startedAt + 200 * 60_000,
+    );
+  });
+  it("persists unlimited settings across reconnect, schedules only decision timers and broadcasts an alarm roll", async () => {
+    const response = await createRoom({
+      name: "Alex",
+      config: { timeLimitMinutes: null },
+    });
+    expect(response.status).toBe(201);
+    const host = await response.json<RoomCredentials>();
+    const guest = await join(host.roomCode, "Bo");
+    const inbox = await connect(host);
+    const guestInbox = await connect(guest);
+    expect(
+      (await inbox.next("welcome")).lobby.config.timeLimitMinutes,
+    ).toBeNull();
+    await guestInbox.next("welcome");
+    expect(
+      await roomOp(inbox, "start-unlimited", {
+        type: "start",
+        fillBots: false,
+      }),
+    ).toBe("ack");
+    const created = await eventsWith(inbox, "GameCreated");
+    const initial = created.events.find(
+      (event) => event.type === "GameCreated",
+    );
+    if (initial?.type !== "GameCreated")
+      throw new Error("GameCreated expected");
+    expect(initial.state.config.timeLimitMinutes).toBeNull();
+    expect(initial.state.matchDeadline).toBeNull();
+    await eventsWith(guestInbox, "GameCreated");
+    const stub = env.GAME_ROOM.getByName(host.roomCode);
+    const timers = await runInDurableObject(stub, (_instance, durableState) =>
+      durableState.storage.sql
+        .exec<{ kind: string }>("SELECT kind FROM timers")
+        .toArray(),
+    );
+    expect(timers).toEqual([{ kind: "decision" }]);
+    await closeInbox(inbox);
+    const reconnected = await connect(host, created.toSeq);
+    const welcome = await reconnected.next("welcome");
+    expect(welcome.lobby.config.timeLimitMinutes).toBeNull();
+    const snapshot = await connect(host);
+    expect((await snapshot.next("welcome")).snapshot?.matchDeadline).toBeNull();
+    await runInDurableObject(stub, (_instance, durableState) => {
+      const sql = durableState.storage.sql;
+      const row = sql
+        .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+        .toArray()[0];
+      const state = JSON.parse(row.json) as GameState;
+      if (!state.pending) throw new Error("Decision expected");
+      const deadline = Date.now() - 1;
+      sql.exec(
+        "UPDATE state SET json=? WHERE id=1",
+        JSON.stringify({ ...state, pending: { ...state.pending, deadline } }),
+      );
+      sql.exec("UPDATE timers SET fire_at=? WHERE kind='decision'", deadline);
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const rolled = await eventsWith(reconnected, "DiceRolled");
+    const broadcast = await eventsWith(guestInbox, "DiceRolled");
+    expect(broadcast).toEqual(rolled);
+    expect(rolled.events.some((event) => event.type === "GameOver")).toBe(
+      false,
+    );
+  });
   it("sleeps abandoned matches, retains their deadline and resumes after eviction", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);

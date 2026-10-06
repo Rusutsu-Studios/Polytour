@@ -9,9 +9,8 @@ import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 7 adds the reworked Chance deck's events and die rolls; version 6
-// added the retained Escape card and island action. Stale clients reload.
-export const PROTOCOL_VERSION = 7;
+// Version 8 adds null (unlimited) game duration. Stale clients reload.
+export const PROTOCOL_VERSION = 8;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -21,9 +20,7 @@ export const RoomConfigSchema = z
     startingCash: z.number().int().min(0).max(10_000_000).default(2_000_000),
     startSalary: z.number().int().min(0).max(1_000_000).default(400_000),
     roundLimit: z.number().int().min(1).max(10_000).default(10_000),
-    timeLimitMinutes: z
-      .union([z.literal(20), z.literal(60), z.literal(120)])
-      .default(120),
+    timeLimitMinutes: z.number().int().min(15).nullable().default(120),
     festivalCount: z.number().int().min(0).max(20).default(3),
     lineMonopoly: z.boolean().default(true),
     tripleMonopoly: z.boolean().default(true),

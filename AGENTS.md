@@ -7,7 +7,7 @@ CI fails if the import is missing.
 
 Polytour is a web-first, real-time multiplayer property-trading board game in the
 spirit of Business Tour / Modoo Marble (2–4 player rooms, configurable 20/60/120-minute
-limits). The current target is desktop browsers with mouse and keyboard; mobile
+limits or unlimited duration). The current target is desktop browsers with mouse and keyboard; mobile
 support is optional. It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.

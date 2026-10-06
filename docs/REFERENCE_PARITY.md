@@ -25,11 +25,14 @@ explicit choices take precedence.
 
 The default preset has **2,000,000 starting cash, 400,000 per lap, three festivals,
 line and triple monopoly enabled, and a 120-minute real-time limit**. The room can
-choose 20/60/120 minutes, adjust cash and salary, choose festival count, toggle
+choose 20/60/120-minute shortcuts, an exact duration of at least 15 minutes
+(including longer games such as 200 minutes) or an explicit
+unlimited (∞) Polytour option, adjust cash and salary, choose festival count, toggle
 monopoly conditions, and choose the direct-hotel exception. New matches use immediate
 server Web Crypto dice. Every seat receives the same resources;
 settings freeze at match start. A round cap remains available for simulation and
-short tests, independently of the real-time limit.
+short tests, independently of the real-time limit. Unlimited duration disables
+both limits and retains decision timers; only enabled win conditions end the game.
 
 This is a rules prototype. Paid items, luck stats, paid rerolls, or an
 outcome-biased power gauge will not be reproduced. Initial festivals are selected

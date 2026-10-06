@@ -219,6 +219,11 @@ async function findBotTimer(actor: Actor) {
   // A shuffled first turn may belong to Camille. Advance only the human's
   // setup decisions until a bot has enough presentation time left to pause.
   for (let count = 0; count < 30; count += 1) {
+    // Setup can advance the server ahead of the Director's modal card.
+    // Wait for the card to close before sampling the bot's remaining timer.
+    await expect(actor.page.locator(".chance-dialog[open]")).toHaveCount(0, {
+      timeout: 20_000,
+    });
     const state = actor.state;
     if (!state?.pending) throw new Error("Expected an active pending decision");
     const nextAt = botDecisionAt(state);

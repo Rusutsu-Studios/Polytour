@@ -23,6 +23,30 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   between the top tools and the bottom choice; any future action shot must
   return to that frame and preserve access to the current decision. Geometry
   lives in `client/scene/board-layout.ts` and its orientation is unit-tested.
+- **Player view:** Video sets local board zoom from 80% to 200% in 10% steps,
+  saved for this browser. In a match, wheel, +/- keys, touch pinch and laptop
+  trackpad pinch zoom the view. Trackpad Ctrl+wheel events without a physical
+  Control key press stay on the board; deliberate Ctrl+wheel and browser
+  keyboard zoom shortcuts keep their native behavior. A left-button grab on the
+  board's tiles, center or edges orbits gently
+  after an 8px threshold: horizontal drag turns around it and vertical drag moves
+  between a low and overhead view. Projection scale stays fixed while orbiting;
+  wheel/pinch and explicit zoom controls alone change magnification. The high
+  view can extend beyond the frame; Shift-drag reaches its edges within the
+  rotation-aware pan bounds. A simple
+  click still inspects or chooses a tile. Empty background and floating controls,
+  including the Roll button and sale quotes, never start a grab.
+  Reset board view in the game toolbar, Default view in Video (or 0 while unlocked)
+  restores 100%, the initial orientation and centered pan. Lock board view is
+  saved locally and blocks gestures, keyboard shortcuts and Video zoom controls;
+  touch and trackpad pinches cannot magnify the page while locked. The two reset
+  buttons remain usable. Lobby previews use only Video controls.
+  The accessible flat-board fallback keeps camera controls unavailable.
+  Input applies immediately without smoothing, including reduced motion.
+  The Director never writes this preference or the user's board transform.
+  Framing, sale quotes and the floating Roll anchor share the same local transform
+  and projection. View changes never cancel an event animation, advance the
+  event queue, change a shared rule or send a server intent.
 - **Lighting:** one warm key light with soft shadows (or baked + `ContactShadows`),
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),

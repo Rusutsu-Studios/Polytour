@@ -15,6 +15,7 @@ import {
   type ServerMessage,
 } from "../src/shared/protocol/index.js";
 import { clickBoardSpace } from "./board-interactions.js";
+import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -765,13 +766,15 @@ for (const locale of ["fr", "en"] as const) {
   });
 }
 
-test("globe and language text switch directly on click and keyboard and persist", async ({
+test("the lobby settings gear groups personal controls and restores keyboard focus", async ({
   page,
 }) => {
   await page.goto("/");
-  const trigger = page.locator(".language-trigger");
-  await expect(trigger).toHaveText("FR");
-  await expect(trigger).toHaveAccessibleName("FR · Passer en anglais");
+  const trigger = page.locator(".personal-settings-trigger");
+  await expect(trigger).toHaveAccessibleName("Réglages");
+  await expect(trigger).toHaveText("Réglages");
+  await expect(page.locator(".language-trigger")).toHaveCount(0);
+  await expect(page.locator(".topbar-right .graphics-quality")).toHaveCount(0);
   for (const size of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
@@ -779,32 +782,47 @@ test("globe and language text switch directly on click and keyboard and persist"
   ]) {
     await page.setViewportSize(size);
     await expect(trigger.locator("svg")).toBeVisible();
+    await expect(trigger.locator("svg + span")).toBeVisible();
     const help = await page
       .getByRole("button", { name: "Comment jouer", exact: true })
       .boundingBox();
-    const language = await trigger.boundingBox();
-    expect(language).not.toBeNull();
+    const settings = await trigger.boundingBox();
+    expect(settings).not.toBeNull();
     expect(help).not.toBeNull();
-    expect(Math.abs((language?.y ?? 0) - (help?.y ?? 0))).toBeLessThan(2);
     expect(
-      (help?.x ?? 0) - ((language?.x ?? 0) + (language?.width ?? 0)),
-    ).toBeLessThan(25);
+      Math.abs(
+        (settings?.y ?? 0) +
+          (settings?.height ?? 0) / 2 -
+          ((help?.y ?? 0) + (help?.height ?? 0) / 2),
+      ),
+    ).toBeLessThan(2);
     await page.screenshot({
-      path: `.local/verification/language-button-${size.width}.png`,
+      path: `.local/verification/settings-button-${size.width}.png`,
     });
   }
-  await trigger.hover();
-  await expect(trigger).toHaveText("FR");
-  await trigger.click();
-  await expect(trigger).toHaveText("EN");
-  await expect(trigger).toHaveAccessibleName("EN · Switch to French");
-  await expect(trigger).toBeFocused();
-  await trigger.press("Space");
-  await expect(trigger).toHaveText("FR");
   await trigger.press("Enter");
-  await expect(trigger).toHaveText("EN");
+  await page
+    .locator(".pause-dialog")
+    .getByLabel("Langue", { exact: true })
+    .selectOption("en");
+  await expect(
+    page.getByRole("tab", { name: "Video", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveAccessibleName("Settings");
+  await expect(trigger).toHaveText("Settings");
+  await expect(trigger.locator("svg + span")).toBeVisible();
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(trigger.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/settings-button-en-${viewport.width}.png`,
+    });
+  }
   await page.reload();
-  await expect(trigger).toHaveText("EN");
+  await expect(trigger).toHaveAccessibleName("Settings");
+  await expect(trigger).toHaveText("Settings");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 

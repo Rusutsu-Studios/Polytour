@@ -947,7 +947,11 @@ function resolver(
       (seat) => seat !== state.activeSeat && !getPlayer(state, seat).bankrupt,
     );
     const completedRound = remaining.length === 0;
-    if (completedRound && state.round >= state.config.roundLimit) {
+    if (
+      completedRound &&
+      state.config.timeLimitMinutes !== null &&
+      state.round >= state.config.roundLimit
+    ) {
       const standings = rankStandings(state);
       emit({
         type: "GameOver",
@@ -2268,6 +2272,7 @@ export function createGame(
     throw new RangeError("Decision time must be a positive integer");
   if (
     config.timeLimitMinutes !== undefined &&
+    config.timeLimitMinutes !== null &&
     (!Number.isFinite(config.timeLimitMinutes) || config.timeLimitMinutes <= 0)
   )
     throw new RangeError("Time limit must be positive");
@@ -2444,7 +2449,7 @@ export function createGame(
     result: null,
     startedAt: context.now,
     matchDeadline:
-      config.timeLimitMinutes !== undefined
+      config.timeLimitMinutes !== undefined && config.timeLimitMinutes !== null
         ? context.now + config.timeLimitMinutes * 60_000
         : null,
     festivalTiles: festivals.items,

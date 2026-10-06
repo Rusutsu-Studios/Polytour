@@ -1,14 +1,11 @@
 import { useId } from "react";
 import { useLocale } from "../i18n.js";
+import { updateSettings, useSettings } from "../settings/store.js";
 
-export default function GraphicsToggle({
-  lowGraphics,
-  onChange,
-}: {
-  lowGraphics: boolean;
-  onChange: (low: boolean) => void;
-}) {
+export default function GraphicsToggle() {
   const { t } = useLocale();
+  const { graphics } = useSettings();
+  const lowGraphics = graphics === "low";
   const name = useId();
   return (
     <fieldset className="graphics-quality">
@@ -25,7 +22,9 @@ export default function GraphicsToggle({
               name={name}
               value={low ? "low" : "high"}
               checked={lowGraphics === low}
-              onChange={() => onChange(low)}
+              onChange={() =>
+                updateSettings({ graphics: low ? "low" : "high" })
+              }
             />
             <span>{low ? t("Faible", "Low") : t("Élevé", "High")}</span>
           </label>

@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 11, `economyRule: "reference"`) follow the reference
+New rooms (rules version 12, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -20,7 +20,8 @@ the sources and the values that remain interpolated.
 ## Design pillars and v1 boundaries
 
 - **Fast, decisive, and legible.** A player should have one meaningful decision at a
-  time, and a match must finish inside the round limit without a stalemate rule.
+  time. Timed matches finish within their limits; unlimited matches wait for a
+  win condition without a stalemate rule.
 - **Luck creates a problem; choices solve it.** Dice and cards create uncertainty,
   while buying, building, buyouts, and positioning decide the result.
 - **No pay-to-win.** Match rules, starting resources, RNG, and available decisions
@@ -64,7 +65,11 @@ the tie.
    new dice roll before highest net worth wins using the standings tie-breaks.
    A separate round limit
    applies to short tests/simulations; the timed preset uses a 10,000-round safety
-   cap. Twenty rounds are not labelled twenty minutes.
+   cap. The fourth duration choice, **∞**, explicitly stores `timeLimitMinutes: null`:
+   it has no wall-clock deadline or round cap, and ends only through an enabled
+   monopoly condition or the last player standing. Decision timers still apply.
+   Missing duration in legacy round-only games retains their round cap.
+   Twenty rounds are not labelled twenty minutes.
 5. Three initial festivals are selected among cities only by default. New rooms
    spread them across different countries: with three configured festivals, a
    country receives more than one in about 3% of matches. For two through eight
@@ -111,8 +116,8 @@ Dubai and Bali.
 | Starting cash | 2,000,000 (configurable) |
 | Salary for passing/landing on Start | 400,000 (configurable) |
 | Players | 2–4; empty seats stay empty or take a bot |
-| Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
-| Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
+| Time limit | Whole minutes, minimum 15, or ∞; exact entry also accepts durations above 120 (e.g. 200); shortcuts 20/60/120; default 120 (then highest net worth wins) |
+| Round limit | 10,000 safety cap for timed games; none for ∞; custom tests/simulations use shorter caps |
 | Initial festivals | 3 (configurable); cities only with ×2 rent (saved reference rooms: cities or resorts) |
 | Sell-back to bank | 100% of invested value (prototype: 50%) |
 | Buyout price | 2× invested value (paid to owner) |
@@ -322,7 +327,8 @@ lands it on World Tour, even in the middle of a doubles streak.
 2. **Triple Monopoly** - own every city of any 3 countries; enabled by default, configurable.
 3. **Line Monopoly** - own every city and resort on one side; enabled by default, configurable.
 4. **Resort Monopoly** (shown as "beaches" in the interface) - own all 4 resorts; disabled by default, a room option (saves made before the option keep it enabled).
-5. **Time limit / round cap** - highest net worth (cash + invested value) wins.
+5. **Time limit / round cap** - highest net worth (cash + invested value) wins;
+   disabled when the duration is ∞.
 
 Check instant wins after any change of ownership (purchase, buyout, Land Swap, sale)
 and after any forced-sell or bankruptcy phase has completed, never while a

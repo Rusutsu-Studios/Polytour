@@ -33,6 +33,7 @@ import type {
   RoomCredentials,
 } from "../shared/protocol/index.js";
 import { RoomCodeSchema, RoomConfigSchema } from "../shared/protocol/index.js";
+import { BOARD_ZOOM } from "./board-view.js";
 import { director, useDirector } from "./director/director.js";
 import { translate as t, useLocale } from "./i18n.js";
 import {
@@ -45,6 +46,7 @@ import {
   type PingState,
   useCloudflarePing,
 } from "./net/use-cloudflare-ping.js";
+import { updateSettings, useSettings } from "./settings/store.js";
 import ActionButton from "./ui/ActionButton.js";
 import {
   fullMoney,
@@ -70,7 +72,6 @@ import DiceExplanation from "./ui/DiceExplanation.js";
 import HeldCardHand from "./ui/HeldCardHand.js";
 import Icon from "./ui/Icon.js";
 import InvitationEntry from "./ui/InvitationEntry.js";
-import LanguagePicker from "./ui/LanguagePicker.js";
 import LuckCardHelp from "./ui/LuckCardHelp.js";
 import PauseMenu, { type SettingsTab } from "./ui/PauseMenu.js";
 import {
@@ -83,8 +84,7 @@ import {
   WaitingNotice,
   WaitingRoom,
 } from "./ui/RoomPeople.js";
-import RoomSettingsFields, { QuickSettings } from "./ui/RoomSettings.js";
-import RoomSettings from "./ui/SettingsDialog.js";
+import { QuickSettings } from "./ui/RoomSettings.js";
 import StartOrderMoment from "./ui/StartOrderMoment.js";
 import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
@@ -92,7 +92,7 @@ import "./App.css";
 const BoardScene = lazy(() => import("./scene/BoardScene.js"));
 const DEFAULT_CONFIG = RoomConfigSchema.parse({});
 class SceneBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
+  { children: ReactNode; fallback: ReactNode; onError?: () => void },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -101,6 +101,7 @@ class SceneBoundary extends Component<
   }
   componentDidCatch(_error: Error, _info: ErrorInfo) {
     /* Keep the accessible board available without WebGL. */
+    this.props.onError?.();
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
@@ -977,7 +978,7 @@ function TurnTimer({
   );
 }
 
-type GameTool = "journal" | "proof" | "rules" | "room" | null;
+type GameTool = "journal" | "proof" | "room" | null;
 
 function NetworkStatus({
   ping,
@@ -1025,10 +1026,8 @@ function MatchView({
   config,
   selected,
   onSelect,
-  zoom,
-  onZoom,
-  lowGraphics,
-  onGraphicsChange,
+  viewResetKey,
+  onViewReset,
   streamer,
   onStreamerChange,
   copied,
@@ -1044,10 +1043,9 @@ function MatchView({
   config: RoomConfig;
   selected: number | null;
   onSelect: (tile: number) => void;
-  zoom: number;
-  onZoom: (zoom: number) => void;
-  lowGraphics: boolean;
-  onGraphicsChange: (low: boolean) => void;
+  /** Bumped to put the board back to its default framing. */
+  viewResetKey: number;
+  onViewReset: () => void;
   streamer: boolean;
   onStreamerChange: (enabled: boolean) => void;
   copied: boolean;
@@ -1057,10 +1055,20 @@ function MatchView({
   debug: boolean;
   cloudflarePing: PingState;
 }) {
+  const {
+    boardZoom: zoom,
+    boardViewLocked: viewLocked,
+    graphics,
+  } = useSettings();
+  const lowGraphics = graphics === "low";
+  const [boardZoomAvailable, setBoardZoomAvailable] = useState(false);
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
   const [pauseSettingsTab, setPauseSettingsTab] = useState<SettingsTab>();
   const soloMenuPause = useRef(game.pause?.kind === "paused");
+  // Panels opened only to be read leave a solo game running.
+  const menuShouldPause = useRef(true);
+  const [menuPauses, setMenuPauses] = useState(true);
   const soloObservedPause = useRef(game.pause?.kind === "paused");
   const [tool, setTool] = useState<GameTool>(null);
   const [rollAnchor, setRollAnchor] = useState<{
@@ -1068,7 +1076,6 @@ function MatchView({
     y: number;
   } | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
   const [saleSelection, setSaleSelection] = useState<{
     gameId: string;
     pending: PublicState["pending"];
@@ -1131,6 +1138,7 @@ function MatchView({
       setPauseOpen(false);
     } else if (
       pauseOpen &&
+      menuShouldPause.current &&
       !authoritative.pause &&
       authoritative.pending &&
       authoritative.pending.deadline > Date.now()
@@ -1139,8 +1147,15 @@ function MatchView({
       room.act({ type: "RequestPause" }, pauseSeat);
     }
   }, [solo, pauseSeat, pauseBlocked, pauseOpen, authoritative, room.act]);
-  const openPauseMenu = (settingsTab?: SettingsTab) => {
-    soloMenuPause.current = solo;
+  const openPauseMenu = (
+    settingsTab?: SettingsTab,
+    pauseGame = true,
+    trigger?: HTMLButtonElement,
+  ) => {
+    overlayTrigger.current = trigger ?? null;
+    menuShouldPause.current = pauseGame;
+    setMenuPauses(pauseGame);
+    soloMenuPause.current = solo && pauseGame;
     setPauseSettingsTab(settingsTab);
     setTool(null);
     setInspectorOpen(false);
@@ -1235,9 +1250,7 @@ function MatchView({
       ? t("Carnet de voyage", "Game log")
       : tool === "proof"
         ? diceToolLabel
-        : tool === "rules"
-          ? t("Réglages de la partie", "Game settings")
-          : t("Votre salle", "Your room");
+        : t("Votre salle", "Your room");
   const journalEntries = history
     .map((event, index) => ({ content: eventText(event, game), key: index }))
     .filter((item) => item.content !== null)
@@ -1325,24 +1338,16 @@ function MatchView({
         overlayTrigger.current?.focus();
       }
     };
-    const fullscreenChanged = () =>
-      setFullscreen(Boolean(document.fullscreenElement));
     window.addEventListener("keydown", closeOverlays);
-    document.addEventListener("fullscreenchange", fullscreenChanged);
     return () => {
       window.removeEventListener("keydown", closeOverlays);
-      document.removeEventListener("fullscreenchange", fullscreenChanged);
     };
   }, []);
-  function toggleFullscreen() {
-    if (document.fullscreenElement)
-      void document.exitFullscreen().catch(() => {});
-    else void document.documentElement.requestFullscreen().catch(() => {});
-  }
   return (
     <>
       <div className="board-stage">
         <SceneBoundary
+          onError={() => setBoardZoomAvailable(false)}
           fallback={
             <BoardFallback
               state={game}
@@ -1372,6 +1377,11 @@ function MatchView({
               pickKey={pickKey}
               pickSeat={controlSeat ?? undefined}
               zoom={zoom}
+              onZoom={(next) => updateSettings({ boardZoom: next })}
+              viewResetKey={viewResetKey}
+              viewLocked={viewLocked}
+              interactiveZoom
+              onWebGlAvailableChange={setBoardZoomAvailable}
               lowGraphics={lowGraphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? salePending.seat : undefined}
@@ -1386,12 +1396,23 @@ function MatchView({
       <header className="match-topbar">
         <Logo small />
         <div className="match-time">
-          {game.config.roundLimit < 10_000 && (
-            <span>
-              {t(
-                `Manche ${game.round}/${game.config.roundLimit}`,
-                `Round ${game.round}/${game.config.roundLimit}`,
-              )}
+          {game.config.timeLimitMinutes !== null &&
+            game.config.roundLimit < 10_000 && (
+              <span>
+                {t(
+                  `Manche ${game.round}/${game.config.roundLimit}`,
+                  `Round ${game.round}/${game.config.roundLimit}`,
+                )}
+              </span>
+            )}
+          {game.config.timeLimitMinutes === null && (
+            <span
+              className="match-clock"
+              role="img"
+              aria-label={t("Durée illimitée", "Unlimited duration")}
+              title={t("Durée illimitée", "Unlimited duration")}
+            >
+              ∞
             </span>
           )}
           <MatchClock
@@ -1435,6 +1456,20 @@ function MatchView({
           onChange={onStreamerChange}
           compact
         />
+        <ActionButton
+          type="button"
+          className="game-tool-button"
+          aria-label={t("Recentrer le plateau", "Reset board view")}
+          title={t("Recentrer le plateau", "Reset board view")}
+          disabled={!boardZoomAvailable}
+          disabledReason={t(
+            "Le recentrage est disponible sur le plateau 3D.",
+            "Reset view is available on the 3D board.",
+          )}
+          onClick={onViewReset}
+        >
+          <Icon name="target" size={18} />
+        </ActionButton>
         <button
           type="button"
           className="game-tool-button"
@@ -1462,12 +1497,14 @@ function MatchView({
         <button
           type="button"
           className="game-tool-button"
-          aria-label={t("Réglages de la partie", "Game settings")}
-          title={t("Réglages de la partie", "Game settings")}
-          aria-expanded={tool === "rules"}
-          onClick={(event) => showTool("rules", event.currentTarget)}
+          aria-label={t("Règles de la partie", "Game rules")}
+          title={t("Règles de la partie", "Game rules")}
+          aria-haspopup="dialog"
+          onClick={(event) =>
+            openPauseMenu("rules", false, event.currentTarget)
+          }
         >
-          <Icon name="settings" size={18} />
+          <Icon name="sliders" size={18} />
         </button>
         <button
           type="button"
@@ -1499,23 +1536,6 @@ function MatchView({
           onClick={onHelp}
         >
           <Icon name="help" size={18} />
-        </button>
-        <button
-          type="button"
-          className="game-tool-button"
-          aria-label={
-            fullscreen
-              ? t("Quitter le plein écran", "Exit fullscreen")
-              : t("Plein écran", "Fullscreen")
-          }
-          title={
-            fullscreen
-              ? t("Quitter le plein écran", "Exit fullscreen")
-              : t("Plein écran", "Fullscreen")
-          }
-          onClick={toggleFullscreen}
-        >
-          <Icon name="fullscreen" size={17} />
         </button>
         <button
           type="button"
@@ -1709,7 +1729,7 @@ function MatchView({
             id="game-tool-panel"
             ref={toolRef}
             key={tool}
-            className={`tool-drawer${tool === "journal" ? " tool-drawer--journal" : tool === "rules" ? " tool-drawer--rules" : ""}`}
+            className={`tool-drawer${tool === "journal" ? " tool-drawer--journal" : ""}`}
             aria-labelledby="tool-title"
             initial={reducedMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1765,21 +1785,6 @@ function MatchView({
                 }}
                 expanded
               />
-            )}
-            {tool === "rules" && (
-              <div className="match-rules">
-                <p className="field-note">
-                  {t(
-                    "Les réglages sont fixés pour toute la durée de cette partie.",
-                    "Settings are fixed for the duration of this game.",
-                  )}
-                </p>
-                <RoomSettingsFields
-                  config={config}
-                  disabled
-                  onChange={() => {}}
-                />
-              </div>
             )}
             {tool === "room" && (
               <div className="room-tool">
@@ -1866,14 +1871,19 @@ function MatchView({
         )}
       </AnimatePresence>
 
-      <NetworkStatus
-        className="match-network"
-        ping={cloudflarePing}
-        onClick={() => openPauseMenu("debug")}
-      />
+      {debug && (
+        <NetworkStatus
+          className="match-network"
+          ping={cloudflarePing}
+          onClick={() => openPauseMenu("debug")}
+        />
+      )}
       {pauseOpen && (
         <PauseMenu
           initialSettingsTab={pauseSettingsTab}
+          rules={{ config, disabled: true, onChange: () => {} }}
+          willPause={menuPauses}
+          returnFocus={overlayTrigger}
           game={authoritative}
           mySeats={mySeats}
           blocked={pauseBlocked}
@@ -1897,10 +1907,11 @@ function MatchView({
             setPauseOpen(false);
             onLeave();
           }}
-          zoom={zoom}
-          onZoom={onZoom}
-          lowGraphics={lowGraphics}
-          onGraphicsChange={onGraphicsChange}
+          onViewReset={onViewReset}
+          zoomAvailable={boardZoomAvailable}
+          streamer={streamer}
+          onStreamerChange={onStreamerChange}
+          debugAvailable={debug}
           connection={room.connection}
           ping={cloudflarePing}
           roomDebug={room.roomDebug}
@@ -1990,25 +2001,24 @@ function App() {
     null,
   );
   const [copied, setCopied] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [lowGraphics, setLowGraphics] = useState(() => {
-    try {
-      return localStorage.getItem("polytour.lowGraphics") === "true";
-    } catch {
-      return false;
-    }
-  });
-  function changeGraphics(low: boolean) {
-    setLowGraphics(low);
-    try {
-      localStorage.setItem("polytour.lowGraphics", String(low));
-    } catch {
-      // The local choice still works when browser storage is unavailable.
-    }
+  const {
+    boardZoom: zoom,
+    boardViewLocked: viewLocked,
+    graphics,
+  } = useSettings();
+  const lowGraphics = graphics === "low";
+  const [viewResetKey, setViewResetKey] = useState(0);
+  const [previewZoomAvailable, setPreviewZoomAvailable] = useState(false);
+  function resetBoardView() {
+    updateSettings({ boardZoom: BOARD_ZOOM.default });
+    setViewResetKey((key) => key + 1);
   }
+  const debug =
+    import.meta.env.DEV ||
+    new URLSearchParams(window.location.search).has("debug");
   const { serverState, viewState, reducedMotion } = useDirector();
   const room = useRoom(credentials);
-  const cloudflarePing = useCloudflarePing(true, room.connection);
+  const cloudflarePing = useCloudflarePing(debug, room.connection);
   const serverConfigKey = room.lobby ? JSON.stringify(room.lobby.config) : null;
   const activePosition = viewState?.players.find(
     (player) => player.seat === viewState.activeSeat,
@@ -2111,7 +2121,6 @@ function App() {
   useEffect(() => {
     if (isGame) setHomeSettingsTab(null);
   }, [isGame]);
-  const debug = new URLSearchParams(window.location.search).has("debug");
   // Room controls stay steady while a quick change awaits its answer: the
   // room hook already drops a second command until the first is answered.
   const roomOffline = room.leaving || room.connection !== "online";
@@ -2160,8 +2169,8 @@ function App() {
               onClick={() => setHomeSettingsTab("video")}
             >
               <Icon name="settings" size={18} />
+              <span>{t("Réglages", "Settings")}</span>
             </button>
-            <LanguagePicker />
             <button
               type="button"
               className="text-button help-button"
@@ -2286,6 +2295,7 @@ function App() {
           <div className="welcome-world">
             <div className="welcome-board-preview">
               <SceneBoundary
+                onError={() => setPreviewZoomAvailable(false)}
                 fallback={
                   <BoardFallback
                     state={null}
@@ -2309,6 +2319,9 @@ function App() {
                     onSelect={setSelected}
                     preview
                     zoom={zoom}
+                    viewResetKey={viewResetKey}
+                    viewLocked={viewLocked}
+                    onWebGlAvailableChange={setPreviewZoomAvailable}
                     lowGraphics={lowGraphics}
                   />
                 </Suspense>
@@ -2449,22 +2462,28 @@ function App() {
             {you === null && room.you && (
               <WaitingNotice lobby={room.lobby} member={room.you.member} />
             )}
-            <RoomSettings
-              config={config}
-              disabled={!leader || roomOffline}
-              onChange={setConfig}
-              save={
-                leader
-                  ? {
-                      dirty: settingsDirty,
-                      onSave: () => room.settings(config),
-                    }
-                  : undefined
-              }
-            />
+            <button
+              type="button"
+              className="settings-trigger"
+              aria-haspopup="dialog"
+              aria-expanded={homeSettingsTab === "rules"}
+              onClick={() => setHomeSettingsTab("rules")}
+            >
+              <Icon name="sliders" size={21} />
+              <span className="settings-trigger-title">
+                {t("Règles de la partie", "Game rules")}
+              </span>
+              <span className="settings-trigger-hint">
+                {leader
+                  ? t("Personnaliser", "Customize")
+                  : t("Consulter", "View")}
+              </span>
+              <Icon name="arrow" size={17} />
+            </button>
           </div>
           <div className="room-preview">
             <SceneBoundary
+              onError={() => setPreviewZoomAvailable(false)}
               fallback={
                 <BoardFallback
                   state={null}
@@ -2487,6 +2506,9 @@ function App() {
                   onSelect={setSelected}
                   preview
                   zoom={zoom}
+                  viewResetKey={viewResetKey}
+                  viewLocked={viewLocked}
+                  onWebGlAvailableChange={setPreviewZoomAvailable}
                   lowGraphics={lowGraphics}
                 />
               </Suspense>
@@ -2501,10 +2523,8 @@ function App() {
           config={config}
           selected={selected ?? activePosition ?? null}
           onSelect={setSelected}
-          zoom={zoom}
-          onZoom={setZoom}
-          lowGraphics={lowGraphics}
-          onGraphicsChange={changeGraphics}
+          viewResetKey={viewResetKey}
+          onViewReset={resetBoardView}
           streamer={streamer}
           onStreamerChange={changeStreamer}
           copied={copied}
@@ -2569,28 +2589,48 @@ function App() {
           error={null}
           onClose={() => setHomeSettingsTab(null)}
           onLeave={() => {}}
-          zoom={zoom}
-          onZoom={setZoom}
-          lowGraphics={lowGraphics}
-          onGraphicsChange={changeGraphics}
+          onViewReset={resetBoardView}
+          zoomAvailable={previewZoomAvailable}
+          streamer={streamer}
+          onStreamerChange={changeStreamer}
+          debugAvailable={debug}
           connection={room.connection}
           ping={cloudflarePing}
           roomDebug={credentials ? room.roomDebug : null}
           ownSeat={room.you?.seat ?? null}
           onDebugActiveChange={room.setDebugActive}
           bank={null}
+          rules={
+            room.lobby
+              ? {
+                  config,
+                  disabled: !leader || roomOffline,
+                  onChange: setConfig,
+                  save: leader
+                    ? {
+                        dirty: settingsDirty,
+                        onSave: () => room.settings(config),
+                      }
+                    : undefined,
+                }
+              : null
+          }
         />
       )}
       {!isGame && (
         <footer className="lobby-footer">
           <span className="lobby-credit">
             <span>{t("Crée par Poli & GJJS", "Made by Poli & GJJS")}</span>
-            <span aria-hidden="true">-</span>
-            <NetworkStatus
-              className="lobby-network"
-              ping={cloudflarePing}
-              onClick={() => setHomeSettingsTab("debug")}
-            />
+            {debug && (
+              <>
+                <span aria-hidden="true">-</span>
+                <NetworkStatus
+                  className="lobby-network"
+                  ping={cloudflarePing}
+                  onClick={() => setHomeSettingsTab("debug")}
+                />
+              </>
+            )}
           </span>
           <a
             href="https://github.com/Rusutsu-Studios/Polytour/"

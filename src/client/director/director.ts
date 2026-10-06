@@ -1,6 +1,11 @@
 import { useSyncExternalStore } from "react";
 import type { GameEvent, PublicState } from "../../shared/engine/index.js";
 import { applyEvent } from "../../shared/engine/index.js";
+import {
+  getReducedMotion,
+  subscribeReducedMotion,
+  updateSettings,
+} from "../settings/store.js";
 
 type SalaryPaid = Extract<GameEvent, { type: "SalaryPaid" }>;
 export type AnimationContext = {
@@ -34,26 +39,12 @@ const CATCH_UP_BATCHES = 2;
 const CATCH_UP_PLAYBACK_RATE = 2.5;
 /** Beyond this backlog, snap to the server state instead of replaying it. */
 const RECOVERY_BACKLOG = 40;
-/** The player's own answer to reduced motion, which outlasts a reload. */
-const MOTION_KEY = "polytour.reducedMotion";
-function storedReducedMotion(): boolean | null {
-  try {
-    const stored = localStorage.getItem(MOTION_KEY);
-    return stored === "true" ? true : stored === "false" ? false : null;
-  } catch {
-    return null;
-  }
-}
-function systemReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 class Director {
   private value: DirectorState = {
     serverState: null,
     viewState: null,
     busy: false,
-    reducedMotion: storedReducedMotion() ?? systemReducedMotion(),
+    reducedMotion: getReducedMotion(),
     history: [],
   };
   private listeners = new Set<() => void>();
@@ -195,17 +186,15 @@ class Director {
     for (const presenter of this.presenters)
       presenter.snap(this.value.serverState);
   };
-  /** Keep `remember` false for a system change: only the player decides. */
-  setReducedMotion(reducedMotion: boolean, remember = true) {
-    if (remember)
-      try {
-        localStorage.setItem(MOTION_KEY, String(reducedMotion));
-      } catch {
-        // The choice still holds for this match without browser storage.
-      }
+  setReducedMotion(reducedMotion: boolean) {
+    updateSettings({ reducedMotion: reducedMotion ? "on" : "off" });
+  }
+  syncReducedMotion = () => {
+    const reducedMotion = getReducedMotion();
+    if (reducedMotion === this.value.reducedMotion) return;
     this.update({ reducedMotion });
     if (reducedMotion) this.recoverToServer();
-  }
+  };
 }
 
 export const director = new Director();
@@ -216,10 +205,4 @@ export function useDirector() {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) director.recoverToServer();
 });
-window
-  .matchMedia("(prefers-reduced-motion: reduce)")
-  .addEventListener("change", (event) => {
-    // A stored answer wins. The system only supplies the first default.
-    if (storedReducedMotion() === null)
-      director.setReducedMotion(event.matches, false);
-  });
+subscribeReducedMotion(director.syncReducedMotion);
