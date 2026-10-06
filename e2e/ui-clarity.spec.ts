@@ -814,7 +814,10 @@ for (const size of DESKTOP_SIZES) {
     page,
   }) => {
     await page.setViewportSize(size);
-    await page.clock.install();
+    // A frozen clock keeps the four-second hold open for slow 4K screenshots.
+    const clockTime = Date.now();
+    await page.clock.install({ time: clockTime - 60 * 60_000 });
+    await page.clock.pauseAt(clockTime);
     const room = await decisionRoom(page, 100_000, (state) => ({
       ...state,
       players: state.players.map((player) =>
@@ -822,6 +825,8 @@ for (const size of DESKTOP_SIZES) {
       ),
     }));
     await page.keyboard.press("Escape");
+    // Let the board draw a few frames behind the notice.
+    await page.clock.runFor(1500);
     const notice = page.locator('.notice-dialog[data-moment="notice"][open]');
     const title = page.locator("#notice-title");
     const fits = async () => {
@@ -843,8 +848,6 @@ for (const size of DESKTOP_SIZES) {
       },
     ]);
     await expect(notice).toBeVisible();
-    // Freeze once the board has drawn, so slow 4K screenshots keep the hold open.
-    await page.clock.pauseAt(Date.now() + 1000);
     await expect(title).toHaveText(
       /^Vous n’avez pas assez d’argent pour acheter \S/,
     );
