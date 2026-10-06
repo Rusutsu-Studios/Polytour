@@ -106,7 +106,6 @@ for (const locale of ["fr", "en"] as const) {
             festivals: "Festivals initiaux",
             building: "Les bots peuvent construire",
             noBuilding: "Construction désactivée pour tous les niveaux.",
-            dice: "Mêmes dés et règles que vous.",
             easyDescription: "profite moins bien de certaines occasions",
             hardDescription: "garde une réserve pour les loyers",
           }
@@ -123,7 +122,6 @@ for (const locale of ["fr", "en"] as const) {
             festivals: "Starting festivals",
             building: "Bots can build",
             noBuilding: "Building is disabled at every level.",
-            dice: "The same dice and rules as you.",
             easyDescription: "occasionally misses opportunities",
             hardDescription: "keeps cash for rent",
           };
@@ -134,7 +132,9 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       difficulty.getByRole("radio", { name: words.medium, exact: true }),
     ).toBeChecked();
-    await expect(quick).toContainText(words.dice);
+    await expect(
+      quick.locator(".room-setting-bot-description, .room-setting-bot-rules"),
+    ).toHaveCount(0);
     for (const viewport of [
       { width: 1280, height: 720 },
       { width: 1440, height: 900 },
@@ -153,10 +153,16 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       difficulty.getByRole("radio", { name: words.easy, exact: true }),
     ).toBeChecked();
-    await expect(quick).toContainText(words.easyDescription);
-    await expect(difficulty).toHaveAccessibleDescription(
-      new RegExp(words.easyDescription),
+    const helpName = (label: string) =>
+      locale === "fr" ? `À propos de ${label}` : `About ${label}`;
+    await difficulty
+      .getByRole("button", { name: helpName(words.group), exact: true })
+      .click();
+    await expect(page.locator("#disabled-action-hint")).toContainText(
+      words.easyDescription,
     );
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#disabled-action-hint")).not.toBeVisible();
     await quick.getByRole("slider", { name: words.festivals }).focus();
     await page.keyboard.press("Home");
     await page.getByLabel(words.name).fill(`Difficulty ${locale}`);
@@ -221,10 +227,24 @@ for (const locale of ["fr", "en"] as const) {
     const sheet = page.locator(".settings-dialog");
     const settingsDifficulty = sheet.getByRole("group", { name: words.group });
     await settingsDifficulty.getByRole("radio", { name: words.hard }).check();
-    await expect(settingsDifficulty).toContainText(words.hardDescription);
+    const hardHelp = settingsDifficulty.getByRole("button", {
+      name: helpName(words.hard),
+      exact: true,
+    });
+    await hardHelp.click();
+    await expect(page.locator("#disabled-action-hint")).toContainText(
+      words.hardDescription,
+    );
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeVisible();
     // The custom building rule remains an independent restriction on every level.
     await sheet.getByLabel(words.building, { exact: true }).uncheck();
-    await expect(settingsDifficulty).toContainText(words.noBuilding);
+    await hardHelp.click();
+    await expect(page.locator("#disabled-action-hint")).toContainText(
+      words.noBuilding,
+    );
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeVisible();
     await expect(
       settingsDifficulty.getByRole("radio", { name: words.hard }),
     ).toBeChecked();
@@ -351,6 +371,34 @@ test("a guest can read each bot level but cannot cycle it", async ({
       .getByRole("group", { name: "Default bot difficulty" });
     for (const radio of await defaults.getByRole("radio").all())
       await expect(radio).toBeDisabled();
+    const help = defaults.getByRole("button", {
+      name: "About Default bot difficulty",
+      exact: true,
+    });
+    await expect(help).toBeEnabled();
+    await help.click();
+    await expect(guest.locator("#disabled-action-hint strong")).toHaveText(
+      "Default bot difficulty",
+    );
+    await expect(help).toHaveAttribute("aria-expanded", "true");
+    await page.locator(".settings-trigger").click();
+    await page
+      .locator(".settings-dialog")
+      .getByRole("group", { name: "Default bot difficulty" })
+      .getByRole("radio", { name: "Hard", exact: true })
+      .check();
+    await hostRoom.command("settings", () => page.keyboard.press("Escape"));
+    await expect(guest.locator("#disabled-action-hint")).toContainText(
+      "keeps cash for rent",
+    );
+    await expect(help).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      defaults.getByRole("radio", { name: "Hard", exact: true }),
+    ).toBeChecked();
+    await guest.keyboard.press("Escape");
+    await expect(guest.locator("#disabled-action-hint")).not.toBeVisible();
+    await expect(help).toHaveAttribute("aria-expanded", "false");
+    await expect(guest.locator(".settings-dialog")).toBeVisible();
   } finally {
     await context.close();
   }

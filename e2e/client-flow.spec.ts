@@ -489,11 +489,21 @@ test("win conditions follow the settings draft and saved rules in both languages
   const gifts = dialog.getByLabel("Gifts can cause bankruptcy", {
     exact: true,
   });
-  await expect(gifts).toHaveAccessibleDescription(
-    /Birthday and Charity cards.*full payment/,
+  const giftHelp = dialog.getByRole("button", {
+    name: "About Gifts can cause bankruptcy",
+    exact: true,
+  });
+  await giftHelp.click();
+  await expect(page.locator("#disabled-action-hint")).toContainText(
+    /Birthday.*Charity.*full payment/,
   );
+  await page.keyboard.press("Escape");
   await gifts.uncheck();
-  await expect(gifts).toHaveAccessibleDescription(/capped at available cash/);
+  await giftHelp.click();
+  await expect(page.locator("#disabled-action-hint")).toContainText(
+    /capped at available cash/,
+  );
+  await page.keyboard.press("Escape");
   await gifts.check();
   for (const size of [
     { width: 1280, height: 720 },
@@ -518,9 +528,10 @@ test("win conditions follow the settings draft and saved rules in both languages
         bottom: rect.bottom,
         footerBottom: footer.getBoundingClientRect().bottom,
         overflow: body.scrollWidth > body.clientWidth,
+        // Scroll positions use whole pixels while layout edges can be fractional.
         ordered:
           summary.getBoundingClientRect().bottom <=
-          footer.getBoundingClientRect().top,
+          footer.getBoundingClientRect().top + 1,
       };
     });
     expect(layout.top).toBeGreaterThanOrEqual(0);

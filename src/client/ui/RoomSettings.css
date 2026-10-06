@@ -33,6 +33,12 @@
   font-weight: 650;
 }
 
+.room-setting-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .room-setting-heading output {
   color: var(--ink);
   font-size: 26px;
@@ -226,6 +232,16 @@
   cursor: pointer;
 }
 
+.room-setting-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-setting-toggle-row .room-setting-toggle {
+  flex: 1;
+}
+
 .room-setting-toggle input {
   flex: 0 0 auto;
   width: 20px;
@@ -256,12 +272,6 @@
   max-width: 65ch;
   margin-top: 10px;
   line-height: 1.6;
-}
-
-.room-setting-help {
-  margin: 0 0 8px 30px;
-  color: var(--muted);
-  font-size: 14px;
 }
 
 .room-settings-wins {
@@ -320,16 +330,12 @@
   grid-column: 1 / -1;
 }
 
-.room-setting-bot-description {
-  margin: 10px 0 0;
-  color: var(--ink);
-  text-wrap: pretty;
-}
-
-.room-setting-bot-rules {
-  margin: 4px 0 0;
-  color: var(--muted);
-  text-wrap: pretty;
+.room-setting-bot-option {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
 }
 
 .room-settings input:focus-visible,

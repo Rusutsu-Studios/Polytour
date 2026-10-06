@@ -27,6 +27,7 @@ export default defineConfig({
       testMatch: [
         "client-flow.spec.ts",
         "ui-clarity.spec.ts",
+        "settings-help.spec.ts",
         "network-flow.spec.ts",
         "language-flow.spec.ts",
         "pause-menu.spec.ts",

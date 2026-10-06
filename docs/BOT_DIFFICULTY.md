@@ -38,7 +38,9 @@ Chance effects make longer-term outcomes harder to estimate.
 ## What players see
 
 - Three labelled default choices directly on the welcome screen and in room
-  settings, with a short French or English explanation of the selected policy.
+  settings. Small question-mark buttons open French or English explanations
+  in the existing popup: the default's selected policy and, in the full menu,
+  each individual level. Every room setting has help, including read-only ones.
 - A visible button on each bot's lobby card cycles Easy, Medium and Hard. Only
   the leader can change it, before starting. A room can contain different levels;
   bots without an individual choice follow the default. Changing that default
