@@ -57,7 +57,7 @@
     transform: translateY(-2px);
   }
 }
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion="true"] {
   .not-found-car {
     animation: none;
   }

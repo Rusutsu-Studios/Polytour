@@ -17,11 +17,14 @@ type IconName =
   | "journal"
   | "shield"
   | "settings"
+  | "sliders"
   | "search"
   | "exit"
   | "pause"
   | "fullscreen"
   | "graphics"
+  | "reset"
+  | "target"
   | "lock"
   | "pin"
   | "crown"
@@ -50,12 +53,17 @@ const paths: Record<IconName, string> = {
   shield: "m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-5 10 3 3 7-7",
   settings:
     "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7ZM10 2h4v3l2 1 2-2 2 2-2 2 1 2h3v4h-3l-1 2 2 2-2 2-2-2-2 1v3h-4v-3l-2-1-2 2-2-2 2-2-1-2H2v-4h3l1-2-2-2 2-2 2 2 2-1V2Z",
+  sliders:
+    "M4 3v5m0 4v9M12 3v9m0 4v5M20 3v2m0 4v12M1 8h6v4H1V8Zm8 4h6v4H9v-4Zm8-7h6v4h-6V5Z",
   search: "M21 21l-5-5m-6 2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
   exit: "M9 3H3v18h6m-2-9h14m-5-5 5 5-5 5",
   pause: "M8 5v14M16 5v14",
   fullscreen: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
   graphics:
     "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm4 18h8m-4-4v4",
+  reset: "M3 4v6h6M3 10a9 9 0 1 1 2.6 8.4M12 8v4l3 2",
+  target:
+    "M12 2v4m0 12v4M2 12h4m12 0h4M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM12 12h.01",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5V11Zm7 4v2",
   pin: "M12 22s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12Zm0-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   crown: "M4 18h16M4 7l4 4 4-6 4 6 4-4-1.5 11h-13L4 7Z",

@@ -1,28 +1,19 @@
 import { motion } from "motion/react";
-import {
-  type KeyboardEvent,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PublicState, Seat } from "../../shared/engine/index.js";
-import { director, useDirector } from "../director/director.js";
+import { useDirector } from "../director/director.js";
 import { useLocale } from "../i18n.js";
 import type { RoomDebugState } from "../net/room-debug.js";
 import type { PingState } from "../net/use-cloudflare-ping.js";
-import ActionButton from "./ActionButton.js";
-import { fullMoney } from "./board-display.js";
-import GraphicsToggle from "./GraphicsToggle.js";
 import Icon from "./Icon.js";
-import RoomDebug, { translatedRegion } from "./RoomDebug.js";
+import type { RoomSettingsProps } from "./RoomSettings.js";
+import SettingsPanel, { type SettingsTab } from "./SettingsPanel.js";
 import "./PauseMenu.css";
 
 type Page = "menu" | "settings" | "confirm-leave";
-export type SettingsTab = "game" | "video" | "audio" | "debug";
-const TABS: readonly SettingsTab[] = ["game", "video", "audio", "debug"];
+
+export type { SettingsTab } from "./SettingsPanel.js";
 
 export type PauseMenuProps = {
   game: PublicState | null;
@@ -36,10 +27,13 @@ export type PauseMenuProps = {
   error: string | null;
   onClose: () => void;
   onLeave: () => void;
-  zoom: number;
-  onZoom: (zoom: number) => void;
-  lowGraphics: boolean;
-  onGraphicsChange: (low: boolean) => void;
+  /** Recentres the 3D board; the control is disabled without it. */
+  onViewReset: () => void;
+  /** False while the flat fallback board is on screen. */
+  zoomAvailable: boolean;
+  streamer: boolean;
+  onStreamerChange: (enabled: boolean) => void;
+  debugAvailable: boolean;
   connection: string;
   ping: PingState;
   roomDebug: RoomDebugState | null;
@@ -48,6 +42,12 @@ export type PauseMenuProps = {
   onDebugActiveChange: (active: boolean) => void;
   /** The bank's running totals, from the authoritative match state. */
   bank: { received: number; paidOut: number; balance: number } | null;
+  /** The room rules, when this screen belongs to a room. Null on the home screen. */
+  rules?: RoomSettingsProps | null;
+  /** False when this screen was opened only to be read, leaving a solo game running. */
+  willPause?: boolean;
+  /** The control to focus again on close, when the opener knows it. */
+  returnFocus?: { current: HTMLElement | null };
 };
 
 // THESIS: A small pause sheet lets the player adjust their view and return to play.
@@ -67,25 +67,28 @@ export default function PauseMenu({
   error,
   onClose,
   onLeave,
-  zoom,
-  onZoom,
-  lowGraphics,
-  onGraphicsChange,
+  onViewReset,
+  zoomAvailable,
+  streamer,
+  onStreamerChange,
+  debugAvailable,
   connection,
   ping,
   roomDebug,
   ownSeat,
   onDebugActiveChange,
   bank,
+  rules = null,
+  willPause = true,
+  returnFocus,
 }: PauseMenuProps) {
-  const { locale, setLocale, t } = useLocale();
+  const { t } = useLocale();
   const { reducedMotion } = useDirector();
   const [page, setPage] = useState<Page>(
     !game || initialSettingsTab ? "settings" : "menu",
   );
-  const [tab, setTab] = useState<SettingsTab>(
-    initialSettingsTab ?? (game ? "game" : "video"),
-  );
+  const [debugActive, setDebugActive] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("video");
   const [now, setNow] = useState(Date.now());
   const paused = game?.pause?.kind === "paused";
   const vote = game?.pause?.kind === "vote" ? game.pause : null;
@@ -101,7 +104,7 @@ export default function PauseMenu({
         "La partie est en pause. Les tours et les chronomètres sont arrêtés.",
         "The game is paused. Turns and clocks are stopped.",
       )
-    : solo && eligible.length > 0 && game?.status === "active"
+    : willPause && solo && eligible.length > 0 && game?.status === "active"
       ? t("Mise en pause de la partie…", "Pausing the game…")
       : null;
   const cooldown = Math.max(
@@ -122,27 +125,17 @@ export default function PauseMenu({
   const settingsRef = useRef<HTMLButtonElement>(null);
   const leaveRef = useRef<HTMLButtonElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
-  const tabRefs = useRef<
-    Partial<Record<SettingsTab, HTMLButtonElement | null>>
-  >({});
   const returnTo = useRef<"continue" | "settings" | "leave">("continue");
-  const debugActive = page === "settings" && tab === "debug";
-  const sample = ping.status === "success" ? ping.value : null;
-  const unavailable = t("Indisponible", "Unavailable");
-  const entryPoint =
-    sample?.runtime === "local"
-      ? t("Local", "Local")
-      : sample?.colo
-        ? [sample.colo, sample.location].filter(Boolean).join(" · ")
-        : unavailable;
-  const regionLabel = translatedRegion(sample?.region ?? null, t);
+  const handleDebugActiveChange = useCallback(
+    (active: boolean) => {
+      setDebugActive(active);
+      onDebugActiveChange(active);
+    },
+    [onDebugActiveChange],
+  );
 
-  // Stop room-diagnostic traffic before timers or events can see a closed tab.
-  useLayoutEffect(() => {
-    onDebugActiveChange(debugActive);
-    return () => onDebugActiveChange(false);
-  }, [debugActive, onDebugActiveChange]);
-
+  const returnFocusRef = useRef(returnFocus);
+  returnFocusRef.current = returnFocus;
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -150,6 +143,11 @@ export default function PauseMenu({
     dialog.showModal();
     return () => {
       dialog.close();
+      const named = returnFocusRef.current?.current;
+      if (named?.isConnected) {
+        named.focus();
+        return;
+      }
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
         previousFocus.focus();
       }
@@ -190,43 +188,31 @@ export default function PauseMenu({
     returnTo.current = page === "settings" ? "settings" : "leave";
     setPage("menu");
   };
+  // Leaders send their rule changes once, whichever way the panel closes.
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+  const flushed = useRef(false);
+  const dirty = Boolean(rules?.save?.dirty);
+  useEffect(() => {
+    if (dirty) flushed.current = false;
+  }, [dirty]);
+  const flushRules = useCallback(() => {
+    const current = rulesRef.current;
+    if (flushed.current || !current || current.disabled) return;
+    if (!current.save?.dirty) return;
+    flushed.current = true;
+    current.save.onSave();
+  }, []);
+  useEffect(() => flushRules, [flushRules]);
+  const closePanel = () => {
+    flushRules();
+    onClose();
+  };
   const dismiss = () => {
+    flushRules();
     if (!game || page === "menu") onClose();
     else backToMenu();
   };
-  const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const index = TABS.indexOf(tab);
-    const nextIndex =
-      event.key === "ArrowRight"
-        ? (index + 1) % TABS.length
-        : event.key === "ArrowLeft"
-          ? (index + TABS.length - 1) % TABS.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? TABS.length - 1
-              : null;
-    if (nextIndex === null) return;
-    event.preventDefault();
-    const next = TABS[nextIndex];
-    if (!next) return;
-    setTab(next);
-    tabRefs.current[next]?.focus();
-  };
-  const tabLabels: Record<SettingsTab, string> = {
-    game: t("Jeu", "Game"),
-    video: t("Vidéo", "Video"),
-    audio: "Audio",
-    debug: t("Débogage", "Debug"),
-  };
-  const connectionLabel =
-    connection === "online"
-      ? t("Connectée", "Connected")
-      : connection === "offline"
-        ? t("Hors ligne", "Offline")
-        : connection === "connecting"
-          ? t("Connexion en cours…", "Connecting…")
-          : t("Reconnexion en cours…", "Reconnecting…");
   const title =
     page === "settings"
       ? t("Réglages", "Settings")
@@ -239,6 +225,7 @@ export default function PauseMenu({
       ref={dialogRef}
       className="pause-dialog"
       data-debug={debugActive}
+      data-tab={page === "settings" ? activeTab : undefined}
       aria-labelledby={`${id}-title`}
       aria-describedby={pauseNote ? `${id}-note` : undefined}
       onCancel={(event) => {
@@ -281,7 +268,7 @@ export default function PauseMenu({
                 ? t("Revenir au plateau", "Back to the board")
                 : t("Fermer les réglages", "Close settings")
             }
-            onClick={onClose}
+            onClick={closePanel}
           >
             <Icon name="close" size={23} />
           </button>
@@ -418,6 +405,7 @@ export default function PauseMenu({
                 onClick={() => setPage("settings")}
               >
                 <Icon name="settings" size={20} />
+                <span>{t("Réglages", "Settings")}</span>
               </button>
               <button
                 ref={leaveRef}
@@ -457,287 +445,23 @@ export default function PauseMenu({
             </div>
           )}
           {page === "settings" && (
-            <>
-              <div
-                className="pause-tabs"
-                role="tablist"
-                aria-label={t("Catégories de réglages", "Settings categories")}
-              >
-                {TABS.map((value) => (
-                  <button
-                    key={value}
-                    ref={(element) => {
-                      tabRefs.current[value] = element;
-                    }}
-                    id={`${id}-tab-${value}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === value}
-                    aria-controls={`${id}-panel-${value}`}
-                    tabIndex={tab === value ? 0 : -1}
-                    onClick={() => setTab(value)}
-                    onKeyDown={handleTabKey}
-                  >
-                    {tabLabels[value]}
-                  </button>
-                ))}
-              </div>
-              {TABS.map((value) => (
-                <div
-                  key={value}
-                  id={`${id}-panel-${value}`}
-                  className="pause-tab-panel"
-                  role="tabpanel"
-                  aria-labelledby={`${id}-tab-${value}`}
-                  hidden={tab !== value}
-                  // biome-ignore lint/a11y/noNoninteractiveTabindex: WAI-ARIA tab panels without controls need a keyboard focus target.
-                  tabIndex={0}
-                >
-                  {value === "game" && (
-                    <div className="pause-setting">
-                      <label htmlFor={`${id}-language`}>
-                        {t("Langue", "Language")}
-                      </label>
-                      <select
-                        id={`${id}-language`}
-                        value={locale}
-                        onChange={(event) =>
-                          setLocale(event.target.value === "en" ? "en" : "fr")
-                        }
-                      >
-                        <option value="fr">Français</option>
-                        <option value="en">English</option>
-                      </select>
-                    </div>
-                  )}
-                  {value === "video" && (
-                    <div className="pause-video-settings">
-                      <GraphicsToggle
-                        lowGraphics={lowGraphics}
-                        onChange={onGraphicsChange}
-                      />
-                      <label className="pause-reduced-motion">
-                        <input
-                          type="checkbox"
-                          checked={reducedMotion}
-                          onChange={(event) =>
-                            director.setReducedMotion(event.target.checked)
-                          }
-                        />
-                        {t("Réduire les animations", "Reduce motion")}
-                      </label>
-                      <div className="pause-setting">
-                        <span id={`${id}-zoom-label`}>
-                          {t("Taille du plateau", "Board size")}
-                        </span>
-                        <fieldset
-                          className="pause-zoom"
-                          aria-labelledby={`${id}-zoom-label`}
-                        >
-                          <ActionButton
-                            type="button"
-                            aria-label={t("Dézoomer le plateau", "Zoom out")}
-                            disabled={zoom <= 0.8}
-                            disabledReason={t(
-                              "Le plateau est déjà dézoomé au maximum.",
-                              "The board is already zoomed out as far as possible.",
-                            )}
-                            onClick={() =>
-                              onZoom(
-                                Math.max(
-                                  0.8,
-                                  Math.round((zoom - 0.1) * 10) / 10,
-                                ),
-                              )
-                            }
-                          >
-                            -
-                          </ActionButton>
-                          <button
-                            type="button"
-                            className="pause-zoom-reset"
-                            onClick={() => onZoom(1)}
-                          >
-                            {t("Recentrer", "Reset view")}
-                          </button>
-                          <ActionButton
-                            type="button"
-                            aria-label={t("Zoomer le plateau", "Zoom in")}
-                            disabled={zoom >= 1.3}
-                            disabledReason={t(
-                              "Le plateau est déjà zoomé au maximum.",
-                              "The board is already zoomed in as far as possible.",
-                            )}
-                            onClick={() =>
-                              onZoom(
-                                Math.min(
-                                  1.3,
-                                  Math.round((zoom + 0.1) * 10) / 10,
-                                ),
-                              )
-                            }
-                          >
-                            +
-                          </ActionButton>
-                          <output aria-labelledby={`${id}-zoom-label`}>
-                            {Math.round(zoom * 100)} %
-                          </output>
-                        </fieldset>
-                      </div>
-                    </div>
-                  )}
-                  {value === "audio" && (
-                    <p className="pause-audio-soon">
-                      {t("Bientôt disponible", "Coming soon")}
-                    </p>
-                  )}
-                  {value === "debug" && debugActive && (
-                    <div
-                      className="pause-debug"
-                      data-runtime={sample?.runtime ?? "unknown"}
-                    >
-                      <div
-                        className="pause-debug-grid"
-                        data-room={Boolean(roomDebug)}
-                      >
-                        {roomDebug && (
-                          <RoomDebug value={roomDebug} ownSeat={ownSeat} />
-                        )}
-                        <section
-                          className="pause-debug-edge"
-                          aria-labelledby={`${id}-http-title`}
-                        >
-                          <h3 id={`${id}-http-title`}>
-                            {t("Connexion HTTP", "HTTP connection")}
-                          </h3>
-                          <dl>
-                            <div>
-                              <dt>{t("Ping Cloudflare", "Cloudflare ping")}</dt>
-                              <dd role="status">
-                                {ping.status === "success"
-                                  ? `${ping.value.latencyMs} ms`
-                                  : ping.status === "loading"
-                                    ? t("Mesure en cours…", "Measuring…")
-                                    : unavailable}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>
-                                {t(
-                                  "Point d’entrée Cloudflare",
-                                  "Cloudflare entry point",
-                                )}
-                              </dt>
-                              <dd>{entryPoint}</dd>
-                            </div>
-                            <div>
-                              <dt>{t("Région", "Region")}</dt>
-                              <dd>{regionLabel}</dd>
-                            </div>
-                            <div>
-                              <dt>{t("Service de jeu", "Game service")}</dt>
-                              <dd>polytour</dd>
-                            </div>
-                            <div>
-                              <dt>{t("Hôte", "Host")}</dt>
-                              <dd>{sample?.hostname ?? unavailable}</dd>
-                            </div>
-                            {game && (
-                              <div>
-                                <dt>
-                                  {t(
-                                    "Connexion de la partie",
-                                    "Game connection",
-                                  )}
-                                </dt>
-                                <dd>{connectionLabel}</dd>
-                              </div>
-                            )}
-                          </dl>
-                          <p className="pause-debug-note">
-                            {ping.status === "success" ? (
-                              <>
-                                {t("Dernière mesure : ", "Last measured: ")}
-                                <time
-                                  dateTime={new Date(
-                                    ping.value.checkedAt,
-                                  ).toISOString()}
-                                >
-                                  {new Date(
-                                    ping.value.checkedAt,
-                                  ).toLocaleTimeString(
-                                    locale === "fr" ? "fr-CH" : "en-GB",
-                                  )}
-                                </time>
-                                {t(" · Toutes les 5 s.", " · Every 5 s.")}
-                              </>
-                            ) : ping.status === "error" ? (
-                              t(
-                                "Mesure impossible. Nouvelle tentative dès que la connexion le permet.",
-                                "Could not measure. Retrying when the connection allows.",
-                              )
-                            ) : (
-                              t(
-                                "Actualisation toutes les 5 s.",
-                                "Updated every 5 s.",
-                              )
-                            )}
-                          </p>
-                          <p className="pause-debug-note">
-                            {t(
-                              "Ping HTTP vers Cloudflare, distinct de la latence de la partie.",
-                              "HTTP ping to Cloudflare, separate from the game’s latency.",
-                            )}
-                          </p>
-                        </section>
-                        {bank && (
-                          <section
-                            className="pause-debug-bank"
-                            aria-labelledby={`${id}-bank-title`}
-                          >
-                            <h3 id={`${id}-bank-title`}>
-                              {t("Banque", "Bank")}
-                            </h3>
-                            <dl>
-                              <div>
-                                <dt>
-                                  {t("Versé aux joueurs", "Paid to players")}
-                                </dt>
-                                <dd>{fullMoney(bank.paidOut)}</dd>
-                              </div>
-                              <div>
-                                <dt>
-                                  {t(
-                                    "Reçu des joueurs",
-                                    "Received from players",
-                                  )}
-                                </dt>
-                                <dd>{fullMoney(bank.received)}</dd>
-                              </div>
-                              <div>
-                                <dt>
-                                  {t("Solde du compte", "Account balance")}
-                                </dt>
-                                <dd data-negative={bank.balance < 0}>
-                                  {bank.balance > 0 ? "+" : ""}
-                                  {fullMoney(bank.balance)}
-                                </dd>
-                              </div>
-                            </dl>
-                            <p className="pause-debug-note">
-                              {t(
-                                "Le compte de la banque démarre à 0. Salaires et primes le font baisser ; taxes et amendes le font monter. Les achats, constructions et ventes de propriétés n’y passent pas.",
-                                "The bank account starts at 0. Salaries and bonuses lower it; taxes and fines raise it. Property purchases, building and sales don’t go through it.",
-                              )}
-                            </p>
-                          </section>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </>
+            <SettingsPanel
+              initialTab={initialSettingsTab}
+              rules={rules}
+              onTabChange={setActiveTab}
+              onViewReset={onViewReset}
+              zoomAvailable={zoomAvailable}
+              streamer={streamer}
+              onStreamerChange={onStreamerChange}
+              debugAvailable={debugAvailable}
+              hasGame={Boolean(game)}
+              connection={connection}
+              ping={ping}
+              roomDebug={roomDebug}
+              ownSeat={ownSeat}
+              onDebugActiveChange={handleDebugActiveChange}
+              bank={bank}
+            />
           )}
         </div>
       </motion.div>
