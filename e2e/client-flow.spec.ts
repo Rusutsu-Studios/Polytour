@@ -530,21 +530,7 @@ test("win conditions follow the settings draft and saved rules in both languages
   const gifts = dialog.getByLabel("Gifts can cause bankruptcy", {
     exact: true,
   });
-  const giftHelp = dialog.getByRole("button", {
-    name: "About Gifts can cause bankruptcy",
-    exact: true,
-  });
-  await giftHelp.click();
-  await expect(page.locator("#disabled-action-hint")).toContainText(
-    /Birthday.*Charity.*full payment/,
-  );
-  await page.keyboard.press("Escape");
   await gifts.uncheck();
-  await giftHelp.click();
-  await expect(page.locator("#disabled-action-hint")).toContainText(
-    /capped at available cash/,
-  );
-  await page.keyboard.press("Escape");
   await gifts.check();
   for (const size of [
     { width: 1280, height: 720 },

@@ -33,16 +33,22 @@ export default function DisabledHints() {
     let anchor: HTMLElement | null = null;
     let previousDescription: string | null = null;
     let pinned = false;
+    let dismissedHelp: HTMLElement | null = null;
     let leaveTimer: number | undefined;
     const cancelLeave = () => {
       window.clearTimeout(leaveTimer);
       leaveTimer = undefined;
     };
+    // A control that acts on click explains itself on hover and focus only:
+    // clicking it runs the action instead of pinning the hint open.
+    const pinnable = (control: HTMLElement) =>
+      control.closest<HTMLElement>("[data-help-pin]")?.dataset.helpPin !==
+      "false";
     const hide = () => {
       cancelLeave();
       if (element.matches(":popover-open")) element.hidePopover();
       if (anchor) {
-        if (element.dataset.hintKind === "help")
+        if (element.dataset.hintKind === "help" && pinnable(anchor))
           anchor.setAttribute("aria-expanded", "false");
         if (previousDescription === null)
           anchor.removeAttribute("aria-describedby");
@@ -61,13 +67,19 @@ export default function DisabledHints() {
         help &&
         !help.matches("[aria-disabled='true'], :disabled") &&
         help.dataset.helpMessage
-      )
+      ) {
+        // Wrapper hints describe the actual input when it is hovered or focused.
+        const input =
+          target instanceof Element
+            ? target.closest<HTMLElement>("input, select, textarea")
+            : null;
         return {
-          control: help,
+          control: input && help.contains(input) ? input : help,
           kind: "help",
           title: help.dataset.helpTitle ?? "",
           message: help.dataset.helpMessage,
         };
+      }
       const control =
         target instanceof Element
           ? (target.closest<HTMLElement>("[aria-disabled='true'], :disabled") ??
@@ -102,7 +114,8 @@ export default function DisabledHints() {
         );
       }
       element.dataset.hintKind = hint.kind;
-      if (hint.kind === "help") anchor.setAttribute("aria-expanded", "true");
+      if (hint.kind === "help" && pinnable(anchor))
+        anchor.setAttribute("aria-expanded", "true");
       const title = element.querySelector("strong");
       if (title && title.textContent !== hint.title)
         title.textContent = hint.title;
@@ -116,12 +129,15 @@ export default function DisabledHints() {
           : document.body;
       if (host.parentElement !== container) container.appendChild(host);
       if (!element.matches(":popover-open")) element.showPopover();
-      const rect = anchor.getBoundingClientRect();
+      const rect = (anchor.closest("label") ?? anchor).getBoundingClientRect();
       const bounds = element.getBoundingClientRect();
       element.style.left = `${Math.max(12, Math.min(window.innerWidth - bounds.width - 12, rect.left + (rect.width - bounds.width) / 2))}px`;
       element.style.top = `${Math.max(12, rect.top >= bounds.height + 20 ? rect.top - bounds.height - 10 : Math.min(window.innerHeight - bounds.height - 12, rect.bottom + 10))}px`;
     };
     const pointer = (event: PointerEvent) => {
+      // Closing a popup can reveal another setting without pointer movement.
+      // Escape stays dismissed until the user moves away or changes focus.
+      if (dismissedHelp) return;
       if (
         element.dataset.hintKind === "help" &&
         element.contains(event.target as Node)
@@ -139,7 +155,20 @@ export default function DisabledHints() {
         }
       } else hide();
     };
+    const move = (event: PointerEvent) => {
+      if (
+        dismissedHelp &&
+        event.target instanceof Node &&
+        !dismissedHelp.contains(event.target)
+      ) {
+        dismissedHelp = null;
+        pointer(event);
+      }
+    };
     const focus = (event: FocusEvent) => {
+      if (event.target instanceof Node && dismissedHelp?.contains(event.target))
+        return;
+      dismissedHelp = null;
       const hint = hintFor(event.target);
       if (hint) show(hint);
       else hide();
@@ -174,7 +203,9 @@ export default function DisabledHints() {
     const toggleHelp = (event: MouseEvent) => {
       const hint = hintFor(event.target);
       if (hint?.kind !== "help") return;
-      if (anchor === hint.control && pinned) hide();
+      dismissedHelp = null;
+      if (!pinnable(hint.control)) hide();
+      else if (anchor === hint.control && pinned) hide();
       else {
         show(hint);
         pinned = true;
@@ -186,8 +217,9 @@ export default function DisabledHints() {
         element.dataset.hintKind === "help" &&
         (pinned || anchor.contains(document.activeElement))
       ) {
-        const rect = anchor.getBoundingClientRect();
-        const visible = anchor.contains(
+        const positionAnchor = anchor.closest("label") ?? anchor;
+        const rect = positionAnchor.getBoundingClientRect();
+        const visible = positionAnchor.contains(
           document.elementFromPoint(
             rect.left + rect.width / 2,
             rect.top + rect.height / 2,
@@ -206,6 +238,10 @@ export default function DisabledHints() {
       if (event.key === "Escape" && element.matches(":popover-open")) {
         event.preventDefault();
         event.stopPropagation();
+        dismissedHelp =
+          anchor?.closest<HTMLElement>(
+            "[data-help-title][data-help-message]",
+          ) ?? null;
         hide();
       }
     };
@@ -235,6 +271,7 @@ export default function DisabledHints() {
       ],
     });
     document.addEventListener("pointerover", pointer);
+    document.addEventListener("pointermove", move);
     document.addEventListener("pointerout", leave);
     document.addEventListener("focusin", focus);
     document.addEventListener("focusout", leave);
@@ -248,6 +285,7 @@ export default function DisabledHints() {
       hide();
       observer.disconnect();
       document.removeEventListener("pointerover", pointer);
+      document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerout", leave);
       document.removeEventListener("focusin", focus);
       document.removeEventListener("focusout", leave);
