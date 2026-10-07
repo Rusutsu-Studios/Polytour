@@ -139,7 +139,7 @@ const tint = new THREE.Color();
  * Bakes static parts into one vertex-coloured geometry, so a whole landmark
  * body costs one draw call and one shadow pass.
  */
-function bake(parts: readonly Part[], keep: readonly string[] = []) {
+export function bake(parts: readonly Part[], keep: readonly string[] = []) {
   const baked = parts.map(
     ({ geometry, color, position, rotation, scale, matrix }) => {
       const part = geometry.index ? geometry.toNonIndexed() : geometry;
