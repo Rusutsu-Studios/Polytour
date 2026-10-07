@@ -14,3 +14,5 @@
 - Quick settings show each label above its value with clear spacing.
 - Bot difficulty explanations stay dismissible with Escape, remain readable
   with keyboard focus, and never pin open when a difficulty is selected.
+- The reset interruption browser check controls animation time so slower
+  runners still exercise input during the transition (#151).

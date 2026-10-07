@@ -2402,9 +2402,7 @@ test("center map and streamer toolbar buttons explain themselves without pinning
   await expect(board).toHaveAttribute("data-board-pitch", "0");
 });
 
-test("center map eases the whole view home and new input interrupts it", async ({
-  page,
-}) => {
+test("center map eases the whole view home", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.addInitScript(() =>
     localStorage.setItem("polytour.lowGraphics", "true"),
@@ -2490,29 +2488,50 @@ test("center map eases the whole view home and new input interrupts it", async (
       path: `.local/verification/smooth-center-${viewport.width}.png`,
     });
   }
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync"]);
+});
+
+test("new zoom input interrupts an active center map transition", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.addInitScript(() =>
+    localStorage.setItem("polytour.lowGraphics", "true"),
+  );
+  const match = await enterMatch(page);
+  const board = page.locator(".canvas-layer");
+  const reset = page.getByRole("button", {
+    name: "Recentrer le plateau",
+    exact: true,
+  });
+  const box = await board.boundingBox();
+  if (!box) throw new Error("Expected the mounted board");
   await dragBoard(
     page,
-    await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
     140,
     60,
   );
+  const beforeReset = await boardView(page);
+  expect(Number(beforeReset[3])).toBeGreaterThan(0);
+  // Control time only for interruption: runner latency can outlast the reset.
+  await freezeClock(page);
   await reset.click();
+  await page.clock.runFor(150);
+  const duringReset = await boardView(page);
+  expect(Number(duringReset[3])).toBeGreaterThan(0);
+  expect(Number(duringReset[3])).toBeLessThan(Number(beforeReset[3]));
   await board.focus();
   await page.keyboard.press("+");
   const interrupted = await boardView(page);
+  expect(Number(interrupted[0])).toBeGreaterThan(Number(duringReset[0]));
   expect(Number(interrupted[3])).toBeGreaterThan(0);
   // Wait beyond the old reset's duration and verify it cannot overwrite new input.
-  await board.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        const started = performance.now();
-        const tick = () =>
-          performance.now() - started >= 700
-            ? resolve()
-            : requestAnimationFrame(tick);
-        tick();
-      }),
-  );
+  await page.clock.runFor(700);
   expect(await boardView(page)).toEqual(interrupted);
   expect(
     match.messages
