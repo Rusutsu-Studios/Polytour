@@ -1461,7 +1461,12 @@ function MatchView({
           type="button"
           className="game-tool-button"
           aria-label={t("Recentrer le plateau", "Reset board view")}
-          title={t("Recentrer le plateau", "Reset board view")}
+          data-help-title={t("Recentrer le plateau", "Reset board view")}
+          data-help-message={t(
+            "Remet le zoom, l’angle et le centrage du plateau à leur position d’origine. Raccourci : 0.",
+            "Puts the board's zoom, angle and centring back to the original view. Shortcut: 0.",
+          )}
+          data-help-pin="false"
           disabled={!boardZoomAvailable}
           disabledReason={t(
             "Le recentrage est disponible sur le plateau 3D.",

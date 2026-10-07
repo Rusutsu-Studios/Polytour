@@ -38,11 +38,15 @@ export default function DisabledHints() {
       window.clearTimeout(leaveTimer);
       leaveTimer = undefined;
     };
+    // A control that acts on click explains itself on hover and focus only:
+    // clicking it runs the action instead of pinning the hint open.
+    const pinnable = (control: HTMLElement) =>
+      control.dataset.helpPin !== "false";
     const hide = () => {
       cancelLeave();
       if (element.matches(":popover-open")) element.hidePopover();
       if (anchor) {
-        if (element.dataset.hintKind === "help")
+        if (element.dataset.hintKind === "help" && pinnable(anchor))
           anchor.setAttribute("aria-expanded", "false");
         if (previousDescription === null)
           anchor.removeAttribute("aria-describedby");
@@ -102,7 +106,8 @@ export default function DisabledHints() {
         );
       }
       element.dataset.hintKind = hint.kind;
-      if (hint.kind === "help") anchor.setAttribute("aria-expanded", "true");
+      if (hint.kind === "help" && pinnable(anchor))
+        anchor.setAttribute("aria-expanded", "true");
       const title = element.querySelector("strong");
       if (title && title.textContent !== hint.title)
         title.textContent = hint.title;
@@ -174,7 +179,8 @@ export default function DisabledHints() {
     const toggleHelp = (event: MouseEvent) => {
       const hint = hintFor(event.target);
       if (hint?.kind !== "help") return;
-      if (anchor === hint.control && pinned) hide();
+      if (!pinnable(hint.control)) hide();
+      else if (anchor === hint.control && pinned) hide();
       else {
         show(hint);
         pinned = true;
