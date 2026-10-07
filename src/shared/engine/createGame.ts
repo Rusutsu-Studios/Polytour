@@ -27,6 +27,7 @@ import {
   isResortTile,
   PAUSE_TIMING,
   ruleEconomy,
+  startLandingSalary,
 } from "../board/index.js";
 import { selectInitialFestivals } from "./festivals.js";
 import { applyEvent, toPublic } from "./reducer.js";
@@ -75,6 +76,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  startLandingBonus: true,
   escapeCard: true,
   chanceRule: "reworked",
   turnOrderRule: "clockwise",
@@ -102,6 +104,17 @@ export function worldTourRule(
 /** Saves before rules version 10 keep the original card set. */
 export function chanceRule(config: Pick<GameConfig, "chanceRule">): ChanceRule {
   return config.chanceRule ?? "original";
+}
+/**
+ * The salary an arrival on Start pays: the bonus rate from rules version 11,
+ * and the flat salary on saves made before it.
+ */
+export function arrivalSalary(
+  config: Pick<GameConfig, "startSalary" | "startLandingBonus">,
+): number {
+  return config.startLandingBonus === true
+    ? startLandingSalary(config.startSalary)
+    : config.startSalary;
 }
 /**
  * The cards a full deck holds under the match's frozen rules: every card with
@@ -994,13 +1007,21 @@ function resolver(
       steps,
       laps: player.laps + crossings,
     });
-    if (crossings > 0)
+    if (crossings > 0) {
+      // A clockwise landing exactly on Start pays its crossing at the bonus
+      // rate; any earlier crossing on the same move stays at the flat salary.
+      const landed =
+        position === 0 && (state.config.startLandingBonus ?? false);
+      const amount =
+        state.config.startSalary * (crossings - (landed ? 1 : 0)) +
+        (landed ? startLandingSalary(state.config.startSalary) : 0);
       emit({
         type: "SalaryPaid",
         seat,
-        amount: state.config.startSalary * crossings,
-        cash: player.cash + state.config.startSalary * crossings,
+        amount,
+        cash: player.cash + amount,
       });
+    }
   };
   const moveTo = (seat: Seat, target: number) => {
     move(seat, clockwiseSteps(getPlayer(state, seat).position, target));
@@ -2529,6 +2550,11 @@ export function createGame(
   if (config.escapeCard !== undefined && typeof config.escapeCard !== "boolean")
     throw new RangeError("Escape card rule must be a boolean");
   if (
+    config.startLandingBonus !== undefined &&
+    typeof config.startLandingBonus !== "boolean"
+  )
+    throw new RangeError("Start landing bonus rule must be a boolean");
+  if (
     config.chanceRule !== undefined &&
     !["reworked", "original"].includes(config.chanceRule)
   )
@@ -2649,6 +2675,7 @@ export function createGame(
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
       escapeCard: config.escapeCard ?? true,
+      startLandingBonus: config.startLandingBonus ?? true,
       chanceRule: chances,
       turnOrderRule,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,

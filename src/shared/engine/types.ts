@@ -49,6 +49,8 @@ export type GameConfig = {
   readonly fourResortRent?: boolean;
   /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
+  /** Missing on saves before rules version 11: landing on Start pays a flat salary. */
+  readonly startLandingBonus?: boolean;
   /** Missing on saves before rules version 9: retain the original Chance deck. */
   readonly escapeCard?: boolean;
   /** Missing on saves before rules version 10: the original card set. */

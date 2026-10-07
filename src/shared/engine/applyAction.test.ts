@@ -466,17 +466,38 @@ describe("property economy and build unlocking", () => {
   });
 });
 describe("dice, Island, laps and World Tour", () => {
-  it("pays one salary and counts one lap when clockwise movement lands on Start", () => {
+  it("pays one salary at the landing rate and counts one lap when clockwise movement lands on Start", () => {
     const state = newGame();
     const result = land(state, 0, [1, 2]);
     expect(getPlayer(result.state, state.activeSeat)).toMatchObject({
       position: 0,
       laps: 1,
-      cash: 2_400_000,
+      cash: 2_600_000,
     });
     expect(
       result.events.filter((event) => event.type === "SalaryPaid"),
     ).toHaveLength(1);
+  });
+  it("pays the flat salary for a crossing that stops past Start", () => {
+    const state = newGame();
+    const result = land(state, 1, [1, 2]);
+    expect(getPlayer(result.state, state.activeSeat)).toMatchObject({
+      position: 1,
+      laps: 1,
+      cash: 2_400_000,
+    });
+  });
+  it("keeps the flat salary on a saved match made before the landing bonus", () => {
+    const state = newGame(4, { ...CONFIG, startLandingBonus: false });
+    const result = land(state, 0, [1, 2]);
+    expect(getPlayer(result.state, state.activeSeat).cash).toBe(2_400_000);
+  });
+  it("rounds the landing salary down on an odd salary", () => {
+    const state = newGame(4, { ...CONFIG, startSalary: 333_333 });
+    const result = land(state, 0, [1, 2]);
+    expect(getPlayer(result.state, state.activeSeat).cash).toBe(
+      2_000_000 + 499_999,
+    );
   });
   it("finishes the landing before giving a doubles bonus and traps on third double", () => {
     const state = newGame();
@@ -950,10 +971,11 @@ describe("the original sixteen Chance cards", () => {
     const state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
     const grand = draw(state, "Grand Tour");
+    // The card lands on Start, so it collects the landing rate.
     expect(getPlayer(grand.state, seat)).toMatchObject({
       position: 0,
       laps: 1,
-      cash: 2_400_000,
+      cash: 2_600_000,
     });
     // Detour steps back from the first Chance square without any salary.
     const detour = draw(state, "Detour");
