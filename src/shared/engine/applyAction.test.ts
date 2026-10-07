@@ -596,7 +596,7 @@ describe("dice, Island, laps and World Tour", () => {
       ).ok,
     ).toBe(false);
   });
-  it("does not offer Escape as a rent card and preserves the automatic Jailbreak effect", () => {
+  it("does not offer Escape as a rent card and preserves the automatic Rescue Boat effect", () => {
     const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
     const seat = initial.activeSeat;
     const owner = other(initial);
@@ -619,7 +619,7 @@ describe("dice, Island, laps and World Tour", () => {
       card: "Escape",
     });
     const saved = setPlayer(newGame(), owner, { position: 8, onIsland: true });
-    expect(getPlayer(draw(saved, "Jailbreak").state, owner).onIsland).toBe(
+    expect(getPlayer(draw(saved, "Rescue Boat").state, owner).onIsland).toBe(
       false,
     );
   });
@@ -1068,12 +1068,12 @@ describe("the original sixteen Chance cards", () => {
     expect(getProperty(swapped, 1)).toMatchObject({ owner: seat, level: 2 });
     expect(swapped.championshipHost).toBeNull();
   });
-  it("Jailbreak releases everyone without moving them and a targetless card does nothing", () => {
+  it("Rescue Boat releases everyone without moving them and a targetless card does nothing", () => {
     const state = newGame();
     const rival = other(state);
     const freed = draw(
       setPlayer(state, rival, { position: 8, onIsland: true, islandTurns: 1 }),
-      "Jailbreak",
+      "Rescue Boat",
     ).state;
     expect(getPlayer(freed, rival)).toMatchObject({
       position: 8,

@@ -3,6 +3,7 @@ import type { StateMigration } from "./state-migrations.js";
 import {
   CURRENT_STATE_VERSION,
   migrateSavedState,
+  renameChanceCardsInEvent,
   STATE_MIGRATIONS,
 } from "./state-migrations.js";
 
@@ -67,6 +68,45 @@ describe("Saved state migrations", () => {
       pause: null,
       pauseCooldownUntil: 0,
     });
+  });
+
+  it("renames the island release card in a version-3 save and leaves the rest", () => {
+    const saved = {
+      deck: ["Jailbreak", "Coupon"],
+      discard: ["Jailbreak"],
+      lastCard: { seat: 2, card: "Jailbreak" },
+      pause: null,
+    };
+    expect(migrateSavedState(saved, 3)).toEqual({
+      state: {
+        deck: ["Rescue Boat", "Coupon"],
+        discard: ["Rescue Boat"],
+        lastCard: { seat: 2, card: "Rescue Boat" },
+        pause: null,
+      },
+      changed: true,
+    });
+    expect(saved.deck).toEqual(["Jailbreak", "Coupon"]);
+    expect(migrateSavedState({ deck: [], lastCard: null }, 3).state).toEqual({
+      deck: [],
+      lastCard: null,
+    });
+  });
+
+  it("renames the island release card in a replayed event row", () => {
+    expect(
+      renameChanceCardsInEvent(
+        JSON.stringify({ type: "ChanceDrawn", seat: 1, card: "Jailbreak" }),
+      ),
+    ).toBe(
+      JSON.stringify({ type: "ChanceDrawn", seat: 1, card: "Rescue Boat" }),
+    );
+    const kept = JSON.stringify({
+      type: "ChanceDrawn",
+      seat: 1,
+      card: "Coupon",
+    });
+    expect(renameChanceCardsInEvent(kept)).toBe(kept);
   });
 
   it("leaves a save already at the current version untouched and unwritten", () => {

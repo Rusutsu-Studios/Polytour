@@ -1283,7 +1283,7 @@ function resolver(
       case "Roll Again":
         secrets({ extraRoll: true });
         break;
-      case "Jailbreak":
+      case "Rescue Boat":
         for (const player of state.players)
           if (player.onIsland)
             emit({ type: "LeftIsland", seat: player.seat, method: "card" });

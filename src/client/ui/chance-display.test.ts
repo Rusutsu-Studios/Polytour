@@ -173,8 +173,8 @@ describe("luck-card descriptions without a draw", () => {
         locale === "fr" ? "défaussée après usage" : "Discard it after use",
       );
       expect(
-        describeChanceCard("Jailbreak", DEFAULT_GAME_CONFIG).text,
-      ).toContain(locale === "fr" ? "Tous les joueurs" : "All players");
+        describeChanceCard("Rescue Boat", DEFAULT_GAME_CONFIG).text,
+      ).toContain(locale === "fr" ? "bateau de secours" : "rescue boat");
     },
   );
 

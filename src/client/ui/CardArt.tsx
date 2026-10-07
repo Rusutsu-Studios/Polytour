@@ -352,20 +352,49 @@ const ART: Record<ChanceCard, (roll?: number) => [string, ReactNode]> = {
       <path d="M88 29v18m-9-9h18" {...ARROW} strokeWidth={5} />
     </>,
   ],
-  Jailbreak: () => [
+  "Rescue Boat": () => [
     "#5cc0b5",
     <>
+      <rect y="84" width="120" height="36" fill="#3f9fd0" />
+      <ellipse cx="98" cy="84" rx="20" ry="7" fill="#f1d58a" />
       <path
-        d="M44 54V36a16 16 0 0 1 32 0v4"
-        stroke="#6b7a86"
-        strokeWidth="8"
-        strokeLinecap="round"
+        d="M98 82c-2-9 0-16 5-22"
+        stroke="#8a5a3b"
+        strokeWidth="4"
         fill="none"
-        transform="translate(10 -10) rotate(12 60 40)"
       />
-      <rect x="32" y="54" width="56" height="40" rx="7" fill="#ffcf4a" />
-      <circle cx="60" cy="70" r="6" fill="#8a5a3b" />
-      <rect x="57.5" y="70" width="5" height="12" fill="#8a5a3b" />
+      <path
+        d="M103 58c-7-5-16-3-20 3 8-3 14-2 20-3Zm0 0c6-6 15-5 17 1-6-3-11-2-17-1Z"
+        fill="#3e9a55"
+      />
+      <rect x="20" y="48" width="34" height="22" rx="5" fill="#fffdf6" />
+      <rect x="26" y="54" width="9" height="9" fill="#8fd3f4" />
+      <rect x="39" y="54" width="9" height="9" fill="#8fd3f4" />
+      <path d="M8 70h72l-11 22H19Z" fill="#d04a3a" />
+      <circle
+        cx="66"
+        cy="58"
+        r="10"
+        fill="none"
+        stroke="#fffdf6"
+        strokeWidth="6"
+      />
+      <circle
+        cx="66"
+        cy="58"
+        r="10"
+        fill="none"
+        stroke="#d04a3a"
+        strokeWidth="6"
+        strokeDasharray="7.85 7.85"
+      />
+      <path
+        d="M86 100h14M76 110h16"
+        stroke="#fffdf6"
+        strokeWidth="4"
+        strokeLinecap="round"
+        opacity=".7"
+      />
     </>,
   ],
   Escape: () => [
