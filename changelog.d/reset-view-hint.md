@@ -1,8 +1,10 @@
 ### Changed
 
-- Remove question-mark buttons from settings and the start page. Help appears
-  only when hovering or focusing a bot difficulty choice, including in
-  read-only settings. How to play keeps its button with a book icon (#151).
+- Remove question-mark buttons from settings and the start page. Bot difficulty
+  choices explain their behavior on hover or focus, including in read-only
+  settings. How to play keeps its button with a book icon (#151).
+- Streamer mode and Center map explain their actions with a small popup on
+  hover or keyboard focus. The other settings have no explanatory popups.
 
 ### Fixed
 

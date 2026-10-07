@@ -2355,7 +2355,7 @@ test("locked board freezes every gesture and zoom preference but toolbar reset r
   ).toEqual(["sync", "sync"]);
 });
 
-test("board toolbar actions stay usable without explanation popups", async ({
+test("center map and streamer toolbar buttons explain themselves without pinning help", async ({
   page,
 }) => {
   await enterMatch(page, { realClock: true });
@@ -2366,13 +2366,27 @@ test("board toolbar actions stay usable without explanation popups", async ({
   });
   const hint = page.locator("#disabled-action-hint");
   await reset.hover();
-  await expect(hint).not.toBeVisible();
+  await expect(hint.locator("strong")).toHaveText("Recentrer le plateau");
+  await expect(hint).toContainText("Raccourci : 0.");
+  await page.keyboard.press("Escape");
+  await page.locator(".game-tools .streamer-toggle").focus();
   await reset.focus();
-  await expect(hint).not.toBeVisible();
+  await expect(hint.locator("strong")).toHaveText("Recentrer le plateau");
+  await expect(reset).toHaveAttribute(
+    "aria-describedby",
+    /disabled-action-hint/,
+  );
   await expect(reset).not.toHaveAttribute("title");
   await expect(reset).not.toHaveAttribute("aria-expanded");
-  await page.locator(".game-tools .streamer-toggle").hover();
+  const streamer = page.locator(".game-tools .streamer-toggle");
+  await streamer.hover();
+  await expect(hint.locator("strong")).toHaveText("Mode streamer");
+  await expect(hint).toContainText("Masque le code");
+  await expect(streamer).toHaveAttribute("aria-pressed", "false");
+  await streamer.click();
   await expect(hint).not.toBeVisible();
+  await expect(streamer).toHaveAttribute("aria-pressed", "true");
+  await expect(streamer).not.toHaveAttribute("aria-expanded");
   await dragBoard(
     page,
     await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
@@ -2380,6 +2394,8 @@ test("board toolbar actions stay usable without explanation popups", async ({
     20,
   );
   expect(Number(await board.getAttribute("data-board-yaw"))).not.toBe(0);
+  await reset.hover();
+  await expect(hint).toBeVisible();
   await reset.click();
   await expect(hint).not.toBeVisible();
   await expect(board).toHaveAttribute("data-board-yaw", "0");

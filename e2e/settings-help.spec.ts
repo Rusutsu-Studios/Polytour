@@ -18,7 +18,7 @@ async function dismissHelp(page: Page, dialog?: Locator) {
 }
 
 for (const locale of ["fr", "en"] as const) {
-  test(`only bot difficulties explain themselves and quick settings stay spaced in ${locale}`, async ({
+  test(`bot difficulty and streamer help work while quick settings stay spaced in ${locale}`, async ({
     page,
   }) => {
     const words =
@@ -82,9 +82,20 @@ for (const locale of ["fr", "en"] as const) {
       exact: true,
     });
     await streamer.hover();
+    await expect(popup.locator("strong")).toHaveText(words.streamer);
+    await dismissHelp(page);
+    await quick.getByRole("slider", { name: words.cash, exact: true }).focus();
     await streamer.focus();
-    await expect(popup).not.toBeVisible();
+    await expect(popup).toContainText(
+      locale === "fr" ? "Masque le code" : "Hides the room code",
+    );
+    await expect(streamer).toHaveAttribute(
+      "aria-describedby",
+      /disabled-action-hint/,
+    );
+    await expect(streamer).not.toHaveAttribute("aria-expanded");
     await expect(streamer).not.toHaveAttribute("title");
+    await dismissHelp(page);
     const quickDefault = quick.getByRole("group", {
       name: words.defaults,
       exact: true,
@@ -122,7 +133,16 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       dialog.locator('.setting-help, [data-icon="help"]'),
     ).toHaveCount(0);
-    await expect(dialog.locator("[data-help-title]")).toHaveCount(3);
+    await expect(
+      dialog.locator(".room-settings [data-help-title]"),
+    ).toHaveCount(3);
+    const settingsStreamer = dialog.getByRole("button", {
+      name: words.streamer,
+      exact: true,
+    });
+    await settingsStreamer.hover();
+    await expect(popup.locator("strong")).toHaveText(words.streamer);
+    await dismissHelp(page, dialog);
     await dialog.getByRole("slider", { name: words.cash, exact: true }).focus();
     await expect(popup).not.toBeVisible();
     const building = dialog.getByRole("checkbox", {
