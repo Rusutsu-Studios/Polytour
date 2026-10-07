@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { BOARD_SIZE } from "../../shared/board/index.js";
-import { clampBoardZoom } from "../board-view.js";
+import { BOARD_ZOOM } from "../board-view.js";
 import {
   BOARD_BOTTOM,
   BOARD_HALF,
@@ -113,7 +113,9 @@ export function frameBoard(
   ui = 1,
   rotation = new THREE.Quaternion(),
 ) {
-  const zoom = clampBoardZoom(requestedZoom);
+  const zoom = Number.isFinite(requestedZoom)
+    ? THREE.MathUtils.clamp(requestedZoom, BOARD_ZOOM.min, BOARD_ZOOM.max)
+    : BOARD_ZOOM.default;
   camera.updateMatrixWorld();
   const insets = preview
     ? { top: height * 0.03, bottom: height * 0.03, side: width * 0.03 }

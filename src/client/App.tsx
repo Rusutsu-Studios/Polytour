@@ -1461,7 +1461,12 @@ function MatchView({
           type="button"
           className="game-tool-button"
           aria-label={t("Recentrer le plateau", "Reset board view")}
-          title={t("Recentrer le plateau", "Reset board view")}
+          data-help-title={t("Recentrer le plateau", "Reset board view")}
+          data-help-message={t(
+            "Revenir à la vue par défaut.",
+            "Return to the default view.",
+          )}
+          data-help-pin="false"
           disabled={!boardZoomAvailable}
           disabledReason={t(
             "Le recentrage est disponible sur le plateau 3D.",
@@ -1536,7 +1541,7 @@ function MatchView({
           title={t("Comment jouer", "How to play")}
           onClick={onHelp}
         >
-          <Icon name="help" size={18} />
+          <Icon name="book" size={18} />
         </button>
         <button
           type="button"
@@ -2180,7 +2185,7 @@ function App() {
               className="text-button help-button"
               onClick={() => setHelpOpen(true)}
             >
-              <Icon name="help" size={18} />
+              <Icon name="book" size={18} />
               <span>{t("Comment jouer", "How to play")}</span>
             </button>
             {(credentials || invitationCode !== null) && (

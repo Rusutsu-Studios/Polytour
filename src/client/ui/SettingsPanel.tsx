@@ -197,12 +197,6 @@ export default function SettingsPanel({
         <strong aria-hidden="true">
           {streamer ? t("Activé", "On") : t("Désactivé", "Off")}
         </strong>
-        <p>
-          {t(
-            "Masque le code de salle et de connexion.",
-            "Hides the room code and masks it when joining.",
-          )}
-        </p>
       </div>
       <div
         className="pause-tabs"
