@@ -318,6 +318,12 @@ for (const viewport of [
       });
       await expect(salary).toBeEnabled();
       await salary.fill("450000");
+      await expect(guestPage.locator("#disabled-action-hint")).toBeVisible();
+      await guestPage.keyboard.press("Escape");
+      await expect(
+        guestPage.locator("#disabled-action-hint"),
+      ).not.toBeVisible();
+      await expect(settings).toBeVisible();
       await guestPage.keyboard.press("Escape");
       await expect(guestPage.locator(".settings-trigger")).toBeFocused();
       await guestPage
