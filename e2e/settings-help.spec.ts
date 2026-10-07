@@ -135,7 +135,7 @@ for (const locale of ["fr", "en"] as const) {
     await page.getByRole("button", { name: words.play, exact: true }).click();
     await expect(page.locator(".lobby-seat.bot")).toHaveCount(3);
     await page.locator(".settings-trigger").click();
-    const dialog = page.locator(".settings-dialog");
+    const dialog = page.locator(".pause-dialog");
     const cashHelp = dialog.getByRole("button", {
       name: helpName(words.cash),
       exact: true,

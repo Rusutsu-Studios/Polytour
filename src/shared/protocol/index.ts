@@ -26,9 +26,7 @@ export const RoomConfigSchema = z
     startingCash: z.number().int().min(0).max(10_000_000).default(2_000_000),
     startSalary: z.number().int().min(0).max(1_000_000).default(400_000),
     roundLimit: z.number().int().min(1).max(10_000).default(10_000),
-    timeLimitMinutes: z
-      .union([z.literal(20), z.literal(60), z.literal(120)])
-      .default(120),
+    timeLimitMinutes: z.number().int().min(15).nullable().default(120),
     festivalCount: z.number().int().min(0).max(20).default(3),
     lineMonopoly: z.boolean().default(true),
     tripleMonopoly: z.boolean().default(true),
@@ -223,6 +221,10 @@ export type LobbyState = {
   /** Omitted by older servers; those rooms retain their original Chance deck. */
   readonly escapeCard?: boolean;
   readonly chanceRule: ChanceRule;
+  /** Omitted by older servers; existing rooms keep their recorded shuffled order. */
+  readonly turnOrderRule?: "clockwise" | "shuffled";
+  /** Omitted by older servers; existing rooms keep their original festival draw. */
+  readonly festivalDistribution?: "spread" | "random";
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

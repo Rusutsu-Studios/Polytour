@@ -6,6 +6,11 @@ import {
   test,
   type WebSocketRoute,
 } from "@playwright/test";
+import {
+  BOARD_HALF,
+  LOT_TOP,
+  tilePoint,
+} from "../src/client/scene/board-layout.js";
 import { DECISION_TIMING } from "../src/shared/board/index.js";
 import {
   createGame,
@@ -25,6 +30,7 @@ import {
   DEBUG_PING_RESPONSE,
   type RoomDiagnostics,
 } from "../src/shared/protocol/room-diagnostics.js";
+import { boardScreenPoint, clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
@@ -77,6 +83,8 @@ const FRANKFURT_ROOM = {
 type MatchFixtureOptions = {
   roomDiagnostics?: () => RoomDiagnostics;
   observePongs?: boolean;
+  flatBoard?: boolean;
+  realClock?: boolean;
 };
 
 const workerHealthRequests = new WeakMap<Page, string[]>();
@@ -220,8 +228,8 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
     });
   });
   // Track timers before the shared home/match probe creates its first cadence.
-  await page.clock.install({ time: Date.now() });
-  await page.goto("/");
+  if (!options.realClock) await page.clock.install({ time: Date.now() });
+  await page.goto("/?debug");
   if (options.observePongs) {
     // The route mock is installed during navigation; observe it before joining.
     await page.evaluate((pong) => {
@@ -243,10 +251,14 @@ async function enterMatch(page: Page, options: MatchFixtureOptions = {}) {
   await page.getByLabel("Votre nom de joueur").fill("Camille");
   await page.getByRole("button", { name: "Jouer", exact: true }).click();
   await expect(page.locator(".player-card")).toHaveCount(4);
-  await expect(page.locator(".canvas-layer")).toHaveAttribute(
-    "data-scene-ready",
-    "true",
-  );
+  if (options.flatBoard) {
+    await expect(page.locator(".flat-board")).toBeVisible();
+  } else {
+    await expect(page.locator(".canvas-layer")).toHaveAttribute(
+      "data-scene-ready",
+      "true",
+    );
+  }
   await expect(
     page.getByRole("button", { name: "Lancer les dés", exact: true }),
   ).toBeEnabled();
@@ -280,7 +292,7 @@ async function openSettings(page: Page) {
   await page.getByRole("button", { name: "Menu pause", exact: true }).click();
   await page.getByRole("button", { name: "Réglages", exact: true }).click();
   await expect(
-    page.getByRole("tab", { name: "Jeu", exact: true }),
+    page.getByRole("tab", { name: "Vidéo", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
 }
 
@@ -347,7 +359,7 @@ for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     });
     await page.setViewportSize(viewport);
     await page.clock.install({ time: Date.now() });
-    await page.goto("/");
+    await page.goto("/?debug");
     const badge = page.locator(".lobby-network");
     await expect(badge).toHaveAccessibleName("Débogage réseau");
     await expect(badge).toHaveText(/^FRA · \d+ ms$/);
@@ -384,7 +396,6 @@ for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     await completeProbe(page, () => page.clock.runFor(5000));
     expect(probes).toBe(beforeOpening + 1);
     await expectSharedPing(panel, "FRA", ".lobby-network");
-    await modal.getByRole("tab", { name: "Jeu", exact: true }).click();
     await modal.getByLabel("Langue", { exact: true }).selectOption("en");
     await modal.getByRole("tab", { name: "Debug", exact: true }).click();
     await expect(badge).toHaveAccessibleName("Network debug");
@@ -392,7 +403,7 @@ for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
     await page.keyboard.press("Escape");
     await expect(modal).toHaveCount(0);
     await expect(badge).toBeFocused();
-    await expect(page.locator(".language-trigger")).toHaveText("EN");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
     expect(roomRequests).toEqual([]);
     expect(sockets).toEqual([]);
     expect(
@@ -429,7 +440,8 @@ test("the match network button opens Debug directly without requesting a multipl
   await page.keyboard.press("Escape");
   const gear = modal.getByRole("button", { name: "Réglages", exact: true });
   await expect(gear).toBeFocused();
-  await expect(gear).toHaveText("");
+  await expect(gear).toHaveText("Réglages");
+  await expect(gear.locator("svg + span")).toBeVisible();
   await expect(gear.locator("svg")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
@@ -464,9 +476,17 @@ test("opening a multiplayer pause menu keeps clocks and authoritative updates ru
     name: "Réglages",
     exact: true,
   });
-  await expect(settingsGear).toHaveText("");
+  await expect(settingsGear).toHaveText("Réglages");
+  await expect(settingsGear.locator("svg + span")).toBeVisible();
   await expect(settingsGear.locator("svg")).toBeVisible();
   await page.screenshot({ path: ".local/verification/pause-menu.png" });
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(settingsGear.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/pause-menu-settings-fr-${viewport.width}.png`,
+    });
+  }
   const previousTime = await page.locator(".match-clock").innerText();
   await expect
     .poll(() => page.locator(".match-clock").innerText())
@@ -530,15 +550,16 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     sessionStorage.getItem("polytour-room-v1"),
   );
   await openSettings(page);
-  const game = page.getByRole("tab", { name: "Jeu", exact: true });
-  await game.focus();
-  await game.press("ArrowRight");
+  const video = page.getByRole("tab", { name: "Vidéo", exact: true });
+  await video.focus();
+  await video.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "Vidéo", exact: true }),
+    page.getByRole("tab", { name: "Accessibilité", exact: true }),
   ).toBeFocused();
   await expect(
-    page.getByRole("tab", { name: "Vidéo", exact: true }),
+    page.getByRole("tab", { name: "Accessibilité", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  await video.click();
   const graphics = page.locator(".pause-dialog .graphics-quality");
   await expect(graphics).toHaveAccessibleName("Graphismes");
   const highGraphics = graphics.getByRole("radio", {
@@ -560,16 +581,34 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     "true",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("polytour.lowGraphics")),
-  ).toBe("true");
-  await expect(page.getByLabel("Réduire les animations")).toBeChecked();
-  await page.getByLabel("Réduire les animations").uncheck();
-  await expect(page.getByLabel("Réduire les animations")).not.toBeChecked();
-  await page.getByLabel("Réduire les animations").check();
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("polytour.settings.v1") ?? "null"),
+    ),
+  ).toMatchObject({ graphics: "low" });
   await page
     .getByRole("button", { name: "Zoomer le plateau", exact: true })
     .click();
-  await page.getByRole("button", { name: "Recentrer", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Vue par défaut", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  await expect(
+    motion.getByRole("radio", { name: "Système", exact: true }),
+  ).toBeChecked();
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+  await motion.getByRole("radio", { name: "Activé", exact: true }).check();
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
   await expect(page.getByLabel("Vitesse des animations")).toHaveCount(0);
   await expect(
     page.getByRole("button", {
@@ -604,13 +643,12 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
       path: `.local/verification/pause-settings-${viewport.width}.png`,
     });
   }
-  await game.click();
   await page
     .locator(".pause-dialog")
     .getByLabel("Langue", { exact: true })
     .selectOption("en");
   await expect(
-    page.getByRole("tab", { name: "Game", exact: true }),
+    page.getByRole("tab", { name: "Video", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(
     page.getByRole("tab", { name: "Video", exact: true }),
@@ -627,6 +665,18 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     graphics.getByRole("radio", { name: "High", exact: true }),
   ).not.toBeChecked();
   await page.keyboard.press("Escape");
+  const settings = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Settings", exact: true });
+  await expect(settings).toHaveText("Settings");
+  await expect(settings.locator("svg + span")).toBeVisible();
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(settings.locator("svg + span")).toBeVisible();
+    await page.screenshot({
+      path: `.local/verification/pause-menu-settings-en-${viewport.width}.png`,
+    });
+  }
   await expect(
     page
       .locator(".pause-dialog")
@@ -1015,7 +1065,6 @@ test("Cloudflare probe details translate and distinguish local or unmapped entry
     diagnosticValue(panel, "Point d’entrée Cloudflare"),
   ).toContainText("FRA");
   await expect(diagnosticValue(panel, "Région")).toHaveText("Europe");
-  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
   await page
     .locator(".pause-dialog")
     .getByLabel("Langue", { exact: true })
@@ -1274,7 +1323,6 @@ test("room diagnostics show connected ingress routes and SQLite with bounded mea
   await expect(chart.locator("circle")).toHaveCount(60);
   expect(match.metadataRequests()).toBe(1);
   expect(match.connections()).toBe(1);
-  await page.getByRole("tab", { name: "Jeu", exact: true }).click();
   await page
     .locator(".pause-dialog")
     .getByLabel("Langue", { exact: true })
@@ -1485,19 +1533,26 @@ test("the rules icon is read only, invitations stay separate, and leaving needs 
 }) => {
   const match = await enterMatch(page);
   await page
-    .getByRole("button", { name: "Réglages de la partie", exact: true })
+    .getByRole("button", { name: "Règles de la partie", exact: true })
     .click();
-  await expect(page.locator(".match-rules")).toContainText(
+  await expect(page.locator(".pause-rules")).toContainText(
     "Les réglages sont fixés pour toute la durée de cette partie.",
   );
-  const controls = page.locator(".match-rules").locator("input, select");
+  const controls = page.locator(".pause-rules").locator("input, select");
   expect(await controls.count()).toBeGreaterThan(0);
   for (const control of await controls.all())
     await expect(control).toBeDisabled();
-  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(page.locator(".pause-dialog")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Réglages de la partie", exact: true }),
+    page
+      .locator(".pause-dialog")
+      .getByRole("button", { name: "Réglages", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".pause-dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Règles de la partie", exact: true }),
   ).toBeFocused();
   await page
     .getByRole("button", { name: "Inviter des joueurs", exact: true })
@@ -1551,26 +1606,751 @@ test("a reduced-motion answer outlasts a reload and outranks the system setting"
 }) => {
   await enterMatch(page);
   await openSettings(page);
-  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
-  const reduce = page.getByLabel("Réduire les animations");
-  // This browser asks for reduced motion, so the box starts checked.
-  await expect(reduce).toBeChecked();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
+  const motion = page.getByRole("group", {
+    name: "Réduire les animations",
+    exact: true,
+  });
+  // The system preference applies until a personal override is selected.
+  await expect(
+    motion.getByRole("radio", { name: "Système", exact: true }),
+  ).toBeChecked();
   await expect(page.locator("main")).toHaveAttribute(
     "data-reduced-motion",
     "true",
   );
-  await reduce.uncheck();
+  await motion.getByRole("radio", { name: "Désactivé", exact: true }).check();
   await expect(page.locator("main")).toHaveAttribute(
     "data-reduced-motion",
     "false",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("polytour.reducedMotion")),
-  ).toBe("false");
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("polytour.settings.v1") ?? "null"),
+    ),
+  ).toMatchObject({ reducedMotion: "off" });
   await page.reload();
   // The stored answer wins. The system no longer turns the animations off.
   await expect(page.locator("main")).toHaveAttribute(
     "data-reduced-motion",
     "false",
   );
+});
+
+async function zoomBoard(page: Page, deltaY: number, expected: number) {
+  const board = page.locator(".canvas-layer");
+  const bounds = await board.boundingBox();
+  if (!bounds) throw new Error("Expected the mounted board");
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await page.mouse.wheel(0, deltaY);
+  await expect(board).toHaveAttribute("data-board-zoom", String(expected));
+}
+
+test("board zoom uses wheel and keys, respects fields and dialogs, and persists on reload", async ({
+  page,
+}) => {
+  const match = await enterMatch(page);
+  const board = page.locator(".canvas-layer");
+  await zoomBoard(page, -100, 1.1);
+  await board.focus();
+  await page.keyboard.press("+");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.2");
+  await page.keyboard.press("-");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  const bounds = await board.boundingBox();
+  if (!bounds) throw new Error("Expected the mounted board");
+  const wheelPoint = {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+  await page.keyboard.down("Control");
+  expect(
+    await board.locator("canvas").evaluate((element, point) => {
+      const event = new WheelEvent("wheel", {
+        deltaY: -100,
+        ctrlKey: true,
+        clientX: point.x,
+        clientY: point.y,
+        bubbles: true,
+        cancelable: true,
+      });
+      return element.dispatchEvent(event);
+    }, wheelPoint),
+  ).toBe(true);
+  await page.keyboard.up("Control");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  await page.keyboard.press("Control++");
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await page.keyboard.press("+");
+  await board.dispatchEvent("wheel", { deltaY: -100 });
+  await expect(board).toHaveAttribute("data-board-zoom", "1.1");
+  const zoomIn = page.getByRole("button", {
+    name: "Zoomer le plateau",
+    exact: true,
+  });
+  for (let value = 12; value <= 20; value += 1) {
+    await zoomIn.click();
+    await expect(board).toHaveAttribute("data-board-zoom", String(value / 10));
+  }
+  await expect(zoomIn).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await board.focus();
+  await page.keyboard.press("+");
+  await expect(board).toHaveAttribute("data-board-zoom", "2");
+  await page.reload();
+  await expect(board).toHaveAttribute("data-scene-ready", "true");
+  await expect(board).toHaveAttribute("data-board-zoom", "2");
+  await board.focus();
+  await page.keyboard.press("0");
+  await expect(board).toHaveAttribute("data-board-zoom", "1");
+  await zoomBoard(page, 100, 0.9);
+  await zoomBoard(page, 100, 0.8);
+  await zoomBoard(page, 100, 0.8);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Dézoomer le plateau", exact: true }),
+  ).toBeDisabled();
+  const field = page.getByLabel("Langue", { exact: true });
+  await field.focus();
+  await page.keyboard.press("0");
+  await expect(board).toHaveAttribute("data-board-zoom", "0.8");
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync", "sync"]);
+});
+
+test("laptop trackpad pinch zooms the board without magnifying the page", async ({
+  page,
+}) => {
+  await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const input = await page.context().newCDPSession(page);
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+    const bounds = await board.boundingBox();
+    if (!bounds) throw new Error("Expected the mounted board");
+    const background = {
+      x: bounds.x + 20,
+      y: bounds.y + bounds.height / 2,
+    };
+    const pageSize = () =>
+      page.evaluate(() => ({
+        width: innerWidth,
+        height: innerHeight,
+        scale: visualViewport?.scale,
+        dpr: devicePixelRatio,
+      }));
+    const initial = await pageSize();
+    for (const [point, deltaY, zoom] of [
+      [center, -100, "1.1"],
+      [center, 100, "1"],
+      [background, -100, "1.1"],
+      [background, 100, "1"],
+    ] as const) {
+      // Precision trackpads emit trusted Ctrl+wheel without a Control keydown.
+      await input.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        ...point,
+        deltaX: 0,
+        deltaY,
+        modifiers: 2,
+      });
+      await expect(board).toHaveAttribute("data-board-zoom", zoom);
+      expect(await pageSize()).toEqual(initial);
+      if (zoom === "1.1") {
+        await page.screenshot({
+          path: `.local/verification/laptop-trackpad-${viewport.width}.png`,
+        });
+      }
+    }
+  }
+  await input.detach();
+});
+
+test("board pinch and rotation preserve click inspection and Default view resets", async ({
+  page,
+}) => {
+  await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const bounds = await board.boundingBox();
+  if (!bounds) throw new Error("Expected the mounted board");
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  const touch = await page.context().newCDPSession(page);
+  await touch.send("Emulation.setTouchEmulationEnabled", {
+    enabled: true,
+    maxTouchPoints: 2,
+  });
+  // A real pinch often starts one finger before the second joins. Transfer of
+  // implicit canvas capture must not discard the still-active first pointer.
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: x - 50, y, id: 1 }],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ x: x - 48, y, id: 1 }],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      { x: x - 48, y, id: 1 },
+      { x: x + 50, y, id: 2 },
+    ],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      { x: x - 95, y, id: 1 },
+      { x: x + 95, y, id: 2 },
+    ],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(async () => Number(await board.getAttribute("data-board-zoom")))
+    .toBeGreaterThan(1);
+  await expect(board).toHaveAttribute("data-board-yaw", "0");
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y, id: 3 }],
+  });
+  for (const dx of [15, 75]) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: x + dx, y: y + 10, id: 3 }],
+    });
+  }
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(async () => Number(await board.getAttribute("data-board-yaw")))
+    .toBeGreaterThan(0.12);
+  await touch.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await touch.detach();
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 120, y + 60, { steps: 8 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => Number(await board.getAttribute("data-board-yaw")))
+    .not.toBe(0);
+  await expect(page.locator(".city-card-dialog[open]")).toHaveCount(0);
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Vue par défaut", exact: true })
+    .click();
+  await expect(board).toHaveAttribute("data-board-zoom", "1");
+  await expect(board).toHaveAttribute("data-board-pan-x", "0");
+  await expect(board).toHaveAttribute("data-board-pan-y", "0");
+  await expect(board).toHaveAttribute("data-board-yaw", "0");
+  await expect(board).toHaveAttribute("data-board-pitch", "0");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  // Plain inspection preserves the previous tool focus after a dragged gesture.
+  const pauseTrigger = page.getByRole("button", {
+    name: "Menu pause",
+    exact: true,
+  });
+  await pauseTrigger.focus();
+  await import("./board-interactions.js").then(({ clickBoardSpace }) =>
+    clickBoardSpace(page, 1),
+  );
+  await expect(page.locator(".city-card-dialog[open]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(pauseTrigger).toBeFocused();
+});
+
+for (const viewport of DESKTOP_SIZES) {
+  test(`board zoom extremes keep HUDs and actions visible at ${viewport.width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.addInitScript(() =>
+      localStorage.setItem("polytour.lowGraphics", "true"),
+    );
+    await enterMatch(page);
+    const board = page.locator(".canvas-layer");
+    for (const zoom of [0.8, 2]) {
+      await openSettings(page);
+      await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+      await page
+        .getByRole("slider", { name: "Zoom du plateau", exact: true })
+        .press(zoom === 2 ? "End" : "Home");
+      await expect(board).toHaveAttribute("data-board-zoom", String(zoom));
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await page.clock.runFor(100);
+
+      if (zoom === 2) {
+        await page.mouse.move(viewport.width / 2, viewport.height * 0.4);
+        await page.keyboard.down("Shift");
+        await page.mouse.down();
+        await page.mouse.move(viewport.width - 1, viewport.height - 1, {
+          steps: 8,
+        });
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await expect
+          .poll(async () =>
+            Number(await board.getAttribute("data-board-pan-y")),
+          )
+          .toBeLessThan(0);
+        await page.clock.runFor(100);
+      }
+      for (const element of await page
+        .locator(".player-card, .decision-panel")
+        .all()) {
+        const rect = await element.boundingBox();
+        expect(rect).not.toBeNull();
+        if (!rect) continue;
+        expect(rect.x).toBeGreaterThanOrEqual(0);
+        expect(rect.y).toBeGreaterThanOrEqual(0);
+        expect(rect.x + rect.width).toBeLessThanOrEqual(viewport.width);
+        expect(rect.y + rect.height).toBeLessThanOrEqual(viewport.height);
+      }
+      const roll = await page
+        .getByRole("button", { name: "Lancer les dés", exact: true })
+        .boundingBox();
+      if (!roll) throw new Error("Expected a visible roll button");
+      for (const hud of await page.locator(".player-card").all()) {
+        const rect = await hud.boundingBox();
+        if (!rect) throw new Error("Expected a visible player HUD");
+        expect(
+          roll.x < rect.x + rect.width &&
+            roll.x + roll.width > rect.x &&
+            roll.y < rect.y + rect.height &&
+            roll.y + roll.height > rect.y,
+        ).toBe(false);
+      }
+      expect(
+        await page.evaluate(() => ({
+          width: document.documentElement.scrollWidth,
+          height: document.documentElement.scrollHeight,
+        })),
+      ).toEqual(viewport);
+      await page.screenshot({
+        path: `.local/verification/board-zoom-${viewport.width}-${zoom}.png`,
+      });
+    }
+  });
+}
+
+test("the accessible flat board keeps camera controls inert", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      value(this: HTMLCanvasElement, contextId: string, options?: unknown) {
+        return contextId.includes("webgl")
+          ? null
+          : Reflect.apply(original, this, [contextId, options]);
+      },
+    });
+    localStorage.setItem(
+      "polytour.settings.v1",
+      JSON.stringify({ version: 1, boardZoom: 1.4 }),
+    );
+  });
+  await enterMatch(page, { flatBoard: true });
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  for (const name of [
+    "Dézoomer le plateau",
+    "Zoomer le plateau",
+    "Vue par défaut",
+  ]) {
+    await expect(
+      page.getByRole("button", { name, exact: true }),
+    ).toBeDisabled();
+  }
+  await expect(page.getByRole("tabpanel")).toContainText(
+    "Le plateau simplifié ne permet pas de zoomer ni de déplacer la vue.",
+  );
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.locator(".flat-board button").first().focus();
+  await page.keyboard.press("+");
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          JSON.parse(
+            localStorage.getItem("polytour.settings.v1") ?? "null",
+          ) as { boardZoom: number } | null
+        )?.boardZoom,
+    ),
+  ).toBe(1.4);
+});
+
+async function dragBoard(
+  page: Page,
+  point: { x: number; y: number },
+  dx: number,
+  dy: number,
+  pan = false,
+) {
+  await page.mouse.move(point.x, point.y);
+  if (pan) await page.keyboard.down("Shift");
+  await page.mouse.down();
+  await page.mouse.move(point.x + dx, point.y + dy, { steps: 8 });
+  await page.mouse.up();
+  if (pan) await page.keyboard.up("Shift");
+}
+
+async function boardView(page: Page) {
+  return page.locator(".canvas-layer").evaluate((element) => {
+    const data = (element as HTMLElement).dataset;
+    return [
+      data.boardZoom,
+      data.boardPanX,
+      data.boardPanY,
+      data.boardYaw,
+      data.boardPitch,
+    ];
+  });
+}
+
+test("home preview fills its stage and personal settings mirror the welcome streamer shortcut", async ({
+  page,
+}) => {
+  await page.goto("/");
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator(".canvas-layer")).toHaveAttribute(
+      "data-scene-ready",
+      "true",
+    );
+    await expect
+      .poll(async () => {
+        const stage = await page
+          .locator(".welcome-board-preview")
+          .boundingBox();
+        const canvas = await page.locator(".canvas-layer canvas").boundingBox();
+        if (!stage || !canvas) return Infinity;
+        return Math.abs(stage.height - canvas.height);
+      })
+      .toBeLessThan(2);
+    const stage = await page.locator(".welcome-board-preview").boundingBox();
+    expect(stage?.height).toBeGreaterThan(350);
+    await page.screenshot({
+      path: `.local/verification/board-view-home-${viewport.width}.png`,
+    });
+  }
+  const shortcut = page
+    .locator(".topbar")
+    .getByRole("button", { name: "Mode streamer", exact: true });
+  await shortcut.click();
+  await page.getByRole("button", { name: "Réglages", exact: true }).click();
+  await expect(
+    page.getByRole("tab", { name: "Vidéo", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("button", { name: "Vue par défaut", exact: true }),
+  ).toBeVisible();
+  const setting = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Mode streamer", exact: true });
+  await expect(setting).toHaveAttribute("aria-pressed", "true");
+  await setting.click();
+  await expect(shortcut).toHaveAttribute("aria-pressed", "false");
+  await page
+    .getByLabel("Verrouiller la vue du plateau", { exact: true })
+    .check();
+  await expect(
+    page.getByRole("slider", { name: "Zoom du plateau", exact: true }),
+  ).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await page.getByRole("button", { name: "Réglages", exact: true }).click();
+  await expect(
+    page.getByLabel("Verrouiller la vue du plateau", { exact: true }),
+  ).toBeChecked();
+  await page.keyboard.press("Escape");
+  await page.goto("/?room=ABCD23");
+  await expect(page.locator(".invitation-entry")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const stage = await page.locator(".welcome-board-preview").boundingBox();
+      const canvas = await page.locator(".canvas-layer canvas").boundingBox();
+      return stage && canvas
+        ? Math.abs(stage.height - canvas.height)
+        : Infinity;
+    })
+    .toBeLessThan(2);
+});
+
+test("grabbing tiles, the center and edges rotates gently while clicks and floating controls stay separate", async ({
+  page,
+}) => {
+  const match = await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const [x, z] = tilePoint(1, 0, -0.35);
+  const tile = await boardScreenPoint(page, { x, y: LOT_TOP + 0.003, z });
+  await dragBoard(page, tile, 3, 1);
+  await expect(board).toHaveAttribute("data-board-yaw", "0");
+  await expect(page.locator(".city-card-dialog[open]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  for (const spot of [
+    { x, y: LOT_TOP, z },
+    { x: 0, y: LOT_TOP, z: 0 },
+    { x: BOARD_HALF - 0.08, y: LOT_TOP, z: 0 },
+  ]) {
+    const before = Number(await board.getAttribute("data-board-yaw"));
+    await dragBoard(page, await boardScreenPoint(page, spot), 80, 20);
+    const after = Number(await board.getAttribute("data-board-yaw"));
+    expect(Math.abs(after - before)).toBeGreaterThan(0.05);
+    expect(Math.abs(after - before)).toBeLessThan(0.5);
+    await expect(page.locator(".city-card-dialog[open]")).toHaveCount(0);
+  }
+  const reset = page.getByRole("button", {
+    name: "Recentrer le plateau",
+    exact: true,
+  });
+  await reset.click();
+  await expect(board).toHaveAttribute("data-board-yaw", "0");
+  await expect(board).toHaveAttribute("data-board-pitch", "0");
+  const empty = { x: 4, y: 450 };
+  const beforeEmpty = await boardView(page);
+  await dragBoard(page, empty, 70, 40);
+  expect(await boardView(page)).toEqual(beforeEmpty);
+  const roll = page.getByRole("button", {
+    name: "Lancer les dés",
+    exact: true,
+  });
+  const rect = await roll.boundingBox();
+  if (!rect) throw new Error("Expected the floating roll control");
+  const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(center.x, center.y, { steps: 8 });
+  await page.mouse.up();
+  expect(await boardView(page)).toEqual(beforeEmpty);
+  await clickBoardSpace(page, 1);
+  await expect(page.locator(".city-card-dialog[open]")).toBeVisible();
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync"]);
+});
+
+test("vertical grabs orbit from low to overhead without zooming at desktop sizes", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("polytour.lowGraphics", "true"),
+  );
+  const match = await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const reset = page.getByRole("button", {
+    name: "Recentrer le plateau",
+    exact: true,
+  });
+  const projection = () =>
+    page.evaluate(async () => {
+      const modulePath = performance
+        .getEntriesByType("resource")
+        .find((entry) => entry.name.includes("/@react-three_fiber.js"))?.name;
+      if (!modulePath) throw new Error("Expected the loaded R3F module");
+      const { _roots } = (await import(
+        modulePath
+      )) as typeof import("@react-three/fiber");
+      const canvas = document.querySelector<HTMLCanvasElement>(
+        ".canvas-layer canvas",
+      );
+      const scene = canvas && _roots.get(canvas)?.store.getState();
+      const view = scene?.scene.getObjectByName("board-user-view");
+      if (
+        !scene ||
+        !view ||
+        !("left" in scene.camera) ||
+        !("zoom" in scene.camera)
+      )
+        throw new Error("Expected the mounted orthographic board");
+      const camera = scene.camera as import("three").OrthographicCamera;
+      const normal = camera.position
+        .clone()
+        .set(0, 1, 0)
+        .applyQuaternion(view.quaternion);
+      const towardCamera = camera
+        .getWorldDirection(camera.position.clone())
+        .negate();
+      return {
+        width: (camera.right - camera.left) / camera.zoom,
+        height: (camera.top - camera.bottom) / camera.zoom,
+        elevation: (Math.asin(normal.dot(towardCamera)) * 180) / Math.PI,
+      };
+    });
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await reset.click();
+    await expect(board).toHaveAttribute("data-board-pitch", "0");
+    const initial = await projection();
+    for (const direction of [1, -1]) {
+      await reset.click();
+      for (let grab = 0; grab < 4; grab++) {
+        const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+        await dragBoard(page, center, 0, direction * 180);
+      }
+      await expect(board).toHaveAttribute("data-board-zoom", "1");
+      await expect(board).toHaveAttribute("data-board-yaw", "0");
+      const orbit = await projection();
+      expect(orbit.width).toBeCloseTo(initial.width, 6);
+      expect(orbit.height).toBeCloseTo(initial.height, 6);
+      if (direction === 1) expect(orbit.elevation).toBeGreaterThan(80);
+      else expect(orbit.elevation).toBeLessThan(20);
+      await page.screenshot({
+        path:
+          ".local/verification/board-orbit-" +
+          viewport.width +
+          (direction === 1 ? "-overhead.png" : "-low.png"),
+      });
+    }
+    await reset.click();
+    await zoomBoard(page, -100, 1.1);
+    expect((await projection()).width).toBeCloseTo(initial.width / 1.1, 6);
+    await reset.click();
+    await expect(board).toHaveAttribute("data-board-zoom", "1");
+    const restored = await projection();
+    expect(restored.width).toBeCloseTo(initial.width, 6);
+    expect(restored.elevation).toBeCloseTo(initial.elevation, 6);
+  }
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync"]);
+});
+
+test("locked board freezes every gesture and zoom preference but toolbar reset remains usable", async ({
+  page,
+}) => {
+  const match = await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  await zoomBoard(page, -100, 1.1);
+  await dragBoard(
+    page,
+    await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
+    90,
+    30,
+  );
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await page
+    .getByLabel("Verrouiller la vue du plateau", { exact: true })
+    .check();
+  for (const label of ["Zoomer le plateau", "Dézoomer le plateau"]) {
+    await expect(
+      page.getByRole("button", { name: label, exact: true }),
+    ).toBeDisabled();
+  }
+  await expect(
+    page.getByRole("slider", { name: "Zoom du plateau", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Vue par défaut", exact: true }),
+  ).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  const frozen = await boardView(page);
+  const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+  await dragBoard(page, center, 100, 30);
+  await dragBoard(page, center, 80, 40, true);
+  await page.mouse.wheel(0, -100);
+  await board.focus();
+  await page.keyboard.press("+");
+  await page.keyboard.press("0");
+  expect(await boardView(page)).toEqual(frozen);
+  const touch = await page.context().newCDPSession(page);
+  const pageScale = await page.evaluate(() => visualViewport?.scale);
+  await expect(board).toHaveCSS("touch-action", "none");
+  await touch.send("Input.dispatchMouseEvent", {
+    type: "mouseWheel",
+    ...center,
+    deltaX: 0,
+    deltaY: -100,
+    modifiers: 2,
+  });
+  expect(await boardView(page)).toEqual(frozen);
+  expect(await page.evaluate(() => visualViewport?.scale)).toBe(pageScale);
+  await touch.send("Emulation.setTouchEmulationEnabled", {
+    enabled: true,
+    maxTouchPoints: 2,
+  });
+  for (const [type, distance] of [
+    ["touchStart", 40],
+    ["touchMove", 90],
+  ] as const) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: [
+        { x: center.x - distance, y: center.y, id: 1 },
+        { x: center.x + distance, y: center.y, id: 2 },
+      ],
+    });
+  }
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await touch.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await touch.detach();
+  expect(await boardView(page)).toEqual(frozen);
+  expect(await page.evaluate(() => visualViewport?.scale)).toBe(pageScale);
+  const reset = page.getByRole("button", {
+    name: "Recentrer le plateau",
+    exact: true,
+  });
+  await reset.click();
+  await expect(reset).toBeFocused();
+  await expect(board).toHaveAttribute("data-board-zoom", "1");
+  await expect(board).toHaveAttribute("data-board-yaw", "0");
+  await expect(board).toHaveAttribute("data-board-pitch", "0");
+  await expect(board).toHaveAttribute("data-board-pan-x", "0");
+  await page.reload();
+  await expect(board).toHaveAttribute("data-scene-ready", "true");
+  await zoomBoard(page, -100, 1);
+  await openSettings(page);
+  await expect(
+    page
+      .locator(".game-tools")
+      .getByRole("button", { name: "Mode streamer", exact: true }),
+  ).toHaveCount(1);
+  const streamer = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Mode streamer", exact: true });
+  await streamer.click();
+  await expect(streamer).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+  await expect(
+    page.getByLabel("Verrouiller la vue du plateau", { exact: true }),
+  ).toBeChecked();
+  await page
+    .getByLabel("Verrouiller la vue du plateau", { exact: true })
+    .uncheck();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await zoomBoard(page, -100, 1.1);
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync", "sync"]);
 });

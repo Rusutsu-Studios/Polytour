@@ -121,13 +121,19 @@ debug socket has been removed; `/api/health` remains.
   Medium. Strict validation rejects other levels and seat indices. Older clients
   receive an update or incompatible-response error and must refresh; no state or
   rules version changes.
-- Protocol version 8 adds `botDifficulty: "easy" | "medium" | "hard"` to strict
+- Protocol version 9 adds `botDifficulty: "easy" | "medium" | "hard"` to strict
   room settings, lobby config and new match config. Missing settings default to
   `medium`; unmarked saved matches keep Medium decisions. The room leader can
   change this shared default only before starting. Temporary disconnect
   replacements use the frozen match config. Older clients receive an
   update or incompatible-response error and must refresh before resuming. No
   state or rules version changes.
+- Protocol version 8 accepts `timeLimitMinutes: null` in room creation and lobby
+  settings for unlimited games, or a whole-minute duration of at least 15,
+  including durations above 120 (such as 200).
+  Decision time accepts whole seconds from 10 to 60. Omitted duration still defaults to 120 minutes.
+  Public config preserves null and `matchDeadline` is null; neither time nor
+  round limits end these games. Older clients reload before reading this setting.
 - Protocol version 7 adds the `PowerCut {seat, tile, untilLap}`,
   `ShieldRaised {seat, tile}`, `ShieldBroken {seat, tile}` (the attacker's seat)
   and `PropertyGiven {seat, to, tile}` events, an optional `shielded: true` and
@@ -140,11 +146,22 @@ debug socket has been removed; `/api/health` remains.
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 10 with `boardRule: "country"`,
+  New rooms freeze rules version 12 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true` and
-  `chanceRule: "reworked"`. Version-9 lobbies report `chanceRule: "original"`;
+  `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true`,
+  `chanceRule: "reworked"`, `turnOrderRule: "clockwise"` and
+  `festivalDistribution: "spread"`. The optional festival-distribution selector
+  is server-owned: version-11 and older lobbies use `"random"`, preserving their
+  original draw. Existing active snapshots retain their saved festival tiles;
+  older snapshots may omit this marker. No new event or protocol version is
+  required because clients render the authoritative `festivalTiles`. The optional order
+  selector is server-owned: version-10 and older lobbies report `"shuffled"`.
+  `GameCreated.state.startingTurnOrder` contains the selected starter first,
+  followed by the fixed clockwise cycle. Its initial pending deadline reserves
+  the seven-second opening wheel before the ordinary decision window; reconnect
+  snapshots do not replay that reveal. Version-9 lobbies report
+  `chanceRule: "original"`;
   older rooms also omit or freeze `escapeCard: false` and retain the original
   16-card deck. Version-7 lobbies report both
   booleans as `false`. The optional festival marker preserves version-4/5/6 rooms

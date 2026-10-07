@@ -25,8 +25,11 @@ export type GameConfig = {
   readonly startSalary: number;
   readonly roundLimit: number;
   readonly decisionSeconds?: number;
-  readonly timeLimitMinutes?: number;
+  /** null disables time and round limits; undefined retains round-only games. */
+  readonly timeLimitMinutes?: number | null;
   readonly festivalCount?: number;
+  /** Missing on saved rooms before version 12: retain the original random draw. */
+  readonly festivalDistribution?: "spread" | "random";
   /** Missing on older saves: retain the economy's original resort festivals. */
   readonly resortFestivals?: boolean;
   readonly lineMonopoly?: boolean;
@@ -50,6 +53,8 @@ export type GameConfig = {
   readonly escapeCard?: boolean;
   /** Missing on saves before rules version 10: the original card set. */
   readonly chanceRule?: ChanceRule;
+  /** Missing on saves before rules version 11: their recorded order stays shuffled. */
+  readonly turnOrderRule?: "clockwise" | "shuffled";
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
   readonly extraRollOnDouble?: boolean;

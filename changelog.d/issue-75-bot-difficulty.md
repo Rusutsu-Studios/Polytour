@@ -13,3 +13,7 @@
 ### Changed
 - Easy bots still construct and buy out properties, with occasional delayed
   upgrades and missed buyouts instead of systematically avoiding development.
+
+### Fixed
+- Integrate bot settings and their help with the unified settings menu, precise
+  timers and unlimited duration; keep help usable in read-only rooms (#142).

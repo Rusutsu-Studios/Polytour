@@ -68,8 +68,8 @@ function observeRoom(page: Page) {
 async function expectContained(panel: Locator, width: number, height: number) {
   const layout = await panel.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
-    // The settings ribbon deliberately extends beyond the sheet's paper edge.
-    const content = element.querySelector(".settings-dialog-body") ?? element;
+    // Check the scrollable settings body inside the shared menu.
+    const content = element.querySelector(".pause-dialog-body") ?? element;
     return {
       top: bounds.top,
       bottom: bounds.bottom,
@@ -102,7 +102,7 @@ for (const locale of ["fr", "en"] as const) {
             play: "Jouer",
             start: "Démarrer la partie",
             close: "Fermer les réglages",
-            settings: "Réglages de la partie",
+            settings: "Règles de la partie",
             festivals: "Festivals initiaux",
             building: "Les bots peuvent construire",
             noBuilding: "Construction désactivée pour tous les niveaux.",
@@ -118,7 +118,7 @@ for (const locale of ["fr", "en"] as const) {
             play: "Play",
             start: "Start game",
             close: "Close settings",
-            settings: "Game settings",
+            settings: "Game rules",
             festivals: "Starting festivals",
             building: "Bots can build",
             noBuilding: "Building is disabled at every level.",
@@ -224,7 +224,7 @@ for (const locale of ["fr", "en"] as const) {
     const trigger = page.locator(".settings-trigger");
     await trigger.focus();
     await page.keyboard.press("Enter");
-    const sheet = page.locator(".settings-dialog");
+    const sheet = page.locator(".pause-dialog");
     const settingsDifficulty = sheet.getByRole("group", { name: words.group });
     await settingsDifficulty.getByRole("radio", { name: words.hard }).check();
     const hardHelp = settingsDifficulty.getByRole("button", {
@@ -300,7 +300,7 @@ for (const locale of ["fr", "en"] as const) {
     await rulesTrigger.focus();
     await page.keyboard.press("Enter");
     const frozen = page
-      .locator(".tool-drawer--rules")
+      .locator(".pause-rules")
       .getByRole("group", { name: words.group });
     await expect(frozen.getByRole("radio", { name: words.hard })).toBeChecked();
     for (const radio of await frozen.getByRole("radio").all())
@@ -366,8 +366,27 @@ test("a guest can read each bot level but cannot cycle it", async ({
       "Bot · Medium",
     ]);
     await guest.locator(".settings-trigger").click();
+    const guestSettings = guest.locator(".pause-dialog");
+    for (const label of ["Game duration", "Decision timer"]) {
+      const group = guestSettings.getByRole("group", {
+        name: label,
+        exact: true,
+      });
+      await expect(group.getByRole("slider")).toBeDisabled();
+      const timeHelp = group.getByRole("button", {
+        name: `About ${label}`,
+        exact: true,
+      });
+      await expect(timeHelp).toBeEnabled();
+      await timeHelp.click();
+      await expect(guest.locator("#disabled-action-hint strong")).toHaveText(
+        label,
+      );
+      await guest.keyboard.press("Escape");
+      await expect(guestSettings).toBeVisible();
+    }
     const defaults = guest
-      .locator(".settings-dialog")
+      .locator(".pause-dialog")
       .getByRole("group", { name: "Default bot difficulty" });
     for (const radio of await defaults.getByRole("radio").all())
       await expect(radio).toBeDisabled();
@@ -383,7 +402,7 @@ test("a guest can read each bot level but cannot cycle it", async ({
     await expect(help).toHaveAttribute("aria-expanded", "true");
     await page.locator(".settings-trigger").click();
     await page
-      .locator(".settings-dialog")
+      .locator(".pause-dialog")
       .getByRole("group", { name: "Default bot difficulty" })
       .getByRole("radio", { name: "Hard", exact: true })
       .check();
@@ -398,7 +417,7 @@ test("a guest can read each bot level but cannot cycle it", async ({
     await guest.keyboard.press("Escape");
     await expect(guest.locator("#disabled-action-hint")).not.toBeVisible();
     await expect(help).toHaveAttribute("aria-expanded", "false");
-    await expect(guest.locator(".settings-dialog")).toBeVisible();
+    await expect(guest.locator(".pause-dialog")).toBeVisible();
   } finally {
     await context.close();
   }

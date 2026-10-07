@@ -1396,6 +1396,43 @@ describe("wins, rankings and timeouts", () => {
     );
     expect(applyTimeout(timed, { now: 1_199_999 }).state.status).toBe("active");
   });
+  it("unlimited games pass time and round limits, keep decision timers and still end on a win", () => {
+    let state = newGame(4, {
+      ...CONFIG,
+      timeLimitMinutes: null,
+      roundLimit: 1,
+    });
+    expect(state.matchDeadline).toBeNull();
+    const last = state.turnOrder.at(-1) as Seat;
+    state = withActive(
+      { ...state, round: 10_000, roundSeatsRemaining: [last] },
+      last,
+    );
+    const continued = land(state, 0);
+    expect(continued.state.status).toBe("active");
+    expect(continued.state.round).toBe(10_001);
+    expect(continued.events.some((event) => event.type === "GameOver")).toBe(
+      false,
+    );
+    const timedOut = applyTimeout(continued.state, {
+      now: 7_200_001,
+      dice: [1, 2],
+    });
+    expect(timedOut.state.status).toBe("active");
+    expect(timedOut.events.some((event) => event.type === "DiceRolled")).toBe(
+      true,
+    );
+    expect(
+      timedOut.events.reduce(applyEvent, toPublic(continued.state)),
+    ).toEqual(toPublic(timedOut.state));
+
+    state = newGame(4, { ...CONFIG, timeLimitMinutes: null });
+    for (const tile of [1, 2, 3, 4, 5, 6])
+      state = grant(state, tile, state.activeSeat);
+    expect(
+      act(land(state, 7).state, { type: "Buy", level: 0 }).state.result?.kind,
+    ).toBe("line-monopoly");
+  });
   it("settles pending sales and sequential mandatory payments fairly before time-limit ranking", () => {
     let state = newGame(4, {
       ...CONFIG,
@@ -1464,8 +1501,10 @@ describe("wins, rankings and timeouts", () => {
   });
   it("starts the decision clock and bot moves after the animations", () => {
     const state = newGame();
-    // Nothing to watch yet: a bot only takes its short pause.
-    expect(botDecisionAt(toPublic(state))).toBe(BOT_TIMING.roll);
+    // The opening wheel finishes before the starter takes its thinking pause.
+    expect(botDecisionAt(toPublic(state))).toBe(
+      DECISION_TIMING.startAnimation + BOT_TIMING.roll,
+    );
     // From tile 4 to 7: the dice, three hops, then the purchase decision.
     const purchase = land(state, 7, [1, 2]).state;
     const presented =

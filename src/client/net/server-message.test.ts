@@ -52,6 +52,57 @@ const diagnostics: RoomDiagnostics = {
 };
 
 describe("room debug server envelopes", () => {
+  it.each(["spread", "random"] as const)(
+    "retains the frozen festival distribution %s in the lobby and snapshot",
+    (festivalDistribution) => {
+      const snapshot = createGame(
+        { ...DEFAULT_GAME_CONFIG, festivalDistribution },
+        [
+          { playerId: "ada", name: "Ada", control: "human" },
+          { playerId: "bea", name: "Bea", control: "human" },
+        ],
+        7,
+        { now: 0 },
+      ).state;
+      expect(
+        parseServerMessage(
+          JSON.stringify({
+            ...welcome,
+            snapshot,
+            lobby: { ...welcome.lobby, festivalDistribution },
+          }),
+        ),
+      ).toMatchObject({
+        lobby: { festivalDistribution },
+        snapshot: { config: { festivalDistribution } },
+      });
+      expect(() =>
+        parseServerMessage(
+          JSON.stringify({
+            ...welcome,
+            snapshot: {
+              ...snapshot,
+              config: { ...snapshot.config, festivalDistribution: "invalid" },
+            },
+          }),
+        ),
+      ).toThrow();
+    },
+  );
+  it("accepts older welcomes without a festival distribution and rejects invalid markers", () => {
+    expect(parseServerMessage(JSON.stringify(welcome))).not.toHaveProperty(
+      "lobby.festivalDistribution",
+    );
+    expect(() =>
+      parseServerMessage(
+        JSON.stringify({
+          ...welcome,
+          lobby: { ...welcome.lobby, festivalDistribution: "invalid" },
+        }),
+      ),
+    ).toThrow();
+  });
+
   it("validates individual bot levels in lobby updates and match snapshots", () => {
     const snapshot = createGame(
       DEFAULT_GAME_CONFIG,

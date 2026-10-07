@@ -339,63 +339,130 @@ export function QuickSettings({
   );
 }
 
-function ChoiceSetting({
+function TimeSetting({
   label,
   help,
   value,
   choices,
+  min,
+  max,
   suffix,
+  unlimitedLabel,
   disabled,
   onChange,
 }: {
   label: string;
   help: string;
-  value: number;
-  choices: readonly number[];
+  value: number | null;
+  choices: readonly (number | null)[];
+  min: number;
+  max: number;
   suffix: string;
+  unlimitedLabel?: string;
   disabled: boolean;
-  onChange: (value: number) => void;
+  onChange: (value: number | null) => void;
 }) {
   const id = useId();
-  // Keep valid settings from existing saved rooms visible, even outside the presets.
-  const options = choices.includes(value)
-    ? choices
-    : [...choices, value].sort((a, b) => a - b);
+  const { t } = useLocale();
+  const [draft, setDraft] = useState(String(value ?? ""));
+  const editing = useRef(false);
+  useLayoutEffect(() => {
+    if (disabled) editing.current = false;
+    if (!editing.current) setDraft(String(value ?? ""));
+  }, [value, disabled]);
+  const finiteMax = unlimitedLabel ? Math.max(max, value ?? max) : max;
+  const sliderMax = finiteMax + (unlimitedLabel ? 1 : 0);
+  const sliderValue = value ?? sliderMax;
+  const commit = () => {
+    editing.current = false;
+    if (disabled) return;
+    const entered = Math.round(Number(draft));
+    const next =
+      draft.trim() !== "" && Number.isSafeInteger(entered)
+        ? Math.max(min, unlimitedLabel ? entered : Math.min(max, entered))
+        : value;
+    setDraft(String(next ?? ""));
+    if (next !== value) onChange(next);
+  };
   return (
-    <fieldset className="room-setting-choice" aria-labelledby={`${id}-label`}>
+    <fieldset
+      className="room-setting-choice room-setting-choice--time"
+      aria-labelledby={`${id}-label`}
+    >
       <legend>
         <span className="room-setting-label">
           <span id={`${id}-label`}>{label}</span>
           <SettingHelp label={label} message={help} />
         </span>
       </legend>
-      <input
-        className="room-setting-range"
-        type="range"
-        min={0}
-        max={options.length - 1}
-        step={1}
-        value={options.indexOf(value)}
-        disabled={disabled}
-        aria-label={label}
-        aria-valuetext={`${value} ${suffix}`}
-        style={
-          {
-            "--setting-progress": `${(options.indexOf(value) / (options.length - 1)) * 100}%`,
-          } as CSSProperties
-        }
-        onChange={(event) => {
-          const choice = options[Number(event.currentTarget.value)];
-          if (!disabled && choice !== undefined) onChange(choice);
-        }}
-      />
+      <div className="room-setting-time-row">
+        <input
+          className="room-setting-range"
+          type="range"
+          min={min}
+          max={sliderMax}
+          step={1}
+          value={sliderValue}
+          disabled={disabled}
+          aria-label={label}
+          aria-valuetext={
+            value === null ? unlimitedLabel : `${value} ${suffix}`
+          }
+          style={
+            {
+              "--setting-progress": `${((sliderValue - min) / (sliderMax - min)) * 100}%`,
+            } as CSSProperties
+          }
+          onChange={(event) => {
+            const entered = Number(event.currentTarget.value);
+            if (!disabled) onChange(entered > finiteMax ? null : entered);
+          }}
+        />
+        <div className="room-setting-time-value">
+          <input
+            type="number"
+            min={min}
+            max={unlimitedLabel ? undefined : max}
+            step={1}
+            value={draft}
+            placeholder={value === null ? "∞" : undefined}
+            disabled={disabled}
+            aria-label={t(`${label} : valeur exacte`, `${label}: exact value`)}
+            onFocus={() => {
+              editing.current = true;
+            }}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+            }}
+            onChange={(event) => {
+              if (disabled) return;
+              const text = event.currentTarget.value;
+              setDraft(text);
+              const entered = Number(text);
+              if (
+                text !== "" &&
+                Number.isSafeInteger(entered) &&
+                entered >= min &&
+                (unlimitedLabel || entered <= max)
+              )
+                onChange(entered);
+            }}
+          />
+          <span>{suffix}</span>
+        </div>
+      </div>
       <div className="room-setting-pills">
-        {options.map((option) => (
-          <label className="room-setting-pill" key={option}>
+        {choices.map((option) => (
+          <label className="room-setting-pill" key={option ?? "unlimited"}>
             <input
               type="radio"
               name={id}
-              value={option}
+              value={option ?? "unlimited"}
+              aria-label={option === null ? unlimitedLabel : undefined}
               checked={option === value}
               disabled={disabled}
               onChange={() => {
@@ -403,7 +470,13 @@ function ChoiceSetting({
               }}
             />
             <span>
-              {option} <span>{suffix}</span>
+              {option === null ? (
+                "∞"
+              ) : (
+                <>
+                  {option} <span>{suffix}</span>
+                </>
+              )}
             </span>
           </label>
         ))}
@@ -521,21 +594,22 @@ export function RoomSettings({
           onChange={(festivalCount) => update({ festivalCount })}
           wide
         />
-        <ChoiceSetting
+        <TimeSetting
           label={t("Durée de partie", "Game duration")}
           help={t(
-            "Limite de temps, pauses exclues. Sans victoire immédiate, le plus grand patrimoine gagne après règlement des effets en cours : argent disponible et valeur investie dans ses propriétés.",
-            "Time limit, excluding pauses. If no instant win occurs, highest net worth wins after pending effects settle: cash plus invested property value.",
+            "Limite de temps, pauses exclues. La durée illimitée désactive les limites de temps et de tours. Sans victoire immédiate, le plus grand patrimoine gagne après règlement des effets en cours : argent disponible et valeur investie dans ses propriétés.",
+            "Time limit, excluding pauses. Unlimited duration disables the time and round limits. If no instant win occurs, highest net worth wins after pending effects settle: cash plus invested property value.",
           )}
           value={config.timeLimitMinutes}
-          choices={[20, 60, 120]}
+          choices={[20, 60, 120, null]}
+          min={15}
+          max={120}
           suffix="min"
+          unlimitedLabel={t("Durée illimitée", "Unlimited duration")}
           disabled={disabled}
-          onChange={(timeLimitMinutes) =>
-            update({ timeLimitMinutes: timeLimitMinutes as 20 | 60 | 120 })
-          }
+          onChange={(timeLimitMinutes) => update({ timeLimitMinutes })}
         />
-        <ChoiceSetting
+        <TimeSetting
           label={t("Temps de décision", "Decision timer")}
           help={t(
             "Temps pour chaque choix humain, après les animations. Sans réponse, le jeu applique son choix automatique. Les bots gardent leur propre rythme.",
@@ -543,9 +617,13 @@ export function RoomSettings({
           )}
           value={config.decisionSeconds}
           choices={[15, 30, 45, 60]}
+          min={10}
+          max={60}
           suffix="s"
           disabled={disabled}
-          onChange={(decisionSeconds) => update({ decisionSeconds })}
+          onChange={(decisionSeconds) => {
+            if (decisionSeconds !== null) update({ decisionSeconds });
+          }}
         />
         <BotDifficultySetting
           config={config}
@@ -622,24 +700,33 @@ export function RoomSettings({
               )}
             </li>
           )}
-          <li>
-            {t(
-              `Avoir le patrimoine le plus élevé après ${config.timeLimitMinutes} min : argent + valeur investie dans les propriétés.`,
-              `Have the highest net worth after ${config.timeLimitMinutes} min: cash + invested property value.`,
-            )}
-          </li>
-          <li>
-            {t(
-              `Si la limite de ${config.roundLimit} tours de table est atteinte avant, le patrimoine le plus élevé gagne.`,
-              `If the ${config.roundLimit}-round limit is reached first, highest net worth wins.`,
-            )}
-          </li>
+          {config.timeLimitMinutes !== null && (
+            <>
+              <li>
+                {t(
+                  `Avoir le patrimoine le plus élevé après ${config.timeLimitMinutes} min : argent + valeur investie dans les propriétés.`,
+                  `Have the highest net worth after ${config.timeLimitMinutes} min: cash + invested property value.`,
+                )}
+              </li>
+              <li>
+                {t(
+                  `Si la limite de ${config.roundLimit} tours de table est atteinte avant, le patrimoine le plus élevé gagne.`,
+                  `If the ${config.roundLimit}-round limit is reached first, highest net worth wins.`,
+                )}
+              </li>
+            </>
+          )}
         </ul>
         <p>
-          {t(
-            "À égalité de patrimoine : argent disponible, puis nombre de plages, puis ordre de jeu initial.",
-            "Net-worth ties: most cash, then most beaches, then original turn order.",
-          )}
+          {config.timeLimitMinutes === null
+            ? t(
+                "Durée illimitée : aucune limite de temps ou de tours. Seules les conditions de victoire ci-dessus terminent la partie.",
+                "Unlimited duration: no time or round limit. Only the win conditions above end the game.",
+              )
+            : t(
+                "À égalité de patrimoine : argent disponible, puis nombre de plages, puis ordre de jeu initial.",
+                "Net-worth ties: most cash, then most beaches, then original turn order.",
+              )}
         </p>
       </section>
     </div>
