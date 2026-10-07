@@ -5,6 +5,7 @@ import { RoomConfigSchema } from "../../shared/protocol/index.js";
 import { RoomDiagnosticsSchema } from "../../shared/protocol/room-diagnostics.js";
 
 const seat = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
+const botDifficulty = z.enum(["easy", "medium", "hard"]);
 const tile = z.number().int().min(0).max(31);
 const integer = z.number().int();
 const pause = z
@@ -52,6 +53,7 @@ const publicState = z.object({
       roundLimit: integer,
       resortFestivals: z.boolean().optional(),
       escapeCard: z.boolean().optional(),
+      botDifficulty: botDifficulty.optional(),
       turnOrderRule: z.enum(["clockwise", "shuffled"]).optional(),
       festivalDistribution: z.enum(["spread", "random"]).optional(),
     })
@@ -62,6 +64,7 @@ const publicState = z.object({
       name: z.string(),
       seat,
       control: z.enum(["human", "bot"]),
+      botDifficulty: botDifficulty.optional(),
       cash: integer,
       position: tile,
       laps: integer,
@@ -219,6 +222,7 @@ const lobby = z.object({
         seat,
         name: z.string(),
         control: z.enum(["human", "bot"]).nullable(),
+        botDifficulty: botDifficulty.optional(),
         online: z.boolean(),
         controller: seat.nullable().default(null),
       }),

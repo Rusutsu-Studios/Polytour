@@ -1,3 +1,4 @@
+import { BOT_POLICY } from "../board/bot-policy.js";
 import type {
   BoardRule,
   BuildLevel,
@@ -81,6 +82,7 @@ export const DEFAULT_GAME_CONFIG = {
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
   botCanBuild: true,
+  botDifficulty: "medium",
   giftCanBankrupt: true,
 } as const satisfies GameConfig;
 /** Saves made before rules version 4 carry no marker: keep the prototype economy. */
@@ -2144,16 +2146,166 @@ export function changeControl(
     events: [event],
   };
 }
+function acquiredState(
+  state: PublicState,
+  tile: number,
+  seat: Seat | null,
+): PublicState {
+  const owner = propertyOwner(state, tile);
+  if (owner === seat) return state;
+  // Follow real ownership cleanup: transfer restores power and drops a shield.
+  let acquired: PublicState;
+  if (seat === null) {
+    if (owner === null) return state;
+    acquired = applyEvent(state, {
+      type: "PropertySold",
+      seat: owner,
+      tile,
+      amount: 0,
+    });
+  } else {
+    acquired = applyEvent(state, {
+      type: "PropertyGiven",
+      seat: owner ?? seat,
+      to: seat,
+      tile,
+    });
+  }
+  return {
+    ...acquired,
+    championshipHost:
+      !rules(state).championshipPersists &&
+      state.championshipHost?.tile === tile
+        ? null
+        : state.championshipHost,
+  };
+}
+
+/** A short public-state heuristic, not a search of future dice or Chance cards. */
+function botHoldingsValue(state: PublicState, seat: Seat): number {
+  if (instantWin(state, seat)) return BOT_POLICY.winningValue;
+  const player = getPlayer(state, seat);
+  const collections = COUNTRY_IDS.reduce((value, country) => {
+    const cities = getCountryCityTiles(country, state.config);
+    const owned = cities.filter(
+      (city) => propertyOwner(state, city.index) === seat,
+    ).length;
+    return (
+      value +
+      (owned === cities.length ? BOT_POLICY.collectionValue : 0) +
+      Math.max(0, owned - 1) * BOT_POLICY.collectionProgressValue
+    );
+  }, 0);
+  return (
+    collections +
+    player.properties.reduce(
+      (value, tile) =>
+        value +
+        propertyInvestedValue(state, tile) +
+        propertyRent(state, tile) * BOT_POLICY.rentHorizon,
+      0,
+    )
+  );
+}
+
+function acquisitionValue(
+  state: PublicState,
+  tile: number,
+  seat: Seat,
+): number {
+  const acquired = acquiredState(state, tile, seat);
+  if (instantWin(acquired, seat)) return BOT_POLICY.winningValue;
+  const without = acquiredState(state, tile, null);
+  const blocks = state.players.some(
+    (player) =>
+      player.seat !== seat &&
+      !player.bankrupt &&
+      instantWin(acquiredState(state, tile, player.seat), player.seat),
+  );
+  return (
+    botHoldingsValue(acquired, seat) -
+    botHoldingsValue(without, seat) +
+    (blocks ? BOT_POLICY.winningValue / 2 : 0)
+  );
+}
+
+function hardSwapTarget(
+  state: PublicState,
+  seat: Seat,
+  actions: readonly Action[],
+): Action {
+  const pending = state.pending;
+  if (pending?.kind !== "card-target" || pending.sourceTile === undefined)
+    return { type: "Decline" };
+  let best: Action = { type: "Decline" };
+  let bestValue = 0;
+  for (const action of actions) {
+    if (action.type !== "ChooseTarget") continue;
+    const target = getProperty(state, action.tile);
+    if (!target || target.owner === null || target.shielded) continue;
+    const beforeSwap =
+      !rules(state).championshipPersists &&
+      state.championshipHost !== null &&
+      [pending.sourceTile, action.tile].includes(state.championshipHost.tile)
+        ? { ...state, championshipHost: null }
+        : state;
+    const swapped = applyEvent(beforeSwap, {
+      type: "PropertiesSwapped",
+      seat,
+      otherSeat: target.owner,
+      tile: pending.sourceTile,
+      otherTile: action.tile,
+    });
+    // The active seat wins first if the swap completes two instant conditions.
+    if (instantWin(swapped, seat)) return action;
+    if (instantWin(swapped, target.owner)) continue;
+    const value =
+      botHoldingsValue(swapped, seat) -
+      botHoldingsValue(state, seat) -
+      (botHoldingsValue(swapped, target.owner) -
+        botHoldingsValue(state, target.owner));
+    if (value > bestValue) {
+      bestValue = value;
+      best = action;
+    }
+  }
+  return best;
+}
+
+function botReserve(state: PublicState, seat: Seat): number {
+  const position = getPlayer(state, seat).position;
+  let exposure = 0;
+  for (let first = 1; first <= 6; first++) {
+    for (let second = 1; second <= 6; second++) {
+      const tile = (position + first + second) % BOARD_SIZE;
+      const owner = propertyOwner(state, tile);
+      if (owner !== null && owner !== seat)
+        exposure += propertyRent(state, tile);
+    }
+  }
+  return Math.max(
+    rules(state).islandReleaseFee,
+    Math.ceil((exposure * BOT_POLICY.threatHorizon) / 36),
+  );
+}
+
 export function botAction(
   state: PublicState,
   seat: Seat,
-  difficulty: BotDifficulty = "medium",
+  difficulty: BotDifficulty = getPlayer(state, seat).botDifficulty ??
+    state.config.botDifficulty ??
+    "medium",
 ): Action {
   const actions = legalActions(state, seat);
   if (actions.length === 0) throw new RangeError("Bot has no legal decision");
   const pending = state.pending;
   if (!pending) return actions[0];
   const cash = getPlayer(state, seat).cash;
+  // Public, reproducible lapses leave Easy close to the ordinary Medium policy.
+  const easyLapse =
+    difficulty === "easy" &&
+    "tile" in pending &&
+    (state.round + seat + pending.tile) % BOT_POLICY.easyLapsePeriod === 0;
   switch (pending.kind) {
     case "island":
       return (
@@ -2169,19 +2321,34 @@ export function botAction(
           (action): action is Extract<Action, { type: "Travel" }> =>
             action.type === "Travel",
         )
+        .filter(
+          (action) =>
+            difficulty !== "hard" ||
+            (propertyOwner(state, action.tile) === seat
+              ? nextRentIncrease(state, action.tile) > 0
+              : cash +
+                  travelSalary(state, seat, action.tile) -
+                  ECONOMY.worldTourFee >=
+                landPrice(state, action.tile)),
+        )
         .sort((a, b) => {
           const score = (tile: number) =>
-            propertyOwner(state, tile) === null && getProperty(state, tile)
-              ? landPrice(state, tile) +
-                (getTile(tile, state.config)?.kind === "resort"
-                  ? ECONOMY.resortPrice
-                  : 0)
-              : propertyOwner(state, tile) === seat
-                ? nextRentIncrease(state, tile)
-                : -propertyRent(state, tile);
+            difficulty === "hard"
+              ? propertyOwner(state, tile) === null
+                ? acquisitionValue(state, tile, seat)
+                : nextRentIncrease(state, tile)
+              : propertyOwner(state, tile) === null && getProperty(state, tile)
+                ? landPrice(state, tile) +
+                  (getTile(tile, state.config)?.kind === "resort"
+                    ? ECONOMY.resortPrice
+                    : 0)
+                : propertyOwner(state, tile) === seat
+                  ? nextRentIncrease(state, tile)
+                  : -propertyRent(state, tile);
           return score(b.tile) - score(a.tile) || a.tile - b.tile;
         });
-      return cash > ECONOMY.worldTourFee * 4 && travel.length
+      return (difficulty === "hard" || cash > ECONOMY.worldTourFee * 4) &&
+        travel.length
         ? travel[0]
         : actions[0];
     }
@@ -2198,13 +2365,16 @@ export function botAction(
       );
       const economy = rules(state);
       const reserve =
-        difficulty === "easy"
-          ? 0
-          : difficulty === "hard"
-            ? Math.max(economy.minimumTax, Math.floor(cash / 4))
-            : economy.islandReleaseFee;
+        difficulty === "hard"
+          ? botReserve(state, seat)
+          : economy.islandReleaseFee;
+      const winningPurchase =
+        difficulty === "hard" &&
+        pending.kind === "buy" &&
+        instantWin(acquiredState(state, pending.tile, seat), seat) !== null;
       const affordable = builds.filter(
-        (action) => cash - actionCost(state, action) >= reserve,
+        (action) =>
+          cash - actionCost(state, action) >= (winningPurchase ? 0 : reserve),
       );
       const selected = [...affordable]
         .reverse()
@@ -2214,11 +2384,28 @@ export function botAction(
             action.level < 5 ||
             cash >= actionCost(state, action) * 3,
         );
+      if (easyLapse && selected && selected.level > 0)
+        return (
+          affordable.find(
+            (action) =>
+              action.type === selected.type &&
+              action.level === selected.level - 1,
+          ) ?? { type: "Decline" }
+        );
       return selected ?? { type: "Decline" };
     }
     case "buyout":
-      return cash - pending.price >= rules(state).islandReleaseFee &&
-        (difficulty === "hard" || pending.price <= cash / 2)
+      if (difficulty === "hard")
+        return actions.some((action) => action.type === "Buyout") &&
+          (instantWin(acquiredState(state, pending.tile, seat), seat) !==
+            null ||
+            (cash - pending.price >= botReserve(state, seat) &&
+              acquisitionValue(state, pending.tile, seat) >= pending.price))
+          ? { type: "Buyout" }
+          : { type: "Decline" };
+      return !easyLapse &&
+        cash - pending.price >= rules(state).islandReleaseFee &&
+        pending.price <= cash / 2
         ? { type: "Buyout" }
         : { type: "Decline" };
     case "rent-card":
@@ -2237,8 +2424,31 @@ export function botAction(
         : timeoutAction(state);
     }
     case "sell":
+      if (difficulty === "hard")
+        return [...actions].sort((a, b) => {
+          if (a.type !== "Sell" || b.type !== "Sell") return 0;
+          const loss = (tile: number) =>
+            acquisitionValue(state, tile, seat) /
+            Math.max(1, propertyRefund(state, tile));
+          return loss(a.tile) - loss(b.tile) || a.tile - b.tile;
+        })[0];
       return timeoutAction(state);
     case "card-target":
+      if (difficulty === "hard" && pending.card === "Land Swap")
+        return hardSwapTarget(state, seat, actions);
+      if (difficulty === "hard" && pending.card === "Gift") {
+        const recipient = cashRankedOpponent(state, seat, false);
+        if (recipient !== undefined)
+          return {
+            type: "ChooseTarget",
+            tile: [...pending.targets].sort((a, b) => {
+              const loss = (tile: number) =>
+                acquisitionValue(state, tile, seat) +
+                acquisitionValue(state, tile, recipient);
+              return loss(a) - loss(b) || a - b;
+            })[0],
+          };
+      }
       return pending.card === "Land Swap"
         ? (actions.find(
             (action) =>
@@ -2265,6 +2475,11 @@ export function createGame(
     throw new RangeError("Start salary must be a non-negative integer");
   if (!Number.isInteger(config.roundLimit) || config.roundLimit < 1)
     throw new RangeError("Round limit must be a positive integer");
+  if (
+    config.botDifficulty !== undefined &&
+    !["easy", "medium", "hard"].includes(config.botDifficulty)
+  )
+    throw new RangeError("Unsupported bot difficulty");
   if (
     config.decisionSeconds !== undefined &&
     (!Number.isInteger(config.decisionSeconds) || config.decisionSeconds < 1)
@@ -2354,6 +2569,14 @@ export function createGame(
     seats.some((seat) => seat.playerId.length === 0 || seat.name.length === 0)
   )
     throw new RangeError("Every seat must have a player ID and name");
+  if (
+    seats.some(
+      (seat) =>
+        seat.botDifficulty !== undefined &&
+        !["easy", "medium", "hard"].includes(seat.botDifficulty),
+    )
+  )
+    throw new RangeError("Unsupported seat bot difficulty");
   const tableSeats = seats.map((seat, index) => seat.seat ?? index);
   if (
     tableSeats.some(
@@ -2368,6 +2591,12 @@ export function createGame(
       playerId: seat.playerId,
       name: seat.name,
       control: seat.control,
+      ...(seat.control === "bot"
+        ? {
+            botDifficulty:
+              seat.botDifficulty ?? config.botDifficulty ?? "medium",
+          }
+        : {}),
       seat: tableSeats[index] as Seat,
       cash: config.startingCash,
       position: 0,

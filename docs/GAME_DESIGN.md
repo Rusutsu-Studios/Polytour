@@ -474,7 +474,8 @@ These defaults are deterministic from public state and are what `applyTimeout`
 applies to a **human** seat whose decision timer expires, whether that player is
 connected or inside the disconnect grace period. **Bot** seats never time out: they
 act through `botAction` at their difficulty. A disconnected human seat becomes a
-bot seat (medium difficulty) when its grace period ends, until the player reconnects.
+bot seat at the match's frozen room default (Medium for unmarked saves) when its
+grace period ends, until the player reconnects.
 
 Opening the pause menu in a match with one human immediately pauses play. In a
 match with multiple humans, any non-bankrupt human may request a pause; every
@@ -489,6 +490,30 @@ human can resume; the engine adds the paused duration to both deadlines so every
 remaining second is preserved. Closing the solo menu resumes; closing a multiplayer
 menu merely returns to the paused board. If all humans exhaust their disconnect
 grace while paused, the room resumes its match clock so abandoned rooms can expire.
+
+## Bot difficulty
+
+The room setting chooses the default for new bots. The leader can select each
+bot's level on its lobby card, and each choice freezes when the match starts.
+Temporary bots replacing disconnected humans use the frozen room default. The
+welcome screen and room settings show the default; lobby cards and the match HUD
+show each bot's own level. Saved bots without their own `botDifficulty` fall back
+to the saved room default, or Medium when neither marker exists.
+
+- **Easy:** uses Medium's cash reserve and normally constructs and buys out.
+  Occasional public-state lapses choose one fewer construction level, postpone a
+  single-step upgrade or miss a buyout opportunity. The cycle uses the round, seat
+  and tile modulo four; it never reads private entropy or changes dice.
+- **Medium:** retains the existing development and buyout policy with a simple
+  cash margin.
+- **Hard:** uses public-state heuristics for collections, instant wins, blocking,
+  probable next-roll rent exposure and the strategic loss of a forced sale.
+
+All levels use the same authoritative rules, legal actions and random sources.
+Hard neither knows future dice nor reads the private deck. It is a strategic
+heuristic, with no claim of human-level play or guaranteed victory. Disabling
+`botCanBuild` still restricts every level. The proposal and reproducible
+comparison live in [BOT_DIFFICULTY.md](BOT_DIFFICULTY.md).
 
 ## Engine contract
 
@@ -517,7 +542,7 @@ export function toPublic(state: GameState): PublicState; // strips secrets; this
 
 export function legalActions(state: PublicState, seat: Seat): Action[]; // drives UI buttons and bots
 
-export function botAction(state: PublicState, seat: Seat, difficulty: BotDifficulty): Action;
+export function botAction(state: PublicState, seat: Seat, difficulty?: BotDifficulty): Action;
 ```
 
 `applyAction`, `applyTimeout`, and `createGame` decide *what happens* and emit
@@ -572,6 +597,13 @@ Change one parameter at a time and commit the sim output alongside the config ch
 `pnpm sim -- --rules prototype|reference --rounds N` selects the rule set and round
 cap. The reference rules were adopted together at the user's request; their
 20-round and 60-round results are in `tools/sim/reference.json`.
+
+`--difficulty easy|medium|hard` selects one policy for all simulator seats.
+`--players 3 --levels easy,medium,hard` rotates the supplied policies across
+seats for comparison; `--seed-start N` selects the first deterministic seed.
+Report interpretation must account for repeated levels, such as two Medium bots
+in a four-player run. See [BOT_DIFFICULTY.md](BOT_DIFFICULTY.md) and
+`tools/sim/bot-difficulty.json` for the current comparison and its limits.
 
 ## Modes (roadmap)
 

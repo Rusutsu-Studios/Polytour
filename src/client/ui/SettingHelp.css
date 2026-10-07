@@ -1,0 +1,23 @@
+.setting-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f4e3ba;
+  color: #245566;
+  cursor: help;
+}
+.setting-help:hover,
+.setting-help[aria-expanded="true"] {
+  background: #f8db9b;
+  color: #173b45;
+}
+.setting-help:focus-visible {
+  outline: 2px solid #245566;
+  outline-offset: 3px;
+}

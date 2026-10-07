@@ -5,12 +5,18 @@ import type {
   EconomyRule,
   WorldTourRule,
 } from "../board/index.js";
-import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
+import type {
+  Action,
+  BotDifficulty,
+  GameEvent,
+  PublicState,
+  Seat,
+} from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 8 adds null (unlimited) game duration. Stale clients reload.
-export const PROTOCOL_VERSION = 8;
+// Version 9 adds per-bot lobby choices and frozen player difficulty.
+export const PROTOCOL_VERSION = 9;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -29,6 +35,7 @@ export const RoomConfigSchema = z
     extraRollOnDouble: z.boolean().default(true),
     tripleDoubleToIsland: z.boolean().default(true),
     botCanBuild: z.boolean().default(true),
+    botDifficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),
     randomnessMode: z.enum(["secure", "drand"]).default("secure"),
@@ -105,6 +112,13 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
         z.object({ type: z.literal("add-bot"), seat }).strict(),
         z.object({ type: z.literal("remove-bot"), seat }).strict(),
         z
+          .object({
+            type: z.literal("bot-difficulty"),
+            seat,
+            difficulty: z.enum(["easy", "medium", "hard"]),
+          })
+          .strict(),
+        z
           .object({ type: z.literal("add-local"), seat, name: NameSchema })
           .strict(),
         z.object({ type: z.literal("remove-local"), seat }).strict(),
@@ -139,6 +153,7 @@ export type LobbyOp =
   | { type: "settings"; config: RoomConfig }
   | { type: "add-bot"; seat: Seat }
   | { type: "remove-bot"; seat: Seat }
+  | { type: "bot-difficulty"; seat: Seat; difficulty: BotDifficulty }
   | { type: "add-local"; seat: Seat; name: string }
   | { type: "remove-local"; seat: Seat }
   | { type: "transfer-host"; seat: Seat }
@@ -171,6 +186,8 @@ export type LobbySeat = {
   seat: Seat;
   name: string;
   control: "human" | "bot" | null;
+  /** Only bots carry an individual level; missing fields use room config. */
+  botDifficulty?: BotDifficulty;
   online: boolean;
   /** A local player shares this seat's device and screen. */
   controller: Seat | null;

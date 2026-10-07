@@ -530,11 +530,21 @@ test("win conditions follow the settings draft and saved rules in both languages
   const gifts = dialog.getByLabel("Gifts can cause bankruptcy", {
     exact: true,
   });
-  await expect(gifts).toHaveAccessibleDescription(
-    /Birthday and Charity cards.*full payment/,
+  const giftHelp = dialog.getByRole("button", {
+    name: "About Gifts can cause bankruptcy",
+    exact: true,
+  });
+  await giftHelp.click();
+  await expect(page.locator("#disabled-action-hint")).toContainText(
+    /Birthday.*Charity.*full payment/,
   );
+  await page.keyboard.press("Escape");
   await gifts.uncheck();
-  await expect(gifts).toHaveAccessibleDescription(/capped at available cash/);
+  await giftHelp.click();
+  await expect(page.locator("#disabled-action-hint")).toContainText(
+    /capped at available cash/,
+  );
+  await page.keyboard.press("Escape");
   await gifts.check();
   for (const size of [
     { width: 1280, height: 720 },
@@ -868,8 +878,18 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .getByRole("group", { name: "Temps de décision" })
     .getByRole("radio", { name: "60 s", exact: true })
     .check();
-  await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
-  await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Victoire par ligne complète",
+      exact: true,
+    }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Victoire par trois collections",
+      exact: true,
+    }),
+  ).toBeChecked();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
   await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
     "drand",
