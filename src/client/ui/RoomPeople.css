@@ -33,6 +33,35 @@
   opacity: 0.55;
   cursor: default;
 }
+
+.seat-bot-difficulty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid #7999a2;
+  border-radius: 7px;
+  background: #e4f2e8;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.seat-bot-difficulty:hover:not([aria-disabled="true"]) {
+  background: #d5e698;
+  border-color: #557122;
+}
+
+.seat-bot-difficulty[aria-disabled="true"] {
+  background: #e2e9df;
+  cursor: default;
+}
+
+.seat-bot-difficulty:focus-visible {
+  outline: 3px solid #236cce;
+  outline-offset: 3px;
+}
 .seat-local-form {
   height: 100%;
   min-height: 138px;

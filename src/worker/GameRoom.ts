@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { BOT_TIMING, ECONOMY } from "../shared/board/index.js";
 import type {
   Action,
+  BotDifficulty,
   GameEvent,
   GameState,
   Seat,
@@ -52,6 +53,7 @@ type StoredSeat = {
   name: string;
   control: "human" | "bot";
   token_hash: string | null;
+  botDifficulty?: BotDifficulty;
 };
 type StoredMember = {
   id: string;
@@ -93,9 +95,11 @@ const LOBBY_LIFETIME = 7_200_000;
  * 8 pays four resorts double the third's rent and lets a buyout be built on;
  * 9 adds the saved Island Escape card;
  * 10 reworks the Chance deck (see ChanceRule);
- * 11 pays 1.5x salary for a clockwise landing exactly on Start.
+ * 11 selects a random starter, then follows the fixed clockwise seats;
+ * 12 spreads initial festivals across sides and country groups;
+ * 13 pays 1.5x salary for a clockwise landing exactly on Start.
  */
-const RULES_VERSION = 11;
+const RULES_VERSION = 13;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -107,7 +111,9 @@ function frozenRules(version: number | null) {
     version !== 8 &&
     version !== 9 &&
     version !== 10 &&
-    version !== 11
+    version !== 11 &&
+    version !== 12 &&
+    version !== 13
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -123,7 +129,11 @@ function frozenRules(version: number | null) {
     chanceRule: version >= 10 ? ("reworked" as const) : ("original" as const),
     resortFestivals: version >= 4 && version < 7,
     escapeCard: version >= 9,
-    startLandingBonus: version >= 11,
+    turnOrderRule:
+      version >= 11 ? ("clockwise" as const) : ("shuffled" as const),
+    festivalDistribution:
+      version >= 12 ? ("spread" as const) : ("random" as const),
+    startLandingBonus: version >= 13,
   };
 }
 
@@ -189,7 +199,7 @@ export class GameRoom extends DurableObject<Env> {
       "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
     );
     this.ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS seats (seat INTEGER PRIMARY KEY, name TEXT NOT NULL, control TEXT NOT NULL, token_hash TEXT)",
+      "CREATE TABLE IF NOT EXISTS seats (seat INTEGER PRIMARY KEY, name TEXT NOT NULL, control TEXT NOT NULL, token_hash TEXT, bot_difficulty TEXT)",
     );
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), seq INTEGER NOT NULL, json TEXT NOT NULL)",
@@ -300,12 +310,22 @@ export class GameRoom extends DurableObject<Env> {
     const festivals = state.config.resortFestivals;
     const escapeCard = state.config.escapeCard;
     const chances = state.config.chanceRule;
+    const turnOrder = state.config.turnOrderRule;
+    const festivalDistribution = state.config.festivalDistribution;
     const startBonus = state.config.startLandingBonus;
     if (
-      // Saves made before rules version 11 pay a flat salary on every crossing.
+      // Saves through version 12 retain their flat salary.
       (rulesVersion !== null &&
         startBonus !== frozen.startLandingBonus &&
-        (rulesVersion >= 11 || startBonus !== undefined)) ||
+        (rulesVersion >= 13 || startBonus !== undefined)) ||
+      // Older saves may omit the selector; their recorded festivals stay intact.
+      (rulesVersion !== null &&
+        festivalDistribution !== frozen.festivalDistribution &&
+        (rulesVersion >= 12 || festivalDistribution !== undefined)) ||
+      // Older matches retain their stored order; version 11 requires its selector.
+      (rulesVersion !== null &&
+        rulesVersion >= 11 &&
+        turnOrder !== frozen.turnOrderRule) ||
       // Older decks have no Escape card, including unmarked saved matches.
       (rulesVersion !== null &&
         escapeCard !== frozen.escapeCard &&
@@ -353,10 +373,26 @@ export class GameRoom extends DurableObject<Env> {
   private seats(): StoredSeat[] {
     if (!this.schemaReady) return [];
     return this.ctx.storage.sql
-      .exec<StoredSeat>(
-        "SELECT seat,name,control,token_hash FROM seats ORDER BY seat",
-      )
+      .exec<
+        Omit<StoredSeat, "botDifficulty"> & {
+          bot_difficulty?: BotDifficulty | null;
+        }
+      >("SELECT * FROM seats ORDER BY seat")
+      .toArray()
+      .map(({ bot_difficulty, ...seat }) => ({
+        ...seat,
+        ...(bot_difficulty ? { botDifficulty: bot_difficulty } : {}),
+      }));
+  }
+  /** Add the optional column only when a lobby changes or starts, never on lookup. */
+  private ensureBotDifficultyColumn(): void {
+    const columns = this.ctx.storage.sql
+      .exec<{ name: string }>("PRAGMA table_info(seats)")
       .toArray();
+    if (!columns.some((column) => column.name === "bot_difficulty"))
+      this.ctx.storage.sql.exec(
+        "ALTER TABLE seats ADD COLUMN bot_difficulty TEXT",
+      );
   }
   private members(): StoredMember[] {
     if (!this.schemaReady) return [];
@@ -661,7 +697,10 @@ export class GameRoom extends DurableObject<Env> {
         : saved.state.status === "finished"
           ? "finished"
           : "playing",
-      config: room.config,
+      config: {
+        ...room.config,
+        botDifficulty: room.config.botDifficulty ?? "medium",
+      },
       ...frozenRules(this.readMeta<number>("rulesVersion")),
       seats: SEATS.map((seat) => {
         const entry = seats.find((candidate) => candidate.seat === seat);
@@ -671,6 +710,12 @@ export class GameRoom extends DurableObject<Env> {
           seat,
           name: entry?.name ?? "Place libre",
           control: entry?.control ?? null,
+          ...(entry?.control === "bot"
+            ? {
+                botDifficulty:
+                  entry.botDifficulty ?? room.config.botDifficulty ?? "medium",
+              }
+            : {}),
           online:
             this.socketsWhere(
               (attachment) => attachment.seat === (controller ?? seat),
@@ -1230,6 +1275,7 @@ export class GameRoom extends DurableObject<Env> {
       case "settings":
       case "add-bot":
       case "remove-bot":
+      case "bot-difficulty":
         break;
       default: {
         const unknown: never = op;
@@ -1240,6 +1286,21 @@ export class GameRoom extends DurableObject<Env> {
     if (op.type === "settings") {
       const config = op.config;
       done(() => this.writeMeta("room", { ...room, config }));
+      return finish();
+    }
+    if (op.type === "bot-difficulty") {
+      if (
+        this.seats().find((entry) => entry.seat === op.seat)?.control !== "bot"
+      )
+        return this.reject(socket, message.id, "not-a-bot");
+      done(() => {
+        this.ensureBotDifficultyColumn();
+        this.ctx.storage.sql.exec(
+          "UPDATE seats SET bot_difficulty=? WHERE seat=?",
+          op.difficulty,
+          op.seat,
+        );
+      });
       return finish();
     }
     if (op.type === "add-bot" || op.type === "remove-bot") {
@@ -1296,6 +1357,12 @@ export class GameRoom extends DurableObject<Env> {
           name: entry?.name ?? BOT_NAMES[index],
           control: entry?.control ?? "bot",
           seat: index,
+          ...(entry?.control !== "human"
+            ? {
+                botDifficulty:
+                  entry?.botDifficulty ?? room.config.botDifficulty ?? "medium",
+              }
+            : {}),
         },
       ];
     });
@@ -1313,12 +1380,20 @@ export class GameRoom extends DurableObject<Env> {
       createEngineContext(startedAt),
     );
     this.ctx.storage.transactionSync(() => {
+      this.ensureBotDifficultyColumn();
       for (const entry of allSeats)
         if (!seats.some((candidate) => candidate.seat === entry.seat))
           this.ctx.storage.sql.exec(
-            "INSERT INTO seats(seat,name,control,token_hash) VALUES(?,?,'bot',NULL)",
+            "INSERT INTO seats(seat,name,control,token_hash,bot_difficulty) VALUES(?,?,'bot',NULL,?)",
             entry.seat,
             entry.name,
+            entry.botDifficulty ?? "medium",
+          );
+        else if (entry.control === "bot")
+          this.ctx.storage.sql.exec(
+            "UPDATE seats SET bot_difficulty=? WHERE seat=?",
+            entry.botDifficulty ?? "medium",
+            entry.seat,
           );
       // A human can leave while the room is still a lobby. Lobby disconnects
       // need no alarm, but starting that room must give every absent human the
@@ -1368,8 +1443,9 @@ export class GameRoom extends DurableObject<Env> {
       undefined,
       false,
       () => {
+        this.ensureBotDifficultyColumn();
         this.ctx.storage.sql.exec(
-          "UPDATE seats SET name=?,control='human',token_hash=? WHERE seat=?",
+          "UPDATE seats SET name=?,control='human',token_hash=?,bot_difficulty=NULL WHERE seat=?",
           member.name,
           member.token_hash,
           op.seat,

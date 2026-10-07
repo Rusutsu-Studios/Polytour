@@ -25,11 +25,14 @@ explicit choices take precedence.
 
 The default preset has **2,000,000 starting cash, 400,000 per lap, three festivals,
 line and triple monopoly enabled, and a 120-minute real-time limit**. The room can
-choose 20/60/120 minutes, adjust cash and salary, choose festival count, toggle
+choose 20/60/120-minute shortcuts, an exact duration of at least 15 minutes
+(including longer games such as 200 minutes) or an explicit
+unlimited (∞) Polytour option, adjust cash and salary, choose festival count, toggle
 monopoly conditions, and choose the direct-hotel exception. New matches use immediate
 server Web Crypto dice. Every seat receives the same resources;
 settings freeze at match start. A round cap remains available for simulation and
-short tests, independently of the real-time limit.
+short tests, independently of the real-time limit. Unlimited duration disables
+both limits and retains decision timers; only enabled win conditions end the game.
 
 This is a rules prototype. Paid items, luck stats, paid rerolls, or an
 outcome-biased power gauge will not be reproduced. Initial festivals are selected
@@ -241,11 +244,11 @@ upgrade, world-championship, royal-gift and croquet cards; a Hotel hit by Forced
 Sale drops to three houses instead of being exempt. These are Polytour choices,
 not reference values. Version-8 and earlier rooms keep the original deck.
 
-### Start landing bonus: rules version 11, 6 October 2026
+### Start landing bonus: rules version 13, 6 October 2026
 
 At the user's request, a clockwise landing exactly on Start pays 150% of the
 salary (600,000 at the default) instead of the flat amount, and new rooms freeze
-`rulesVersion: 11` with `startLandingBonus: true`. A move that crosses Start and
+`rulesVersion: 13` with `startLandingBonus: true`. A move that crosses Start and
 stops elsewhere still pays it flat, so only the stop is rewarded; Grand Tour
 lands on Start and therefore collects the bonus too. This is a Polytour choice,
 not a reference value: the reference game pays one flat salary per crossing.
@@ -270,6 +273,18 @@ Use the actual settings screen and tile tooltips to capture this matrix, then
 create a versioned config preset with tests. Do not rewrite the rules of a game
 already in progress. The initial functional prototype can be played while this
 comparison is being collected.
+
+### Polytour festival distribution exception - 6 October 2026
+
+New rooms use rules version 12 with `festivalDistribution: "spread"`. When
+configured festivals fit in separate countries, the chance of placing more than
+one in a country is one percentage point per configured festival: about 3% with
+three festivals. The count and city-only rule remain unchanged. Rare draws can
+still group all three in one country. Above eight festivals, the draw visits
+every country before assigning the remaining festivals to distinct cities.
+There is no Portugal-specific weighting. This is an explicit Polytour balance
+choice, not a claim about the reference game's festival distribution. Rooms
+through version 11 retain their original seeded shuffle and saved placements.
 
 ### Polytour festival exception — 4 October 2026
 

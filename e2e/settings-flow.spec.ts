@@ -92,6 +92,7 @@ test("legacy preferences migrate intact and shared settings update another open 
       locale: "en",
       graphics: "low",
       boardZoom: 1,
+      boardViewLocked: false,
       reducedMotion: "off",
     },
     locale: "en",

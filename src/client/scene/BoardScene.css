@@ -1,3 +1,16 @@
+.canvas-layer[data-interactive-zoom="true"],
+.game-shell .canvas-layer[data-board-view-locked="true"] {
+  touch-action: none;
+}
+.canvas-layer[data-board-dragging="true"],
+.canvas-layer[data-board-dragging="true"] canvas,
+.canvas-layer[data-board-dragging="true"] button {
+  cursor: grabbing;
+}
+.canvas-layer:focus-visible {
+  outline: 3px solid #174b61;
+  outline-offset: -4px;
+}
 .sale-labels {
   position: absolute;
   inset: 0;

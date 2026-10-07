@@ -33,6 +33,12 @@
   font-weight: 650;
 }
 
+.room-setting-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .room-setting-heading output {
   color: var(--ink);
   font-size: 26px;
@@ -195,6 +201,53 @@
   font-weight: 500;
 }
 
+.room-setting-choice--time .room-setting-pill > span {
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 3px;
+  line-height: 1.2;
+  height: 44px;
+}
+
+.room-setting-time-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.room-setting-time-row .room-setting-range {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.room-setting-time-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.room-setting-time-value input {
+  width: 66px;
+  min-height: 36px;
+  padding: 4px;
+  border: 1px solid #7999a2;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.room-setting-time-value input:disabled {
+  color: #47666c;
+  background: #e2e9df;
+}
+
 .room-setting-pill input:checked + span {
   border-color: #557122;
   background: var(--settings-lime);
@@ -224,6 +277,16 @@
   color: var(--ink);
   font-size: 14px;
   cursor: pointer;
+}
+
+.room-setting-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-setting-toggle-row .room-setting-toggle {
+  flex: 1;
 }
 
 .room-setting-toggle input {
@@ -256,12 +319,6 @@
   max-width: 65ch;
   margin-top: 10px;
   line-height: 1.6;
-}
-
-.room-setting-help {
-  margin: 0 0 8px 30px;
-  color: var(--muted);
-  font-size: 14px;
 }
 
 .room-settings-wins {
@@ -314,6 +371,18 @@
 
 .room-setting-pill:hover input:not(:disabled) + span {
   border-color: var(--settings-blue);
+}
+
+.room-setting-bots {
+  grid-column: 1 / -1;
+}
+
+.room-setting-bot-option {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
 }
 
 .room-settings input:focus-visible,

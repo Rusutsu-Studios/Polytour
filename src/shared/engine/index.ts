@@ -22,6 +22,7 @@ export {
   changeControl,
   createGame,
   DEFAULT_GAME_CONFIG,
+  decisionOpensAt,
   decisionWindow,
   economyRule,
   expirePauseVote,

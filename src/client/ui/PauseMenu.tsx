@@ -27,6 +27,12 @@ export type PauseMenuProps = {
   error: string | null;
   onClose: () => void;
   onLeave: () => void;
+  /** Recentres the 3D board; the control is disabled without it. */
+  onViewReset: () => void;
+  /** False while the flat fallback board is on screen. */
+  zoomAvailable: boolean;
+  streamer: boolean;
+  onStreamerChange: (enabled: boolean) => void;
   debugAvailable: boolean;
   connection: string;
   ping: PingState;
@@ -61,6 +67,10 @@ export default function PauseMenu({
   error,
   onClose,
   onLeave,
+  onViewReset,
+  zoomAvailable,
+  streamer,
+  onStreamerChange,
   debugAvailable,
   connection,
   ping,
@@ -439,6 +449,10 @@ export default function PauseMenu({
               initialTab={initialSettingsTab}
               rules={rules}
               onTabChange={setActiveTab}
+              onViewReset={onViewReset}
+              zoomAvailable={zoomAvailable}
+              streamer={streamer}
+              onStreamerChange={onStreamerChange}
               debugAvailable={debugAvailable}
               hasGame={Boolean(game)}
               connection={connection}

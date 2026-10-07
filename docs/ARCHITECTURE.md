@@ -54,6 +54,20 @@ Persisted alarms drive bots, decision deadlines, disconnect grace, real-time mat
 expiry and pause-vote expiry. New-room rolls resolve immediately through server Web Crypto, without a
 network fetch. Legacy drand-round alarms remain supported: a saved commitment
 survives retry/reconnect and keeps its original source. See [RANDOMNESS.md](RANDOMNESS.md).
+Each lobby bot can keep an individual `botDifficulty` choice on its seat row.
+Unselected bots follow the room default; changing that default preserves explicit
+choices. Starting freezes each bot's effective level in its public player state
+and seat row, so returning to the lobby retains it. Compaction moves the entire
+seat row, including its level. Humans carry no individual bot level; taking a bot's
+place clears that field, and temporary disconnect replacements use the frozen
+match default. The same engine `botAction` policy reads only public state and
+legal actions. Missing player fields use match config, then Medium.
+New rooms create the nullable `seats.bot_difficulty` column. Existing rooms gain
+it only when a bot choice is saved, a match starts or a bot is replaced by a
+human; reads and constructor wake-ups do not change that schema. Protocol version
+9 requires stale clients to refresh; no state migration or rules-version change
+is required. See
+[BOT_DIFFICULTY.md](BOT_DIFFICULTY.md) for the proposal and its evaluation limits.
 Live Chance draws receive fresh Web Crypto through `EngineContext.chanceEntropy`
 and select uniformly among remaining cards with rejection sampling, without
 replacement. This is independent of seeded setup and applies to saved decks without
@@ -89,11 +103,15 @@ Pending legacy dice block all pause intents. While a commitment is unresolved,
 vote expiry waits as well, keeping the committed event sequence unchanged. Dice
 resolution clears an expired vote in the same persisted event batch as its result;
 no late acceptance can count and the commitment/proof remains unchanged.
-New rooms freeze rules version 11: country-grouped board, reference economy,
+New rooms freeze rules version 13: country-grouped board, reference economy,
 staged hotels, World Tour flights to free or own properties, a 200 k rent for
-four resorts, a build offer after a buyout, a keepable Island Escape card, the
-reworked Chance deck and 150% salary for a landing exactly on Start.
-Version-10 rooms pay that salary flat. Version-9 rooms keep the original sixteen cards plus
+four resorts, a build offer after a buyout, a keepable Island Escape card,
+the reworked Chance deck, clockwise seat order from a random starter,
+country-spread festivals and 150% salary for landing exactly on Start.
+Rooms through version 12 retain their flat Start salary. Rooms through version 11
+retain their unrestricted festival shuffle.
+Rooms through version 10 keep their original shuffled order. Version-9 rooms
+keep the original sixteen cards plus
 Escape; version-8 and older rooms retain their original sixteen-card deck,
 without that card. Version-6 rooms pay four resorts
 like three and offer no build after a buyout; version-5 rooms also keep flights
@@ -373,7 +391,7 @@ info is added later, redact per socket using the seat in the attachment.
 | `pause-vote` | `state.pause.deadline` during voting | Clear an expired vote; gameplay continues. Deferred during a pending dice commitment. |
 | `match-end` | `state.matchDeadline` | Finish an active unpaused match, including an unattended match. |
 | `decision` | `state.pending.deadline` (computed by the engine) | `applyTimeout` applies the rule-defined default for a human seat (auto-roll, decline purchase, auto-sell cheapest to cover debt). |
-| `grace:<seat>` | 60 s after socket close | Seat becomes a bot seat (`botAction`, medium) until the player reconnects. |
+| `grace:<seat>` | 60 s after socket close | A bot uses the match's frozen default for the human's seat until the player reconnects. |
 | `bot` | `botDecisionAt`: once the events that opened the decision have played at 1×, plus 0.7 s (roll) or 1.4 s (choice); 0.9 s after a wake-up | Bot picks an action via `botAction`; bot seats never hit the `decision` timeout. |
 | `cleanup` | 10 min after `Finished` | `deleteAll()` storage. |
 
@@ -422,9 +440,19 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 10 with country-grouped tiles, reference economy, staged hotels, full
+  use version 13 with country-grouped tiles, reference economy, staged hotels, full
   nominal sale refunds, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true`, `buildAfterBuyout: true` and `chanceRule: "reworked"`.
+  `fourResortRent: true`, `buildAfterBuyout: true`, `chanceRule: "reworked"`, `startLandingBonus: true`,
+  `turnOrderRule: "clockwise"` and `festivalDistribution: "spread"`. The server chooses a random starter, then cycles
+  seats bottom-right → bottom-left → top-left → top-right, skipping empty and
+  bankrupt places. Saved version-10 and older lobbies use `turnOrderRule: "shuffled"`;
+  running matches keep their persisted `startingTurnOrder` without a migration.
+  Version-11 and older lobbies use `festivalDistribution: "random"`; an absent
+  marker on an older active save retains its recorded festival tiles. New rooms
+  use the spread selector, with a repeated-country chance of one percentage point
+  per festival when distinct countries can accommodate the configured count.
+  No existing match is redrawn on reconnect or eviction. Rooms through version 12
+  omit or freeze `startLandingBonus: false` and keep a flat salary.
   Saves without the Chance marker keep the original deck. Version-4/5/6 rooms retain
   their resort festivals and rent; an absent festival marker on those saved matches
   follows the original economy. A version-4/5 save without the World Tour selector
