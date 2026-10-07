@@ -243,6 +243,7 @@ for (const locale of ["fr", "en"] as const) {
     await gift.uncheck();
     for (const viewport of DESKTOPS) {
       await page.setViewportSize(viewport);
+      await dialog.getByRole("heading").first().focus();
       await giftHelp.scrollIntoViewIfNeeded();
       await gift.focus();
       await giftHelp.hover();
