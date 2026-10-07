@@ -98,6 +98,9 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
   await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await expect(hint).not.toBeVisible();
+  await page
+    .getByRole("button", { name: "Reset board view", exact: true })
+    .focus();
   await matchToggle.focus();
   await expect(hint).toBeVisible();
   await expect(matchToggle).toHaveAttribute(
@@ -129,6 +132,7 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
   await expect(hint).toContainText("Hides the room code");
   await page.keyboard.press("Escape");
   await expect(page.locator(".pause-dialog")).toBeVisible();
+  await page.locator(".pause-dialog").getByRole("tab").first().focus();
   await setting.focus();
   await expect(hint).toBeVisible();
   await setting.click();

@@ -203,6 +203,7 @@ export default function DisabledHints() {
     const toggleHelp = (event: MouseEvent) => {
       const hint = hintFor(event.target);
       if (hint?.kind !== "help") return;
+      dismissedHelp = null;
       if (!pinnable(hint.control)) hide();
       else if (anchor === hint.control && pinned) hide();
       else {
