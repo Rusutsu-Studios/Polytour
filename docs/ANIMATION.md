@@ -42,7 +42,9 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   touch and trackpad pinches cannot magnify the page while locked. The two reset
   buttons remain usable. Lobby previews use only Video controls.
   The accessible flat-board fallback keeps camera controls unavailable.
-  Input applies immediately without smoothing, including reduced motion.
+  Gestures apply immediately. Reset buttons and the 0 shortcut ease zoom,
+  orientation and pan back to the default view over 0.55 seconds. Reduced
+  motion resets immediately, and a new gesture interrupts the reset.
   The Director never writes this preference or the user's board transform.
   Framing, sale quotes and the floating Roll anchor share the same local transform
   and projection. View changes never cancel an event animation, advance the

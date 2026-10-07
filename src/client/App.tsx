@@ -1463,8 +1463,8 @@ function MatchView({
           aria-label={t("Recentrer le plateau", "Reset board view")}
           data-help-title={t("Recentrer le plateau", "Reset board view")}
           data-help-message={t(
-            "Remet le zoom, l’angle et le centrage du plateau à leur position d’origine. Raccourci : 0.",
-            "Puts the board's zoom, angle and centring back to the original view. Shortcut: 0.",
+            "Revenir à la vue par défaut.",
+            "Return to the default view.",
           )}
           data-help-pin="false"
           disabled={!boardZoomAvailable}

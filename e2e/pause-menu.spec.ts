@@ -2367,7 +2367,7 @@ test("center map and streamer toolbar buttons explain themselves without pinning
   const hint = page.locator("#disabled-action-hint");
   await reset.hover();
   await expect(hint.locator("strong")).toHaveText("Recentrer le plateau");
-  await expect(hint).toContainText("Raccourci : 0.");
+  await expect(hint.locator("p")).toHaveText("Revenir à la vue par défaut.");
   await page.keyboard.press("Escape");
   await page.locator(".game-tools .streamer-toggle").focus();
   await reset.focus();
@@ -2400,4 +2400,123 @@ test("center map and streamer toolbar buttons explain themselves without pinning
   await expect(hint).not.toBeVisible();
   await expect(board).toHaveAttribute("data-board-yaw", "0");
   await expect(board).toHaveAttribute("data-board-pitch", "0");
+});
+
+test("center map eases the whole view home and new input interrupts it", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.addInitScript(() =>
+    localStorage.setItem("polytour.lowGraphics", "true"),
+  );
+  const match = await enterMatch(page, { realClock: true });
+  const board = page.locator(".canvas-layer");
+  const reset = page.getByRole("button", {
+    name: "Recentrer le plateau",
+    exact: true,
+  });
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-reduced-motion",
+    "false",
+  );
+  for (const viewport of DESKTOP_SIZES.slice(0, 3)) {
+    await page.setViewportSize(viewport);
+    await board.focus();
+    for (let step = 0; step < 6; step++) await page.keyboard.press("+");
+    await expect(board).toHaveAttribute("data-board-zoom", "1.6");
+    await dragBoard(
+      page,
+      await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
+      100,
+      60,
+    );
+    await dragBoard(
+      page,
+      await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
+      80,
+      35,
+      true,
+    );
+    const initial = (await boardView(page)).map(Number);
+    expect(initial[3]).toBeGreaterThan(0);
+    expect(initial[4]).toBeGreaterThan(0);
+    expect(Math.abs(initial[1])).toBeGreaterThan(0);
+    expect(Math.abs(initial[2])).toBeGreaterThan(0);
+    const recording = board.evaluate(
+      (element) =>
+        new Promise<number[][]>((resolve) => {
+          const frames: number[][] = [];
+          const started = performance.now();
+          const sample = () => {
+            const data = (element as HTMLElement).dataset;
+            frames.push(
+              [
+                data.boardZoom,
+                data.boardPanX,
+                data.boardPanY,
+                data.boardYaw,
+                data.boardPitch,
+              ].map(Number),
+            );
+            if (performance.now() - started >= 1100) resolve(frames);
+            else requestAnimationFrame(sample);
+          };
+          sample();
+        }),
+    );
+    await reset.click();
+    const frames = await recording;
+    expect(
+      frames.some(
+        (view) =>
+          view[0] > 1 &&
+          view[0] < 1.6 &&
+          Math.abs(view[0] * 10 - Math.round(view[0] * 10)) > 0.001,
+      ),
+    ).toBe(true);
+    for (let axis = 1; axis < 5; axis++) {
+      expect(
+        frames.some(
+          (view) =>
+            Math.abs(view[axis]) > 0 &&
+            Math.abs(view[axis]) < Math.abs(initial[axis]),
+        ),
+      ).toBe(true);
+    }
+    await expect
+      .poll(async () => (await boardView(page)).map(Number))
+      .toEqual([1, 0, 0, 0, 0]);
+    await page.screenshot({
+      path: `.local/verification/smooth-center-${viewport.width}.png`,
+    });
+  }
+  await dragBoard(
+    page,
+    await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
+    140,
+    60,
+  );
+  await reset.click();
+  await board.focus();
+  await page.keyboard.press("+");
+  const interrupted = await boardView(page);
+  expect(Number(interrupted[3])).toBeGreaterThan(0);
+  // Wait beyond the old reset's duration and verify it cannot overwrite new input.
+  await board.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const started = performance.now();
+        const tick = () =>
+          performance.now() - started >= 700
+            ? resolve()
+            : requestAnimationFrame(tick);
+        tick();
+      }),
+  );
+  expect(await boardView(page)).toEqual(interrupted);
+  expect(
+    match.messages
+      .filter((raw) => raw.startsWith("{"))
+      .map((raw) => (JSON.parse(raw) as { type: string }).type),
+  ).toEqual(["sync"]);
 });

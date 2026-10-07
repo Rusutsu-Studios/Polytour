@@ -1,4 +1,13 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import gsap from "gsap";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 import {
   BOARD_DRAG_THRESHOLD,
@@ -16,6 +25,9 @@ export function useBoardView({
   enabled,
   locked,
   zoom,
+  requestedZoom,
+  onViewZoom,
+  reducedMotion,
   onZoom,
   resetKey,
   limits,
@@ -28,6 +40,9 @@ export function useBoardView({
   enabled: boolean;
   locked: boolean;
   zoom: number;
+  requestedZoom: number;
+  onViewZoom: (zoom: number) => void;
+  reducedMotion: boolean;
   onZoom?: (zoom: number) => void;
   resetKey?: number;
   limits: BoardPan;
@@ -41,6 +56,8 @@ export function useBoardView({
     enabled,
     locked,
     zoom,
+    onViewZoom,
+    reducedMotion,
     onZoom,
     limits,
     unitsPerPixel,
@@ -52,6 +69,8 @@ export function useBoardView({
     enabled,
     locked,
     zoom,
+    onViewZoom,
+    reducedMotion,
     onZoom,
     limits,
     unitsPerPixel,
@@ -60,13 +79,64 @@ export function useBoardView({
     canStartGesture,
   };
   const effectivePan = useMemo(() => clampBoardPan(pan, limits), [pan, limits]);
+  const currentPan = useRef(effectivePan);
+  currentPan.current = effectivePan;
+  const resetTween = useRef<gsap.core.Tween | null>(null);
+  const previousResetKey = useRef(resetKey);
+  const previousZoom = useRef(requestedZoom);
+  const stopReset = useCallback(() => {
+    resetTween.current?.kill();
+    resetTween.current = null;
+  }, []);
+  const resetView = useCallback(() => {
+    stopReset();
+    previousZoom.current = BOARD_ZOOM.default;
+    latest.current.onZoom?.(BOARD_ZOOM.default);
+    if (latest.current.reducedMotion) {
+      setPan(CENTERED_BOARD);
+      latest.current.onOrientation(DEFAULT_BOARD_ORIENTATION);
+      latest.current.onViewZoom(BOARD_ZOOM.default);
+      return;
+    }
+    const view = {
+      ...currentPan.current,
+      ...latest.current.orientation,
+      zoom: latest.current.zoom,
+    };
+    resetTween.current = gsap.to(view, {
+      x: 0,
+      y: 0,
+      yaw: 0,
+      pitch: 0,
+      zoom: BOARD_ZOOM.default,
+      duration: 0.55,
+      ease: "power2.inOut",
+      onUpdate: () => {
+        setPan({ x: view.x, y: view.y });
+        latest.current.onOrientation({ yaw: view.yaw, pitch: view.pitch });
+        latest.current.onViewZoom(view.zoom);
+      },
+      onComplete: () => {
+        resetTween.current = null;
+      },
+    });
+  }, [stopReset]);
 
   // Menu reset works even while direct gestures are locked.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key deliberately requests a fresh centered view.
+  useLayoutEffect(() => {
+    if (previousResetKey.current !== resetKey) {
+      previousResetKey.current = resetKey;
+      resetView();
+    } else if (previousZoom.current !== requestedZoom) {
+      previousZoom.current = requestedZoom;
+      stopReset();
+      onViewZoom(requestedZoom);
+    }
+  }, [resetKey, requestedZoom, onViewZoom, resetView, stopReset]);
+  useEffect(() => stopReset, [stopReset]);
   useEffect(() => {
-    setPan(CENTERED_BOARD);
-    onOrientation(DEFAULT_BOARD_ORIENTATION);
-  }, [resetKey, onOrientation]);
+    if (reducedMotion && resetTween.current) resetView();
+  }, [reducedMotion, resetView]);
   useEffect(() => {
     setPan((value) => {
       const next = clampBoardPan(value, limits);
@@ -97,7 +167,10 @@ export function useBoardView({
       event.target instanceof HTMLCanvasElement &&
       latest.current.canStartGesture(event.clientX, event.clientY);
     const changeZoom = (value: number) => {
+      stopReset();
       const next = clampBoardZoom(value);
+      previousZoom.current = next;
+      latest.current.onViewZoom(next);
       latest.current.onZoom?.(next);
       latest.current.zoom = next;
     };
@@ -124,6 +197,7 @@ export function useBoardView({
       )
         return;
       // A plain tile click preserves the tool focus restored after inspection.
+      if (resetTween.current) changeZoom(latest.current.zoom);
       event.preventDefault();
       const point = { x: event.clientX, y: event.clientY };
       pointers.set(event.pointerId, point);
@@ -248,9 +322,7 @@ export function useBoardView({
       else if (event.key === "-")
         changeZoom(latest.current.zoom - BOARD_ZOOM.step);
       else if (event.key === "0") {
-        changeZoom(BOARD_ZOOM.default);
-        setPan(CENTERED_BOARD);
-        latest.current.onOrientation(DEFAULT_BOARD_ORIENTATION);
+        resetView();
       } else return;
       event.preventDefault();
     };
@@ -289,6 +361,6 @@ export function useBoardView({
       window.removeEventListener("keyup", keyup);
       window.removeEventListener("blur", blur);
     };
-  }, [layer]);
+  }, [layer, resetView, stopReset]);
   return effectivePan;
 }

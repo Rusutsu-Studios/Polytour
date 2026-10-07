@@ -2869,6 +2869,7 @@ function SaleLabels({
 
 export default function BoardScene(props: BoardProps) {
   const { t } = useLocale();
+  const { reducedMotion } = useDirector();
   const config = props.state?.config ?? props.config;
   const layer = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -2884,7 +2885,8 @@ export default function BoardScene(props: BoardProps) {
     (x: number, y: number) => hitTest.current(x, y),
     [],
   );
-  const zoom = clampBoardZoom(props.zoom ?? 1);
+  const requestedZoom = clampBoardZoom(props.zoom ?? 1);
+  const [zoom, setZoom] = useState(requestedZoom);
   const framing = useMemo(
     () =>
       frameBoard(
@@ -2906,6 +2908,9 @@ export default function BoardScene(props: BoardProps) {
     ),
     locked: Boolean(props.viewLocked),
     zoom,
+    requestedZoom,
+    onViewZoom: setZoom,
+    reducedMotion,
     onZoom: props.onZoom,
     resetKey: props.viewResetKey,
     limits: framing.limits,
