@@ -855,6 +855,8 @@ for (const size of DESKTOP_SIZES) {
       "Prix 350 k · Argent 100 k",
     );
     await fits();
+    // The scene shows the buyer in their own colour, seat 0 here.
+    await expect(notice.locator("image")).toHaveAttribute("href", /buy-0/);
     await page.screenshot({
       path: `.local/verification/notice-buy-${size.width}x${size.height}.png`,
     });
@@ -877,6 +879,8 @@ for (const size of DESKTOP_SIZES) {
       "Rachat 880 k · Argent 640 k",
     );
     await fits();
+    // Buyer seat 1 against owner seat 0.
+    await expect(notice.locator("image")).toHaveAttribute("href", /buyout-1-0/);
     await page.screenshot({
       path: `.local/verification/notice-buyout-${size.width}x${size.height}.png`,
     });

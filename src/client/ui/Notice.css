@@ -117,36 +117,7 @@
 .notice-continue span {
   margin-left: 10px;
 }
-.notice-float {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: notice-float 2.4s ease-in-out infinite alternate;
-}
-.notice-float:nth-of-type(odd) {
-  animation-delay: -1.2s;
-}
-.notice-pop {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: notice-pop 0.9s ease-in-out infinite alternate;
-}
-@keyframes notice-float {
-  to {
-    transform: translateY(-12px) rotate(10deg);
-  }
-}
-@keyframes notice-pop {
-  to {
-    transform: scale(1.14);
-  }
-}
-.notice-dialog[data-reduced-motion="true"] :is(.notice-float, .notice-pop) {
-  animation: none;
-}
 @media (prefers-reduced-motion: reduce) {
-  :is(.notice-float, .notice-pop) {
-    animation: none;
-  }
   .notice-reading {
     display: none;
   }

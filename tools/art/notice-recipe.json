@@ -1,0 +1,115 @@
+{
+  "model": {
+    "diffusion": "flux-2-klein-9b.safetensors (FLUX.2 [klein] 9B distilled, models/diffusion_models)",
+    "text_encoder": "qwen_3_8b_fp8mixed.safetensors (Comfy-Org/flux2-klein-9B, models/text_encoders, type flux2)",
+    "vae": "flux2-vae.safetensors (Comfy-Org/flux2-dev, models/vae)",
+    "comfyui": "0.39.0 portable, NVIDIA RTX 3080 Ti 12 GB",
+    "sampling": "euler, Flux2Scheduler 4 steps, CFG 1, 1344x768, ConditioningZeroOut negative"
+  },
+  "buy": [
+    {
+      "out": "base.png",
+      "seed": 5014,
+      "prompt": "A cartoon woman in a violet blazer shrugs with both shoulders raised and both palms turned up at her sides, elbows bent, with an apologetic, embarrassed smile. Beside her stands a medium-sized blank cream wooden price sign on a single post, completely empty with nothing written on it, facing the viewer in front of a charming little house with a coral roof. Vibrant cartoon illustration for a fun board game, premium mobile game art: bold rounded shapes, vivid saturated colors, glossy highlights, soft cel shading, warm sunny lighting with gentle shadows and depth. A single character with a big expressive head and a calm, gently funny expression, standing in a simple symmetrical front-facing pose, anatomically correct: exactly two arms, one arm from each shoulder, two hands, five fingers per hand. Sunny sky with fluffy clouds and a few rounded buildings in the soft background. Wide composition, main subjects in the upper two thirds of the frame. No text, no letters, no numbers, no logos, no watermark."
+    },
+    {
+      "out": "buy-2.png (violet)",
+      "seed": 6001,
+      "prompt": "Change only her facial expression: she now looks frustrated and disappointed, eyebrows drawn together and slightly lowered, a small tight frown with lips pressed together, no smile. Keep her pose, both hands, her clothes, the house, the blank sign and the whole cartoon drawing style exactly the same.",
+      "source": "base.png"
+    },
+    {
+      "out": "buy-0.png (coral)",
+      "seed": 7001,
+      "prompt": "Change only the color of her blazer to warm coral red. Keep everything else exactly the same: her face and expression, her hair, her trousers, both hands, the pose, the house, the blank sign, the background and the cartoon drawing style.",
+      "source": "buy-2.png"
+    },
+    {
+      "out": "buy-1.png (blue)",
+      "seed": 7000,
+      "prompt": "Change only the color of her blazer to royal blue. Keep everything else exactly the same: her face and expression, her hair, her trousers, both hands, the pose, the house, the blank sign, the background and the cartoon drawing style.",
+      "source": "buy-2.png"
+    },
+    {
+      "out": "buy-3.png (green)",
+      "seed": 7000,
+      "prompt": "Change only the color of her blazer to forest green. Keep everything else exactly the same: her face and expression, her hair, her trousers, both hands, the pose, the house, the blank sign, the background and the cartoon drawing style.",
+      "source": "buy-2.png"
+    }
+  ],
+  "buyout": [
+    {
+      "out": "buyout-2-0.png (buyer violet, owner coral)",
+      "seed": 12004,
+      "source": "buy-2.png",
+      "prompt": "Keep the woman on the left exactly as she is: same face, frustrated expression, hair, earrings, purple blazer, pose and both hands. Keep the house and the cartoon drawing style exactly the same. Remove the wooden sign on its post. Add the owner of the house: an ordinary businessman in his forties with short neat brown hair, clean-shaven, a well-fitted coral business suit, white shirt and dark tie, confident and calm, a polite but firm smile, stands on the right side of the image, facing the woman, holding up a large blank cream wooden price sign in front of his chest with both hands, one hand on each side of the sign, the sign completely empty with nothing written on it and fully visible. Each character has exactly two arms, one from each shoulder, and five fingers per hand. No text, no letters, no numbers."
+    },
+    {
+      "out": "buyout-0-1.png",
+      "seed": 14000,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes warm coral red, and the man's suit jacket and trousers become royal blue. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-0-2.png",
+      "seed": 14000,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes warm coral red, and the man's suit jacket and trousers become purple. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-0-3.png",
+      "seed": 14001,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes warm coral red, and the man's suit jacket and trousers become forest green. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-1-0.png",
+      "seed": 13002,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only the clothing colours: the woman on the left now wears a royal blue blazer, and the man on the right now wears a warm coral red suit jacket and trousers. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-1-2.png",
+      "seed": 14003,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes royal blue, and the man's suit jacket and trousers become purple. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-1-3.png",
+      "seed": 13002,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only the clothing colours: the woman on the left now wears a royal blue blazer, and the man on the right now wears a forest green suit jacket and trousers. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-2-1.png",
+      "seed": 13000,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only the clothing colours: the woman on the left now wears a purple blazer, and the man on the right now wears a royal blue suit jacket and trousers. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-2-3.png",
+      "seed": 13000,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only the clothing colours: the woman on the left now wears a purple blazer, and the man on the right now wears a forest green suit jacket and trousers. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-3-0.png",
+      "seed": 14001,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes forest green, and the man's suit jacket and trousers become warm coral red. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-3-1.png",
+      "seed": 14001,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes forest green, and the man's suit jacket and trousers become royal blue. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    },
+    {
+      "out": "buyout-3-2.png",
+      "seed": 14004,
+      "source": "buyout-2-0.png",
+      "prompt": "Change only two clothing colours: the woman's blazer becomes forest green, and the man's suit jacket and trousers become purple. The woman keeps her dark purple trousers unchanged; only her blazer changes colour. Keep everything else exactly the same: both faces and expressions, hair, earrings, shirts and tie, poses, all hands, the blank sign, the house, the background and the cartoon drawing style."
+    }
+  ],
+  "note": "Each image is one ComfyUI job: tools/art/generate.py with these fields, renaming 'out' to 'id'. buy-2 comes from 'base'; every other scene edits the image named in 'source'. Seeds pin the exact result on the same model and ComfyUI version. Colours by seat: 0 coral, 1 blue, 2 violet, 3 green."
+}

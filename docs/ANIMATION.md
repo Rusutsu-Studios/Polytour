@@ -203,8 +203,10 @@ bot action. A `MoneyTransferred` event with reason `Tax` opens a matching
 six-second payment popup for every observer, naming the payer and exact amount.
 Its hold runs alongside the money animation and ends before the next event.
 A `PurchaseUnaffordable` event opens a four-second illustrated notice for every
-observer: a drawn stage over the board and a parchment banner naming the player
-("you" on their own screen), the city, its price and their cash.
+observer: a generated scene in the players' colours inside a cloud over the board,
+with the price written on its sign, and a parchment banner naming the player
+("you" on their own screen), the city, its price and their cash. See
+[CARD_ART.md](CARD_ART.md).
 Reduced motion keeps a
 static card and its instructions. Card art and prompts are documented in
 [CARD_ART.md](CARD_ART.md).
