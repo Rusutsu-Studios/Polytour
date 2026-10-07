@@ -153,11 +153,9 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       difficulty.getByRole("radio", { name: words.easy, exact: true }),
     ).toBeChecked();
-    const helpName = (label: string) =>
-      locale === "fr" ? `À propos de ${label}` : `About ${label}`;
     await difficulty
-      .getByRole("button", { name: helpName(words.group), exact: true })
-      .click();
+      .getByRole("radio", { name: words.easy, exact: true })
+      .focus();
     await expect(page.locator("#disabled-action-hint")).toContainText(
       words.easyDescription,
     );
@@ -227,11 +225,10 @@ for (const locale of ["fr", "en"] as const) {
     const sheet = page.locator(".pause-dialog");
     const settingsDifficulty = sheet.getByRole("group", { name: words.group });
     await settingsDifficulty.getByRole("radio", { name: words.hard }).check();
-    const hardHelp = settingsDifficulty.getByRole("button", {
-      name: helpName(words.hard),
-      exact: true,
-    });
-    await hardHelp.click();
+    const hardHelp = settingsDifficulty
+      .getByRole("radio", { name: words.hard, exact: true })
+      .locator("..");
+    await hardHelp.hover();
     await expect(page.locator("#disabled-action-hint")).toContainText(
       words.hardDescription,
     );
@@ -239,7 +236,7 @@ for (const locale of ["fr", "en"] as const) {
     await expect(sheet).toBeVisible();
     // The custom building rule remains an independent restriction on every level.
     await sheet.getByLabel(words.building, { exact: true }).uncheck();
-    await hardHelp.click();
+    await hardHelp.hover();
     await expect(page.locator("#disabled-action-hint")).toContainText(
       words.noBuilding,
     );
@@ -373,12 +370,7 @@ test("a guest can read each bot level but cannot cycle it", async ({
         exact: true,
       });
       await expect(group.getByRole("slider")).toBeDisabled();
-      const timeHelp = group.getByRole("button", {
-        name: `About ${label}`,
-        exact: true,
-      });
-      await expect(timeHelp).toBeEnabled();
-      await timeHelp.click();
+      await group.focus();
       await expect(guest.locator("#disabled-action-hint strong")).toHaveText(
         label,
       );
@@ -390,16 +382,16 @@ test("a guest can read each bot level but cannot cycle it", async ({
       .getByRole("group", { name: "Default bot difficulty" });
     for (const radio of await defaults.getByRole("radio").all())
       await expect(radio).toBeDisabled();
-    const help = defaults.getByRole("button", {
-      name: "About Default bot difficulty",
-      exact: true,
-    });
-    await expect(help).toBeEnabled();
-    await help.click();
+    const help = defaults
+      .getByRole("radio", { name: "Hard", exact: true })
+      .locator("..");
+    await help.focus();
     await expect(guest.locator("#disabled-action-hint strong")).toHaveText(
-      "Default bot difficulty",
+      "Hard",
     );
-    await expect(help).toHaveAttribute("aria-expanded", "true");
+    await expect(guest.locator("#disabled-action-hint")).toContainText(
+      "keeps cash for rent",
+    );
     await page.locator(".settings-trigger").click();
     await page
       .locator(".pause-dialog")
@@ -410,13 +402,13 @@ test("a guest can read each bot level but cannot cycle it", async ({
     await expect(guest.locator("#disabled-action-hint")).toContainText(
       "keeps cash for rent",
     );
-    await expect(help).toHaveAttribute("aria-expanded", "true");
+    await expect(help).not.toHaveAttribute("aria-expanded");
     await expect(
       defaults.getByRole("radio", { name: "Hard", exact: true }),
     ).toBeChecked();
     await guest.keyboard.press("Escape");
     await expect(guest.locator("#disabled-action-hint")).not.toBeVisible();
-    await expect(help).toHaveAttribute("aria-expanded", "false");
+    await expect(help).not.toHaveAttribute("aria-expanded");
     await expect(guest.locator(".pause-dialog")).toBeVisible();
   } finally {
     await context.close();

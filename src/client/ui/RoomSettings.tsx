@@ -5,7 +5,6 @@ import type { RoomConfig } from "../../shared/protocol/index.js";
 import { useLocale } from "../i18n.js";
 import { money } from "./board-display.js";
 import { botDifficultyName } from "./bot-display.js";
-import SettingHelp from "./SettingHelp.js";
 import "./RoomSettings.css";
 
 export type RoomSettingsProps = {
@@ -86,11 +85,16 @@ function NumberSetting({
     if (next !== value) onChange(next);
   };
   return (
-    <div className={`room-setting${wide ? " room-setting--wide" : ""}`}>
+    <div
+      className={`room-setting${wide ? " room-setting--wide" : ""}`}
+      data-help-title={label}
+      data-help-message={help}
+      data-help-pin="false"
+      tabIndex={disabled ? 0 : undefined}
+    >
       <div className="room-setting-heading">
         <span className="room-setting-label">
           <label htmlFor={`${id}-range`}>{label}</label>
-          <SettingHelp label={label} message={help} />
         </span>
         <output htmlFor={`${id}-range`}>
           {monetary ? money(value) : value}
@@ -165,16 +169,11 @@ function NumberSetting({
   );
 }
 
-function BotDifficultyHelp({
-  config,
-  difficulty = config.botDifficulty ?? "medium",
-  defaultLevel = false,
-}: {
-  config: RoomConfig;
-  difficulty?: BotDifficulty;
-  defaultLevel?: boolean;
-}) {
-  const { t } = useLocale();
+function botDifficultyHelp(
+  config: RoomConfig,
+  difficulty: BotDifficulty,
+  t: (fr: string, en: string) => string,
+) {
   const description =
     difficulty === "easy"
       ? t(
@@ -198,32 +197,21 @@ function BotDifficultyHelp({
               ? "Builds and buys out while keeping a small cash reserve."
               : "Buys bare land and affordable cities.",
           );
-  return (
-    <SettingHelp
-      label={
-        defaultLevel
-          ? t("Niveau par défaut", "Default bot difficulty")
-          : botDifficultyName(difficulty)
-      }
-      message={[
-        defaultLevel
-          ? t(
-              "Niveau utilisé pour les nouveaux bots. Cliquez sur le niveau d’un bot dans sa carte pour le changer individuellement.",
-              "The level used for new bots. Click a bot’s level on its card to change it individually.",
-            )
-          : "",
-        description,
-        !config.botCanBuild
-          ? t(
-              "Construction désactivée pour tous les niveaux.",
-              "Building is disabled at every level.",
-            )
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    />
-  );
+  return [
+    t(
+      "Niveau utilisé pour les nouveaux bots. Cliquez sur le niveau d’un bot dans sa carte pour le changer individuellement.",
+      "The level used for new bots. Click a bot’s level on its card to change it individually.",
+    ),
+    description,
+    !config.botCanBuild
+      ? t(
+          "Construction désactivée pour tous les niveaux.",
+          "Building is disabled at every level.",
+        )
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function BotDifficultySetting({
@@ -245,13 +233,18 @@ function BotDifficultySetting({
           <span id={`${id}-label`}>
             {t("Niveau par défaut", "Default bot difficulty")}
           </span>
-          <BotDifficultyHelp config={config} defaultLevel />
         </span>
       </legend>
       <div className="room-setting-pills">
         {(["easy", "medium", "hard"] as const).map((option: BotDifficulty) => (
           <div className="room-setting-bot-option" key={option}>
-            <label className="room-setting-pill">
+            <label
+              className="room-setting-pill"
+              data-help-title={botDifficultyName(option)}
+              data-help-message={botDifficultyHelp(config, option, t)}
+              data-help-pin="false"
+              tabIndex={disabled ? 0 : undefined}
+            >
               <input
                 type="radio"
                 name={id}
@@ -264,9 +257,6 @@ function BotDifficultySetting({
               />
               <span>{botDifficultyName(option)}</span>
             </label>
-            {!compact && (
-              <BotDifficultyHelp config={config} difficulty={option} />
-            )}
           </div>
         ))}
       </div>
@@ -388,11 +378,14 @@ function TimeSetting({
     <fieldset
       className="room-setting-choice room-setting-choice--time"
       aria-labelledby={`${id}-label`}
+      data-help-title={label}
+      data-help-message={help}
+      data-help-pin="false"
+      tabIndex={disabled ? 0 : undefined}
     >
       <legend>
         <span className="room-setting-label">
           <span id={`${id}-label`}>{label}</span>
-          <SettingHelp label={label} message={help} />
         </span>
       </legend>
       <div className="room-setting-time-row">
@@ -636,7 +629,13 @@ export function RoomSettings({
         <div className="room-settings-toggles">
           {TOGGLES.map(([key, fr, en]) => (
             <div className="room-setting-toggle-row" key={key}>
-              <label className="room-setting-toggle">
+              <label
+                className="room-setting-toggle"
+                data-help-title={t(fr, en)}
+                data-help-message={toggleHelp[key]}
+                data-help-pin="false"
+                tabIndex={disabled ? 0 : undefined}
+              >
                 <input
                   type="checkbox"
                   disabled={disabled}
@@ -647,7 +646,6 @@ export function RoomSettings({
                 />
                 <span>{t(fr, en)}</span>
               </label>
-              <SettingHelp label={t(fr, en)} message={toggleHelp[key]} />
             </div>
           ))}
         </div>

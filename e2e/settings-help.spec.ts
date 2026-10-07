@@ -26,11 +26,12 @@ async function dismissHelp(page: Page, dialog?: Locator) {
   await expect(page.locator("#disabled-action-hint")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("#disabled-action-hint")).not.toBeVisible();
+  await page.mouse.move(2, 2);
   if (dialog) await expect(dialog).toBeVisible();
 }
 
 for (const locale of ["fr", "en"] as const) {
-  test(`every room setting has separate accessible help in ${locale}`, async ({
+  test(`every room setting explains itself without question marks in ${locale}`, async ({
     page,
   }) => {
     const words =
@@ -91,91 +92,107 @@ for (const locale of ["fr", "en"] as const) {
             giftFull: /Birthday.*Charity.*full payment/,
             giftCapped: /capped at available cash/,
           };
-    const helpName = (label: string) =>
-      locale === "fr" ? `À propos de ${label}` : `About ${label}`;
     const popup = page.locator("#disabled-action-hint");
     await page.goto("/");
     await chooseLanguage(page, locale);
+    await expect(page.locator('[data-icon="help"], .setting-help')).toHaveCount(
+      0,
+    );
     const quick = page.locator(".welcome-quick-settings");
-    await expect(quick.locator("button[data-help-title]")).toHaveCount(4);
-    await expect(
-      quick.locator(".room-setting-bot-description, .room-setting-bot-rules"),
-    ).toHaveCount(0);
-    await quick
-      .getByRole("button", { name: helpName(words.cash), exact: true })
-      .hover();
+    const quickCash = quick.getByRole("slider", {
+      name: words.cash,
+      exact: true,
+    });
+    await quickCash.hover();
     await expect(popup.locator("strong")).toHaveText(words.cash);
     await dismissHelp(page);
     const quickDefault = quick.getByRole("group", {
       name: words.defaults,
       exact: true,
     });
-    await quickDefault
-      .getByRole("radio", { name: words.easy, exact: true })
-      .check();
-    const quickHelp = quickDefault.getByRole("button", {
-      name: helpName(words.defaults),
+    const easy = quickDefault.getByRole("radio", {
+      name: words.easy,
       exact: true,
     });
-    await quickHelp.focus();
-    await expect(popup).toContainText(words.easyCopy);
-    await quickHelp.press("Enter");
-    await expect(popup).toBeVisible();
-    await expect(quickHelp).toHaveAttribute("aria-expanded", "true");
-    await quickHelp.press("Enter");
-    await expect(popup).not.toBeVisible();
-    await expect(quickHelp).toHaveAttribute("aria-expanded", "false");
-    await quickHelp.press("Enter");
-    await expect(
-      quickDefault.getByRole("radio", { name: words.easy, exact: true }),
-    ).toBeChecked();
+    const medium = quickDefault.getByRole("radio", {
+      name: words.medium,
+      exact: true,
+    });
+    await medium.locator("..").hover();
+    await expect(popup.locator("strong")).toHaveText(words.medium);
+    await expect(popup).toContainText(
+      locale === "fr" ? "petite réserve" : "small cash reserve",
+    );
+    await expect(medium).toBeChecked();
     await dismissHelp(page);
+    await easy.focus();
+    await expect(popup).toContainText(words.easyCopy);
+    await expect(easy).toHaveAttribute(
+      "aria-describedby",
+      /disabled-action-hint/,
+    );
+    await expect(easy).not.toHaveAttribute("aria-expanded");
+    await easy.check();
+    await expect(popup).not.toBeVisible();
+    await expect(easy).toBeChecked();
+    const streamer = page.getByRole("button", {
+      name: locale === "fr" ? "Mode streamer" : "Streamer mode",
+      exact: true,
+    });
+    await streamer.hover();
+    await expect(popup).toContainText(
+      locale === "fr" ? "Masque le code" : "Hides the room code",
+    );
+    await expect(streamer).toHaveAttribute("aria-pressed", "false");
+    await dismissHelp(page);
+    await streamer.focus();
+    await expect(popup).toBeVisible();
+    await expect(streamer).toHaveAttribute(
+      "aria-describedby",
+      /disabled-action-hint/,
+    );
+    await streamer.press("Enter");
+    await expect(popup).not.toBeVisible();
+    await expect(streamer).toHaveAttribute("aria-pressed", "true");
+    await expect(streamer).not.toHaveAttribute("aria-expanded");
 
     await page.getByLabel(words.player).fill(`Setting help ${locale}`);
     await page.getByRole("button", { name: words.play, exact: true }).click();
     await expect(page.locator(".lobby-seat.bot")).toHaveCount(3);
     await page.locator(".settings-trigger").click();
     const dialog = page.locator(".pause-dialog");
-    const cashHelp = dialog.getByRole("button", {
-      name: helpName(words.cash),
-      exact: true,
-    });
-    await cashHelp.hover();
-    await expect(popup).toBeVisible();
-    await expect(popup.locator("strong")).toHaveText(words.cash);
-    await popup.hover({ timeout: 5_000 });
-    await expect(cashHelp).toHaveAttribute("aria-expanded", "true");
-    await dismissHelp(page, dialog);
-    await expect(cashHelp).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      dialog.locator('.setting-help, [data-icon="help"]'),
+    ).toHaveCount(0);
     const labels = [
       words.cash,
       words.salary,
       words.festivals,
       words.duration,
       words.timer,
-      words.defaults,
       ...words.toggles,
       words.easy,
       words.medium,
       words.hard,
     ];
-    await expect(dialog.locator("button[data-help-title]")).toHaveCount(
-      labels.length,
-    );
+    const settings = dialog.locator(".room-settings [data-help-title]");
+    await expect(settings).toHaveCount(labels.length);
     for (const label of labels) {
-      const help = dialog.getByRole("button", {
-        name: helpName(label),
-        exact: true,
-      });
-      await expect(help).toBeEnabled();
-      await help.scrollIntoViewIfNeeded();
-      await help.focus();
+      const wrapper = dialog.locator(`[data-help-title="${label}"]`);
+      const input = wrapper.locator("input").first();
+      await wrapper.scrollIntoViewIfNeeded();
+      await input.focus();
       await expect(popup).toBeVisible();
       await expect(popup.locator("strong")).toHaveText(label);
       await expect(popup.locator("p")).toHaveText(/\S/);
-      await expect(help).toHaveAttribute("aria-expanded", "true");
+      await expect(input).toHaveAttribute(
+        "aria-describedby",
+        /disabled-action-hint/,
+      );
+      await expect(input).not.toHaveAttribute("aria-expanded");
+      await popup.hover();
+      await expect(popup).toBeVisible();
       await dismissHelp(page, dialog);
-      await expect(help).toHaveAttribute("aria-expanded", "false");
     }
     for (const label of [words.cash, words.salary, words.festivals])
       await expect(
@@ -194,25 +211,18 @@ for (const locale of ["fr", "en"] as const) {
       name: words.defaults,
       exact: true,
     });
-    const defaultHelp = defaults.getByRole("button", {
-      name: helpName(words.defaults),
-      exact: true,
-    });
-    await defaults
-      .getByRole("radio", { name: words.hard, exact: true })
-      .check();
-    await defaultHelp.click();
+    const hard = defaults.getByRole("radio", { name: words.hard, exact: true });
+    await hard.check();
+    await hard.locator("..").hover();
     await expect(popup).toContainText(words.hardCopy);
-    await expect(
-      defaults.getByRole("radio", { name: words.hard, exact: true }),
-    ).toBeChecked();
+    await expect(hard).toBeChecked();
     await dismissHelp(page, dialog);
     const building = dialog.getByRole("checkbox", {
       name: words.toggles[6],
       exact: true,
     });
     await building.uncheck();
-    await defaultHelp.click();
+    await hard.locator("..").hover();
     await expect(popup).toContainText(words.noBuilding);
     await expect(building).not.toBeChecked();
     await dismissHelp(page, dialog);
@@ -220,11 +230,8 @@ for (const locale of ["fr", "en"] as const) {
       name: words.toggles[7],
       exact: true,
     });
-    const giftHelp = dialog.getByRole("button", {
-      name: helpName(words.toggles[7]),
-      exact: true,
-    });
-    await giftHelp.click();
+    const giftHelp = gift.locator("..");
+    await giftHelp.hover();
     await expect(popup).toContainText(words.giftFull);
     await expect(gift).toBeChecked();
     await expect(
@@ -236,7 +243,10 @@ for (const locale of ["fr", "en"] as const) {
     await gift.uncheck();
     for (const viewport of DESKTOPS) {
       await page.setViewportSize(viewport);
-      await giftHelp.click();
+      await giftHelp.scrollIntoViewIfNeeded();
+      await gift.focus();
+      await giftHelp.hover();
+      await expect(popup).toBeVisible();
       await expect(popup).toContainText(words.giftCapped);
       await expect(gift).not.toBeChecked();
       await expectPopupBounds(popup, viewport.width, viewport.height);

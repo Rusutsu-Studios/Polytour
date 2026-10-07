@@ -1541,7 +1541,7 @@ function MatchView({
           title={t("Comment jouer", "How to play")}
           onClick={onHelp}
         >
-          <Icon name="help" size={18} />
+          <Icon name="book" size={18} />
         </button>
         <button
           type="button"
@@ -2182,7 +2182,7 @@ function App() {
               className="text-button help-button"
               onClick={() => setHelpOpen(true)}
             >
-              <Icon name="help" size={18} />
+              <Icon name="book" size={18} />
               <span>{t("Comment jouer", "How to play")}</span>
             </button>
             {(credentials || invitationCode !== null) && (

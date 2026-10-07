@@ -92,11 +92,25 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
   const matchToggle = page
     .locator(".game-tools")
     .getByRole("button", { name: "Streamer mode", exact: true });
+  const hint = page.locator("#disabled-action-hint");
+  await matchToggle.hover();
+  await expect(hint).toContainText("Hides the room code");
+  await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(hint).not.toBeVisible();
+  await matchToggle.focus();
+  await expect(hint).toBeVisible();
+  await expect(matchToggle).toHaveAttribute(
+    "aria-describedby",
+    /disabled-action-hint/,
+  );
   await expect(page.locator(".game-tools button").first()).toHaveAccessibleName(
     "Streamer mode",
   );
   await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
   await matchToggle.click();
+  await expect(hint).not.toBeVisible();
+  await expect(matchToggle).not.toHaveAttribute("aria-expanded");
   await expect(matchToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".room-tool-code")).toContainText(roomCode);
   expect(
@@ -111,7 +125,14 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
     .locator(".pause-dialog")
     .getByRole("button", { name: "Streamer mode", exact: true });
   await expect(setting).toHaveAttribute("aria-pressed", "false");
+  await setting.hover();
+  await expect(hint).toContainText("Hides the room code");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".pause-dialog")).toBeVisible();
+  await setting.focus();
+  await expect(hint).toBeVisible();
   await setting.click();
+  await expect(hint).not.toBeVisible();
   await expect(setting).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
