@@ -63,6 +63,7 @@ import {
   boardPickKey,
   isBoardPick,
 } from "./ui/board-pick.js";
+import { botDifficultyName } from "./ui/bot-display.js";
 import CardMoment from "./ui/CardMoment.js";
 import Changelog from "./ui/Changelog.js";
 import CityCard from "./ui/CityCard.js";
@@ -85,6 +86,7 @@ import {
   WaitingRoom,
 } from "./ui/RoomPeople.js";
 import { QuickSettings } from "./ui/RoomSettings.js";
+import StartOrderMoment from "./ui/StartOrderMoment.js";
 import StreamerToggle from "./ui/StreamerToggle.js";
 import "./App.css";
 
@@ -1395,12 +1397,23 @@ function MatchView({
       <header className="match-topbar">
         <Logo small />
         <div className="match-time">
-          {game.config.roundLimit < 10_000 && (
-            <span>
-              {t(
-                `Manche ${game.round}/${game.config.roundLimit}`,
-                `Round ${game.round}/${game.config.roundLimit}`,
-              )}
+          {game.config.timeLimitMinutes !== null &&
+            game.config.roundLimit < 10_000 && (
+              <span>
+                {t(
+                  `Manche ${game.round}/${game.config.roundLimit}`,
+                  `Round ${game.round}/${game.config.roundLimit}`,
+                )}
+              </span>
+            )}
+          {game.config.timeLimitMinutes === null && (
+            <span
+              className="match-clock"
+              role="img"
+              aria-label={t("Durée illimitée", "Unlimited duration")}
+              title={t("Durée illimitée", "Unlimited duration")}
+            >
+              ∞
             </span>
           )}
           <MatchClock
@@ -1584,7 +1597,7 @@ function MatchView({
                           : mySeats.includes(player.seat)
                             ? t("Ce PC", "This PC")
                             : player.control === "bot"
-                              ? "Bot"
+                              ? `Bot · ${botDifficultyName(player.botDifficulty ?? game.config.botDifficulty)}`
                               : t("Absent", "Away")}
                     </span>
                   )}
@@ -2139,6 +2152,7 @@ function App() {
       className={isGame ? "game-shell" : "lobby-shell"}
       data-reduced-motion={reducedMotion}
     >
+      <StartOrderMoment />
       {!isGame && (
         <header className="topbar">
           <span className="brand-button">
@@ -2363,8 +2377,10 @@ function App() {
               you={you}
               leader={leader}
               disabled={roomOffline}
+              pending={room.pending}
               onAddBot={room.addBot}
               onRemoveBot={room.removeBot}
+              onBotDifficulty={room.botDifficulty}
               onAddLocal={room.addLocal}
               onRemoveLocal={room.removeLocal}
               onTransferHost={room.transferHost}

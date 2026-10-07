@@ -469,7 +469,7 @@ const deck: Pavement = (context, color, width, height, next) => {
 
 // Each country paves its cities its own way, in its own color, as on the
 // reference boards: a lawn, flagstones, a wave mosaic, square concrete slabs
-// for Italy-Germany, long concrete slabs for Czechia-Austria, crazy paving,
+// for Germany, long concrete slabs for Switzerland, crazy paving,
 // slate and a timber deck.
 const COUNTRY_PAVEMENTS: readonly Pavement[] = [
   lawn,

@@ -4,6 +4,9 @@
   margin: 0;
   width: max-content;
   max-width: min(300px, calc(100vw - 24px));
+  max-height: calc(100svh - 24px);
+  overflow: auto;
+  overflow-wrap: anywhere;
   padding: 14px 18px;
   border: 0;
   border-radius: 12px;
@@ -16,6 +19,9 @@
   font-size: 14px;
   line-height: 1.45;
   z-index: 100;
+}
+.disabled-action-hint[data-hint-kind="help"] {
+  pointer-events: auto;
 }
 .disabled-action-hint strong {
   display: block;

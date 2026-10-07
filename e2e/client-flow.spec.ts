@@ -4,6 +4,8 @@ import type {
   PublicState,
   Seat,
 } from "../src/shared/engine/index.js";
+import { applyEvent } from "../src/shared/engine/index.js";
+import type { ServerMessage } from "../src/shared/protocol/index.js";
 import { APP_VERSION } from "../src/shared/version.js";
 import { boardScreenPoint, clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
@@ -528,11 +530,21 @@ test("win conditions follow the settings draft and saved rules in both languages
   const gifts = dialog.getByLabel("Gifts can cause bankruptcy", {
     exact: true,
   });
-  await expect(gifts).toHaveAccessibleDescription(
-    /Birthday and Charity cards.*full payment/,
+  const giftHelp = dialog.getByRole("button", {
+    name: "About Gifts can cause bankruptcy",
+    exact: true,
+  });
+  await giftHelp.click();
+  await expect(page.locator("#disabled-action-hint")).toContainText(
+    /Birthday.*Charity.*full payment/,
   );
+  await page.keyboard.press("Escape");
   await gifts.uncheck();
-  await expect(gifts).toHaveAccessibleDescription(/capped at available cash/);
+  await giftHelp.click();
+  await expect(page.locator("#disabled-action-hint")).toContainText(
+    /capped at available cash/,
+  );
+  await page.keyboard.press("Escape");
   await gifts.check();
   for (const size of [
     { width: 1280, height: 720 },
@@ -617,6 +629,205 @@ test("win conditions follow the settings draft and saved rules in both languages
   ).toBeDisabled();
 });
 
+for (const locale of ["fr", "en"] as const) {
+  test(`unlimited duration slider, saved rules and gameplay (${locale})`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const command = observeRoomCommands(page);
+    let snapshot: PublicState | null = null;
+    let rolls = 0;
+    page.on("websocket", (socket) => {
+      socket.on("framereceived", (frame) => {
+        try {
+          const message = JSON.parse(String(frame.payload)) as ServerMessage;
+          if (message.type === "welcome") snapshot = message.snapshot;
+          if (message.type === "events") {
+            for (const event of message.events) {
+              if (event.type === "GameCreated") snapshot = event.state;
+              else if (snapshot) snapshot = applyEvent(snapshot, event);
+              if (event.type === "DiceRolled") rolls++;
+            }
+          }
+        } catch {
+          // Transport diagnostics are plain text.
+        }
+      });
+    });
+    await page.goto("/");
+    await page.getByLabel("Votre nom de joueur").fill("Unlimited tester");
+    await openLobby(page);
+    await chooseLanguage(page, locale);
+    await page.locator(".settings-trigger").click();
+    const dialog = page.locator(".pause-dialog");
+    await expect(dialog).not.toContainText(
+      locale === "fr"
+        ? "Vos changements sont enregistrés à la fermeture."
+        : "Your changes are saved when you close this window.",
+    );
+    const duration = dialog.getByRole("slider", {
+      name: locale === "fr" ? "Durée de partie" : "Game duration",
+      exact: true,
+    });
+    const unlimitedName =
+      locale === "fr" ? "Durée illimitée" : "Unlimited duration";
+    const unlimited = dialog.getByRole("radio", {
+      name: unlimitedName,
+      exact: true,
+    });
+    const wins = dialog.locator(".room-settings-wins");
+    await expect(
+      dialog.getByRole("radio", { name: "120 min", exact: true }),
+    ).toBeChecked();
+    await expect(duration).toHaveValue("120");
+    await expect(duration).toHaveAttribute("max", "121");
+    await expect(duration).toHaveAttribute("min", "15");
+    const exactDuration = dialog.getByRole("spinbutton", {
+      name:
+        locale === "fr"
+          ? "Durée de partie : valeur exacte"
+          : "Game duration: exact value",
+      exact: true,
+    });
+    const exactDecision = dialog.getByRole("spinbutton", {
+      name:
+        locale === "fr"
+          ? "Temps de décision : valeur exacte"
+          : "Decision timer: exact value",
+      exact: true,
+    });
+    const decision = dialog.getByRole("slider", {
+      name: locale === "fr" ? "Temps de décision" : "Decision timer",
+      exact: true,
+    });
+    await exactDuration.fill("14");
+    await exactDuration.press("Enter");
+    await expect(exactDuration).toHaveValue("15");
+    await duration.focus();
+    await duration.press("Home");
+    await duration.press("ArrowLeft");
+    await expect(duration).toHaveValue("15");
+    await exactDuration.fill("73");
+    await duration.focus();
+    await duration.press("ArrowRight");
+    await expect(exactDuration).toHaveValue("74");
+    await expect(wins).toContainText(
+      locale === "fr" ? "après 74 min" : "after 74 min",
+    );
+    await exactDuration.fill("200");
+    await exactDuration.press("Enter");
+    await expect(duration).toHaveValue("200");
+    await expect(duration).toHaveAttribute("max", "201");
+    await expect(wins).toContainText(
+      locale === "fr" ? "après 200 min" : "after 200 min",
+    );
+    await exactDecision.fill("37");
+    await decision.focus();
+    await decision.press("ArrowLeft");
+    await expect(exactDecision).toHaveValue("36");
+    await duration.focus();
+    await duration.press("End");
+    await expect(unlimited).toBeChecked();
+    await expect(duration).toHaveAttribute("aria-valuetext", unlimitedName);
+    await expect(wins).toContainText(
+      locale === "fr"
+        ? "aucune limite de temps ou de tours"
+        : "no time or round limit",
+    );
+    await expect(wins).not.toContainText("min :");
+    await expect(wins).not.toContainText("min:");
+    await expect(wins.getByRole("listitem")).toHaveCount(3);
+    await duration.press("ArrowLeft");
+    await expect(
+      dialog.getByRole("radio", { name: "120 min", exact: true }),
+    ).toBeChecked();
+    await expect(wins.getByRole("listitem")).toHaveCount(5);
+    await duration.press("End");
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(size);
+      await unlimited.scrollIntoViewIfNeeded();
+      await expect(unlimited).toBeVisible();
+      expect(
+        await dialog
+          .locator(".pause-dialog-body")
+          .evaluate((element) => element.scrollWidth > element.clientWidth),
+      ).toBe(false);
+      const heights = await dialog
+        .locator(".room-setting-choice--time .room-setting-pill > span")
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getBoundingClientRect().height),
+        );
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
+      await page.screenshot({
+        path: `.local/verification/infinite-settings-${locale}-${size.width}.png`,
+      });
+    }
+    await command("settings", () => page.keyboard.press("Escape"));
+    await page.reload();
+    await expect(page.locator(".lobby-seats")).toBeVisible();
+    await page.locator(".settings-trigger").click();
+    await expect(unlimited).toBeChecked();
+    await expect(exactDecision).toHaveValue("36");
+    await page.keyboard.press("Escape");
+    await command("start", () =>
+      page
+        .getByRole("button", {
+          name: locale === "fr" ? "Démarrer la partie" : "Start game",
+          exact: true,
+        })
+        .click(),
+    );
+    const clock = page.getByRole("img", { name: unlimitedName, exact: true });
+    await expect(clock).toHaveText("∞");
+    await expect.poll(() => snapshot?.config.timeLimitMinutes).toBeNull();
+    await expect.poll(() => snapshot?.matchDeadline).toBeNull();
+    await expect.poll(() => snapshot?.config.decisionSeconds).toBe(36);
+    await page
+      .getByRole("button", {
+        name: locale === "fr" ? "Règles de la partie" : "Game rules",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page
+        .locator(".pause-rules")
+        .getByRole("radio", { name: unlimitedName, exact: true }),
+    ).toBeDisabled();
+    await page
+      .getByRole("button", {
+        name: locale === "fr" ? "Revenir au plateau" : "Back to the board",
+        exact: true,
+      })
+      .click();
+    await expect(page.locator(".pause-dialog")).toHaveCount(0);
+    const roll = page.getByRole("button", {
+      name: locale === "fr" ? "Lancer les dés" : "Roll the dice",
+      exact: true,
+    });
+    await expect(roll).toBeVisible({ timeout: 120_000 });
+    const before = rolls;
+    await roll.click();
+    await expect.poll(() => rolls).toBeGreaterThan(before);
+    await page.reload();
+    await expect(clock).toHaveText("∞");
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(size);
+      await expect(clock).toBeVisible();
+      await page.screenshot({
+        path: `.local/verification/infinite-match-${locale}-${size.width}.png`,
+      });
+    }
+  });
+}
+
 test("four-seat UI, settings, legal roll, inspection and refresh", async ({
   page,
 }) => {
@@ -667,8 +878,18 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     .getByRole("group", { name: "Temps de décision" })
     .getByRole("radio", { name: "60 s", exact: true })
     .check();
-  await expect(page.getByLabel("Victoire par ligne complète")).toBeChecked();
-  await expect(page.getByLabel("Victoire par trois collections")).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Victoire par ligne complète",
+      exact: true,
+    }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Victoire par trois collections",
+      exact: true,
+    }),
+  ).toBeChecked();
   await expect(page.getByLabel("Lancers de dés")).toHaveCount(0);
   await expect(page.locator(".pause-dialog .room-settings")).not.toContainText(
     "drand",
@@ -866,7 +1087,7 @@ test("four-seat UI, settings, legal roll, inspection and refresh", async ({
     page.locator(".decision-actions .construction-choice"),
   ).toHaveCount(5);
   await expect(page.getByRole("button", { name: /^Acheter ·/ })).toBeEnabled();
-  await expect(page.locator(".decision-panel")).toContainText("Roubaix");
+  await expect(page.locator(".decision-panel")).toContainText("Lyon");
   await expect(page.locator(".construction-choice")).toHaveCount(5);
   await expect(
     page.getByRole("button", { name: /^Terrain · 60 k/ }),

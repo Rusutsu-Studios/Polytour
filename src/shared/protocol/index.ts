@@ -5,13 +5,18 @@ import type {
   EconomyRule,
   WorldTourRule,
 } from "../board/index.js";
-import type { Action, GameEvent, PublicState, Seat } from "../engine/index.js";
+import type {
+  Action,
+  BotDifficulty,
+  GameEvent,
+  PublicState,
+  Seat,
+} from "../engine/index.js";
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 7 adds the reworked Chance deck's events and die rolls; version 6
-// added the retained Escape card and island action. Stale clients reload.
-export const PROTOCOL_VERSION = 7;
+// Version 9 adds per-bot lobby choices and frozen player difficulty.
+export const PROTOCOL_VERSION = 9;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -21,9 +26,7 @@ export const RoomConfigSchema = z
     startingCash: z.number().int().min(0).max(10_000_000).default(2_000_000),
     startSalary: z.number().int().min(0).max(1_000_000).default(400_000),
     roundLimit: z.number().int().min(1).max(10_000).default(10_000),
-    timeLimitMinutes: z
-      .union([z.literal(20), z.literal(60), z.literal(120)])
-      .default(120),
+    timeLimitMinutes: z.number().int().min(15).nullable().default(120),
     festivalCount: z.number().int().min(0).max(20).default(3),
     lineMonopoly: z.boolean().default(true),
     tripleMonopoly: z.boolean().default(true),
@@ -32,6 +35,7 @@ export const RoomConfigSchema = z
     extraRollOnDouble: z.boolean().default(true),
     tripleDoubleToIsland: z.boolean().default(true),
     botCanBuild: z.boolean().default(true),
+    botDifficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
     giftCanBankrupt: z.boolean().default(true),
     decisionSeconds: z.number().int().min(10).max(60).default(30),
     randomnessMode: z.enum(["secure", "drand"]).default("secure"),
@@ -108,6 +112,13 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
         z.object({ type: z.literal("add-bot"), seat }).strict(),
         z.object({ type: z.literal("remove-bot"), seat }).strict(),
         z
+          .object({
+            type: z.literal("bot-difficulty"),
+            seat,
+            difficulty: z.enum(["easy", "medium", "hard"]),
+          })
+          .strict(),
+        z
           .object({ type: z.literal("add-local"), seat, name: NameSchema })
           .strict(),
         z.object({ type: z.literal("remove-local"), seat }).strict(),
@@ -142,6 +153,7 @@ export type LobbyOp =
   | { type: "settings"; config: RoomConfig }
   | { type: "add-bot"; seat: Seat }
   | { type: "remove-bot"; seat: Seat }
+  | { type: "bot-difficulty"; seat: Seat; difficulty: BotDifficulty }
   | { type: "add-local"; seat: Seat; name: string }
   | { type: "remove-local"; seat: Seat }
   | { type: "transfer-host"; seat: Seat }
@@ -174,6 +186,8 @@ export type LobbySeat = {
   seat: Seat;
   name: string;
   control: "human" | "bot" | null;
+  /** Only bots carry an individual level; missing fields use room config. */
+  botDifficulty?: BotDifficulty;
   online: boolean;
   /** A local player shares this seat's device and screen. */
   controller: Seat | null;
@@ -207,6 +221,10 @@ export type LobbyState = {
   /** Omitted by older servers; those rooms retain their original Chance deck. */
   readonly escapeCard?: boolean;
   readonly chanceRule: ChanceRule;
+  /** Omitted by older servers; existing rooms keep their recorded shuffled order. */
+  readonly turnOrderRule?: "clockwise" | "shuffled";
+  /** Omitted by older servers; existing rooms keep their original festival draw. */
+  readonly festivalDistribution?: "spread" | "random";
   /** Omitted by older servers; those rooms retain their economy's festival rule. */
   readonly resortFestivals?: boolean;
   seats: LobbySeat[];

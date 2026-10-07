@@ -314,15 +314,19 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
       expect(rect.bottom).toBeLessThanOrEqual(size.height);
     }
     for (const target of await page.locator(".sale-tile-quote").all()) {
-      const receivesPointer = await target.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(
-          rect.x + rect.width / 2,
-          rect.y + rect.height / 2,
-        );
-        return button === hit || (hit !== null && button.contains(hit));
-      });
-      expect(receivesPointer).toBe(true);
+      // Projected board controls settle on the next render after a resize.
+      await expect
+        .poll(() =>
+          target.evaluate((button) => {
+            const rect = button.getBoundingClientRect();
+            const hit = document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            );
+            return button === hit || (hit !== null && button.contains(hit));
+          }),
+        )
+        .toBe(true);
     }
     await page.screenshot({
       path: `.local/verification/sale-board-${size.width}.png`,
@@ -561,14 +565,12 @@ test("country travel and championship pick the same legal targets on the board a
     await expect(destination.locator("option:not([disabled])")).toHaveCount(2);
     await page.mouse.click(city.x, city.y);
     await expect(destination).toHaveValue("3");
-    await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    await expect(page.locator(".decision-confirm")).toContainText("Paris");
     await page.mouse.click(resort.x, resort.y);
     await expect(destination).toHaveValue("4");
-    await expect(page.locator(".decision-confirm")).toContainText(
-      "Côte d’Azur",
-    );
+    await expect(page.locator(".decision-confirm")).toContainText("Seychelles");
     await destination.selectOption("3");
-    await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    await expect(page.locator(".decision-confirm")).toContainText("Paris");
     if (size.width === 1440) {
       const diceTool = page.getByRole("button", {
         name: "À propos des dés",
@@ -586,7 +588,7 @@ test("country travel and championship pick the same legal targets on the board a
       await expect(page.locator(".help-dialog")).not.toBeVisible();
       await expect(diceTool).toBeFocused();
       await expect(destination).toHaveValue("3");
-      await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+      await expect(page.locator(".decision-confirm")).toContainText("Paris");
     }
     expect(room.intents).toHaveLength(0);
   }
