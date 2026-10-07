@@ -146,12 +146,16 @@ debug socket has been removed; `/api/health` remains.
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 12 with `boardRule: "country"`,
+  New rooms freeze rules version 13 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
-  `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
+  `sellBackPercent: 100`, `sellBeyondDebt: true`, `worldTourRule: "free-and-own"`,
+  `resortFestivals: false`,
   `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true`,
   `chanceRule: "reworked"`, `turnOrderRule: "clockwise"` and
-  `festivalDistribution: "spread"`. The optional festival-distribution selector
+  `festivalDistribution: "spread"`. The optional open-ended sale marker is
+  server-owned: version-12 and older lobbies omit it and end a forced sale at
+  zero cash. No new protocol version is required, because the extra decision
+  reuses the existing `sell` pending and the `Decline` intent. The optional festival-distribution selector
   is server-owned: version-11 and older lobbies use `"random"`, preserving their
   original draw. Existing active snapshots retain their saved festival tiles;
   older snapshots may omit this marker. No new event or protocol version is

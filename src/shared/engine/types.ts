@@ -57,6 +57,8 @@ export type GameConfig = {
   readonly turnOrderRule?: "clockwise" | "shuffled";
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
+  /** Missing on saves before rules version 13: a forced sale stops at zero. */
+  readonly sellBeyondDebt?: boolean;
   readonly extraRollOnDouble?: boolean;
   /** Missing on existing saves: the third consecutive double sends you to the island. */
   readonly tripleDoubleToIsland?: boolean;

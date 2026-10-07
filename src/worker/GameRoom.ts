@@ -96,9 +96,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 9 adds the saved Island Escape card;
  * 10 reworks the Chance deck (see ChanceRule);
  * 11 selects a random starter, then follows the fixed clockwise seats;
- * 12 spreads initial festivals across sides and country groups.
+ * 12 spreads initial festivals across sides and country groups;
+ * 13 lets a seller who has settled their debt keep selling.
  */
-const RULES_VERSION = 12;
+const RULES_VERSION = 13;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -111,7 +112,8 @@ function frozenRules(version: number | null) {
     version !== 9 &&
     version !== 10 &&
     version !== 11 &&
-    version !== 12
+    version !== 12 &&
+    version !== 13
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -120,6 +122,7 @@ function frozenRules(version: number | null) {
     hotelPurchaseRule:
       version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
+    sellBeyondDebt: version >= 13,
     worldTourRule:
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
     fourResortRent: version >= 8,
@@ -301,6 +304,7 @@ export class GameRoom extends DurableObject<Env> {
     const prototypeEconomy = economy === undefined || economy === "prototype";
     const board = state.config.boardRule;
     const sale = state.config.sellBackPercent;
+    const extraSales = state.config.sellBeyondDebt;
     const tour = state.config.worldTourRule;
     const fourResorts = state.config.fourResortRent;
     const buyoutBuild = state.config.buildAfterBuyout;
@@ -310,6 +314,10 @@ export class GameRoom extends DurableObject<Env> {
     const turnOrder = state.config.turnOrderRule;
     const festivalDistribution = state.config.festivalDistribution;
     if (
+      // Saves made before rules version 13 end a forced sale at zero cash.
+      (rulesVersion !== null &&
+        extraSales !== frozen.sellBeyondDebt &&
+        (rulesVersion >= 13 || extraSales !== undefined)) ||
       // Older saves may omit the selector; their recorded festivals stay intact.
       (rulesVersion !== null &&
         festivalDistribution !== frozen.festivalDistribution &&

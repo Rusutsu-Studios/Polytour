@@ -345,6 +345,16 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
     tile: 11,
     amount: 660_000,
   });
+  // The debt is settled, so the phase waits for the seller to finish with it.
+  expect(room.state().players[0].cash).toBe(260_000);
+  await expect(page.locator(".decision-sale")).toContainText("Vendre encore ?");
+  await expect(page.locator(".sale-ledger")).toContainText("Argent");
+  await expect(page.locator(".sale-ledger")).toContainText("260 k");
+  await expect(page.locator(".sale-tile-quote")).toHaveCount(2);
+  await page.getByRole("button", { name: "Terminer les ventes" }).click();
+  await expect.poll(() => room.intents.length).toBe(2);
+  expect(room.intents[1].action).toEqual({ type: "Decline" });
+  room.commit(1);
   await expect(page.locator(".decision-sale")).toHaveCount(0);
   await expect(page.locator(".sale-tile-quote")).toHaveCount(0);
   await expect(page.locator(".canvas-layer")).toHaveAttribute(
@@ -415,6 +425,16 @@ test.describe("standard animation playback", () => {
     await expect.poll(() => room.intents.length).toBe(2);
     expect(room.intents[1].action).toEqual({ type: "Sell", tile: 25 });
     room.commit(1);
+    expect(room.state().players[0].cash).toBe(510_000);
+    // One city is left and the debt is gone: selling on is the seller's call.
+    await expect(page.locator(".decision-sale")).toContainText(
+      "Vendre encore ?",
+    );
+    await expect(page.locator(".sale-tile-quote")).toHaveCount(1);
+    await page.getByRole("button", { name: "Terminer les ventes" }).click();
+    await expect.poll(() => room.intents.length).toBe(3);
+    expect(room.intents[2].action).toEqual({ type: "Decline" });
+    room.commit(2);
     await expect(page.locator(".decision-sale")).toHaveCount(0);
     await expect(page.locator(".canvas-layer")).toHaveAttribute(
       "data-sale-active",

@@ -2932,7 +2932,11 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0].json,
       ) as GameState;
-      const { festivalDistribution: _distribution, ...config } = saved.config;
+      const {
+        sellBeyondDebt: _extraSales,
+        festivalDistribution: _distribution,
+        ...config
+      } = saved.config;
       sql.exec("UPDATE meta SET v='11' WHERE k='rulesVersion'");
       sql.exec(
         "UPDATE state SET json=? WHERE id=1",
@@ -3017,7 +3021,7 @@ describe("Authoritative private rooms", () => {
               .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
               .toArray()[0].json,
           ) as GameState;
-          sql.exec("UPDATE meta SET v='12' WHERE k='rulesVersion'");
+          sql.exec("UPDATE meta SET v='13' WHERE k='rulesVersion'");
           sql.exec(
             "UPDATE state SET json=? WHERE id=1",
             JSON.stringify({
@@ -3053,7 +3057,7 @@ describe("Authoritative private rooms", () => {
       expect(lobby.festivalDistribution).toBe("spread");
     },
   );
-  it("freezes new rooms on rules version 12 with the Escape card, the reworked deck and the current economy", async () => {
+  it("freezes new rooms on rules version 13 with open-ended sales, the Escape card, the reworked deck and the current economy", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -3068,6 +3072,7 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.resortFestivals).toBe(false);
     expect(game.state.config.festivalDistribution).toBe("spread");
     expect(game.state.config.escapeCard).toBe(true);
+    expect(game.state.config.sellBeyondDebt).toBe(true);
     const cities = getBoard(game.state.config)
       .filter(isCityTile)
       .map((tile) => tile.index);
@@ -3086,7 +3091,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("12");
+    expect(rules).toBe("13");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
@@ -3095,7 +3100,9 @@ describe("Authoritative private rooms", () => {
     expect(welcome.snapshot?.config.festivalDistribution).toBe("spread");
     expect(welcome.snapshot?.config.resortFestivals).toBe(false);
     expect(welcome.lobby.escapeCard).toBe(true);
+    expect(welcome.lobby.sellBeyondDebt).toBe(true);
     expect(welcome.snapshot?.config.escapeCard).toBe(true);
+    expect(welcome.snapshot?.config.sellBeyondDebt).toBe(true);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
     expect(welcome.snapshot?.startingTurnOrder).toEqual(
       game.state.startingTurnOrder,
@@ -3123,7 +3130,8 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
-        const { festivalDistribution: _distribution, ...v11 } = saved.config;
+        const { sellBeyondDebt: _extraSales, ...v12 } = saved.config;
+        const { festivalDistribution: _distribution, ...v11 } = v12;
         const { chanceRule: _chance, ...v9 } = v11;
         const { escapeCard: _escape, ...v8 } = v9;
         const {
@@ -3240,6 +3248,7 @@ describe("Authoritative private rooms", () => {
       const saved = JSON.parse(row.json) as GameState;
       const {
         escapeCard: _escape,
+        sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
         ...config
@@ -3405,6 +3414,7 @@ describe("Authoritative private rooms", () => {
         fourResortRent: _four,
         buildAfterBuyout: _build,
         escapeCard: _escape,
+        sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
         ...oldConfig
@@ -3524,6 +3534,7 @@ describe("Authoritative private rooms", () => {
         fourResortRent: _four,
         buildAfterBuyout: _build,
         escapeCard: _escape,
+        sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
         ...oldConfig
@@ -3701,6 +3712,7 @@ describe("Authoritative private rooms", () => {
         fourResortRent: _four,
         buildAfterBuyout: _build,
         escapeCard: _escape,
+        sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
         ...oldConfig
@@ -3820,11 +3832,12 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 11, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 11, 12, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
       // cannot carry its World Tour marker, version 6 cannot exclude resort
       // festivals, version 7 the version-8 markers, version 8 the Escape card,
-      // version 9 the reworked Chance deck, version 11 the spread marker, and 999 is unknown.
+      // version 9 the reworked Chance deck, version 11 the spread marker,
+      // version 12 the open-ended sale marker, and 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -3842,7 +3855,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='12' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='13' WHERE k='rulesVersion'",
       ),
     );
   });

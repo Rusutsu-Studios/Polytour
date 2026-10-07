@@ -439,9 +439,10 @@ game:
   rollback meets.
 - **Rule and balance changes never rewrite a match in progress.** Metadata records
   `rulesVersion`; public config freezes the board and economy selectors. New rooms
-  use version 12 with country-grouped tiles, reference economy, staged hotels, full
+  use version 13 with country-grouped tiles, reference economy, staged hotels, full
   nominal sale refunds, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
-  `fourResortRent: true`, `buildAfterBuyout: true`, `chanceRule: "reworked"` and
+  `fourResortRent: true`, `buildAfterBuyout: true`, `chanceRule: "reworked"`,
+  `sellBeyondDebt: true`,
   `turnOrderRule: "clockwise"` and `festivalDistribution: "spread"`. The server chooses a random starter, then cycles
   seats bottom-right → bottom-left → top-left → top-right, skipping empty and
   bankrupt places. Saved version-10 and older lobbies use `turnOrderRule: "shuffled"`;
@@ -451,6 +452,9 @@ game:
   use the spread selector, with a repeated-country chance of one percentage point
   per festival when distinct countries can accommodate the configured count.
   No existing match is redrawn on reconnect or eviction.
+  Version-12 and older rooms omit `sellBeyondDebt`: their forced sale closes as
+  soon as the debt clears, while version-13 rooms leave it open until the seller
+  declines.
   Saves without the Chance marker keep the original deck. Version-4/5/6 rooms retain
   their resort festivals and rent; an absent festival marker on those saved matches
   follows the original economy. A version-4/5 save without the World Tour selector

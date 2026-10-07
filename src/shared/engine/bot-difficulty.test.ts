@@ -251,6 +251,21 @@ describe("bot difficulty", () => {
     expect(botAction(state, 0, "hard")).toEqual({ type: "Sell", tile: 31 });
   });
 
+  it("every difficulty stops selling once the debt is settled", () => {
+    const state = {
+      ...own(own(fixture(0), [13, 15], 0, 2), [31], 0),
+      pending: {
+        kind: "sell" as const,
+        seat: 0 as const,
+        targets: [13, 15, 31],
+        creditor: null,
+        deadline: 1000,
+      },
+    };
+    for (const difficulty of ["easy", "medium", "hard"] as const)
+      expect(botAction(state, 0, difficulty)).toEqual({ type: "Decline" });
+  });
+
   it("Hard travels to complete a country ahead of expensive unowned land", () => {
     const state = {
       ...own(fixture(), [13], 0),

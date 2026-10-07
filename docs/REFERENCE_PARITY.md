@@ -283,3 +283,14 @@ and resorts receive no festival rent bonus. This is an explicit Polytour rule,
 separate from the reference evidence above. Existing version-4/5/6 rooms retain
 their original resort festivals, rent and settings; unmarked saved configurations
 fall back to their frozen economy.
+
+### Open-ended forced sale - rules version 13, 7 October 2026
+
+At the user's request, a forced sale no longer stops at the exact amount owed.
+New rooms freeze `rulesVersion: 13` with `sellBeyondDebt: true`: once the debt
+clears, the sell decision stays open and the seller keeps selling as many
+properties as they like, ending the phase by declining. A timed-out or bot seat
+declines as soon as it is solvent, so the phase never drags on by itself. The
+reference game closes its sale dialog when the payment is covered, so this is an
+explicit Polytour choice about raising a cash buffer, not a parity claim. Rooms
+through version 12 keep the original behaviour and end the phase at zero.
