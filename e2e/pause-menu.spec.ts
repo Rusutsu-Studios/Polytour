@@ -570,7 +570,7 @@ test("settings tabs stay local, keyboard navigation and desktop layouts remain u
     name: "Faible",
     exact: true,
   });
-  await expect(graphics.getByRole("radio")).toHaveCount(2);
+  await expect(graphics.getByRole("radio")).toHaveCount(3);
   await expect(highGraphics).toBeChecked();
   await expect(lowGraphics).not.toBeChecked();
   await lowGraphics.press("Space");
@@ -2067,9 +2067,12 @@ test("home preview fills its stage and personal settings mirror the welcome stre
   const setting = page
     .locator(".pause-dialog")
     .getByRole("button", { name: "Mode streamer", exact: true });
+  await expect(setting).not.toBeVisible();
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
   await expect(setting).toHaveAttribute("aria-pressed", "true");
   await setting.click();
   await expect(shortcut).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
   await page
     .getByLabel("Verrouiller la vue du plateau", { exact: true })
     .check();
@@ -2332,7 +2335,8 @@ test("locked board freezes every gesture and zoom preference but toolbar reset r
     page
       .locator(".game-tools")
       .getByRole("button", { name: "Mode streamer", exact: true }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
+  await page.getByRole("tab", { name: "Accessibilité", exact: true }).click();
   const streamer = page
     .locator(".pause-dialog")
     .getByRole("button", { name: "Mode streamer", exact: true });

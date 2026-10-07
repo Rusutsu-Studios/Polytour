@@ -4,29 +4,42 @@ import { updateSettings, useSettings } from "../settings/store.js";
 
 export default function GraphicsToggle() {
   const { t } = useLocale();
-  const { graphics } = useSettings();
-  const lowGraphics = graphics === "low";
+  const { graphics, reducedMotion } = useSettings();
+  const labels = {
+    high: t("Élevé", "High"),
+    low: t("Faible", "Low"),
+    potato: "Potato PC",
+  };
   const name = useId();
   return (
     <fieldset className="graphics-quality">
       <legend>{t("Graphismes", "Graphics")}</legend>
       <div className="graphics-quality-options">
-        {([false, true] as const).map((low) => (
+        {(["potato", "low", "high"] as const).map((quality) => (
           <label
-            key={low ? "low" : "high"}
+            key={quality}
             className="graphics-quality-option"
-            data-selected={lowGraphics === low}
+            data-quality={quality}
+            data-selected={graphics === quality}
           >
             <input
               type="radio"
               name={name}
-              value={low ? "low" : "high"}
-              checked={lowGraphics === low}
+              value={quality}
+              checked={graphics === quality}
               onChange={() =>
-                updateSettings({ graphics: low ? "low" : "high" })
+                updateSettings({
+                  graphics: quality,
+                  reducedMotion:
+                    quality === "potato"
+                      ? "on"
+                      : quality === "high"
+                        ? "off"
+                        : reducedMotion,
+                })
               }
             />
-            <span>{low ? t("Faible", "Low") : t("Élevé", "High")}</span>
+            <span>{labels[quality]}</span>
           </label>
         ))}
       </div>

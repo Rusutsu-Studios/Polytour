@@ -3,7 +3,7 @@ import { BOARD_ZOOM, clampBoardZoom } from "../board-view.js";
 
 export type ClientSettings = {
   version: 1;
-  graphics: "high" | "low";
+  graphics: "high" | "low" | "potato";
   boardZoom: number;
   /** Keeps the board still: no orbit, pan or zoom while it is on. */
   boardViewLocked: boolean;
@@ -44,7 +44,9 @@ function validate(value: unknown, fallback: ClientSettings): ClientSettings {
   return {
     version: 1,
     graphics:
-      record.graphics === "high" || record.graphics === "low"
+      record.graphics === "high" ||
+      record.graphics === "low" ||
+      record.graphics === "potato"
         ? record.graphics
         : fallback.graphics,
     boardZoom:

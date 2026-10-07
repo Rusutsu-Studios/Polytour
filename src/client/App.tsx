@@ -1061,7 +1061,6 @@ function MatchView({
     boardViewLocked: viewLocked,
     graphics,
   } = useSettings();
-  const lowGraphics = graphics === "low";
   const [boardZoomAvailable, setBoardZoomAvailable] = useState(false);
   const { serverState, busy, history, reducedMotion } = useDirector();
   const [pauseOpen, setPauseOpen] = useState(game.pause?.kind === "paused");
@@ -1383,7 +1382,7 @@ function MatchView({
               viewLocked={viewLocked}
               interactiveZoom
               onWebGlAvailableChange={setBoardZoomAvailable}
-              lowGraphics={lowGraphics}
+              graphics={graphics}
               onRollAnchor={setRollAnchor}
               saleSeat={salePending ? salePending.seat : undefined}
               saleBlocked={saleBlocked}
@@ -1452,11 +1451,6 @@ function MatchView({
         className="game-tools"
         aria-label={t("Outils de la partie", "Game tools")}
       >
-        <StreamerToggle
-          enabled={streamer}
-          onChange={onStreamerChange}
-          compact
-        />
         <ActionButton
           type="button"
           className="game-tool-button"
@@ -2007,7 +2001,6 @@ function App() {
     boardViewLocked: viewLocked,
     graphics,
   } = useSettings();
-  const lowGraphics = graphics === "low";
   const [viewResetKey, setViewResetKey] = useState(0);
   const [previewZoomAvailable, setPreviewZoomAvailable] = useState(false);
   function resetBoardView() {
@@ -2159,7 +2152,9 @@ function App() {
             <Logo small={Boolean(isGame)} />
           </span>
           <div className="topbar-right">
-            <StreamerToggle enabled={streamer} onChange={changeStreamer} />
+            {!credentials && (
+              <StreamerToggle enabled={streamer} onChange={changeStreamer} />
+            )}
             <button
               type="button"
               className="text-button personal-settings-trigger"
@@ -2323,7 +2318,7 @@ function App() {
                     viewResetKey={viewResetKey}
                     viewLocked={viewLocked}
                     onWebGlAvailableChange={setPreviewZoomAvailable}
-                    lowGraphics={lowGraphics}
+                    graphics={graphics}
                   />
                 </Suspense>
               </SceneBoundary>
@@ -2512,7 +2507,7 @@ function App() {
                   viewResetKey={viewResetKey}
                   viewLocked={viewLocked}
                   onWebGlAvailableChange={setPreviewZoomAvailable}
-                  lowGraphics={lowGraphics}
+                  graphics={graphics}
                 />
               </Suspense>
             </SceneBoundary>

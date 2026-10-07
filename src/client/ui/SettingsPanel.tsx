@@ -192,18 +192,6 @@ export default function SettingsPanel({
           <option value="en">English</option>
         </select>
       </div>
-      <div className="settings-streamer">
-        <StreamerToggle enabled={streamer} onChange={onStreamerChange} />
-        <strong aria-hidden="true">
-          {streamer ? t("Activé", "On") : t("Désactivé", "Off")}
-        </strong>
-        <p>
-          {t(
-            "Masque le code de salle et de connexion.",
-            "Hides the room code and masks it when joining.",
-          )}
-        </p>
-      </div>
       <div
         className="pause-tabs"
         role="tablist"
@@ -392,6 +380,21 @@ export default function SettingsPanel({
           )}
           {value === "accessibility" && (
             <div className="pause-accessibility-settings">
+              <div className="settings-streamer">
+                <StreamerToggle
+                  enabled={streamer}
+                  onChange={onStreamerChange}
+                />
+                <strong aria-hidden="true">
+                  {streamer ? t("Activé", "On") : t("Désactivé", "Off")}
+                </strong>
+                <p>
+                  {t(
+                    "Masque le code de salle et de connexion.",
+                    "Hides the room code and masks it when joining.",
+                  )}
+                </p>
+              </div>
               <fieldset className="settings-motion">
                 <legend>{t("Réduire les animations", "Reduce motion")}</legend>
                 <div className="settings-motion-options">

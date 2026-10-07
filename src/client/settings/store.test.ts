@@ -57,6 +57,22 @@ async function setup({
 afterEach(() => vi.unstubAllGlobals());
 
 describe("local settings", () => {
+  it("persists Potato PC and restores it without changing other preferences", async () => {
+    const store = await setup();
+    store.updateSettings({ graphics: "potato", boardZoom: 1.2 });
+    const saved = store.saved.get(KEY);
+    expect(JSON.parse(saved ?? "null")).toMatchObject({ graphics: "potato" });
+    const restored = await setup({ values: { [KEY]: saved ?? "" } });
+    expect(restored.getSettings()).toEqual(store.getSettings());
+    restored.updateSettings({ graphics: "low" });
+    expect(restored.getSettings()).toMatchObject({
+      graphics: "low",
+      boardZoom: 1.2,
+      reducedMotion: "system",
+      locale: "en",
+    });
+  });
+
   it("keeps the French fallback outside a browser even when navigator exists", async () => {
     vi.resetModules();
     vi.stubGlobal("window", undefined);

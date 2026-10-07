@@ -78,7 +78,7 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
   );
   await page.reload();
   await expect(page.locator(".lobby-seats")).toContainText("Streamer fixture");
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(toggle).toHaveCount(0);
   expect(
     await page.locator("body").evaluate((body) => body.outerHTML),
   ).not.toContain(roomCode);
@@ -92,12 +92,25 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
   const matchToggle = page
     .locator(".game-tools")
     .getByRole("button", { name: "Streamer mode", exact: true });
-  await expect(page.locator(".game-tools button").first()).toHaveAccessibleName(
-    "Streamer mode",
-  );
-  await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
-  await matchToggle.click();
-  await expect(matchToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(matchToggle).toHaveCount(0);
+  await page.getByRole("button", { name: "Pause menu", exact: true }).click();
+  await page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const setting = page
+    .locator(".pause-dialog")
+    .getByRole("button", { name: "Streamer mode", exact: true });
+  await expect(setting).not.toBeVisible();
+  await page.getByRole("tab", { name: "Accessibility", exact: true }).click();
+  await expect(setting).toHaveAttribute("aria-pressed", "true");
+  await setting.click();
+  await expect(setting).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "Invite players", exact: true })
+    .click();
   await expect(page.locator(".room-tool-code")).toContainText(roomCode);
   expect(
     await page.evaluate(() => localStorage.getItem("polytour.streamer")),
@@ -107,15 +120,13 @@ test("streamer mode masks joining, lobby and match codes and survives reload", a
     .locator(".pause-dialog")
     .getByRole("button", { name: "Settings", exact: true })
     .click();
-  const setting = page
-    .locator(".pause-dialog")
-    .getByRole("button", { name: "Streamer mode", exact: true });
+  await page.getByRole("tab", { name: "Accessibility", exact: true }).click();
   await expect(setting).toHaveAttribute("aria-pressed", "false");
   await setting.click();
   await expect(setting).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  await expect(matchToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(matchToggle).toHaveCount(0);
   await page
     .getByRole("button", { name: "Invite players", exact: true })
     .click();
