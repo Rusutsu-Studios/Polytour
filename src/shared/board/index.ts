@@ -28,6 +28,7 @@ export {
   roundPayout,
   ruleEconomy,
 } from "./economy.js";
+export { FESTIVAL_TUNING } from "./festivals.js";
 export {
   BOT_TIMING,
   CHANCE_AMOUNTS,

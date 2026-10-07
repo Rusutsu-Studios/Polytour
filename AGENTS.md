@@ -7,7 +7,7 @@ CI fails if the import is missing.
 
 Polytour is a web-first, real-time multiplayer property-trading board game in the
 spirit of Business Tour / Modoo Marble (2–4 player rooms, configurable 20/60/120-minute
-limits). The current target is desktop browsers with mouse and keyboard; mobile
+limits or unlimited duration). The current target is desktop browsers with mouse and keyboard; mobile
 support is optional. It runs entirely on Cloudflare: a Worker serves the SPA and API, and
 one Durable Object per match runs the authoritative game. The visual bar is high:
 a stylized 3D board with juicy, choreographed animations.
@@ -17,17 +17,23 @@ a stylized 3D board with juicy, choreographed animations.
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins (four-beach win optional, off) and
-> 120 minutes. New rooms (rules version 10) use the reference economy: its rent
+> 120 minutes. New rooms (rules version 12) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
 > championship, a retained island Escape card, a reworked 36-card Chance deck (half bad
 > cards), Hotels that cannot be bought out and no Landmark. Festivals are
-> cities only from version 7; saved version-4/5/6 rooms keep resort festivals. World Tour
+> cities only from version 7. From version 12, festivals are usually spread across
+> countries (3 festivals: about 3% chance of a repeated country); rooms through
+> version 11 keep their original festival shuffle.
+> Saved version-4/5/6 rooms keep resort festivals. World Tour
 > reaches free properties and the traveller's own (versions 4/5: own only when none
 > is free). Four resorts pay 200 k rent, and a bought-out city can be built on
 > at once from version 8; version-7 and earlier rooms pay four resorts like three
 > and offer no immediate build after a buyout. Version-8 and earlier rooms keep the
 > original sixteen-card deck without the retained Escape card; version-9 rooms
-> keep that deck plus Escape. Two houses
+> keep that deck plus Escape. From version 11, a random starter is followed by
+> the fixed clockwise seat order; rooms through version 10 keep their shuffled
+> order.
+> Two houses
 > before a first completed lap, three after; the Hotel follows on a later
 > visit to a three-house city. Direct
 > hotels are an explicit custom exception; saved version-2/3 rooms keep their original board and the

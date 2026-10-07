@@ -23,6 +23,30 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   between the top tools and the bottom choice; any future action shot must
   return to that frame and preserve access to the current decision. Geometry
   lives in `client/scene/board-layout.ts` and its orientation is unit-tested.
+- **Player view:** Video sets local board zoom from 80% to 200% in 10% steps,
+  saved for this browser. In a match, wheel, +/- keys, touch pinch and laptop
+  trackpad pinch zoom the view. Trackpad Ctrl+wheel events without a physical
+  Control key press stay on the board; deliberate Ctrl+wheel and browser
+  keyboard zoom shortcuts keep their native behavior. A left-button grab on the
+  board's tiles, center or edges orbits gently
+  after an 8px threshold: horizontal drag turns around it and vertical drag moves
+  between a low and overhead view. Projection scale stays fixed while orbiting;
+  wheel/pinch and explicit zoom controls alone change magnification. The high
+  view can extend beyond the frame; Shift-drag reaches its edges within the
+  rotation-aware pan bounds. A simple
+  click still inspects or chooses a tile. Empty background and floating controls,
+  including the Roll button and sale quotes, never start a grab.
+  Reset board view in the game toolbar, Default view in Video (or 0 while unlocked)
+  restores 100%, the initial orientation and centered pan. Lock board view is
+  saved locally and blocks gestures, keyboard shortcuts and Video zoom controls;
+  touch and trackpad pinches cannot magnify the page while locked. The two reset
+  buttons remain usable. Lobby previews use only Video controls.
+  The accessible flat-board fallback keeps camera controls unavailable.
+  Input applies immediately without smoothing, including reduced motion.
+  The Director never writes this preference or the user's board transform.
+  Framing, sale quotes and the floating Roll anchor share the same local transform
+  and projection. View changes never cancel an event animation, advance the
+  event queue, change a shared rule or send a server intent.
 - **Lighting:** one warm key light with soft shadows (or baked + `ContactShadows`),
   cool fill, environment map for subtle reflections on coins and landmarks.
 - **Post:** ACES/AgX tone mapping, *selective* bloom (coins, landmarks, UI glows only),
@@ -89,6 +113,7 @@ flowchart LR
 
 | Event | Animation | Budget |
 | --- | --- | --- |
+| `GameCreated` | The opening wheel places names in their HUD corners, spins onto the server-selected starter for 3.6 seconds, then holds the result and clockwise order for 3.4 seconds. Name badges show their colours while spinning and receive order numbers at the reveal. Reconnect snapshots snap without replaying it. Start playing or Escape skips; reduced motion shows the result without spinning. | 7.0 s |
 | `DiceRolled` | Dice thrown from the player's side, tumble, bounce, settle on the server's values; camera micro-shake on impact; values pop above dice. Doubles: gold flash + "DOUBLE!" stamp. | 1.2 s |
 | `PawnMoved` | Pawn hops tile-to-tile on an arc with squash & stretch (anticipation → hop → land squash). Each tile gives a small "press" and a soft tick sound whose pitch climbs. Camera follows with damped lerp. Teleports: pawn spins up into a light beam, lands with a ring shockwave. | 0.28 s / tile |
 | `SalaryPaid` | Start tile flares; coins arc into the player's corner HUD; counter rolls up. | 0.8 s |

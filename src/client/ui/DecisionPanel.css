@@ -647,7 +647,7 @@
     padding: 12px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion="true"] {
   .decision-popup .construction-choice {
     transition: none;
   }

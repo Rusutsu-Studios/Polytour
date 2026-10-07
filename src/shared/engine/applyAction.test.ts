@@ -8,6 +8,7 @@ import type {
   GameEvent,
   GameState,
   PlayerState,
+  PublicState,
   Seat,
   SeatInfo,
 } from "./index.js";
@@ -48,6 +49,74 @@ import {
 const SEATS: readonly SeatInfo[] = ["Ada", "Bea", "Cy", "Dan"].map(
   (name, index) => ({ playerId: `player-${index}`, name, control: "human" }),
 );
+
+describe("frozen bot levels", () => {
+  it("dispatches each seat's policy before the match default", () => {
+    const state = createGame(
+      { ...DEFAULT_GAME_CONFIG, festivalCount: 0, botDifficulty: "hard" },
+      [
+        { ...SEATS[0], control: "bot", botDifficulty: "easy" },
+        { ...SEATS[1], control: "bot", botDifficulty: "medium" },
+        { ...SEATS[2], control: "bot", botDifficulty: "hard" },
+      ],
+      7,
+      { now: 0 },
+    ).state;
+    const buying = (seat: Seat, round: number): PublicState => ({
+      ...toPublic(state),
+      round,
+      activeSeat: seat,
+      pending: { kind: "buy", seat, tile: 1, maxLevel: 2, deadline: 1000 },
+    });
+    expect(botAction(buying(0, 3), 0)).toEqual({ type: "Buy", level: 1 });
+    expect(botAction(buying(1, 2), 1)).toEqual({ type: "Buy", level: 2 });
+    let exposed = setPlayer(state, 2, { cash: 400_000, position: 1 });
+    for (const tile of [3, 5, 6, 7, 9, 10, 11])
+      exposed = grant(exposed, tile, 0, 4);
+    const choice: PublicState = {
+      ...toPublic(exposed),
+      activeSeat: 2,
+      pending: { kind: "buy", seat: 2, tile: 1, maxLevel: 2, deadline: 1000 },
+    };
+    expect(botAction(choice, 2)).toEqual({ type: "Decline" });
+    expect(botAction(choice, 2, "medium")).toEqual({ type: "Buy", level: 2 });
+  });
+
+  it("records each bot's chosen level and the default for unmarked bots", () => {
+    const created = createGame(
+      { ...DEFAULT_GAME_CONFIG, botDifficulty: "hard" },
+      [
+        { ...SEATS[0], control: "bot", botDifficulty: "easy" },
+        { ...SEATS[1], control: "bot", botDifficulty: "medium" },
+        { ...SEATS[2], control: "bot" },
+        SEATS[3],
+      ],
+      7,
+      { now: 0 },
+    );
+    expect(created.state.players.map((player) => player.botDifficulty)).toEqual(
+      ["easy", "medium", "hard", undefined],
+    );
+    expect(created.events.reduce(applyEvent, toPublic(created.state))).toEqual(
+      toPublic(created.state),
+    );
+    expect(() =>
+      createGame(
+        DEFAULT_GAME_CONFIG,
+        [
+          {
+            ...SEATS[0],
+            control: "bot",
+            botDifficulty: "expert" as "hard",
+          },
+          SEATS[1],
+        ],
+        7,
+        { now: 0 },
+      ),
+    ).toThrow("Unsupported seat bot difficulty");
+  });
+});
 /** Saved prototype rooms (rules versions 2-3) keep these rules; see the reference block below. */
 const CONFIG: GameConfig = {
   ...DEFAULT_GAME_CONFIG,
@@ -1327,6 +1396,43 @@ describe("wins, rankings and timeouts", () => {
     );
     expect(applyTimeout(timed, { now: 1_199_999 }).state.status).toBe("active");
   });
+  it("unlimited games pass time and round limits, keep decision timers and still end on a win", () => {
+    let state = newGame(4, {
+      ...CONFIG,
+      timeLimitMinutes: null,
+      roundLimit: 1,
+    });
+    expect(state.matchDeadline).toBeNull();
+    const last = state.turnOrder.at(-1) as Seat;
+    state = withActive(
+      { ...state, round: 10_000, roundSeatsRemaining: [last] },
+      last,
+    );
+    const continued = land(state, 0);
+    expect(continued.state.status).toBe("active");
+    expect(continued.state.round).toBe(10_001);
+    expect(continued.events.some((event) => event.type === "GameOver")).toBe(
+      false,
+    );
+    const timedOut = applyTimeout(continued.state, {
+      now: 7_200_001,
+      dice: [1, 2],
+    });
+    expect(timedOut.state.status).toBe("active");
+    expect(timedOut.events.some((event) => event.type === "DiceRolled")).toBe(
+      true,
+    );
+    expect(
+      timedOut.events.reduce(applyEvent, toPublic(continued.state)),
+    ).toEqual(toPublic(timedOut.state));
+
+    state = newGame(4, { ...CONFIG, timeLimitMinutes: null });
+    for (const tile of [1, 2, 3, 4, 5, 6])
+      state = grant(state, tile, state.activeSeat);
+    expect(
+      act(land(state, 7).state, { type: "Buy", level: 0 }).state.result?.kind,
+    ).toBe("line-monopoly");
+  });
   it("settles pending sales and sequential mandatory payments fairly before time-limit ranking", () => {
     let state = newGame(4, {
       ...CONFIG,
@@ -1395,8 +1501,10 @@ describe("wins, rankings and timeouts", () => {
   });
   it("starts the decision clock and bot moves after the animations", () => {
     const state = newGame();
-    // Nothing to watch yet: a bot only takes its short pause.
-    expect(botDecisionAt(toPublic(state))).toBe(BOT_TIMING.roll);
+    // The opening wheel finishes before the starter takes its thinking pause.
+    expect(botDecisionAt(toPublic(state))).toBe(
+      DECISION_TIMING.startAnimation + BOT_TIMING.roll,
+    );
     // From tile 4 to 7: the dice, three hops, then the purchase decision.
     const purchase = land(state, 7, [1, 2]).state;
     const presented =
@@ -1507,7 +1615,11 @@ describe("configurable captured room options", () => {
   it("hands a bot's place to a late player with its money, turn and secrets intact", () => {
     let state = newGame(4, { ...CONFIG, botCanBuild: false });
     const seat = state.activeSeat;
-    state = setPlayer(state, seat, { control: "bot", name: "Iris" });
+    state = setPlayer(state, seat, {
+      control: "bot",
+      name: "Iris",
+      botDifficulty: "hard",
+    });
     const bot = land(state, 6).state;
     const handed = changeControl(bot, seat, "human", "Bo");
     if (!handed.ok) throw new Error(handed.error.message);
@@ -1517,11 +1629,13 @@ describe("configurable captured room options", () => {
     expect(handed.events.reduce(applyEvent, toPublic(bot))).toEqual(
       toPublic(handed.state),
     );
+    const { botDifficulty: _difficulty, ...formerBot } = getPlayer(bot, seat);
     expect(getPlayer(handed.state, seat)).toEqual({
-      ...getPlayer(bot, seat),
+      ...formerBot,
       name: "Bo",
       control: "human",
     });
+    expect(getPlayer(handed.state, seat)).not.toHaveProperty("botDifficulty");
     expect(handed.state.pending).toBe(bot.pending);
     expect(handed.state.rngState).toBe(bot.rngState);
     expect(handed.state.deck).toBe(bot.deck);

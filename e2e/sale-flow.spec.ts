@@ -18,7 +18,7 @@ import {
   PROTOCOL_VERSION,
   RoomConfigSchema,
 } from "../src/shared/protocol/index.js";
-import { clickBoardSpace } from "./board-interactions.js";
+import { boardScreenPoint, clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
 
 test.use({ reducedMotion: "reduce" });
@@ -314,15 +314,19 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
       expect(rect.bottom).toBeLessThanOrEqual(size.height);
     }
     for (const target of await page.locator(".sale-tile-quote").all()) {
-      const receivesPointer = await target.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(
-          rect.x + rect.width / 2,
-          rect.y + rect.height / 2,
-        );
-        return button === hit || (hit !== null && button.contains(hit));
-      });
-      expect(receivesPointer).toBe(true);
+      // Projected board controls settle on the next render after a resize.
+      await expect
+        .poll(() =>
+          target.evaluate((button) => {
+            const rect = button.getBoundingClientRect();
+            const hit = document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            );
+            return button === hit || (hit !== null && button.contains(hit));
+          }),
+        )
+        .toBe(true);
     }
     await page.screenshot({
       path: `.local/verification/sale-board-${size.width}.png`,
@@ -561,14 +565,12 @@ test("country travel and championship pick the same legal targets on the board a
     await expect(destination.locator("option:not([disabled])")).toHaveCount(2);
     await page.mouse.click(city.x, city.y);
     await expect(destination).toHaveValue("3");
-    await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    await expect(page.locator(".decision-confirm")).toContainText("Paris");
     await page.mouse.click(resort.x, resort.y);
     await expect(destination).toHaveValue("4");
-    await expect(page.locator(".decision-confirm")).toContainText(
-      "Côte d’Azur",
-    );
+    await expect(page.locator(".decision-confirm")).toContainText("Seychelles");
     await destination.selectOption("3");
-    await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+    await expect(page.locator(".decision-confirm")).toContainText("Paris");
     if (size.width === 1440) {
       const diceTool = page.getByRole("button", {
         name: "À propos des dés",
@@ -586,7 +588,7 @@ test("country travel and championship pick the same legal targets on the board a
       await expect(page.locator(".help-dialog")).not.toBeVisible();
       await expect(diceTool).toBeFocused();
       await expect(destination).toHaveValue("3");
-      await expect(page.locator(".decision-confirm")).toContainText("Le Havre");
+      await expect(page.locator(".decision-confirm")).toContainText("Paris");
     }
     expect(room.intents).toHaveLength(0);
   }
@@ -685,3 +687,125 @@ test("roll button and informative timer remain usable through 4K and reduced mot
   ).toBeLessThan(500);
   expect(room.errors).toEqual([]);
 });
+
+// One test per viewport: a single pass over every desktop size outgrew the
+// 120 s budget on CI, where WebGL is software rendered.
+for (const viewport of DESKTOP_SIZES) {
+  test(`forced-sale quotes follow the actual board view after zoom, rotation and pan at ${viewport.width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.addInitScript(() =>
+      localStorage.setItem("polytour.lowGraphics", "true"),
+    );
+    const room = await enterSaleRoom(page);
+    const board = page.locator(".canvas-layer");
+    for (const zoom of [0.8, 2]) {
+      await page
+        .getByRole("button", { name: "Menu pause", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Réglages", exact: true }).click();
+      await page.getByRole("tab", { name: "Vidéo", exact: true }).click();
+      await page
+        .getByRole("slider", { name: "Zoom du plateau", exact: true })
+        .press(zoom === 2 ? "End" : "Home");
+      await expect(board).toHaveAttribute("data-board-zoom", String(zoom));
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      if (zoom === 2) {
+        const center = await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 });
+        await page.mouse.move(center.x, center.y);
+        await page.mouse.down();
+        await page.mouse.move(center.x + 60, center.y + 12, { steps: 6 });
+        await page.mouse.up();
+        await expect
+          .poll(
+            async () => Number(await board.getAttribute("data-board-yaw")),
+            { timeout: 20_000 },
+          )
+          .not.toBe(0);
+        const shifted = await boardScreenPoint(page, {
+          x: 0,
+          y: LOT_TOP,
+          z: 0,
+        });
+        await page.mouse.move(shifted.x, shifted.y);
+        await page.keyboard.down("Shift");
+        await page.mouse.down();
+        await page.mouse.move(shifted.x + 100, shifted.y + 50, { steps: 6 });
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await expect
+          .poll(
+            async () => Number(await board.getAttribute("data-board-pan-x")),
+            { timeout: 20_000 },
+          )
+          .not.toBe(0);
+      }
+      const world = [1, 11, 25].map((tile) => {
+        const [x, z] = tilePoint(tile, 0, 0.3);
+        return { tile, x, y: LOT_TOP + 0.08, z };
+      });
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(async (points) => {
+              const modulePath = performance
+                .getEntriesByType("resource")
+                .find((entry) =>
+                  entry.name.includes("/@react-three_fiber.js"),
+                )?.name;
+              if (!modulePath)
+                throw new Error("Expected the loaded R3F module");
+              const { _roots } = (await import(
+                modulePath
+              )) as typeof import("@react-three/fiber");
+              const canvas = document.querySelector<HTMLCanvasElement>(
+                ".canvas-layer canvas",
+              );
+              const scene = canvas && _roots.get(canvas)?.store.getState();
+              if (!canvas || !scene)
+                throw new Error("Expected the mounted board");
+              const rect = canvas.getBoundingClientRect();
+              return Math.max(
+                ...points.map(({ tile, x, y, z }) => {
+                  const point = scene.camera.position.clone().set(x, y, z);
+                  const view = scene.scene.getObjectByName("board-user-view");
+                  if (view) {
+                    view.updateWorldMatrix(true, false);
+                    point.applyMatrix4(view.matrixWorld);
+                  }
+                  point.project(scene.camera);
+                  const quote = document.querySelector<HTMLElement>(
+                    `.sale-tile-quote[data-tile="${tile}"]`,
+                  );
+                  if (!quote) throw new Error("Expected the sale quote");
+                  const position = quote.getBoundingClientRect();
+                  return Math.max(
+                    Math.abs(
+                      position.x +
+                        position.width / 2 -
+                        rect.x -
+                        ((point.x + 1) * rect.width) / 2,
+                    ),
+                    Math.abs(
+                      position.y +
+                        position.height / 2 -
+                        rect.y -
+                        ((1 - point.y) * rect.height) / 2,
+                    ),
+                  );
+                }),
+              );
+            }, world),
+          { timeout: 20_000 },
+        )
+        .toBeLessThan(1);
+      await page.screenshot({
+        path: `.local/verification/board-zoom-sale-${viewport.width}-${zoom}.png`,
+      });
+    }
+    expect(room.intents).toHaveLength(0);
+    expect(room.errors).toEqual([]);
+  });
+}
