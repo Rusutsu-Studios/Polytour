@@ -523,6 +523,75 @@ test("cash shortages have their own explanation", async ({ page }) => {
   await expect(house).toBeDisabled();
 });
 
+for (const size of DESKTOP_SIZES.slice(0, 3)) {
+  test(`a city beyond the player's cash says so at ${size.width}×${size.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    const room = await decisionRoom(page, 40_000);
+    const dialog = page.locator('.decision-popup[data-kind="buy"][open]');
+    await expect(dialog).toHaveAttribute("data-short", "true");
+    const notice = dialog.locator(".decision-shortfall");
+    await expect(notice).toContainText("Pas assez d’argent");
+    await expect(notice).toContainText("Le terrain coûte 60 k");
+    await expect(notice).toContainText("il vous reste 40 k");
+    await expect(dialog.locator(".decision-preview-name")).toHaveText(
+      "Terrain",
+    );
+    await expect(dialog.locator(".ledger-main dd")).toHaveText("60 k");
+    await expect(dialog.locator(".ledger-balance dd")).toHaveText("20 k");
+    // Every level stays visible and locked; none of them can be confirmed.
+    await expect(dialog.locator(".construction-choice")).toHaveCount(5);
+    await expect(
+      dialog.locator('.construction-choice:not([data-locked="true"])'),
+    ).toHaveCount(0);
+    const confirm = dialog.locator(".decision-confirm");
+    await expect(confirm).toHaveText("Passer");
+    await expect(confirm).toBeEnabled();
+    const bounds = await dialog.boundingBox();
+    expect(bounds?.y).toBeGreaterThanOrEqual(0);
+    expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeLessThanOrEqual(
+      size.height,
+    );
+    await page.screenshot({
+      path: `.local/verification/buy-shortfall-${size.width}.png`,
+    });
+    await confirm.click();
+    expect(room.intents).toHaveLength(1);
+    expect(JSON.parse(room.intents[0]).action).toEqual({ type: "Decline" });
+  });
+}
+
+test("an unaffordable beach keeps a card with its price", async ({ page }) => {
+  const room = await decisionRoom(page, 150_000, (state) => ({
+    ...state,
+    players: state.players.map((player) =>
+      player.seat === 0 ? { ...player, position: 4 } : player,
+    ),
+    pending: {
+      kind: "buy",
+      seat: 0,
+      tile: 4,
+      maxLevel: 0,
+      deadline: Date.now() + 60_000,
+    },
+  }));
+  const dialog = page.locator('.decision-popup[data-kind="buy"][open]');
+  await expect(dialog).toHaveAttribute("data-short", "true");
+  await expect(dialog.locator(".construction-choice")).toHaveCount(0);
+  await expect(dialog.locator(".decision-shortfall")).toContainText(
+    "Cette plage coûte 200 k",
+  );
+  await expect(dialog.locator(".decision-preview-name")).toHaveText("Plage");
+  await expect(dialog.locator(".ledger-balance dd")).toHaveText("50 k");
+  const confirm = dialog.locator(".decision-confirm");
+  await expect(confirm).toHaveText("Passer");
+  await page.screenshot({ path: ".local/verification/beach-shortfall.png" });
+  await confirm.click();
+  expect(room.intents).toHaveLength(1);
+  expect(JSON.parse(room.intents[0]).action).toEqual({ type: "Decline" });
+});
+
 for (const size of [
   { width: 1280, height: 720 },
   { width: 1440, height: 900 },
