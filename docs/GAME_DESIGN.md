@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 10, `economyRule: "reference"`) follow the reference
+New rooms (rules version 12, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -20,7 +20,8 @@ the sources and the values that remain interpolated.
 ## Design pillars and v1 boundaries
 
 - **Fast, decisive, and legible.** A player should have one meaningful decision at a
-  time, and a match must finish inside the round limit without a stalemate rule.
+  time. Timed matches finish within their limits; unlimited matches wait for a
+  win condition without a stalemate rule.
 - **Luck creates a problem; choices solve it.** Dice and cards create uncertainty,
   while buying, building, buyouts, and positioning decide the result.
 - **No pay-to-win.** Match rules, starting resources, RNG, and available decisions
@@ -41,9 +42,14 @@ the tie.
 
 ## Match setup, laps, and rounds
 
-1. The server shuffles occupied seats with the match PRNG to create `turnOrder`.
-   Every player starts on Start with configured cash (default 2,000,000), no property, no cards, and zero
-   completed laps. The first seat in `turnOrder` starts round 1.
+1. The server chooses a random occupied starting seat with the match PRNG, then
+   keeps a fixed cycle around the board: bottom-right → bottom-left → top-left →
+   top-right (table seats 3 → 0 → 1 → 2), skipping empty and bankrupt places.
+   `turnOrder` rotates that cycle so the selected starter comes first. The opening
+   wheel reveals the server's choice before the first decision clock and bot move.
+   Every player starts on Start with configured cash (default 2,000,000), no property,
+   no cards, and zero completed laps. Saved rooms and lobbies through version 10
+   retain their original shuffled order; active matches never reorder on reconnect.
 2. A **lap** is a clockwise crossing from tile 31 to tile 0. Crossing it immediately
    pays the Start salary and increments that player's lap count. Landing on Start by
    clockwise movement *is* that crossing: salary is paid once and one lap is counted,
@@ -59,12 +65,24 @@ the tie.
    new dice roll before highest net worth wins using the standings tie-breaks.
    A separate round limit
    applies to short tests/simulations; the timed preset uses a 10,000-round safety
-   cap. Twenty rounds are not labelled twenty minutes.
-5. Three initial festivals are selected by the seeded shuffle by default, among
-   cities only. Saved reference rooms (versions 4–6) retain festivals on cities
-   or resorts; prototype rooms also use cities only. Each doubles the rent of its
-   tile for the whole match and combines with the other modifiers (see Economy).
-   Festival count is configurable.
+   cap. The fourth duration choice, **∞**, explicitly stores `timeLimitMinutes: null`:
+   it has no wall-clock deadline or round cap, and ends only through an enabled
+   monopoly condition or the last player standing. Decision timers still apply.
+   Missing duration in legacy round-only games retains their round cap.
+   Twenty rounds are not labelled twenty minutes.
+5. Three initial festivals are selected among cities only by default. New rooms
+   spread them across different countries: with three configured festivals, a
+   country receives more than one in about 3% of matches. For two through eight
+   festivals, the chance of a repeated country is one percentage point per
+   configured festival. All countries use the same rule; Portugal has no special
+   weighting. A rare draw can still put all three in one country. Above eight
+   festivals, repetition is unavoidable: every country receives one before the
+   remaining festivals are assigned to other distinct cities. The configured
+   count is always retained, with no duplicate tiles. Rooms through version 11
+   keep their original unrestricted seeded shuffle. Saved reference rooms
+   (versions 4–6) retain festivals on cities or resorts; prototype rooms also use
+   cities only. Each doubles the rent of its tile for the whole match and combines
+   with the other modifiers (see Economy). Festival count is configurable.
 
 > Mechanics are not protected by copyright, but names and art are trademarks. Board
 > theme, city names, card names, and visuals must be our own.
@@ -87,9 +105,14 @@ on its side; a two-city group may frame a resort or the tax office.
 | 7 | B3 | 15 | D2 | 23 | F3 | 31 | H2 |
 
 8 countries (A–H), 20 cities, 4 resorts, 3 Chance, 1 Tax. The current names run
-France (A), Spain (B), Portugal (C), Italy (D), United Kingdom (E), United States
-(F), South Korea (G) and Japan (H); the resorts are the French Riviera, Cyprus,
-Dubai and Bali.
+France (A: Lyon, Marseille, Paris), Italy (B: Naples, Milan, Rome), Portugal
+(C: Faro, Porto, Lisbon), Germany (D: Hamburg, Berlin), Switzerland (E: Geneva,
+Zurich), United States (F: Chicago, Los Angeles, New York), South Korea (G: Busan,
+Seoul) and Japan (H: Osaka, Tokyo). Cities within each country follow increasing
+municipal population, with the largest last. The resorts at tiles 4, 14, 18 and 25
+are Seychelles, Maldives, Bora Bora and Hawaii. Destination names are presentation
+only: tile positions, colour groups, purchase prices, construction costs and rents
+stay unchanged. Saved legacy boards retain their original destination names.
 
 ## Economy (starting values)
 
@@ -98,8 +121,8 @@ Dubai and Bali.
 | Starting cash | 2,000,000 (configurable) |
 | Salary for passing/landing on Start | 400,000 (configurable) |
 | Players | 2–4; empty seats stay empty or take a bot |
-| Time limit | 20/60/120 minutes; default 120 (then highest net worth wins) |
-| Round limit | 10,000 safety cap; custom tests/simulations use shorter caps |
+| Time limit | Whole minutes, minimum 15, or ∞; exact entry also accepts durations above 120 (e.g. 200); shortcuts 20/60/120; default 120 (then highest net worth wins) |
+| Round limit | 10,000 safety cap for timed games; none for ∞; custom tests/simulations use shorter caps |
 | Initial festivals | 3 (configurable); cities only with ×2 rent (saved reference rooms: cities or resorts) |
 | Sell-back to bank | 100% of invested value (prototype: 50%) |
 | Buyout price | 2× invested value (paid to owner) |
@@ -163,9 +186,10 @@ that player lands on their own Hotel; reference rooms stop at the Hotel. An acti
 is legal only when its full cost leaves the buyer with cash of at least zero.
 
 This progression is frozen as `hotelPurchaseRule: "staged-hotels"` for new rooms.
-The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations; the server only
-creates version-7 rooms and cannot accept an internal rule marker through room
-settings. A stale pending choice cannot bypass the new cap. See
+The engine still honours `"legacy-lap"` for existing version-2 rooms and simulations;
+new rooms use the current `RULES_VERSION` in `src/worker/GameRoom.ts`.
+The server cannot accept an internal rule marker through room settings. A stale
+pending choice cannot bypass the new cap. See
 [REFERENCE_PARITY.md](REFERENCE_PARITY.md#hotel-progression-and-source-checks--1-october-2026)
 for the historical reference evidence and the retained Polytour lap condition.
 
@@ -313,7 +337,8 @@ lands it on World Tour, even in the middle of a doubles streak.
 2. **Triple Monopoly** - own every city of any 3 countries; enabled by default, configurable.
 3. **Line Monopoly** - own every city and resort on one side; enabled by default, configurable.
 4. **Resort Monopoly** (shown as "beaches" in the interface) - own all 4 resorts; disabled by default, a room option (saves made before the option keep it enabled).
-5. **Time limit / round cap** - highest net worth (cash + invested value) wins.
+5. **Time limit / round cap** - highest net worth (cash + invested value) wins;
+   disabled when the duration is ∞.
 
 Check instant wins after any change of ownership (purchase, buyout, Land Swap, sale)
 and after any forced-sell or bankruptcy phase has completed, never while a
@@ -327,7 +352,8 @@ line ownership.
 
 **Standings** (used for the game-over screen, `placement`, and ratings): the winner
 is first. Remaining non-bankrupt players follow, ranked by net worth, then cash,
-then number of resorts, then earliest position in the randomized `turnOrder`.
+then number of resorts, then earliest position in `turnOrder` from the randomly
+selected starter.
 Bankrupt players come last, the most recently eliminated first. At the round limit
 the same ordering picks the winner, so every match has exactly one winner.
 
@@ -453,7 +479,8 @@ These defaults are deterministic from public state and are what `applyTimeout`
 applies to a **human** seat whose decision timer expires, whether that player is
 connected or inside the disconnect grace period. **Bot** seats never time out: they
 act through `botAction` at their difficulty. A disconnected human seat becomes a
-bot seat (medium difficulty) when its grace period ends, until the player reconnects.
+bot seat at the match's frozen room default (Medium for unmarked saves) when its
+grace period ends, until the player reconnects.
 
 Opening the pause menu in a match with one human immediately pauses play. In a
 match with multiple humans, any non-bankrupt human may request a pause; every
@@ -468,6 +495,30 @@ human can resume; the engine adds the paused duration to both deadlines so every
 remaining second is preserved. Closing the solo menu resumes; closing a multiplayer
 menu merely returns to the paused board. If all humans exhaust their disconnect
 grace while paused, the room resumes its match clock so abandoned rooms can expire.
+
+## Bot difficulty
+
+The room setting chooses the default for new bots. The leader can select each
+bot's level on its lobby card, and each choice freezes when the match starts.
+Temporary bots replacing disconnected humans use the frozen room default. The
+welcome screen and room settings show the default; lobby cards and the match HUD
+show each bot's own level. Saved bots without their own `botDifficulty` fall back
+to the saved room default, or Medium when neither marker exists.
+
+- **Easy:** uses Medium's cash reserve and normally constructs and buys out.
+  Occasional public-state lapses choose one fewer construction level, postpone a
+  single-step upgrade or miss a buyout opportunity. The cycle uses the round, seat
+  and tile modulo four; it never reads private entropy or changes dice.
+- **Medium:** retains the existing development and buyout policy with a simple
+  cash margin.
+- **Hard:** uses public-state heuristics for collections, instant wins, blocking,
+  probable next-roll rent exposure and the strategic loss of a forced sale.
+
+All levels use the same authoritative rules, legal actions and random sources.
+Hard neither knows future dice nor reads the private deck. It is a strategic
+heuristic, with no claim of human-level play or guaranteed victory. Disabling
+`botCanBuild` still restricts every level. The proposal and reproducible
+comparison live in [BOT_DIFFICULTY.md](BOT_DIFFICULTY.md).
 
 ## Engine contract
 
@@ -496,7 +547,7 @@ export function toPublic(state: GameState): PublicState; // strips secrets; this
 
 export function legalActions(state: PublicState, seat: Seat): Action[]; // drives UI buttons and bots
 
-export function botAction(state: PublicState, seat: Seat, difficulty: BotDifficulty): Action;
+export function botAction(state: PublicState, seat: Seat, difficulty?: BotDifficulty): Action;
 ```
 
 `applyAction`, `applyTimeout`, and `createGame` decide *what happens* and emit
@@ -551,6 +602,13 @@ Change one parameter at a time and commit the sim output alongside the config ch
 `pnpm sim -- --rules prototype|reference --rounds N` selects the rule set and round
 cap. The reference rules were adopted together at the user's request; their
 20-round and 60-round results are in `tools/sim/reference.json`.
+
+`--difficulty easy|medium|hard` selects one policy for all simulator seats.
+`--players 3 --levels easy,medium,hard` rotates the supplied policies across
+seats for comparison; `--seed-start N` selects the first deterministic seed.
+Report interpretation must account for repeated levels, such as two Medium bots
+in a four-player run. See [BOT_DIFFICULTY.md](BOT_DIFFICULTY.md) and
+`tools/sim/bot-difficulty.json` for the current comparison and its limits.
 
 ## Modes (roadmap)
 

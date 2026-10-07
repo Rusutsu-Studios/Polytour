@@ -89,11 +89,6 @@
   font-size: 12px;
   line-height: 1.35;
 }
-@media (prefers-reduced-motion: reduce) {
-  .held-mini {
-    transition: none;
-  }
-}
 [data-reduced-motion="true"] .held-mini {
   transition: none;
 }

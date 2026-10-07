@@ -11,5 +11,5 @@
 
 - A player who cannot pay for even the land of a free city or resort no longer
   gets a buy decision with every option locked; the notice replaces it. The
-  outcome is the same as declining. Protocol version 8 adds the
+  outcome is the same as declining. Protocol version 10 adds the
   `PurchaseUnaffordable` event, so clients opened before the update reload.

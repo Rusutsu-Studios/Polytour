@@ -42,6 +42,17 @@ representation and repeatable simulations. Its seed is generated with server Web
 Crypto and is never sent to clients, but the public setup must not be treated as
 a cryptographic secret. Live dice and Chance draws do not use that sequence.
 
+Initial festival placement in new rooms intentionally favours different
+countries. With three configured festivals, a repeated country occurs in about
+3% of matches; the rare branch can still include a complete three-city country.
+The chance is one percentage point per configured festival while distinct
+countries can hold the full count. If there are more festivals than countries,
+the selector visits every country before filling the remaining distinct tiles.
+This applies equally to every country and keeps the configured number of
+festivals. It is a setup balance rule, separate from uniform dice and live Chance
+draws. Rooms through rules version 11 keep their unrestricted festival shuffle,
+and reconnect never redraws existing festivals.
+
 ## Live Chance draws
 
 Every live engine invocation receives fresh server Web Crypto uint32 words in

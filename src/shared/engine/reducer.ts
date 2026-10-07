@@ -302,11 +302,17 @@ export function applyEvent(state: PublicState, event: GameEvent): PublicState {
       };
     }
     case "PlayerControlChanged":
-      return updatePlayer(state, event.seat, (player) => ({
-        ...player,
-        name: event.name ?? player.name,
-        control: event.control,
-      }));
+      return updatePlayer(state, event.seat, (player) => {
+        const { botDifficulty, ...person } = player;
+        return {
+          ...person,
+          ...(event.control === "bot" && botDifficulty !== undefined
+            ? { botDifficulty }
+            : {}),
+          name: event.name ?? player.name,
+          control: event.control,
+        };
+      });
     case "GameOver":
       return {
         ...state,
