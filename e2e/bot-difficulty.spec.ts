@@ -370,12 +370,6 @@ test("a guest can read each bot level but cannot cycle it", async ({
         exact: true,
       });
       await expect(group.getByRole("slider")).toBeDisabled();
-      await group.focus();
-      await expect(guest.locator("#disabled-action-hint strong")).toHaveText(
-        label,
-      );
-      await guest.keyboard.press("Escape");
-      await expect(guestSettings).toBeVisible();
     }
     const defaults = guest
       .locator(".pause-dialog")

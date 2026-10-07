@@ -43,7 +43,6 @@ const TOGGLES = [
 
 function NumberSetting({
   label,
-  help,
   value,
   max,
   step,
@@ -54,7 +53,6 @@ function NumberSetting({
   compact = false,
 }: {
   label: string;
-  help: string;
   value: number;
   max: number;
   step: number;
@@ -85,13 +83,7 @@ function NumberSetting({
     if (next !== value) onChange(next);
   };
   return (
-    <div
-      className={`room-setting${wide ? " room-setting--wide" : ""}`}
-      data-help-title={label}
-      data-help-message={help}
-      data-help-pin="false"
-      tabIndex={disabled ? 0 : undefined}
-    >
+    <div className={`room-setting${wide ? " room-setting--wide" : ""}`}>
       <div className="room-setting-heading">
         <span className="room-setting-label">
           <label htmlFor={`${id}-range`}>{label}</label>
@@ -279,10 +271,6 @@ export function QuickSettings({
       <div className="room-settings-main">
         <NumberSetting
           label={t("Capital de départ", "Starting cash")}
-          help={t(
-            "Argent disponible pour chaque joueur au début de la partie, pour acheter et payer ses premières dépenses.",
-            "The cash each player starts with, to buy properties and cover their first expenses.",
-          )}
           value={config.startingCash}
           max={10_000_000}
           step={10_000}
@@ -293,10 +281,6 @@ export function QuickSettings({
         />
         <NumberSetting
           label={t("Salaire au départ", "Salary per lap")}
-          help={t(
-            "Somme reçue à chaque passage du Départ en avançant, y compris en s’y arrêtant. Reculer ou être envoyé sur l’île ne rapporte pas de salaire.",
-            "Cash received for each forward pass over Start, including landing on it. Moving backward or being sent to the island pays no salary.",
-          )}
           value={config.startSalary}
           max={1_000_000}
           step={10_000}
@@ -307,10 +291,6 @@ export function QuickSettings({
         />
         <NumberSetting
           label={t("Festivals initiaux", "Starting festivals")}
-          help={t(
-            "Nombre de festivals placés au hasard au début. Chaque festival augmente le loyer de la propriété.",
-            "The number of festivals randomly placed at the start. Each festival increases the property’s rent.",
-          )}
           value={config.festivalCount}
           max={20}
           step={1}
@@ -331,7 +311,6 @@ export function QuickSettings({
 
 function TimeSetting({
   label,
-  help,
   value,
   choices,
   min,
@@ -342,7 +321,6 @@ function TimeSetting({
   onChange,
 }: {
   label: string;
-  help: string;
   value: number | null;
   choices: readonly (number | null)[];
   min: number;
@@ -378,10 +356,6 @@ function TimeSetting({
     <fieldset
       className="room-setting-choice room-setting-choice--time"
       aria-labelledby={`${id}-label`}
-      data-help-title={label}
-      data-help-message={help}
-      data-help-pin="false"
-      tabIndex={disabled ? 0 : undefined}
     >
       <legend>
         <span className="room-setting-label">
@@ -486,51 +460,6 @@ export function RoomSettings({
 }: RoomSettingsProps) {
   const { t } = useLocale();
   const winsHeadingId = useId();
-  const toggleHelp = {
-    lineMonopoly: t(
-      "Quand cette option est activée, posséder toutes les villes et plages d’un même côté du plateau fait gagner immédiatement. Les cases spéciales ne comptent pas.",
-      "When enabled, owning every city and beach on one side of the board wins immediately. Special spaces do not count.",
-    ),
-    tripleMonopoly: t(
-      "Quand cette option est activée, posséder trois collections de pays complètes fait gagner immédiatement. Une collection regroupe les villes d’un même pays.",
-      "When enabled, owning three complete country sets wins immediately. A set contains all cities in one country.",
-    ),
-    resortMonopoly: t(
-      "Quand cette option est activée, posséder les quatre plages fait gagner immédiatement, sans construction nécessaire.",
-      "When enabled, owning all four beaches wins immediately, with no buildings required.",
-    ),
-    hotelsDirectly: t(
-      "Permet d’acheter un hôtel directement, sans attendre les étapes normales de construction. Sinon, les hôtels se débloquent avec la progression du joueur et de la ville.",
-      "Allows buying a hotel directly, without waiting for the normal building stages. Otherwise, hotels unlock as the player and city progress.",
-    ),
-    extraRollOnDouble: t(
-      "Quand cette option est activée, un double permet de rejouer après avoir résolu la case, sauf si le tour est terminé. Un double pour sortir de l’île ne donne pas de lancer supplémentaire.",
-      "When enabled, doubles grant another roll after resolving the tile, unless the turn ends. Island escape doubles grant no extra roll.",
-    ),
-    tripleDoubleToIsland: t(
-      "Un troisième double consécutif dans le même tour envoie le joueur sur l’île au lieu d’avancer et termine le tour. Sans cette option, il se déplace normalement.",
-      "A third consecutive double in the same turn sends the player to the island instead of moving and ends the turn. With this option off, the player moves normally.",
-    ),
-    botCanBuild: t(
-      "Autorise les bots à construire et améliorer leurs villes, à tous les niveaux. Désactivée, ils peuvent acheter et racheter, mais ne construisent pas volontairement. Les effets des cartes restent applicables.",
-      "Allows bots to build and upgrade cities at every level. When off, they can buy land and buy out cities, but do not build voluntarily. Card effects still apply.",
-    ),
-    giftCanBankrupt: [
-      t(
-        "Paiements des cartes Anniversaire, Solidarité et Mécène.",
-        "Payments from the Birthday, Charity and Patron cards.",
-      ),
-      config.giftCanBankrupt
-        ? t(
-            "Le paiement complet est dû : il peut forcer une vente ou causer une faillite.",
-            "The full payment is owed: it can force property sales or cause bankruptcy.",
-          )
-        : t(
-            "Le paiement est limité à l’argent disponible, sans vente forcée ni faillite.",
-            "Payment is capped at available cash, with no forced sale or bankruptcy.",
-          ),
-    ].join(" "),
-  };
   const update = (patch: Partial<RoomConfig>) => {
     if (!disabled) onChange({ ...config, ...patch });
   };
@@ -550,10 +479,6 @@ export function RoomSettings({
       <div className="room-settings-main">
         <NumberSetting
           label={t("Capital de départ", "Starting cash")}
-          help={t(
-            "Argent disponible pour chaque joueur au début de la partie, pour acheter et payer ses premières dépenses.",
-            "The cash each player starts with, to buy properties and cover their first expenses.",
-          )}
           value={config.startingCash}
           max={10_000_000}
           step={10_000}
@@ -563,10 +488,6 @@ export function RoomSettings({
         />
         <NumberSetting
           label={t("Salaire au départ", "Salary per lap")}
-          help={t(
-            "Somme reçue à chaque passage du Départ en avançant, y compris en s’y arrêtant. Reculer ou être envoyé sur l’île ne rapporte pas de salaire.",
-            "Cash received for each forward pass over Start, including landing on it. Moving backward or being sent to the island pays no salary.",
-          )}
           value={config.startSalary}
           max={1_000_000}
           step={10_000}
@@ -576,10 +497,6 @@ export function RoomSettings({
         />
         <NumberSetting
           label={t("Festivals initiaux", "Starting festivals")}
-          help={t(
-            "Nombre de festivals placés au hasard au début. Chaque festival augmente le loyer de la propriété.",
-            "The number of festivals randomly placed at the start. Each festival increases the property’s rent.",
-          )}
           value={config.festivalCount}
           max={20}
           step={1}
@@ -589,10 +506,6 @@ export function RoomSettings({
         />
         <TimeSetting
           label={t("Durée de partie", "Game duration")}
-          help={t(
-            "Limite de temps, pauses exclues. La durée illimitée désactive les limites de temps et de tours. Sans victoire immédiate, le plus grand patrimoine gagne après règlement des effets en cours : argent disponible et valeur investie dans ses propriétés.",
-            "Time limit, excluding pauses. Unlimited duration disables the time and round limits. If no instant win occurs, highest net worth wins after pending effects settle: cash plus invested property value.",
-          )}
           value={config.timeLimitMinutes}
           choices={[20, 60, 120, null]}
           min={15}
@@ -604,10 +517,6 @@ export function RoomSettings({
         />
         <TimeSetting
           label={t("Temps de décision", "Decision timer")}
-          help={t(
-            "Temps pour chaque choix humain, après les animations. Sans réponse, le jeu applique son choix automatique. Les bots gardent leur propre rythme.",
-            "Time for each human choice after animations. Without a response, the game applies its automatic choice. Bots keep their own pace.",
-          )}
           value={config.decisionSeconds}
           choices={[15, 30, 45, 60]}
           min={10}
@@ -629,13 +538,7 @@ export function RoomSettings({
         <div className="room-settings-toggles">
           {TOGGLES.map(([key, fr, en]) => (
             <div className="room-setting-toggle-row" key={key}>
-              <label
-                className="room-setting-toggle"
-                data-help-title={t(fr, en)}
-                data-help-message={toggleHelp[key]}
-                data-help-pin="false"
-                tabIndex={disabled ? 0 : undefined}
-              >
+              <label className="room-setting-toggle">
                 <input
                   type="checkbox"
                   disabled={disabled}

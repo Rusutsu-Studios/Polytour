@@ -2355,7 +2355,7 @@ test("locked board freezes every gesture and zoom preference but toolbar reset r
   ).toEqual(["sync", "sync"]);
 });
 
-test("the reset view button explains itself on hover and focus without pinning its hint", async ({
+test("board toolbar actions stay usable without explanation popups", async ({
   page,
 }) => {
   await enterMatch(page, { realClock: true });
@@ -2365,29 +2365,14 @@ test("the reset view button explains itself on hover and focus without pinning i
     exact: true,
   });
   const hint = page.locator("#disabled-action-hint");
-
-  // Hovering explains what the icon does, shortcut included.
-  await expect(hint).not.toBeVisible();
   await reset.hover();
-  await expect(hint).toBeVisible();
-  await expect(hint.locator("strong")).toHaveText("Recentrer le plateau");
-  await expect(hint.locator("p")).toContainText("Raccourci : 0.");
-  // An action button is not a disclosure, so it never claims to expand anything.
-  await expect(reset).not.toHaveAttribute("aria-expanded");
-
-  // Keyboard users reach the same explanation.
-  await page.mouse.move(4, 450);
   await expect(hint).not.toBeVisible();
   await reset.focus();
-  await expect(hint).toBeVisible();
-  await expect(reset).toHaveAttribute(
-    "aria-describedby",
-    /disabled-action-hint/,
-  );
-  await page.keyboard.press("Escape");
   await expect(hint).not.toBeVisible();
-
-  // Clicking performs the reset and dismisses the hint instead of pinning it.
+  await expect(reset).not.toHaveAttribute("title");
+  await expect(reset).not.toHaveAttribute("aria-expanded");
+  await page.locator(".game-tools .streamer-toggle").hover();
+  await expect(hint).not.toBeVisible();
   await dragBoard(
     page,
     await boardScreenPoint(page, { x: 0, y: LOT_TOP, z: 0 }),
@@ -2395,8 +2380,6 @@ test("the reset view button explains itself on hover and focus without pinning i
     20,
   );
   expect(Number(await board.getAttribute("data-board-yaw"))).not.toBe(0);
-  await reset.hover();
-  await expect(hint).toBeVisible();
   await reset.click();
   await expect(hint).not.toBeVisible();
   await expect(board).toHaveAttribute("data-board-yaw", "0");
