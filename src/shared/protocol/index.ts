@@ -221,6 +221,8 @@ export type LobbyState = {
   /** Omitted by older servers; those rooms retain their original Chance deck. */
   readonly escapeCard?: boolean;
   readonly chanceRule: ChanceRule;
+  /** Omitted by older servers; those rooms pay a flat salary on every crossing. */
+  readonly startLandingBonus?: boolean;
   /** Omitted by older servers; existing rooms keep their recorded shuffled order. */
   readonly turnOrderRule?: "clockwise" | "shuffled";
   /** Omitted by older servers; existing rooms keep their original festival draw. */

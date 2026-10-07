@@ -96,9 +96,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 9 adds the saved Island Escape card;
  * 10 reworks the Chance deck (see ChanceRule);
  * 11 selects a random starter, then follows the fixed clockwise seats;
- * 12 spreads initial festivals across sides and country groups.
+ * 12 spreads initial festivals across sides and country groups;
+ * 13 pays 1.5x salary for a clockwise landing exactly on Start.
  */
-const RULES_VERSION = 12;
+const RULES_VERSION = 13;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -111,7 +112,8 @@ function frozenRules(version: number | null) {
     version !== 9 &&
     version !== 10 &&
     version !== 11 &&
-    version !== 12
+    version !== 12 &&
+    version !== 13
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -131,6 +133,7 @@ function frozenRules(version: number | null) {
       version >= 11 ? ("clockwise" as const) : ("shuffled" as const),
     festivalDistribution:
       version >= 12 ? ("spread" as const) : ("random" as const),
+    startLandingBonus: version >= 13,
   };
 }
 
@@ -309,7 +312,12 @@ export class GameRoom extends DurableObject<Env> {
     const chances = state.config.chanceRule;
     const turnOrder = state.config.turnOrderRule;
     const festivalDistribution = state.config.festivalDistribution;
+    const startBonus = state.config.startLandingBonus;
     if (
+      // Saves through version 12 retain their flat salary.
+      (rulesVersion !== null &&
+        startBonus !== frozen.startLandingBonus &&
+        (rulesVersion >= 13 || startBonus !== undefined)) ||
       // Older saves may omit the selector; their recorded festivals stay intact.
       (rulesVersion !== null &&
         festivalDistribution !== frozen.festivalDistribution &&

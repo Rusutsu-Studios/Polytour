@@ -146,11 +146,11 @@ debug socket has been removed; `/api/health` remains.
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 12 with `boardRule: "country"`,
+  New rooms freeze rules version 13 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `worldTourRule: "free-and-own"`, `resortFestivals: false`,
   `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true`,
-  `chanceRule: "reworked"`, `turnOrderRule: "clockwise"` and
+  `chanceRule: "reworked"`, `startLandingBonus: true`, `turnOrderRule: "clockwise"` and
   `festivalDistribution: "spread"`. The optional festival-distribution selector
   is server-owned: version-11 and older lobbies use `"random"`, preserving their
   original draw. Existing active snapshots retain their saved festival tiles;
@@ -168,6 +168,8 @@ debug socket has been removed; `/api/health` remains.
   (cities and resorts); missing markers follow the saved economy. Lobbies before
   version 6 report `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
+  The optional `startLandingBonus` marker is server-owned: rooms through version
+  12 omit it or report `false`, preserving their flat Start salary.
   Lobby snapshots expose their frozen rule markers separately from room settings.
   The strict room-setting schema never accepts internal rule markers; clients
   derive legal construction, travel and sale choices from the shared engine.

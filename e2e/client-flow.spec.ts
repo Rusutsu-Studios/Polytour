@@ -2513,81 +2513,86 @@ for (const locale of ["fr", "en"] as const) {
   });
 }
 
-test("match card help uses the active salary and saved economy rather than welcome defaults", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await page.getByLabel("Votre nom de joueur").fill("Card help match");
-  await playWithBots(page);
-  await expect(
-    page.getByRole("button", { name: "Lancer les dés", exact: true }),
-  ).toBeEnabled({ timeout: 60_000 });
-  // A legacy presentation fixture differs deliberately from welcome settings.
-  // It does not modify the authoritative room or send a game action.
-  await page.evaluate(async () => {
-    const modulePath =
-      performance
-        .getEntriesByType("resource")
-        .find((entry) =>
-          entry.name.includes("/src/client/director/director.ts"),
-        )?.name ?? "/src/client/director/director.ts";
-    const { director } = await import(modulePath);
-    const state = director.getSnapshot().serverState as PublicState | null;
-    if (!state) throw new Error("Expected a match for card help");
-    director.reset({
-      ...state,
-      config: {
-        ...state.config,
-        startSalary: 760_000,
-        economyRule: "prototype",
-        boardRule: "legacy",
-        escapeCard: false,
-      },
-      activeSeat: 0,
-      pending: {
-        kind: "roll",
-        seat: 0,
-        deadline: Date.now() + 60_000,
-      },
-    });
+for (const startLandingBonus of [undefined, true]) {
+  test(`match card help uses the active salary and saved economy with landing bonus ${startLandingBonus ?? "omitted"}`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByLabel("Votre nom de joueur").fill("Card help match");
+    await playWithBots(page);
+    await expect(
+      page.getByRole("button", { name: "Lancer les dés", exact: true }),
+    ).toBeEnabled({ timeout: 60_000 });
+    // A legacy presentation fixture differs deliberately from welcome settings.
+    // It does not modify the authoritative room or send a game action.
+    await page.evaluate(async (startLandingBonus) => {
+      const modulePath =
+        performance
+          .getEntriesByType("resource")
+          .find((entry) =>
+            entry.name.includes("/src/client/director/director.ts"),
+          )?.name ?? "/src/client/director/director.ts";
+      const { director } = await import(modulePath);
+      const state = director.getSnapshot().serverState as PublicState | null;
+      if (!state) throw new Error("Expected a match for card help");
+      director.reset({
+        ...state,
+        config: {
+          ...state.config,
+          startSalary: 760_000,
+          startLandingBonus,
+          economyRule: "prototype",
+          boardRule: "legacy",
+          escapeCard: false,
+        },
+        activeSeat: 0,
+        pending: {
+          kind: "roll",
+          seat: 0,
+          deadline: Date.now() + 60_000,
+        },
+      });
+    }, startLandingBonus);
+    await page
+      .getByRole("button", { name: "Comment jouer", exact: true })
+      .click();
+    const help = page.locator(".help-dialog");
+    const catalogue = help.locator(".help-cards");
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
+    const detail = page.locator(".luck-card-dialog");
+    await catalogue
+      .locator(".luck-card-button")
+      .filter({ hasText: "Grand tour" })
+      .click();
+    await expect(detail.locator(".luck-card-description")).toContainText(
+      startLandingBonus ? "1,14 M" : "760 k",
+    );
+    await expect(detail.locator(".luck-card-description")).not.toContainText(
+      "400 k",
+    );
+    await page.keyboard.press("Escape");
+    await catalogue
+      .locator(".luck-card-button")
+      .filter({ hasText: "Tremblement de terre" })
+      .click();
+    await expect(detail.locator(".luck-card-description")).toContainText(
+      "monuments",
+    );
+    await expect(detail.locator(".luck-card-description")).not.toContainText(
+      "hôtels compris",
+    );
+    await page.keyboard.press("Escape");
+    await catalogue
+      .locator(".luck-card-button")
+      .filter({ hasText: "Échange de terrain" })
+      .click();
+    await expect(detail.locator(".luck-card-description")).toContainText(
+      "hors monuments",
+    );
+    await page.keyboard.press("Escape");
+    await expect(help).toBeVisible();
   });
-  await page
-    .getByRole("button", { name: "Comment jouer", exact: true })
-    .click();
-  const help = page.locator(".help-dialog");
-  const catalogue = help.locator(".help-cards");
-  await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
-  const detail = page.locator(".luck-card-dialog");
-  await catalogue
-    .locator(".luck-card-button")
-    .filter({ hasText: "Grand tour" })
-    .click();
-  await expect(detail.locator(".luck-card-description")).toContainText("760 k");
-  await expect(detail.locator(".luck-card-description")).not.toContainText(
-    "400 k",
-  );
-  await page.keyboard.press("Escape");
-  await catalogue
-    .locator(".luck-card-button")
-    .filter({ hasText: "Tremblement de terre" })
-    .click();
-  await expect(detail.locator(".luck-card-description")).toContainText(
-    "monuments",
-  );
-  await expect(detail.locator(".luck-card-description")).not.toContainText(
-    "hôtels compris",
-  );
-  await page.keyboard.press("Escape");
-  await catalogue
-    .locator(".luck-card-button")
-    .filter({ hasText: "Échange de terrain" })
-    .click();
-  await expect(detail.locator(".luck-card-description")).toContainText(
-    "hors monuments",
-  );
-  await page.keyboard.press("Escape");
-  await expect(help).toBeVisible();
-});
+}
 
 for (const locale of ["fr", "en"] as const) {
   test(`the ${locale} footer opens release notes with keyboard dismissal and readable layouts`, async ({
