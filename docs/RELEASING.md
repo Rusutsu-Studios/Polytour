@@ -8,9 +8,9 @@ and Worker import it through `src/shared/version.ts`; the welcome footer display
 `Cache-Control: no-store`. Rebuild both sides after changing the package version.
 
 The initial `0.1.0` entry records the playable prototype and workflow adoption on
-3 October 2026; it is a starting record, not a published release. Every pull
-request, including documentation-only and maintenance changes, adds a changelog
-fragment in `changelog.d/` and does not touch the version or `CHANGELOG.md`.
+3 October 2026; it is a starting record, not a published release. Every ordinary
+pull request, including documentation-only and maintenance changes, adds a
+changelog fragment in `changelog.d/` and does not touch the version or `CHANGELOG.md`.
 The version advances only when a release is prepared (see below). Codex and
 Claude Code follow the same [shared workflow](../AGENTS.md#release-notes-required-for-every-pull-request).
 CI rejects a pull request or merge-queue entry without a valid fragment, or that
@@ -45,7 +45,7 @@ These counters are separate from application releases. Values at workflow adopti
 | --- | --- | --- |
 | `PROTOCOL_VERSION` | `3` | Client/Worker message compatibility; stale clients reload |
 | `CURRENT_STATE_VERSION` / `stateVersion` | `1` | Persisted state shape and its migration ladder |
-| `RULES_VERSION` / `rulesVersion` | `8` for new rooms | Rules frozen when each room is created |
+| `RULES_VERSION` / `rulesVersion` | `13` for new rooms | Rules frozen when each room is created |
 
 Bump a counter only for its own compatibility requirement, with relevant tests.
 Saved rooms retain their earlier rules; new releases must load their state and
@@ -54,8 +54,8 @@ and [PROTOCOL.md](PROTOCOL.md).
 
 ## Release notes for every pull request
 
-A pull request never edits `CHANGELOG.md` or the `package.json` version. Those
-two spots are the same for every open pull request, so editing them made
+An ordinary pull request never edits `CHANGELOG.md` or the `package.json` version.
+Those two spots are the same for every open pull request, so editing them made
 concurrent pull requests conflict whenever another one merged. Each pull request
 instead adds one fragment file, so nothing collides.
 
@@ -74,7 +74,9 @@ instead adds one fragment file, so nothing collides.
 
    `pnpm check:fragments --base origin/main` runs the same check CI does: it adds
    the rule that the pull request contains a new fragment and does not edit
-   `CHANGELOG.md` or the version.
+   `CHANGELOG.md` or the version. It compares committed changes through `HEAD`,
+   so run it after committing the fragment and fetching the latest base with
+   `git fetch origin main`.
 3. Complete [the checks required for the changes](../AGENTS.md#verification-before-calling-something-done),
    then review and merge the pull request. Iterations of the same pull request
    edit its fragment. Wait for the exact `main` commit's required CI checks and
@@ -108,9 +110,9 @@ pnpm test:version
 and `### Fixed` in a new dated `CHANGELOG.md` section, updates `package.json`,
 deletes the fragments it consumed and leaves `## [Unreleased]` empty. It refuses
 to run with no fragments or with notes left under `Unreleased`. It performs no Git
-commits, tags, publication or deployment; review both changed files, commit them
-and merge the release pull request, which is the only kind allowed to change the
-version and changelog.
+commits, tags, publication or deployment; review the updated files and consumed
+fragment deletions, commit them together and merge the release pull request,
+which is the only kind allowed to change the version and changelog.
 The lower-level `pnpm version:bump patch` remains for manual use.
 
 ## Tagging and publishing

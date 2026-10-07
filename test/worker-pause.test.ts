@@ -250,21 +250,31 @@ describe("Authoritative game pause", () => {
     expect(frozen.seq).toBe(paused.seq);
     expect(frozen.state.pause?.kind).toBe("paused");
     expect(frozen.timers).toEqual([]);
+    if (
+      frozen.state.pause?.kind !== "paused" ||
+      !frozen.state.pending ||
+      frozen.state.matchDeadline === null
+    )
+      throw new Error("Paused game expected");
+    const beforeResume = Date.now();
     const resumed = await intent(game.code, game.inboxes[0], "resume", {
       type: "ResumeGame",
     });
+    const afterResume = Date.now();
+    const minimumShift = beforeResume - frozen.state.pause.startedAt;
+    const maximumShift = afterResume - frozen.state.pause.startedAt;
     expect(resumed.state.pause).toBeNull();
     expect(resumed.state.pending?.deadline).toBeGreaterThanOrEqual(
-      paused.state.pending?.deadline ?? 0,
+      frozen.state.pending.deadline + minimumShift,
     );
-    expect(resumed.state.pending?.deadline).toBeLessThan(
-      (paused.state.pending?.deadline ?? 0) + 1_000,
+    expect(resumed.state.pending?.deadline).toBeLessThanOrEqual(
+      frozen.state.pending.deadline + maximumShift,
     );
     expect(resumed.state.matchDeadline).toBeGreaterThanOrEqual(
-      paused.state.matchDeadline ?? 0,
+      frozen.state.matchDeadline + minimumShift,
     );
-    expect(resumed.state.matchDeadline).toBeLessThan(
-      (paused.state.matchDeadline ?? 0) + 1_000,
+    expect(resumed.state.matchDeadline).toBeLessThanOrEqual(
+      frozen.state.matchDeadline + maximumShift,
     );
     expect(resumed.timers.map((timer) => timer.kind)).toEqual([
       "bot",

@@ -10,6 +10,8 @@ export const ECONOMY = {
   buyoutMultiplier: 2,
   resortPrice: 200_000,
   taxPercent: 10,
+  /** Salary for a clockwise landing exactly on Start, as a percentage. */
+  startLandingPercent: 150,
   doublesToIsland: 3,
   worldTourFee: 50_000,
 } as const;
@@ -108,6 +110,13 @@ export function getResortRent(
   rule: EconomyRule,
 ): number {
   return RULE_ECONOMY[rule].resortRents[resortsOwned];
+}
+/**
+ * Salary for a clockwise landing exactly on Start. Every other crossing pays the
+ * flat salary; this is a payout, so the percentage rounds down.
+ */
+export function startLandingSalary(startSalary: number): number {
+  return roundPayout((startSalary * ECONOMY.startLandingPercent) / 100);
 }
 export function roundCharge(amount: number): number {
   return Math.ceil(amount);

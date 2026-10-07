@@ -143,7 +143,7 @@ export function simulateGame(
     const actions = legalActions(publicBefore, pending.seat);
     const action = choose
       ? choose(publicBefore, actions, decisions - 1)
-      : botAction(publicBefore, pending.seat, "medium");
+      : botAction(publicBefore, pending.seat);
     const result = applyAction(state, pending.seat, action, { now: decisions });
     if (!result.ok)
       throw new Error(

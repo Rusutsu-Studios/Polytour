@@ -251,6 +251,16 @@ test("English local match switches language without rejoining or changing game s
   await expect(
     page.getByRole("button", { name: "Roll the dice", exact: true }),
   ).toBeEnabled({ timeout: 60_000 });
+  for (const [tile, name] of [
+    [13, "Hamburg"],
+    [17, "Geneva"],
+    [25, "Hawaii"],
+  ] as const) {
+    await clickBoardSpace(page, tile);
+    await expect(page.locator("#city-card-title")).toHaveText(name);
+    await page.keyboard.press("Escape");
+  }
+  await page.screenshot({ path: ".local/verification/destinations-en.png" });
   const before = await page.evaluate(() =>
     sessionStorage.getItem("polytour-room-v1"),
   );
@@ -275,6 +285,16 @@ test("English local match switches language without rejoining or changing game s
   expect(
     await page.evaluate(() => sessionStorage.getItem("polytour-room-v1")),
   ).toBe(before);
+  for (const [tile, name] of [
+    [13, "Hambourg"],
+    [17, "Genève"],
+    [25, "Hawaï"],
+  ] as const) {
+    await clickBoardSpace(page, tile);
+    await expect(page.locator("#city-card-title")).toHaveText(name);
+    await page.keyboard.press("Escape");
+  }
+  await page.screenshot({ path: ".local/verification/destinations-fr.png" });
   await clickBoardSpace(page, 0);
   // The clicked space's deed speaks the new locale.
   const card = page.locator(".city-card");
