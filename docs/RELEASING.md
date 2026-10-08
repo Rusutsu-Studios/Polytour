@@ -60,8 +60,12 @@ concurrent pull requests conflict whenever another one merged. Each pull request
 instead adds one fragment file, so nothing collides.
 
 1. Create `changelog.d/<short-name>.md`, unique to the pull request. Use `### Added`,
-   `### Changed` or `### Fixed` headings with concrete bullet notes and useful
-   issue or pull request references. Wrap a long note by indenting its
+   `### Changed` or `### Fixed` headings with concrete player-facing bullet notes.
+   The changelog is displayed in game: describe gameplay, visuals, controls and
+   saved-match behavior without implementation details, issue numbers or CI logs.
+   Use `<!-- internal -->` for internal-only documentation, tooling or CI changes;
+   these still need valid notes and count toward the version bump, but their text
+   is omitted from the game's release history. Wrap a long note by indenting its
    continuation lines. A first line `<!-- bump: minor -->` (or `major`) asks for
    that bump at the next release; patch is the default. Choose the bump with the
    table above. See [changelog.d/README.md](../changelog.d/README.md).
@@ -94,9 +98,17 @@ agents can still complete the normal workflow themselves.
 
 The `Release PR` workflow (`.github/workflows/release-pr.yml`) does this for you: on
 every push to `main` it rebuilds one rolling `release/next` pull request that folds
-the pending fragments into the changelog and version. Merge it to ship. Add a
-`RELEASE_TOKEN` secret (PAT or app token with contents and pull-request write) so
-CI runs on that PR; without it, close and reopen the PR to trigger CI.
+the pending fragments into the changelog and version. Merge it to ship. If GitHub
+policy blocks automatic PR creation, the job warns and leaves a link in its
+summary to open the prepared `release/next` PR manually. Other API and push errors
+still fail the job. An existing open release PR is updated normally.
+Add a `RELEASE_TOKEN` secret (PAT or app token with contents and pull-request write)
+to enable automatic PR creation when permitted and trigger CI on branch updates.
+When policy blocks creation, open the PR manually. Later updates made with the
+default token can queue PR workflows awaiting a maintainer's "Approve workflows
+to run" action. A PAT or app token lets these runs start automatically. See
+[GitHub's workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+A successful Release PR job does not prove PR CI passed.
 To do it by hand instead, open a release pull request:
 
 ```sh
@@ -107,13 +119,22 @@ pnpm test:version
 ```
 
 `release:prepare` groups every fragment's notes under `### Added`, `### Changed`
-and `### Fixed` in a new dated `CHANGELOG.md` section, updates `package.json`,
+and `### Fixed` in a new dated `CHANGELOG.md` section, excluding internal-only
+fragments. Internal-only releases get a short maintenance note stating that
+gameplay and room rules are unchanged. The command updates `package.json`,
 deletes the fragments it consumed and leaves `## [Unreleased]` empty. It refuses
 to run with no fragments or with notes left under `Unreleased`. It performs no Git
 commits, tags, publication or deployment; review the updated files and consumed
 fragment deletions, commit them together and merge the release pull request,
 which is the only kind allowed to change the version and changelog.
 The lower-level `pnpm version:bump patch` remains for manual use.
+
+The 0.8.0 release includes a one-time editorial rewrite of the full in-game history,
+based on merged commits and PRs. Historical versions and dates are unchanged.
+The base check accepts only the exact old and new historical texts pinned by
+SHA-256 digests in `tools/release/release.ts`; it continues to reject all other
+historical edits. The original text is retained solely as a regression fixture
+in `tools/release/fixtures/changelog-before-player-notes.md`.
 
 ## Tagging and publishing
 

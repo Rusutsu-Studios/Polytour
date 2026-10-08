@@ -155,6 +155,54 @@ test("release prepare honours an explicit bump and refuses to run empty or with 
   }
 });
 
+test("internal fragments count for the bump but stay out of mixed player notes", () => {
+  const directory = fixture();
+  try {
+    write(
+      directory,
+      "changelog.d/internal.md",
+      "<!-- bump: minor -->\n<!-- internal -->\n### Fixed\n\n- Repair CI.\n",
+    );
+    write(
+      directory,
+      "changelog.d/player.md",
+      "### Fixed\n\n- Restore room reconnection.\n",
+    );
+    assert.equal(collectFragments(directory)[0].internal, true);
+    assert.equal(prepareRelease(directory, undefined, NOW), "1.3.0");
+    const notes = readFileSync(join(directory, "CHANGELOG.md"), "utf8");
+    assert.match(notes, /Restore room reconnection/);
+    assert.doesNotMatch(notes, /Repair CI|Maintenance release/);
+    assert.equal(collectFragments(directory).length, 0);
+  } finally {
+    cleanup(directory);
+  }
+});
+
+test("internal-only releases get a truthful maintenance note and still require valid notes", () => {
+  const directory = fixture();
+  try {
+    assert.throws(
+      () => parseFragment("internal.md", "<!-- internal -->\n"),
+      /no release notes/,
+    );
+    write(
+      directory,
+      "changelog.d/internal.md",
+      "<!-- internal -->\n### Fixed\n\n- Repair CI.\n",
+    );
+    assert.equal(prepareRelease(directory, undefined, NOW), "1.2.4");
+    const notes = readFileSync(join(directory, "CHANGELOG.md"), "utf8");
+    assert.match(
+      notes,
+      /Maintenance release. Gameplay and room rules are unchanged/,
+    );
+    assert.doesNotMatch(notes, /Repair CI/);
+  } finally {
+    cleanup(directory);
+  }
+});
+
 test("a feature pull request needs a fragment and must leave the changelog and version alone", () => {
   const directory = fixture();
   try {

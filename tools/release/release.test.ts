@@ -389,6 +389,57 @@ test("base check rejects decreasing versions and rewritten or removed release en
   }
 });
 
+test("only the exact reviewed player-notes rewrite can change historical notes", () => {
+  const directory = fixture("0.7.5");
+  try {
+    const original = readFileSync(
+      new URL("./fixtures/changelog-before-player-notes.md", import.meta.url),
+      "utf8",
+    );
+    const rewritten = readFileSync(
+      new URL("../../CHANGELOG.md", import.meta.url),
+      "utf8",
+    );
+    writeFileSync(join(directory, "CHANGELOG.md"), original);
+    const base = commitBase(directory);
+    const version = /## \[([^\]]+)\] -/.exec(rewritten)?.[1];
+    assert.ok(version);
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ version }));
+    writeFileSync(join(directory, "CHANGELOG.md"), rewritten);
+    validateRelease(readRelease(directory));
+    validateBase(directory, readRelease(directory), base);
+    for (const altered of [
+      rewritten.replace(
+        "Gameplay and room rules are unchanged.",
+        "Changed gameplay.",
+      ),
+      rewritten.replace("## [0.7.5] - 2026-10-05", "## [0.7.5] - 2026-10-06"),
+      rewritten.replace(/## \[0\.7\.5\][\s\S]*?(?=## \[0\.7\.4\])/, ""),
+    ]) {
+      writeFileSync(join(directory, "CHANGELOG.md"), altered);
+      assert.throws(
+        () => validateBase(directory, readRelease(directory), base),
+        /immutable/,
+      );
+    }
+    writeFileSync(join(directory, "CHANGELOG.md"), rewritten);
+    const newBase = commitBase(directory);
+    writeFileSync(
+      join(directory, "CHANGELOG.md"),
+      rewritten.replace(
+        "Gameplay and room rules are unchanged.",
+        "Changed gameplay.",
+      ),
+    );
+    assert.throws(
+      () => validateBase(directory, readRelease(directory), newBase),
+      /immutable/,
+    );
+  } finally {
+    cleanupFixture(directory);
+  }
+});
+
 test("base check accepts initial workflow adoption where no changelog existed", () => {
   const directory = fixture("0.0.0");
   try {

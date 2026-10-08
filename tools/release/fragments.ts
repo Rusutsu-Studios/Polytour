@@ -21,6 +21,7 @@ type Category = (typeof CATEGORIES)[number];
 export type Fragment = {
   name: string;
   bump: Bump;
+  internal: boolean;
   notes: Record<Category, string[]>;
 };
 
@@ -64,7 +65,12 @@ export function parseFragment(name: string, text: string): Fragment {
       throw new Error(`${FRAGMENT_DIR}/${name}: start each note with "- ".`);
     }
   }
-  return { name, bump, notes };
+  return {
+    name,
+    bump,
+    internal: /^<!--\s*internal\s*-->\s*$/m.test(normalized),
+    notes,
+  };
 }
 
 export function isFragmentName(name: string): boolean {
@@ -111,10 +117,14 @@ export function prepareRelease(
   if (release.sections.some((section) => section.version === version)) {
     throw new Error(`CHANGELOG.md already contains release ${version}.`);
   }
-  const body = CATEGORIES.flatMap((category) => {
-    const items = fragments.flatMap((fragment) => fragment.notes[category]);
-    return items.length ? [`### ${category}\n\n${items.join("\n")}`] : [];
-  }).join("\n\n");
+  const body =
+    CATEGORIES.flatMap((category) => {
+      const items = fragments
+        .filter((fragment) => !fragment.internal)
+        .flatMap((fragment) => fragment.notes[category]);
+      return items.length ? [`### ${category}\n\n${items.join("\n")}`] : [];
+    }).join("\n\n") ||
+    "### Changed\n\n- Maintenance release. Gameplay and room rules are unchanged.";
   const unreleased = release.sections[0];
   const date = now.toISOString().slice(0, 10);
   const changelog = `${release.changelog.slice(0, unreleased.start)}## [Unreleased]\n\n## [${version}] - ${date}\n\n${body}\n\n${release.changelog.slice(unreleased.end)}`;
