@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # RELEASE_TOKEN (a PAT or app token) makes CI run on the release PR;
-          # a PR opened with the default token does not trigger workflows.
+          # default-token PR updates require a maintainer to approve CI runs.
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
       - uses: ./.github/actions/setup
       - name: Prepare release

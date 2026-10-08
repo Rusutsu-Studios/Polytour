@@ -104,8 +104,11 @@ summary to open the prepared `release/next` PR manually. Other API and push erro
 still fail the job. An existing open release PR is updated normally.
 Add a `RELEASE_TOKEN` secret (PAT or app token with contents and pull-request write)
 to enable automatic PR creation when permitted and trigger CI on branch updates.
-With the default token, open the PR manually and explicitly rerun CI after later
-automated branch updates; a successful Release PR job does not prove PR CI passed.
+When policy blocks creation, open the PR manually. Later updates made with the
+default token can queue PR workflows awaiting a maintainer's "Approve workflows
+to run" action. A PAT or app token lets these runs start automatically. See
+[GitHub's workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+A successful Release PR job does not prove PR CI passed.
 To do it by hand instead, open a release pull request:
 
 ```sh
