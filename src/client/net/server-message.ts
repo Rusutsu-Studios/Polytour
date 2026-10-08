@@ -207,6 +207,7 @@ const lobby = z.object({
   boardRule: z.enum(["country", "legacy"]).default("country"),
   economyRule: z.enum(["reference", "prototype"]).default("reference"),
   sellBackPercent: z.union([z.literal(50), z.literal(100)]).default(100),
+  sellBeyondDebt: z.boolean().optional(),
   hotelPurchaseRule: z
     .enum(["staged-hotels", "legacy-lap"])
     .default("staged-hotels"),

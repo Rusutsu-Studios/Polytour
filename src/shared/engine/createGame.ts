@@ -81,6 +81,7 @@ export const DEFAULT_GAME_CONFIG = {
   chanceRule: "reworked",
   turnOrderRule: "clockwise",
   sellBackPercent: 100,
+  sellBeyondDebt: true,
   extraRollOnDouble: true,
   tripleDoubleToIsland: true,
   botCanBuild: true,
@@ -402,6 +403,16 @@ export function maxBuildLevel(
     return houses;
   return lapped ? 4 : houses;
 }
+/**
+ * Whether a forced sale is now the seller's own choice: the debt is settled
+ * and the room lets them keep raising cash. Saves before rules version 14
+ * close the phase the moment cash reaches zero.
+ */
+function optionalSale(state: PublicState, seat: Seat): boolean {
+  return (
+    state.config.sellBeyondDebt === true && getPlayer(state, seat).cash >= 0
+  );
+}
 export function propertyRefund(state: PublicState, tile: number): number {
   return Math.floor(
     (propertyInvestedValue(state, tile) *
@@ -632,7 +643,11 @@ export function legalActions(state: PublicState, seat: Seat): Action[] {
         })),
       ];
     case "sell":
-      return pending.targets.map((tile) => ({ type: "Sell" as const, tile }));
+      // Settling the debt turns the phase optional: Decline finishes it.
+      return [
+        ...(optionalSale(state, seat) ? [{ type: "Decline" as const }] : []),
+        ...pending.targets.map((tile) => ({ type: "Sell" as const, tile })),
+      ];
   }
 }
 function sameAction(a: Action, b: Action): boolean {
@@ -1583,7 +1598,18 @@ function resolver(
           clearHost([action.tile]);
           emit({ type: "PropertySold", seat, tile: action.tile, amount });
           insolvency(seat, pending.creditor);
-          if (state.pending === null) prepend({ kind: "wins" });
+          // A settled seller keeps the phase until they decline it.
+          if (state.pending === null) {
+            const player = getPlayer(state, seat);
+            if (optionalSale(state, seat) && player.properties.length > 0)
+              open({
+                kind: "sell",
+                seat,
+                targets: player.properties,
+                creditor: pending.creditor,
+              });
+            else prepend({ kind: "wins" });
+          }
         }
         break;
       case "ChooseHost": {
@@ -1720,6 +1746,8 @@ function resolver(
         }
         break;
       case "Decline":
+        // Only a settled seller may decline a sale; the phase ends here.
+        if (pending.kind === "sell") prepend({ kind: "wins" });
         if (pending.kind === "rent-card")
           prepend({
             kind: "rent",
@@ -2055,6 +2083,8 @@ function timeoutAction(state: PublicState): Action {
       };
     }
     case "sell":
+      // An expired optional sale ends the phase instead of liquidating more.
+      if (optionalSale(state, pending.seat)) return { type: "Decline" };
       return {
         type: "Sell",
         tile: [...pending.targets].sort(
@@ -2470,6 +2500,7 @@ export function botAction(
         : timeoutAction(state);
     }
     case "sell":
+      if (optionalSale(state, seat)) return { type: "Decline" };
       if (difficulty === "hard")
         return [...actions].sort((a, b) => {
           if (a.type !== "Sell" || b.type !== "Sell") return 0;
@@ -2574,6 +2605,11 @@ export function createGame(
       throw new RangeError("Unsupported rules version 8 marker");
   if (config.escapeCard !== undefined && typeof config.escapeCard !== "boolean")
     throw new RangeError("Escape card rule must be a boolean");
+  if (
+    config.sellBeyondDebt !== undefined &&
+    typeof config.sellBeyondDebt !== "boolean"
+  )
+    throw new RangeError("Extra sale rule must be a boolean");
   if (
     config.startLandingBonus !== undefined &&
     typeof config.startLandingBonus !== "boolean"
@@ -2704,6 +2740,7 @@ export function createGame(
       chanceRule: chances,
       turnOrderRule,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,
+      sellBeyondDebt: config.sellBeyondDebt ?? true,
     },
     players,
     properties: board

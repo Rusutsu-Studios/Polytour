@@ -161,6 +161,19 @@ function decisionCopy(kind: keyof typeof COPY): readonly [string, string] {
   const [frTitle, frDescription, enTitle, enDescription] = COPY[kind];
   return [t(frTitle, enTitle), t(frDescription, enDescription)];
 }
+/**
+ * A forced sale whose debt is already covered: the seller carries on by
+ * choice, so they decide when the phase ends.
+ */
+function settledSale(state: PublicState): boolean {
+  const pending = state.pending;
+  return (
+    state.config.sellBeyondDebt === true &&
+    pending?.kind === "sell" &&
+    (state.players.find((player) => player.seat === pending.seat)?.cash ?? 0) >=
+      0
+  );
+}
 function actionKey(action: Action): string {
   return `${action.type}:${"level" in action ? action.level : "tile" in action ? action.tile : "card" in action ? action.card : ""}`;
 }
@@ -241,7 +254,9 @@ function actionLabel(action: Action, state: PublicState): string {
       return cardName(action.card);
     case "Decline":
       return state.pending?.kind === "sell"
-        ? t("Déclarer faillite", "Declare bankruptcy")
+        ? settledSale(state)
+          ? t("Terminer les ventes", "Finish selling")
+          : t("Déclarer faillite", "Declare bankruptcy")
         : state.pending?.kind === "rent-card"
           ? t(
               `Payer le loyer · ${money(rentCardPayment(state.pending.amount, null))}`,
@@ -348,7 +363,9 @@ function confirmLabel(action: Action, state: PublicState): string {
         `Travel here · ${money(actionCost(state, action))}`,
       );
     case "Decline":
-      return t("Confirmer la faillite", "Confirm bankruptcy");
+      return settledSale(state)
+        ? t("Terminer les ventes", "Finish selling")
+        : t("Confirmer la faillite", "Confirm bankruptcy");
     default:
       return actionLabel(action, state);
   }
@@ -395,6 +412,8 @@ export default function DecisionPanel({
     state.status === "active";
   const named = (text: string) =>
     playerName ? `${playerName} · ${text}` : text;
+  // The debt is covered and the sale stayed open: the panel stops pressing.
+  const saleSettled = settledSale(state);
   const rngBusy = randomness !== null && randomness.status !== "resolved";
   const decisionKey = `${pending?.kind ?? "roll"}:${decisionSeat}:${pending?.deadline ?? 0}:${pending && "tile" in pending ? pending.tile : ""}`;
   const actions = ownTurn ? legalActions(state, seat) : [];
@@ -593,8 +612,15 @@ export default function DecisionPanel({
     ruleEconomy(economyRule(state.config)).islandMaxFailedEscapes -
       (active?.islandTurns ?? 0),
   );
-  const copy: readonly [string, string] =
-    pending?.kind === "island"
+  const copy: readonly [string, string] = saleSettled
+    ? [
+        t("Vendre encore ?", "Sell more?"),
+        t(
+          "Votre dette est réglée. Vendez autant de propriétés que vous voulez, puis terminez.",
+          "Your debt is settled. Sell as many properties as you like, then finish.",
+        ),
+      ]
+    : pending?.kind === "island"
       ? [
           decisionCopy("island")[0],
           `${
@@ -634,7 +660,9 @@ export default function DecisionPanel({
               ]
             : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
-    selectedAction?.type === "Decline" && pending?.kind === "sell";
+    selectedAction?.type === "Decline" &&
+    pending?.kind === "sell" &&
+    !saleSettled;
   useEffect(() => {
     if (state.pause?.kind === "paused") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -703,7 +731,11 @@ export default function DecisionPanel({
               style={{ color: PLAYER_COLORS[decisionSeat] }}
               aria-hidden="true"
             />
-            <span>{t("Votre dette à régler", "Settle your debt")}</span>
+            <span>
+              {saleSettled
+                ? t("Dette réglée", "Debt settled")
+                : t("Votre dette à régler", "Settle your debt")}
+            </span>
           </>
         )}
         {timer && (
@@ -737,13 +769,21 @@ export default function DecisionPanel({
             {named(
               bankruptcy
                 ? t("Déclarer faillite ?", "Declare bankruptcy?")
-                : t("Vendre une ville", "Sell a city"),
+                : saleSettled
+                  ? t("Vendre encore ?", "Sell more?")
+                  : t("Vendre une ville", "Sell a city"),
             )}
           </h2>
           <dl className="sale-ledger">
-            <div>
-              <dt>{t("Dette", "Debt")}</dt>
-              <dd>{money(Math.max(0, -(active?.cash ?? 0)))}</dd>
+            <div data-negative={!saleSettled}>
+              <dt>{saleSettled ? t("Argent", "Cash") : t("Dette", "Debt")}</dt>
+              <dd>
+                {money(
+                  saleSettled
+                    ? (active?.cash ?? 0)
+                    : Math.max(0, -(active?.cash ?? 0)),
+                )}
+              </dd>
             </div>
             {!bankruptcy && projectedCash !== null && (
               <div data-negative={projectedCash < 0}>
@@ -769,6 +809,14 @@ export default function DecisionPanel({
             </span>
           )}
         </div>
+        {saleSettled && !bankruptcy && (
+          <p className="sale-note">
+            {t(
+              "Dette réglée. Vendez autant de propriétés que vous voulez, puis terminez.",
+              "Debt settled. Sell as many properties as you like, then finish.",
+            )}
+          </p>
+        )}
         <div className="sale-controls">
           {bankruptcy ? (
             <p id="sale-instruction" className="sale-warning">
@@ -811,12 +859,15 @@ export default function DecisionPanel({
                 disabledReason={unavailableReason}
                 onClick={() => {
                   if (bankruptcy) setSelection(null);
+                  else if (saleSettled) act(decline);
                   else choose(decline);
                 }}
               >
                 {bankruptcy
                   ? t("Revenir aux ventes", "Back to property sales")
-                  : t("Déclarer faillite", "Declare bankruptcy")}
+                  : saleSettled
+                    ? t("Terminer les ventes", "Finish selling")
+                    : t("Déclarer faillite", "Declare bankruptcy")}
               </ActionButton>
             )}
             <ActionButton

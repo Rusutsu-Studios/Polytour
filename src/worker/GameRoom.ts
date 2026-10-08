@@ -98,9 +98,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 10 reworks the Chance deck (see ChanceRule);
  * 11 selects a random starter, then follows the fixed clockwise seats;
  * 12 spreads initial festivals across sides and country groups;
- * 13 pays 1.5x salary for a clockwise landing exactly on Start.
+ * 13 pays 1.5x salary for a clockwise landing exactly on Start;
+ * 14 lets a seller who has settled their debt keep selling.
  */
-const RULES_VERSION = 13;
+const RULES_VERSION = 14;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -114,7 +115,8 @@ function frozenRules(version: number | null) {
     version !== 10 &&
     version !== 11 &&
     version !== 12 &&
-    version !== 13
+    version !== 13 &&
+    version !== 14
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -123,6 +125,7 @@ function frozenRules(version: number | null) {
     hotelPurchaseRule:
       version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
+    sellBeyondDebt: version >= 14,
     worldTourRule:
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
     fourResortRent: version >= 8,
@@ -305,6 +308,7 @@ export class GameRoom extends DurableObject<Env> {
     const prototypeEconomy = economy === undefined || economy === "prototype";
     const board = state.config.boardRule;
     const sale = state.config.sellBackPercent;
+    const extraSales = state.config.sellBeyondDebt;
     const tour = state.config.worldTourRule;
     const fourResorts = state.config.fourResortRent;
     const buyoutBuild = state.config.buildAfterBuyout;
@@ -315,6 +319,10 @@ export class GameRoom extends DurableObject<Env> {
     const festivalDistribution = state.config.festivalDistribution;
     const startBonus = state.config.startLandingBonus;
     if (
+      // Saves through version 13 end a forced sale at zero cash.
+      (rulesVersion !== null &&
+        extraSales !== frozen.sellBeyondDebt &&
+        (rulesVersion >= 14 || extraSales !== undefined)) ||
       // Saves through version 12 retain their flat salary.
       (rulesVersion !== null &&
         startBonus !== frozen.startLandingBonus &&

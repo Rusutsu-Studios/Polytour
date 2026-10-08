@@ -502,6 +502,12 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.sale-note {
+  margin: 9px 0 0;
+  color: #47666c;
+  font-size: 12px;
+  line-height: 1.3;
+}
 .sale-controls {
   display: flex;
   align-items: center;

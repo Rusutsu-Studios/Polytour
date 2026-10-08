@@ -216,6 +216,8 @@ export type LobbyState = {
   readonly economyRule: EconomyRule;
   readonly hotelPurchaseRule: "staged-hotels" | "legacy-lap";
   readonly sellBackPercent: 50 | 100;
+  /** Omitted by older servers; those rooms end a forced sale at zero cash. */
+  readonly sellBeyondDebt?: boolean;
   readonly worldTourRule: WorldTourRule;
   readonly fourResortRent: boolean;
   readonly buildAfterBuyout: boolean;

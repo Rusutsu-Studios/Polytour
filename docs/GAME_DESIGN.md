@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 13, `economyRule: "reference"`) follow the reference
+New rooms (rules version 14, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -288,8 +288,11 @@ it to the bank.
 3. Cash may become negative only after a mandatory payment. This immediately opens
    a forced-sell phase. The debtor may sell any owned cities or resorts to the bank;
    each sale returns 100% of that property's invested value (prototype: 50%,
-   rounded down) and resets it to unowned Land. They may sell in any order until
-   solvent, then continue the interrupted resolution.
+   rounded down) and resets it to unowned Land. They may sell in any order. From
+   rules version 14 the phase does not close the moment the debt clears: a
+   solvent seller may keep selling as many properties as they like and ends the
+   phase themselves by declining, which resumes the interrupted resolution.
+   Rooms through version 13 close the phase as soon as cash reaches zero.
 4. If selling every property they own could not bring cash back to zero, the engine
    skips the forced-sell decision and the player is bankrupt immediately; otherwise
    they are bankrupt if cash is still negative once no properties remain. A bankrupt
@@ -467,7 +470,7 @@ they are legal and relevant.
 | Roll (incl. Island pay-or-escape, World Tour travel-or-roll) | 10 s | Auto-roll (escape roll on Island, no travel on World Tour) |
 | Buy / build / buyout | 15 s | Decline |
 | Choose host / card target | 15 s | Deterministic legal default (a paid championship: renew your own host, otherwise pass) |
-| Forced sell | 30 s | Sell cheapest properties until solvent |
+| Forced sell | 30 s | Sell cheapest properties until solvent, then decline |
 
 Animation time is added on top of these. The engine computes each decision's
 `deadline` as `now + decision time + animationBudget(events)`, from timing config in
@@ -479,7 +482,8 @@ current rent (then lowest tile). Earthquake targets the opponent city with the
 highest current rent, and Contractor targets the city with the greatest next-level
 base-rent increase (each then breaks ties by lowest tile). A timed-out Land Swap or
 keep-card prompt declines. A timed-out forced sell chooses the lowest refund first,
-then lowest tile, and repeats until the player is solvent or bankrupt.
+then lowest tile, and repeats until the player is solvent or bankrupt; it never
+spends the optional part of the phase, so an expired solvent sale simply ends.
 
 These defaults are deterministic from public state and are what `applyTimeout`
 applies to a **human** seat whose decision timer expires, whether that player is

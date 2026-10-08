@@ -962,6 +962,90 @@ describe("forced sales and bankruptcy", () => {
     expect(getPlayer(settled, seat).cash).toBe(2_150_000);
     expect(getPlayer(settled, payer).cash).toBe(70_000);
   });
+  it("keeps a settled sale open so the seller may raise more cash", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(grant(state, 4, other(state), 1), 6, seat), 1, seat);
+    state = setPlayer(state, seat, { cash: 10_000 });
+    const debtor = land(state, 4).state;
+    expect(getPlayer(debtor, seat).cash).toBe(-44_000);
+    // A standing debt leaves no way out of the phase but a sale.
+    expect(legalActions(debtor, seat)).toEqual([
+      { type: "Sell", tile: 1 },
+      { type: "Sell", tile: 6 },
+    ]);
+    const settled = act(debtor, { type: "Sell", tile: 6 }).state;
+    expect(getPlayer(settled, seat).cash).toBe(56_000);
+    expect(settled.pending).toMatchObject({ kind: "sell", seat, targets: [1] });
+    expect(legalActions(settled, seat)).toEqual([
+      { type: "Decline" },
+      { type: "Sell", tile: 1 },
+    ]);
+    const refund = propertyRefund(settled, 1);
+    const extra = act(settled, { type: "Sell", tile: 1 });
+    expect(getPlayer(extra.state, seat)).toMatchObject({
+      cash: 56_000 + refund,
+      properties: [],
+      bankrupt: false,
+    });
+    // Nothing left to sell, so the match resumes without another prompt.
+    expect(extra.state.pending?.kind).toBe("roll");
+    expect(propertyOwner(extra.state, 1)).toBeNull();
+  });
+  it("resumes the turn when a settled seller declines further sales", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(grant(state, 4, other(state), 1), 6, seat), 1, seat);
+    state = setPlayer(state, seat, { cash: 10_000 });
+    const settled = act(land(state, 4).state, { type: "Sell", tile: 6 }).state;
+    const done = act(settled, { type: "Decline" });
+    expect(done.events.some((event) => event.type === "PropertySold")).toBe(
+      false,
+    );
+    expect(getPlayer(done.state, seat)).toMatchObject({
+      cash: 56_000,
+      properties: [1],
+    });
+    expect(done.state.pending?.kind).toBe("roll");
+    expect(money(done.state)).toBe(money(settled));
+  });
+  it("closes the sale at zero on saves without the open-ended marker", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(grant(state, 4, other(state), 1), 6, seat), 1, seat);
+    const { sellBeyondDebt: _marker, ...frozenConfig } = state.config;
+    state = setPlayer({ ...state, config: frozenConfig }, seat, {
+      cash: 10_000,
+    });
+    const sold = act(land(state, 4).state, { type: "Sell", tile: 6 }).state;
+    expect(getPlayer(sold, seat)).toMatchObject({
+      cash: 56_000,
+      properties: [1],
+    });
+    expect(sold.pending?.kind).toBe("roll");
+  });
+  it("timeout ends a settled sale instead of selling more", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(grant(grant(state, 4, other(state), 1), 6, seat), 1, seat);
+    state = setPlayer(state, seat, { cash: 10_000 });
+    const debtor = land(state, 4).state;
+    const timeout = applyTimeout(debtor, {
+      now: debtor.pending?.deadline ?? 0,
+    });
+    expect(timeout.events.reduce(applyEvent, toPublic(debtor))).toEqual(
+      toPublic(timeout.state),
+    );
+    // The cheapest refund settles the debt; the rest stays with its owner.
+    expect(
+      timeout.events
+        .filter((event) => event.type === "PropertySold")
+        .map((event) => event.tile),
+    ).toEqual([1]);
+    expect(getPlayer(timeout.state, seat).cash).toBeGreaterThanOrEqual(0);
+    expect(getPlayer(timeout.state, seat).properties).toEqual([6]);
+    expect(timeout.state.pending?.kind).toBe("roll");
+  });
   it("timeout sells cheapest refunds repeatedly until solvent", () => {
     let state = newGame();
     const seat = state.activeSeat;

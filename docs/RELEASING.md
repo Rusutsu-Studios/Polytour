@@ -45,7 +45,7 @@ These counters are separate from application releases. Values at workflow adopti
 | --- | --- | --- |
 | `PROTOCOL_VERSION` | `3` | Client/Worker message compatibility; stale clients reload |
 | `CURRENT_STATE_VERSION` / `stateVersion` | `1` | Persisted state shape and its migration ladder |
-| `RULES_VERSION` / `rulesVersion` | `13` for new rooms | Rules frozen when each room is created |
+| `RULES_VERSION` / `rulesVersion` | `14` for new rooms | Rules frozen when each room is created |
 
 Bump a counter only for its own compatibility requirement, with relevant tests.
 Saved rooms retain their earlier rules; new releases must load their state and

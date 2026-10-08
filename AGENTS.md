@@ -17,7 +17,7 @@ a stylized 3D board with juicy, choreographed animations.
 > server bots, persistence/reconnection, a Three.js board, and immediate server
 > Web Crypto dice exist. Drand remains for saved-room compatibility only in the UI.
 > The default is 2 M cash, 400 k salary, 3 festivals, line/triple wins (four-beach win optional, off) and
-> 120 minutes. New rooms (rules version 13) use the reference economy: its rent
+> 120 minutes. New rooms (rules version 14) use the reference economy: its rent
 > grid laid side by side on the board, additive rent modifiers up to ×10, a paid
 > championship, a retained island Escape card, a reworked 36-card Chance deck (half bad
 > cards), Hotels that cannot be bought out and no Landmark. Festivals are
@@ -34,6 +34,9 @@ a stylized 3D board with juicy, choreographed animations.
 > the fixed clockwise seat order; rooms through version 10 keep their shuffled
 > order. From version 13, landing exactly on Start pays 150% of the salary;
 > rooms through version 12 keep their flat salary.
+> From version 14 a forced sale stays open once the debt is settled, so the seller
+> may keep selling and ends the phase by declining; rooms through version 13
+> close it at zero.
 > Two houses
 > before a first completed lap, three after; the Hotel follows on a later
 > visit to a three-house city. Direct
