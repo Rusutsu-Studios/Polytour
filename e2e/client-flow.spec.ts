@@ -1701,6 +1701,8 @@ test("desktop room controls fit, create and join preserve the host settings", as
 test("illustrated cards play in order and cancel safely on recovery and reconnect", async ({
   page,
 }) => {
+  // Software rendering makes controlled clock advances slower than game time.
+  test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.clock.install();
