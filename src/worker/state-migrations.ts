@@ -10,7 +10,33 @@
 // match keeps the rules it started with until it ends.
 
 /** The shape this build writes. Bump it together with a new ladder step. */
-export const CURRENT_STATE_VERSION = 3;
+export const CURRENT_STATE_VERSION = 4;
+
+/**
+ * Chance cards an older build persisted under a name this one no longer plays
+ * by, keyed by the saved name. Saved state climbs the ladder below; stored
+ * event rows are rewritten as they are replayed, so a reconnecting client never
+ * reads a name its build cannot render.
+ */
+const RENAMED_CHANCE_CARDS: Readonly<Record<string, string>> = {
+  Jailbreak: "Rescue Boat",
+};
+
+/** Maps one saved card name to the name this build uses; others pass through. */
+export function renameChanceCard(card: unknown): unknown {
+  return typeof card === "string" ? (RENAMED_CHANCE_CARDS[card] ?? card) : card;
+}
+
+/** Rewrites renamed cards in one stored event row before it is parsed. */
+export function renameChanceCardsInEvent(json: string): string {
+  let rewritten = json;
+  for (const [saved, current] of Object.entries(RENAMED_CHANCE_CARDS))
+    rewritten = rewritten.replaceAll(
+      `"card":${JSON.stringify(saved)}`,
+      `"card":${JSON.stringify(current)}`,
+    );
+  return rewritten;
+}
 
 export type StateMigration = {
   /** Version produced by this step; it reads version `to - 1`. */
@@ -42,6 +68,40 @@ export const STATE_MIGRATIONS: readonly StateMigration[] = [
       saved === null || typeof saved !== "object"
         ? saved
         : { ...saved, pause: null, pauseCooldownUntil: 0 },
+  },
+  {
+    // Version 4 renames the island release card. A match saved by an older
+    // build still spells it the old way in its draw pile, its discard pile and
+    // its last drawn card, and the engine no longer answers to that name.
+    to: 4,
+    migrate: (saved) => {
+      if (saved === null || typeof saved !== "object") return saved;
+      const state = saved as {
+        readonly deck?: unknown;
+        readonly discard?: unknown;
+        readonly lastCard?: unknown;
+      };
+      const pile = (cards: unknown) =>
+        Array.isArray(cards) ? cards.map(renameChanceCard) : cards;
+      const last = state.lastCard;
+      return {
+        ...state,
+        ...(state.deck === undefined ? {} : { deck: pile(state.deck) }),
+        ...(state.discard === undefined
+          ? {}
+          : { discard: pile(state.discard) }),
+        ...(last === null || typeof last !== "object"
+          ? {}
+          : {
+              lastCard: {
+                ...last,
+                card: renameChanceCard(
+                  (last as { readonly card?: unknown }).card,
+                ),
+              },
+            }),
+      };
+    },
   },
 ];
 

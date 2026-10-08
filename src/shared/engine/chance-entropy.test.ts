@@ -83,7 +83,7 @@ describe("unbiased Chance entropy", () => {
     ({ entropy }) => {
       const initial = {
         ...newGame(),
-        deck: ["Windfall", "Jailbreak", "Contractor"] as const,
+        deck: ["Windfall", "Rescue Boat", "Contractor"] as const,
       };
       const before = JSON.stringify(initial);
       expect(() => draw(initial, entropy)).toThrow("Chance entropy exhausted");
@@ -101,7 +101,7 @@ describe("live Chance draws", () => {
     // Distinct, die-free cards: a reworked deck holds duplicates.
     const initial = {
       ...newGame(),
-      deck: ["Windfall", "Jailbreak", "Contractor"] as const,
+      deck: ["Windfall", "Rescue Boat", "Contractor"] as const,
     };
     const before = JSON.stringify(initial);
     const first = draw(initial, [0]);
@@ -131,9 +131,9 @@ describe("live Chance draws", () => {
   it("rejects a biased tail before picking the next available card", () => {
     const initial = {
       ...newGame(),
-      deck: ["Windfall", "Jailbreak", "Contractor"] as const,
+      deck: ["Windfall", "Rescue Boat", "Contractor"] as const,
     };
-    expect(draw(initial, [0xffff_ffff, 1]).card).toBe("Jailbreak");
+    expect(draw(initial, [0xffff_ffff, 1]).card).toBe("Rescue Boat");
   });
 
   it("draws without repeats, refills from discard and keeps held cards unavailable", () => {
@@ -182,7 +182,7 @@ describe("live Chance draws", () => {
       players: base.players.map((player) =>
         player.seat === base.activeSeat ? { ...player, position: 12 } : player,
       ),
-      deck: ["Jailbreak", "Contractor", "Windfall"] as const,
+      deck: ["Rescue Boat", "Contractor", "Windfall"] as const,
       resolutionQueue: [
         { kind: "landing", seat: base.activeSeat },
         { kind: "landing", seat: base.activeSeat },
@@ -203,13 +203,13 @@ describe("live Chance draws", () => {
       result.events
         .filter((event) => event.type === "CardDrawn")
         .map((event) => event.card),
-    ).toEqual(["Windfall", "Jailbreak"]);
+    ).toEqual(["Windfall", "Rescue Boat"]);
   });
 
   it("retains Chance entropy for an automatic roll at its decision deadline", () => {
     const initial = {
       ...readyToDraw(newGame()),
-      deck: ["Windfall", "Jailbreak"] as const,
+      deck: ["Windfall", "Rescue Boat"] as const,
     };
     const result = applyTimeout(initial, {
       now: 1,
@@ -219,7 +219,7 @@ describe("live Chance draws", () => {
     expect(result.events).toContainEqual({
       type: "CardDrawn",
       seat: initial.activeSeat,
-      card: "Jailbreak",
+      card: "Rescue Boat",
       kept: false,
     });
   });
@@ -248,7 +248,7 @@ describe("live Chance draws", () => {
             ? { ...property, owner: base.activeSeat }
             : property,
         ),
-        deck: ["Contractor", "Jailbreak", "Windfall"],
+        deck: ["Contractor", "Rescue Boat", "Windfall"],
         resolutionQueue: [
           { kind: "landing", seat: base.activeSeat },
           { kind: "landing", seat: base.activeSeat },

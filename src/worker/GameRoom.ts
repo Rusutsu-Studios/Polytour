@@ -44,6 +44,7 @@ import { prepareDice, resolveDice } from "./randomness.js";
 import {
   CURRENT_STATE_VERSION,
   migrateSavedState,
+  renameChanceCardsInEvent,
 } from "./state-migrations.js";
 import { workerDiagnostics } from "./worker-diagnostics.js";
 
@@ -1121,7 +1122,9 @@ export class GameRoom extends DurableObject<Env> {
         type: "events",
         fromSeq: lastSeq + 1,
         toSeq: seq,
-        events: rows.map((row) => JSON.parse(row.json) as GameEvent),
+        events: rows.map(
+          (row) => JSON.parse(renameChanceCardsInEvent(row.json)) as GameEvent,
+        ),
         proofs: rows
           .filter((row) => row.proof)
           .map((row) => ({
