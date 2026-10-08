@@ -48,6 +48,7 @@ import {
 import CardArt from "./CardArt.js";
 import CityIllustration from "./CityIllustration.js";
 import { cardName } from "./chance-display.js";
+import { purchaseShortfall } from "./decision-shortfall.js";
 import Icon from "./Icon.js";
 import "./DecisionPanel.css";
 
@@ -454,6 +455,9 @@ export default function DecisionPanel({
       ? state.players.find((player) => player.seat === property.owner)
       : undefined;
   const construction = pending?.kind === "buy" || pending?.kind === "build";
+  // Too poor for the cheapest level: the card explains the price instead of
+  // leaving the player with locked choices and nothing to confirm.
+  const shortfall = ownTurn ? purchaseShortfall(state, seat) : null;
   const selectedLevel =
     selectedAction && "level" in selectedAction
       ? selectedAction.level
@@ -593,8 +597,14 @@ export default function DecisionPanel({
     ruleEconomy(economyRule(state.config)).islandMaxFailedEscapes -
       (active?.islandTurns ?? 0),
   );
-  const copy: readonly [string, string] =
-    pending?.kind === "island"
+  const copy: readonly [string, string] = shortfall
+    ? [
+        pending?.kind === "build"
+          ? t("Travaux hors budget", "Building out of budget")
+          : t("Hors de votre budget", "Out of your budget"),
+        "",
+      ]
+    : pending?.kind === "island"
       ? [
           decisionCopy("island")[0],
           `${
@@ -635,6 +645,10 @@ export default function DecisionPanel({
             : decisionCopy(pending?.kind ?? "roll");
   const bankruptcy =
     selectedAction?.type === "Decline" && pending?.kind === "sell";
+  // Nothing is affordable: passing is the only move, so it becomes the primary
+  // button instead of a confirmation with nothing to confirm.
+  const passOnly =
+    shortfall !== null && !selectedAction && decline !== undefined;
   useEffect(() => {
     if (state.pause?.kind === "paused") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -1164,6 +1178,7 @@ export default function DecisionPanel({
       data-kind={pending?.kind}
       data-decision={decisionKey}
       data-own="true"
+      data-short={shortfall !== null}
       data-busy={blocked}
       aria-labelledby="decision-heading"
       aria-describedby={
@@ -1227,6 +1242,28 @@ export default function DecisionPanel({
               : copy[1]}
           </p>
         )}
+        {shortfall && (
+          <p className="decision-shortfall" role="status">
+            <Icon name="lock" size={18} />
+            <span>
+              <strong>{t("Pas assez d’argent", "Not enough cash")}</strong>
+              {pending?.kind === "build"
+                ? t(
+                    `Les travaux les moins chers coûtent ${money(shortfall.price)} et il vous reste ${money(shortfall.cash)}.`,
+                    `The cheapest building work costs ${money(shortfall.price)} and you have ${money(shortfall.cash)} left.`,
+                  )
+                : resort
+                  ? t(
+                      `Cette plage coûte ${money(shortfall.price)} et il vous reste ${money(shortfall.cash)}.`,
+                      `This beach costs ${money(shortfall.price)} and you have ${money(shortfall.cash)} left.`,
+                    )
+                  : t(
+                      `Le terrain coûte ${money(shortfall.price)} et il vous reste ${money(shortfall.cash)}.`,
+                      `The land costs ${money(shortfall.price)} and you have ${money(shortfall.cash)} left.`,
+                    )}
+            </span>
+          </p>
+        )}
 
         <div className="decision-popup-story">
           <div className="decision-illustration">
@@ -1255,16 +1292,41 @@ export default function DecisionPanel({
             <span className="decision-preview-name">
               {bankruptcy
                 ? t("Fin de votre partie", "End of your game")
-                : selectedAction && "level" in selectedAction
+                : shortfall
                   ? resort
                     ? t("Plage", "Beach")
-                    : levelName(selectedAction.level)
-                  : selectedAction
-                    ? actionLabel(selectedAction, state)
-                    : t("Votre choix", "Your choice")}
+                    : levelName(shortfall.level)
+                  : selectedAction && "level" in selectedAction
+                    ? resort
+                      ? t("Plage", "Beach")
+                      : levelName(selectedAction.level)
+                    : selectedAction
+                      ? actionLabel(selectedAction, state)
+                      : t("Votre choix", "Your choice")}
             </span>
             <dl className="decision-ledger">
-              {pending?.kind === "rent-card" ? (
+              {shortfall ? (
+                <>
+                  <div className="ledger-main">
+                    <dt>
+                      {pending?.kind === "build"
+                        ? t("Coût des travaux", "Building cost")
+                        : resort
+                          ? t("Prix de la plage", "Beach price")
+                          : t("Prix du terrain", "Land price")}
+                    </dt>
+                    <dd>{money(shortfall.price)}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("Votre argent", "Your cash")}</dt>
+                    <dd>{money(shortfall.cash)}</dd>
+                  </div>
+                  <div className="ledger-balance" data-negative="true">
+                    <dt>{t("Il vous manque", "You are short of")}</dt>
+                    <dd>{money(shortfall.missing)}</dd>
+                  </div>
+                </>
+              ) : pending?.kind === "rent-card" ? (
                 <>
                   <div>
                     <dt>
@@ -1301,6 +1363,7 @@ export default function DecisionPanel({
               )}
               {rent !== null &&
                 !bankruptcy &&
+                !shortfall &&
                 pending?.kind !== "rent-card" && (
                   <div>
                     <dt>
@@ -1317,23 +1380,26 @@ export default function DecisionPanel({
                   <dd>+{money(salary)}</dd>
                 </div>
               )}
-              {construction && decisionTile !== undefined && !bankruptcy && (
-                <div className="ledger-buyout">
-                  <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
-                  <dd>
-                    {(() => {
-                      const price = buyoutPriceAt(
-                        state,
-                        decisionTile,
-                        selectedLevel,
-                      );
-                      return price === null
-                        ? t("Protégé", "Protected")
-                        : money(price);
-                    })()}
-                  </dd>
-                </div>
-              )}
+              {construction &&
+                decisionTile !== undefined &&
+                !bankruptcy &&
+                !shortfall && (
+                  <div className="ledger-buyout">
+                    <dt>{t("Rachat par un adversaire", "Opponent buyout")}</dt>
+                    <dd>
+                      {(() => {
+                        const price = buyoutPriceAt(
+                          state,
+                          decisionTile,
+                          selectedLevel,
+                        );
+                        return price === null
+                          ? t("Protégé", "Protected")
+                          : money(price);
+                      })()}
+                    </dd>
+                  </div>
+                )}
               {projectedCash !== null && !bankruptcy && (
                 <div
                   className="ledger-balance"
@@ -1582,7 +1648,7 @@ export default function DecisionPanel({
           ) : null}
         </div>
         <div className="decision-confirmation">
-          {decline && (
+          {decline && !passOnly && (
             <ActionButton
               type="button"
               className="button quiet"
@@ -1600,20 +1666,35 @@ export default function DecisionPanel({
                 : actionLabel(decline, state)}
             </ActionButton>
           )}
-          <ActionButton
-            type="button"
-            className={`button primary decision-confirm ${bankruptcy ? "decision-bankruptcy" : ""}`}
-            disabled={blocked || !selectedAction}
-            disabledReason={unavailableReason}
-            onClick={confirm}
-          >
-            {blocked
-              ? t("Veuillez patienter…", "Please wait…")
-              : selectedAction
-                ? confirmLabel(selectedAction, state)
-                : t("Choisir une option", "Choose an option")}
-            <Icon name="arrow" size={20} />
-          </ActionButton>
+          {passOnly && decline ? (
+            <ActionButton
+              type="button"
+              className="button primary decision-confirm"
+              disabled={blocked}
+              disabledReason={unavailableReason}
+              onClick={() => act(decline)}
+            >
+              {blocked
+                ? t("Veuillez patienter…", "Please wait…")
+                : actionLabel(decline, state)}
+              <Icon name="arrow" size={20} />
+            </ActionButton>
+          ) : (
+            <ActionButton
+              type="button"
+              className={`button primary decision-confirm ${bankruptcy ? "decision-bankruptcy" : ""}`}
+              disabled={blocked || !selectedAction}
+              disabledReason={unavailableReason}
+              onClick={confirm}
+            >
+              {blocked
+                ? t("Veuillez patienter…", "Please wait…")
+                : selectedAction
+                  ? confirmLabel(selectedAction, state)
+                  : t("Choisir une option", "Choose an option")}
+              <Icon name="arrow" size={20} />
+            </ActionButton>
+          )}
         </div>
       </motion.div>
     </dialog>,
