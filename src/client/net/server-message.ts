@@ -141,6 +141,7 @@ const eventTypes = new Set([
   "PropertyUpgraded",
   "PropertySold",
   "BoughtOut",
+  "PurchaseUnaffordable",
   "RentPaid",
   "MoneyTransferred",
   "ChampionshipChanged",

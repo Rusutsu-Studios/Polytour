@@ -1392,7 +1392,7 @@ function MatchView({
         </SceneBoundary>
       </div>
 
-      <CardMoment obscured={pauseOpen} />
+      <CardMoment obscured={pauseOpen} ownSeat={sharedScreen ? null : own} />
 
       <header className="match-topbar">
         <Logo small />

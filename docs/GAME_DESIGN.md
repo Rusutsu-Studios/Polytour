@@ -281,6 +281,10 @@ it to the bank.
    (two houses before a first completed lap, three after, and the Hotel on a
    three-house city once the first lap is complete); earlier rooms wait for a
    later landing.
+   A visitor who cannot afford the buyout after rent gets no offer; every player
+   instead sees a public notice with the price and the visitor's cash. The same
+   notice replaces the purchase offer on a free city or resort whose land the
+   player cannot pay for.
 3. Cash may become negative only after a mandatory payment. This immediately opens
    a forced-sell phase. The debtor may sell any owned cities or resorts to the bank;
    each sale returns 100% of that property's invested value (prototype: 50%,

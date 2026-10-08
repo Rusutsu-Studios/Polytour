@@ -109,6 +109,9 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
+- Protocol version 10 adds the public `PurchaseUnaffordable {seat, tile,
+  purchase: "buy" | "buyout", price}` event, which changes no state; older
+  clients reload.
 - Protocol version 9 adds lobby `bot-difficulty {seat, difficulty}` with
   `difficulty: "easy" | "medium" | "hard"`. Only the leader can change a real
   bot before starting (`host-only`, `not-a-bot`, `game-already-started`). A lobby

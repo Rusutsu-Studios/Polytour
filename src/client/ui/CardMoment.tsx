@@ -3,7 +3,11 @@ import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DECISION_TIMING } from "../../shared/board/index.js";
-import { BAD_CHANCE_CARDS, type GameEvent } from "../../shared/engine/index.js";
+import {
+  BAD_CHANCE_CARDS,
+  type GameEvent,
+  type Seat,
+} from "../../shared/engine/index.js";
 import {
   type AnimationContext,
   director,
@@ -14,11 +18,13 @@ import { money, PLAYER_COLORS } from "./board-display.js";
 import CardArt from "./CardArt.js";
 import { type CardDraw, describeCard } from "./chance-display.js";
 import Icon from "./Icon.js";
+import PurchaseNotice from "./Notice.js";
 import "./CardMoment.css";
 
 type TaxPayment = Extract<GameEvent, { type: "MoneyTransferred" }>;
+type Unaffordable = Extract<GameEvent, { type: "PurchaseUnaffordable" }>;
 type Moment = {
-  event: CardDraw | TaxPayment;
+  event: CardDraw | TaxPayment | Unaffordable;
   context: AnimationContext;
   readingMs: number;
 };
@@ -26,8 +32,11 @@ type Moment = {
 /** One bounded reading moment in the Director queue, before the card's effects. */
 export default function CardMoment({
   obscured = false,
+  ownSeat = null,
 }: {
   obscured?: boolean;
+  /** The viewer's one seat; null on a shared screen or for a spectator. */
+  ownSeat?: Seat | null;
 }) {
   const { t } = useLocale();
   const [moment, setMoment] = useState<Moment | null>(null);
@@ -53,6 +62,7 @@ export default function CardMoment({
       animate(event, context) {
         if (
           event.type !== "CardDrawn" &&
+          event.type !== "PurchaseUnaffordable" &&
           !(
             event.type === "MoneyTransferred" &&
             event.reason === "Tax" &&
@@ -74,7 +84,9 @@ export default function CardMoment({
                 DECISION_TIMING.taxAnimation,
                 DECISION_TIMING.cardAnimation / context.playbackRate,
               )
-            : DECISION_TIMING.taxAnimation;
+            : event.type === "PurchaseUnaffordable"
+              ? DECISION_TIMING.noticeAnimation
+              : DECISION_TIMING.taxAnimation;
         return new Promise<void>((done) => {
           resolve = done;
           setMoment({ event, context, readingMs });
@@ -108,6 +120,19 @@ export default function CardMoment({
   }, [moment, busy, obscured]);
   if (!moment) return null;
   const { event, context, readingMs } = moment;
+  if (event.type === "PurchaseUnaffordable")
+    return createPortal(
+      <PurchaseNotice
+        ref={dialog}
+        event={event}
+        state={context.next}
+        own={event.seat === ownSeat}
+        readingMs={readingMs}
+        reducedMotion={reducedMotion}
+        onDone={() => finish.current()}
+      />,
+      document.body,
+    );
   const tax = event.type === "MoneyTransferred";
   const seat = event.type === "CardDrawn" ? event.seat : (event.from ?? 0);
   const card =

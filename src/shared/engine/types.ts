@@ -401,6 +401,17 @@ export type GameEvent =
       readonly tile: number;
       readonly amount: number;
     }
+  /**
+   * A player cannot pay for the city or resort they landed on: the land of a
+   * free one, or the buyout of an opponent's. Public notice only; no state change.
+   */
+  | {
+      readonly type: "PurchaseUnaffordable";
+      readonly seat: Seat;
+      readonly tile: number;
+      readonly purchase: "buy" | "buyout";
+      readonly price: number;
+    }
   | {
       readonly type: "RentPaid";
       readonly seat: Seat;
