@@ -9,7 +9,7 @@ opponent's city), several **instant-win monopolies**, and a round limit so a mat
 has a configurable duration. The user's default is a two-hour maximum; instant
 wins and bankruptcies can end a match earlier.
 
-New rooms (rules version 12, `economyRule: "reference"`) follow the reference
+New rooms (rules version 14, `economyRule: "reference"`) follow the reference
 game's economy: its rent grid laid side by side on Polytour's board, its fees and
 its protections. Rooms saved under rules versions 2–3 keep the original
 **prototype** economy; the differences are noted where they apply. All numbers live
@@ -53,9 +53,12 @@ the tie.
 2. A **lap** is a clockwise crossing from tile 31 to tile 0. Crossing it immediately
    pays the Start salary and increments that player's lap count. Landing on Start by
    clockwise movement *is* that crossing: salary is paid once and one lap is counted,
-   never twice. Every clockwise move (dice, World Tour, forward movement cards) pays
-   salary exactly when its path crosses Start. Backward movement and "go to Island"
-   never pay salary or count a lap.
+   never twice. From rules version 13 that landing pays **150% of the salary**
+   (600,000 by default) instead of the flat amount, rounded down as a payout; a move
+   that crosses Start and stops anywhere else pays the flat salary, and saved rooms
+   through version 12 always pay it flat. Every clockwise move (dice, World Tour,
+   forward movement cards) pays salary exactly when its path crosses Start.
+   Backward movement and "go to Island" never pay salary or count a lap.
 3. A **round** ends when every non-bankrupt seat that was still in `turnOrder` at
    the start of that round has completed one turn. Extra rolls from doubles remain
    part of that same turn. Bankrupt seats are skipped thereafter.
@@ -119,7 +122,8 @@ stay unchanged. Saved legacy boards retain their original destination names.
 | Parameter | Value |
 | --- | --- |
 | Starting cash | 2,000,000 (configurable) |
-| Salary for passing/landing on Start | 400,000 (configurable) |
+| Salary for crossing Start | 400,000 (configurable) |
+| Salary for landing exactly on Start | 150% of the salary; 600,000 by default |
 | Players | 2–4; empty seats stay empty or take a bot |
 | Time limit | Whole minutes, minimum 15, or ∞; exact entry also accepts durations above 120 (e.g. 200); shortcuts 20/60/120; default 120 (then highest net worth wins) |
 | Round limit | 10,000 safety cap for timed games; none for ∞; custom tests/simulations use shorter caps |
@@ -216,7 +220,9 @@ it to the bank.
 
 ## Corners and special tiles
 
-- **Start:** collect salary when passing or landing (once per crossing, see laps above).
+- **Start:** collect salary when passing or landing (once per crossing, see laps
+  above). A clockwise landing exactly on Start pays 150% of the salary from rules
+  version 13, so Grand Tour collects it too; saved rooms before that pay it flat.
 - **Island:** landing here, a "go to Island" effect, or a third consecutive double
   sends the pawn to tile 8 with `islandTurns = 0` and **ends the turn immediately**,
   forfeiting any pending doubles roll; it does not pass Start or resolve Island
@@ -275,14 +281,18 @@ it to the bank.
    (two houses before a first completed lap, three after, and the Hotel on a
    three-house city once the first lap is complete); earlier rooms wait for a
    later landing.
+   A visitor who cannot afford the buyout after rent gets no offer; every player
+   instead sees a public notice with the price and the visitor's cash. The same
+   notice replaces the purchase offer on a free city or resort whose land the
+   player cannot pay for.
 3. Cash may become negative only after a mandatory payment. This immediately opens
    a forced-sell phase. The debtor may sell any owned cities or resorts to the bank;
    each sale returns 100% of that property's invested value (prototype: 50%,
    rounded down) and resets it to unowned Land. They may sell in any order. From
-   rules version 13 the phase does not close the moment the debt clears: a
+   rules version 14 the phase does not close the moment the debt clears: a
    solvent seller may keep selling as many properties as they like and ends the
    phase themselves by declining, which resumes the interrupted resolution.
-   Rooms through version 12 close the phase as soon as cash reaches zero.
+   Rooms through version 13 close the phase as soon as cash reaches zero.
 4. If selling every property they own could not bring cash back to zero, the engine
    skips the forced-sell decision and the player is bankrupt immediately; otherwise
    they are bankrupt if cash is still negative once no properties remain. A bankrupt
@@ -371,7 +381,7 @@ lack Escape.
 
 | Card | Effect | Keep? |
 | --- | --- | --- |
-| Grand Tour | Advance to Start, collect salary | |
+| Grand Tour | Advance to Start, collect the landing salary | |
 | Stranded | Go to Island | |
 | Jet Set | Move to World Tour | |
 | Stadium Call | Move to Championship | |
@@ -385,7 +395,7 @@ lack Escape.
 | Land Swap | Optionally choose an opponent city; exchange it with your eligible city of lowest land price (not Hotels; prototype: not Landmarks) | |
 | Detour | Roll one die and move back that many tiles (before v9: 3 tiles) | |
 | Contractor | Upgrade one of your cities by 1 level for free | |
-| Jailbreak | Everyone on the Island is released | |
+| Rescue Boat | A rescue boat calls at the Island and everyone stuck there leaves | |
 | Charity | Give 100,000 to the poorest player | |
 | Escape | Leave the Island for free at the start of your trapped turn, then roll normally (v9) | ✅ |
 | Tailwind | Roll one die and move forward that many tiles (v10) | |
@@ -402,7 +412,7 @@ lack Escape.
 - Drawn, non-keep cards resolve immediately, then enter the discard pile. Keep cards
   leave the deck until used; a player can hold at most one Guardian Angel, one
   Coupon and one Escape card. Escape is added only when `escapeCard: true`, frozen
-  in new rules-version-9 rooms; saved decks and Jailbreak's immediate effect remain
+  in new rules-version-9 rooms; saved decks and Rescue Boat's immediate effect remain
   unchanged. When used, kept cards enter the discard pile. When the draw pile is empty, its
   discard pile replenishes it; held cards remain out of the draw. Each live draw
   uses fresh cryptographic rejection sampling, including from previously saved
@@ -431,7 +441,7 @@ lack Escape.
 - Contractor targets one of the drawer's non-Landmark cities and raises it exactly
   one legal level for free (Hotel still requires a completed lap); the free level
   counts toward invested value. It cannot create a Landmark, so a Hotel is not a
-  legal target. Jailbreak clears Island status without moving pawns.
+  legal target. Rescue Boat clears Island status without moving pawns.
 - Birthday payments resolve one payer at a time in `turnOrder`, and each payer may
   enter forced selling before the next payer is charged. Charity chooses the
   non-bankrupt player with the lowest cash, excluding the drawer; ties use earliest

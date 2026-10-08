@@ -1,371 +1,299 @@
-# Changelog
+# What's new in Polytour
 
-Changes are recorded here by application release version. See
-[RELEASING.md](docs/RELEASING.md) for versioning, milestones and publication.
-
-`0.1.0` is the starting record for the existing playable prototype and the new
-release workflow. This entry does not establish that a Git tag or GitHub Release
-has been published, and it does not reconstruct earlier development history.
+Player-facing updates, newest first. These notes describe changes merged into
+the game; open pull requests are not included. Versions and dates identify the
+application updates, independently of GitHub tags or release publication.
 
 ## [Unreleased]
 
-## [0.7.5] - 2026-10-05
+## [0.8.0] - 2026-10-08
+
+### Added
+
+- Choose Easy, Medium or Hard bots before creating a room, then set each bot's
+  level individually in the lobby. Their levels remain visible during the match.
+  Easy bots sometimes pass up upgrades and buyouts; Hard bots plan more carefully.
+  Every difficulty plays by the same rules and gets the same random dice.
+- Play without a match time limit. Unlimited matches end through the enabled
+  property wins or the last player standing; individual turns still have timers.
+  You can also enter an exact match duration or a decision time from 10 to 60 seconds.
+- Zoom the board with the wheel, +/- keys or a pinch, drag to rotate it, and
+  Shift-drag to pan. Save your zoom, lock the view, or use Center map to return
+  smoothly to the default view. Reduced motion resets the view immediately.
+- Everyone sees an illustrated notice when a player cannot afford a free
+  property or a buyout. It shows the player, property, price and available cash.
+  Continue or Escape dismisses it before its four-second reading time ends.
+
+### Changed
+
+- Landing exactly on Start pays 150% of the salary: 600,000 with the default
+  salary of 400,000. Crossing Start and stopping elsewhere pays the usual salary.
+  Grand Tour receives the landing bonus too. Matches created before this update
+  keep their original salary rule.
+- A shared wheel reveals the randomly chosen starting player. Turns then follow
+  the board clockwise, skipping empty seats and eliminated players. Existing
+  matches keep their original turn order.
+- Festivals are usually spread across different countries in new matches.
+  Several festivals in one country remain possible, but are rare.
+- Personal preferences and room rules share one Settings panel in the lobby
+  and during a match. The leader can edit rules before starting; during play,
+  everyone can read the rules without changing them.
+- Language, graphics, board size, fullscreen, streamer mode and reduced motion
+  are grouped in Settings. Personal choices are saved on this device and shared
+  between its browser tabs. Audio remains coming soon.
+- The board now visits Lyon, Marseille and Paris; Naples, Milan and Rome;
+  Hamburg and Berlin; and Geneva and Zurich. The beaches are Seychelles,
+  Maldives, Bora Bora and Hawaii. Prices, rents and tile positions are unchanged;
+  older legacy boards keep their original destinations.
+- Small houses are now cottages with owner-coloured roofs, chimneys, doors and
+  windows visible from every side of the board.
+- Rescue boat replaces the Jailbreak Chance card, with a boat and life-ring
+  illustration. It releases everyone stranded on the Island without moving
+  their pawns. Saved matches keep working with the renamed card.
 
 ### Fixed
 
-- Two Pause end-to-end tests no longer fail on a slow CI runner: the frozen-clock
-  helper retries when the page clock has already passed its target, and the solo
-  pause test waits for a bot decision with more time left.
+- Bot difficulty explanations work on hover and keyboard focus, including when
+  room rules are read only. Escape dismisses the explanation.
+- Quick settings give labels and values clearer spacing. How to play has a book
+  icon, and Center map and streamer mode explain their actions on hover or focus.
+- Board gestures preserve property clicks and the Roll button. Trackpad pinches
+  zoom the board without enlarging the whole page; intentional browser zoom
+  shortcuts still work. A new gesture interrupts a view reset.
+- Welcome, invitation and lobby board previews use their available desktop space.
+
+## [0.7.5] - 2026-10-05
+
+### Changed
+
+- Maintenance release. Gameplay and room rules are unchanged.
 
 ## [0.7.4] - 2026-10-05
 
 ### Added
 
-- Pause solo matches from the pause menu and resume with the remaining turn and
-  match time intact. Multiplayer pauses require every human player's approval,
-  with one request per room every five minutes (#55).
-- New Chance cards for new rooms (#100): Tailwind moves you forward 1 to 6
-  spaces on a die; Power Cut stops an opponent's city from earning rent until
-  its owner passes Start three times; Forced Sale sends an opponent's property
-  back to the bank with its refund (a Hotel only drops to three houses);
-  Shield floats over one of your properties and blocks the next attack;
-  Patron adds a level to your city, paid by the richest opponent; Roll Again
-  gives you another roll. Two new bad cards: the rare Fan Trip sends you to
-  pay rent in the championship's host city, and Gift makes you give a city
-  to the poorest opponent.
-- Earthquake, Power Cut and Land Swap now play on the board: the hit city
-  shakes and sinks into dust, a cut city goes dark, and swapped cities flash
-  in their new owners' colours. The game log names the affected city and
-  owner (#85).
-- Bare land now carries a small stand with a flag in its owner's colour, and
-  the flag pops up when the land is bought (#70).
-- Kept Chance cards lie face up beside their holder's cash on the table, and
-  the player HUD shows a round ×N badge instead of the "N cards" label (#71).
-- Each player's kept cards also appear as mini cards beside their name;
-  hovering or focusing one springs up the full card with its art and rule.
-  A truncated player name shows in full on hover.
-- Persistent streamer mode hides room codes in the lobby and match, masks the
-  manual join input, and removes invitation codes from the address bar (#37).
-- Missing pages show a roundabout and car with a keyboard-accessible link home
-  while returning HTTP 404 (#92).
-- New rooms include a retained Escape card that releases its holder from Lost
-  Island for free; saved rooms retain their existing card decks (#48).
-- The welcome menu opens video settings from a gear button. The network status
-  beside the credits and in a match opens the same settings panel on Debug.
-- First visits follow the browser's French or English language preference;
-  an explicitly saved language choice takes priority.
+- Pause a solo match and resume with its remaining turn and match time intact.
+  Multiplayer pauses require every human player's approval; a room can request
+  one pause every five minutes.
+- New Chance cards include Tailwind, Power Cut, Forced Sale, Shield, Patron and
+  Roll Again. Fan Trip can send you to pay rent in the championship's host city;
+  Gift makes you give a city to the poorest opponent.
+- Keep an Escape card to leave the Island for free on a later turn. Held cards
+  appear beside your cash and name; hover or focus a mini card to read it.
+- Bare land flies a flag in its owner's colour as soon as it is bought.
+- Streamer mode hides room codes and invitation codes while you share your screen.
 
 ### Changed
 
-- New rooms (rules version 10) rework the Chance deck: Tax audit moves you to
-  the Tax office, Detour rolls a die for 1 to 6 spaces back, and bad cards
-  make up half the draws. Rooms created earlier keep their sixteen
-  cards (#100).
-- In game, a drawn card shows only its title, one simple drawing and one
-  short line, in a gold frame for good cards and a wooden one for bad cards.
-  How to play keeps the full details (#100).
-- Every card has its own flat drawing instead of three shared detailed
-  illustrations (#61).
-- The Lost Island decision shows the flat island drawing instead of a line
-  icon, and the Escape card (#123) joins the reworked deck with its own drawing.
-- Protocol version 7: clients from before this release reload.
-- Pull requests no longer edit `CHANGELOG.md` or bump the package version, which
-  made concurrent pull requests conflict. Each adds a `changelog.d/` fragment
-  instead; `pnpm release:prepare` folds the pending fragments into a dated
-  changelog section and bumps the version at release time. CI now requires a
-  fragment per pull request and rejects version or changelog edits outside a
-  release. `pnpm version:prepare` and `--require-bump` are removed.
+- New matches use a 36-card Chance deck with good and bad cards equally represented.
+  Tax audit sends you to the Tax office, and Detour rolls for 1-6 spaces backwards.
+  Existing matches keep the deck they started with.
+- Each Chance card has its own drawing and a short explanation. Good cards have
+  gold frames; bad cards have wooden frames. How to play holds the full details.
+- Earthquake shakes the affected city, Power Cut darkens it, and Land Swap shows
+  the new owners' colours. The game log identifies affected properties and players.
+- Open the game log from its toolbar icon to see a compact history with action
+  icons, coloured player names and clearly labelled doubles.
+- First visits use your browser's French or English preference. A saved language
+  choice takes priority.
 
 ### Fixed
 
-- Card ranges, the search description and the share-card text use the ASCII
-  hyphen (`1-6`, `2-4 players`) instead of en dashes. AGENTS.md now covers en
-  and em dashes too, and CI rejects them in code.
-- Align the home and room-lobby header, content, connection status and footer
-  on desktop, including large-screen interface scaling (#93).
-- Remove the running-game notice from the pause menu in both languages (#111).
-- Cover Lost Island bot alarms for paying to leave and rolling to escape (#84).
-- Stabilize the existing card/tax browser test's clock setup (from #119).
-- Preserve solo pause and unanimous multiplayer voting when removing the notice.
-- Held-card previews use the current card drawings, and the Island Escape
-  card appears beside the player's cash and in their hand after the Chance
-  card rework (#126). New board effects remain intact.
-- The welcome toolbar removes the Prototype badge and gives graphics and streamer
-  mode the same text-control styling as language; active streamer mode uses red
-  text (#37).
-- Interface minus signs use the standard ASCII hyphen-minus (-).
-- The pause menu uses a gear button for settings, and the language shortcut
-  remains available in the welcome toolbar.
-- Lobby departures and player removals shift occupied seats left, preserving
-  leadership, reconnect credentials and local player controls. New players and
-  bots fill the first open seat (#94).
-- Lost Island displays its title once, uses an island icon and keeps unavailable
-  escape choices visible with explanations (#48).
-- Lost Island descriptions include the Escape card when available under the
-  room’s rules, and the turn decision shows how many failed rolls remain until
-  automatic release (#87).
-- Regression coverage confirms Championship choices work during the first lap,
-  including a city acquired during doubles in the same turn (#83).
-- Keep the game log behind its top-bar icon in a compact, scrollable panel above
-  the bottom-left player, and remove the permanent bottom event caption (#45).
-- Identify log actions with icons, color player names by seat, and show dice
-  totals with a clear doubles label (#45).
-- The "Reduce motion" choice in Pause → Settings → Video is now kept. It was
-  read from the operating system on every load, so a player whose system asks
-  for less motion lost the animations again at each reload and could not keep
-  them on. The system setting now only supplies the first default, and the
-  player's own answer wins from then on.
+- Your reduced-motion choice survives reloading, even when it differs from the
+  operating system's preference.
+- Held-card previews use the current illustrations, including the Escape card.
+- Leaving or removing lobby players closes gaps between seats while preserving
+  leadership, reconnection and players sharing one screen.
+- Island choices explain unavailable actions and the remaining failed escape
+  rolls before automatic release.
+- The home screen, lobby and settings fit desktop displays more consistently.
+  The welcome toolbar gives language, graphics and streamer mode matching controls.
+- Missing pages offer a clear route home.
 
 ## [0.7.3] - 2026-10-04
 
 ### Changed
 
-- Share the ponytail Claude Code plugin with every project member through a committed `.claude/settings.json` (marketplace plus enabled plugin).
+- Maintenance release. Gameplay and room rules are unchanged.
 
 ## [0.7.2] - 2026-10-04
 
-### Added
+### Changed
 
-- Shared Codex marketplace and project configuration to install and enable the
-  Ponytail plugin for trusted Polytour checkouts.
+- Maintenance release. Gameplay and room rules are unchanged.
 
 ## [0.7.1] - 2026-10-04
 
 ### Changed
 
-- The four-resort win is now an optional room setting, off by default, and is
-  called the four-beach win in the interface (French: plages). Saved matches made
-  before the option keep the win enabled.
-- The room settings dialog saves the leader's changes when it closes; the Save
-  settings button is gone.
-- The arrow on the Start tile has a longer, clearer arrowhead on its left end.
-- The French Start tile is named "Départ" instead of "Grand départ".
+- The four-beach win is optional and off by default in new rooms. Existing
+  matches keep their original win conditions.
+- The leader's room settings save when the settings window closes.
+- Start has a clearer arrow and is called Départ in French.
 
 ## [0.7.0] - 2026-10-04
 
 ### Added
 
-- The player who buys out another player's city can build on it at once: up to
-  three houses (two before a first completed lap), or the Hotel on a three-house
-  city once the first lap is complete (#101).
+- Build immediately after buying out a city: up to two houses before your first
+  completed lap, three after it, or a Hotel on an eligible three-house city.
 
 ### Changed
 
-- Owning all four resorts pays 200 k rent instead of the third resort's 100 k,
-  and the resort card lists the fourth row (#99).
-- New rooms freeze rules version 7 for these two rules; rooms already created
-  keep the rules they started with.
+- Owning all four beaches earns 200,000 rent. The property card shows the fourth
+  rent tier. Existing matches retain their original rent and construction rules.
 
 ### Fixed
 
-- Once the dice show their total, the space the pawn is about to reach is
-  outlined in the roller's colour, through the walk and the decision there (#97).
+- After the dice reveal their total, your destination stays outlined in your
+  colour throughout the move and the decision there.
 
 ## [0.6.1] - 2026-10-04
 
 ### Fixed
 
-- Money flies to and from the tile it belongs to instead of the Start tile: a
-  purchase or upgrade is paid into its city, a sale refunds from it, and taxes,
-  the island fee, the World Tour fare and the championship fee are paid on their
-  own tile (#89).
-- The Start salary is paid the moment the pawn passes Start, with a "+400K"
-  floating up from the tile and fading, instead of after the whole move or
-  World Tour flight has finished (#88, #89).
+- Purchases, construction, sales, taxes and travel fees animate at the property
+  or special space they belong to.
+- Salary appears as soon as your pawn passes Start, including during World Tour,
+  instead of waiting for the entire journey to finish.
 
 ## [0.6.0] - 2026-10-04
 
 ### Added
 
-- A small bank is printed on Start. Salaries, taxes, fees and card payments fly
-  to and from it instead of the bare tile, while purchase, building and sale
-  money flies between the player and the lot; the Start salary is printed just
-  below the bank (#60).
-- Pause > Settings > Debug shows the bank's account: paid to players, received
-  from players and its balance, which starts at 0. Property money is not part of
-  it (#60).
-
-### Changed
-
-- Match state version 2 records the bank's account. Saved version-1 matches
-  load with an empty account (#60).
+- Start has a small bank and a printed salary. Money animations make bank
+  payments and property transactions easier to follow.
 
 ## [0.5.2] - 2026-10-04
 
 ### Added
 
-- Room option, enabled by default, to send a player to the Island after a third
-  consecutive double; switching it off lets the third double move normally (#102).
+- Choose whether three consecutive doubles send a player to the Island. The
+  rule is on by default; turning it off lets the third double move normally.
 
 ## [0.5.1] - 2026-10-04
 
+### Changed
+
+- Festivals appear only on cities in new matches. Existing matches retain
+  their original festival rules.
+
 ### Fixed
 
-- Restrict festivals to cities in new matches, including rent and beach details;
-  preserve existing matches with their original frozen festival rules (#96).
-- Explain unavailable actions in small ivory popups on hover or keyboard focus,
-  including construction prerequisites, insufficient cash, reconnecting and
-  unsaved room settings (#32).
-- Keep room preparation and joining feedback inline, without loading popups.
-- Keep Surprise cards visible for eight seconds and show tax payments to every
-  player in a matching six-second popup; reserve reading time before the next
-  decision and bot action (#31).
-- Show the current language as a simple globe-and-text FR/EN button beside How
-  to play; click or keyboard activation switches directly to the other language (#43).
-- Use a minimize icon on decision windows and a compact bottom tab that keeps
-  the countdown and reopens the same selection (#50).
+- Unavailable actions explain why on hover or keyboard focus, including missing
+  cash, construction requirements and reconnecting.
+- Chance cards and tax notices give everyone time to read before the next decision.
+- Switch French and English directly with the globe-and-language button.
+- Minimize a decision into a compact tab that keeps its countdown and selection.
+- Joining and room preparation show progress inline.
 
 ## [0.5.0] - 2026-10-03
 
 ### Added
 
-- A French/English win-condition summary above Save settings, updated from the
-  current room settings and available in the fixed rules during a match.
-- An explanation of Birthday/Charity payments and how gift bankruptcy changes
-  forced sales and payment limits.
+- Room settings summarize the active win conditions and explain how player-to-player
+  gifts interact with bankruptcy and forced sales.
 
 ### Fixed
 
-- Keep the settings footer within short desktop viewports while longer settings
-  content scrolls.
+- Long settings scroll while their closing controls stay within short desktop screens.
 
 ## [0.4.4] - 2026-10-03
 
 ### Changed
 
-- Refresh French/English welcome copy, show creator credits and a GitHub link,
-  and use simple hyphens in titles and unavailable-value labels (#90).
+- Refreshed French and English welcome text, creator credits and the project link.
 
 ## [0.4.3] - 2026-10-03
 
 ### Fixed
 
-- The room lobby board fills its preview instead of shrinking into a short canvas (#82).
+- The lobby board fills its preview area instead of appearing in a short canvas.
 
 ## [0.4.2] - 2026-10-03
 
 ### Fixed
 
-- Leaving a lobby releases the player's places and room connections and passes
-  leadership to another player, including rooms with local or waiting players (#81).
+- Leaving the lobby frees your seats and transfers leadership to another player,
+  including in rooms with local players or people waiting for a place.
 
 ## [0.4.1] - 2026-10-03
 
 ### Changed
 
-- During a match, graphics quality lives only in Pause > Video, with separate
-  High and Low choices. Removed the toolbar magnifier and previous/next arrows
-  from clicked-space details (#80).
-- Room leaders choose a successor from compact player portraits in the room
-  panel. The shared avatar renderer also accepts future custom portraits (#80).
-
-### Fixed
-
-- Run the complete browser suite in three isolated CI shards and cancel superseded branch checks to reduce waiting.
-- Keep protocol-only browser clients independent of 3D rendering during authoritative match checks.
+- Match graphics settings use clear High and Low choices in the pause menu.
+- Room leaders choose a successor from player portraits.
+- Property inspection uses fewer controls so the details stay easier to read.
 
 ## [0.4.0] - 2026-10-03
 
 ### Added
 
-- Polytour browser and home-screen icons, a share image, French/English search
-  metadata and structured game data (#41).
-- A production homepage sitemap and crawl policy that excludes private room
-  pages and previews from indexing, with proper missing-page responses.
-
-### Fixed
-
-- Feature-branch push checks compare released history with main, allowing draft
-  release versions to be updated after another pull request merges.
+- Polytour has browser and home-screen icons, a share image, and French and
+  English search descriptions. Private rooms stay out of search results.
 
 ## [0.3.1] - 2026-10-03
 
 ### Changed
 
-- Festival cities return to the garland of pennants between two masts, now in
-  vivid colors, instead of the face-on banner; the floating multiplier stays
-  gone and the championship host keeps its searchlights (#78).
-- Milan/Berlin and Prague/Vienne stand on smooth concrete slabs, square and long
-  staggered, in muted slate-lavender and warm-taupe colors that no other region
-  uses, so they no longer resemble Tokyo and Osaka (#78).
+- Festival cities display colourful pennant garlands, and the championship host
+  keeps its searchlights.
+- Two country groups have distinct concrete pavements to make them easier to tell apart.
 
 ## [0.3.0] - 2026-10-03
 
+### Added
+
+- Select the version in the welcome footer to read the game's release history.
+
 ### Changed
 
-- The version in the welcome footer opens a scrollable release history sourced
-  directly from CHANGELOG.md, with localized controls and keyboard navigation.
-- The Championship corner is now a stadium with a spinning gold trophy; it
-  lights up in the host's colour while a championship runs. The World Tour
-  corner is now a jet port with a terminal, a control tower and an airliner
-  taking off. Both share the town's ambient motion and keep the draw-call
-  budget (#77).
+- The Championship corner has a stadium with a spinning trophy and lighting in
+  the host's colour. World Tour has an airport, control tower and departing airliner.
 
 ## [0.2.0] - 2026-10-03
 
 ### Added
 
-- Automatic version preparation for each pull request, with shared instructions
-  for Codex and Claude and a CI check that rejects an unchanged application version.
-
-- Play opens a lobby with three bots instead of starting at once; friends who
-  enter the room code take a bot's place (#30).
-- A transferable room leader who can lock the room and approve newcomers, hand
-  a bot's place to someone who arrived mid-game, and bring everyone back to the
-  lobby during or after a match. People who join mid-game watch until they get
-  a place (#33).
-- Players sharing one PC: any seated player can seat a local player, whose
-  decisions appear on that screen labelled with their name (#44).
-- A pause menu with Game, Video, Audio and Debug settings; the game continues
-  while the menu is open, and audio controls are marked coming soon (#35).
-- A five-second Cloudflare ping indicator and on-demand room routing and
-  WebSocket latency diagnostics for connected players.
+- Play opens a lobby with three bots. Friends joining with the room code can
+  take a bot's place before the match starts.
+- The room leader can lock the room, approve newcomers, transfer leadership,
+  give a waiting player a bot's seat, and return everyone to the lobby.
+- Several players can share one computer, with each decision labelled for the
+  player whose turn it is. Mid-game newcomers can watch while waiting for a seat.
+- Personal settings include graphics and reduced motion. Audio is marked coming soon.
+- A High/Low graphics choice offers lighter rendering for older PCs.
 
 ### Changed
 
-- Protocol version 4: open browsers reload after the deploy that ships it.
-- Personal settings live in the pause menu; the sliders tool shows fixed match
-  rules. Video settings retain the High/Low graphics control.
-- Removed manual animation finish/skip and speed controls, preserving reduced
-  motion, automatic catch-up and reconnect recovery.
-- World Tour can fly to your own cities and resorts as well as unowned ones in
-  rooms created from now on (rules version 6). Rooms already created keep their
-  destinations.
-- Road markings around the board and in the town are softer, so they no longer
-  compete with the spaces' names and prices.
-- Board lots are printed in two parts: the city ground, with its buildings and
-  name on a pavement of its country's own style and color, and a concrete price
-  strip showing only the price or the owner's rent. Beaches are one piece of
-  sand, the tax and chance squares are smooth concrete, and unsold plots in the
-  central town no longer hold trees (#57).
-- Country colors are spread further apart so no two groups look alike, and the
-  tax square is named "Impôts" in French and "Taxes" in English (#57).
-- Festival cities fly a tall, vivid swallowtail banner facing the camera with a
-  garland of pennants; the floating multiplier medallion is gone, and the
-  championship host flies a gold banner (#57).
-- Players are identified by color only; per-player symbols are removed from
-  the board, pawns, corner HUDs, cards and menus (#57).
+- World Tour can reach your own properties as well as unowned ones in new rooms.
+  Existing matches retain their original destinations.
+- Long moves follow the board route and show salary when passing Start. World
+  Tour's destination picker includes the salary you will collect.
+- Country groups have distinct colours and pavements. City lots separate their
+  names and buildings from the price or rent strip; beaches have sandy ground.
+- Player colours identify pawns, ownership and menus consistently. Softer road
+  markings make names and prices easier to read.
+- Animation catch-up and reconnect recovery run automatically.
 
 ### Fixed
 
-- Invitation links ask only for a nickname and join the invited room, with
-  retryable errors, saved-seat recovery and a return to the start screen (#54).
-- Chance draws use fresh server cryptographic randomness, including saved games,
-  so public setup and observed cards cannot reveal the next draw (#46).
-- Shared room-creation limits bound anonymous storage allocation without IP keys;
-  health probes and unknown-room requests no longer create room tables (#46).
-- World Tour and long card moves walk the pawn along the board route, past Start
-  when they cross it, instead of jumping across the board. The destination picker
-  counts the Start salary a flight collects (#29).
+- Invitation links ask only for a nickname, recover saved seats and offer retry
+  or a return home when joining fails.
+- Chance draws are independent of visible setup information and earlier draws.
 
 ## [0.1.0] - 2026-10-03
 
 ### Added
 
-- Initial version record for the playable desktop prototype: private rooms with
-  two to four seats, server bots, a Three.js board and saved-room reconnection.
-  Remaining product and verification work is tracked in the roadmap.
-- Application version from `package.json`, shown in the welcome footer and
-  returned by the uncached `GET /api/version` endpoint.
-- Version bump and consistency checks, a changelog, and a documented release and
-  milestone workflow.
+- First recorded playable desktop prototype: private rooms for 2-4 players,
+  server bots, a 32-space 3D board, French and English controls, and reconnection
+  to saved matches.
+- Buy cities and beaches, build houses and Hotels, pay rent, and sell properties
+  to settle debts. Inspect a property to see its owner, price and rent.
+- Discover Chance cards, the Island, Championship and World Tour. Choose
+  properties directly on the board for travel, hosting and forced sales.
+- Play on a board grouped by country, with ownership colours, beach bungalows,
+  a growing central town and turn countdowns beside each player.
+- New matches use the reference economy and configured property wins. Matches
+  already saved keep the rules and economy they started with.

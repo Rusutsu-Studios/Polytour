@@ -15,8 +15,9 @@ import type {
 import type { DiceCommitment, DiceProof } from "../randomness/types.js";
 import type { RoomDiagnostics } from "./room-diagnostics.js";
 
-// Version 9 adds per-bot lobby choices and frozen player difficulty.
-export const PROTOCOL_VERSION = 9;
+// Version 10 adds the public PurchaseUnaffordable notice; version 9 added
+// per-bot lobby choices and frozen player difficulty. Stale clients reload.
+export const PROTOCOL_VERSION = 10;
 export const RoomCodeSchema = z
   .string()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
@@ -223,6 +224,8 @@ export type LobbyState = {
   /** Omitted by older servers; those rooms retain their original Chance deck. */
   readonly escapeCard?: boolean;
   readonly chanceRule: ChanceRule;
+  /** Omitted by older servers; those rooms pay a flat salary on every crossing. */
+  readonly startLandingBonus?: boolean;
   /** Omitted by older servers; existing rooms keep their recorded shuffled order. */
   readonly turnOrderRule?: "clockwise" | "shuffled";
   /** Omitted by older servers; existing rooms keep their original festival draw. */

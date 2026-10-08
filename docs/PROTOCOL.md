@@ -109,6 +109,9 @@ debug socket has been removed; `/api/health` remains.
   seat. Intents carry an optional `seat` for a local player; a device may only name
   its own seat or its local players (`not-your-seat`). Local players connect,
   disconnect and get their 60-second grace together with their device.
+- Protocol version 10 adds the public `PurchaseUnaffordable {seat, tile,
+  purchase: "buy" | "buyout", price}` event, which changes no state; older
+  clients reload.
 - Protocol version 9 adds lobby `bot-difficulty {seat, difficulty}` with
   `difficulty: "easy" | "medium" | "hard"`. Only the leader can change a real
   bot before starting (`host-only`, `not-a-bot`, `game-already-started`). A lobby
@@ -146,14 +149,14 @@ debug socket has been removed; `/api/health` remains.
   (nullable
   `you.seat`, `lobby.locked`, `lobby.waiting`, `seats[n].controller`); older
   clients reload. Version 3 reloaded clients before the regrouped board.
-  New rooms freeze rules version 13 with `boardRule: "country"`,
+  New rooms freeze rules version 14 with `boardRule: "country"`,
   `economyRule: "reference"`, `hotelPurchaseRule: "staged-hotels"`,
   `sellBackPercent: 100`, `sellBeyondDebt: true`, `worldTourRule: "free-and-own"`,
   `resortFestivals: false`,
   `fourResortRent: true`, `buildAfterBuyout: true`, `escapeCard: true`,
-  `chanceRule: "reworked"`, `turnOrderRule: "clockwise"` and
+  `chanceRule: "reworked"`, `startLandingBonus: true`, `turnOrderRule: "clockwise"` and
   `festivalDistribution: "spread"`. The optional open-ended sale marker is
-  server-owned: version-12 and older lobbies omit it and end a forced sale at
+  server-owned: version-13 and older lobbies report `false` and end a forced sale at
   zero cash. No new protocol version is required, because the extra decision
   reuses the existing `sell` pending and the `Decline` intent. The optional festival-distribution selector
   is server-owned: version-11 and older lobbies use `"random"`, preserving their
@@ -172,6 +175,8 @@ debug socket has been removed; `/api/health` remains.
   (cities and resorts); missing markers follow the saved economy. Lobbies before
   version 6 report `worldTourRule: "free-first"`. Existing version-2/3 rooms keep the legacy board,
   prototype economy and their original construction, travel and sale rules.
+  The optional `startLandingBonus` marker is server-owned: rooms through version
+  12 omit it or report `false`, preserving their flat Start salary.
   Lobby snapshots expose their frozen rule markers separately from room settings.
   The strict room-setting schema never accepts internal rule markers; clients
   derive legal construction, travel and sale choices from the shared engine.

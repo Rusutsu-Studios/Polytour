@@ -464,19 +464,57 @@ describe("property economy and build unlocking", () => {
     expect(getPlayer(bought, owner).cash).toBe(2_000_000 + 72_000 + 220_000);
     expect(bought.championshipHost).toBeNull();
   });
+  it("shows everyone a buyout the visitor cannot afford after rent", () => {
+    let state = newGame();
+    const seat = state.activeSeat;
+    state = grant(state, 2, other(state), 1);
+    const price = buyoutPriceAt(state, 2, 1) ?? 0;
+    // From Start, the walk to tile 2 earns no salary before the rent.
+    const rented = land(setPlayer(state, seat, { cash: price }), 2, [1, 1]);
+    expect(getPlayer(rented.state, seat).cash).toBeLessThan(price);
+    expect(rented.events).toContainEqual({
+      type: "PurchaseUnaffordable",
+      seat,
+      tile: 2,
+      purchase: "buyout",
+      price,
+    });
+    expect(rented.state.pending?.kind).not.toBe("buyout");
+  });
 });
 describe("dice, Island, laps and World Tour", () => {
-  it("pays one salary and counts one lap when clockwise movement lands on Start", () => {
+  it("pays one salary at the landing rate and counts one lap when clockwise movement lands on Start", () => {
     const state = newGame();
     const result = land(state, 0, [1, 2]);
     expect(getPlayer(result.state, state.activeSeat)).toMatchObject({
       position: 0,
       laps: 1,
-      cash: 2_400_000,
+      cash: 2_600_000,
     });
     expect(
       result.events.filter((event) => event.type === "SalaryPaid"),
     ).toHaveLength(1);
+  });
+  it("pays the flat salary for a crossing that stops past Start", () => {
+    const state = newGame();
+    const result = land(state, 1, [1, 2]);
+    expect(getPlayer(result.state, state.activeSeat)).toMatchObject({
+      position: 1,
+      laps: 1,
+      cash: 2_400_000,
+    });
+  });
+  it("keeps the flat salary on a saved match made before the landing bonus", () => {
+    const state = newGame(4, { ...CONFIG, startLandingBonus: false });
+    const result = land(state, 0, [1, 2]);
+    expect(getPlayer(result.state, state.activeSeat).cash).toBe(2_400_000);
+  });
+  it("rounds the landing salary down on an odd salary", () => {
+    const state = newGame(4, { ...CONFIG, startSalary: 333_333 });
+    const result = land(state, 0, [1, 2]);
+    expect(getPlayer(result.state, state.activeSeat).cash).toBe(
+      2_000_000 + 499_999,
+    );
   });
   it("finishes the landing before giving a doubles bonus and traps on third double", () => {
     const state = newGame();
@@ -574,12 +612,18 @@ describe("dice, Island, laps and World Tour", () => {
     expect(
       escaped.state.discard.filter((card) => card === "Escape"),
     ).toHaveLength(1);
-    const rolled = act(escaped.state, { type: "Roll" }, [1, 1]).state;
-    expect(getPlayer(rolled, seat).position).toBe(10);
-    expect(act(rolled, { type: "Decline" }).state.pending).toMatchObject({
-      kind: "roll",
-      seat,
-    });
+    // Penniless on a free city: no buy decision, a public notice instead.
+    const rolled = act(escaped.state, { type: "Roll" }, [1, 1]);
+    expect(getPlayer(rolled.state, seat).position).toBe(10);
+    expect(rolled.events).toContainEqual(
+      expect.objectContaining({
+        type: "PurchaseUnaffordable",
+        seat,
+        tile: 10,
+        purchase: "buy",
+      }),
+    );
+    expect(rolled.state.pending).toMatchObject({ kind: "roll", seat });
     for (const invalid of [
       setPlayer(trapped, seat, { heldCards: [] }),
       { ...trapped, pending: { kind: "roll" as const, seat, deadline: 100 } },
@@ -596,7 +640,7 @@ describe("dice, Island, laps and World Tour", () => {
       ).ok,
     ).toBe(false);
   });
-  it("does not offer Escape as a rent card and preserves the automatic Jailbreak effect", () => {
+  it("does not offer Escape as a rent card and preserves the automatic Rescue Boat effect", () => {
     const initial = newGame(4, { ...DEFAULT_GAME_CONFIG, festivalCount: 0 });
     const seat = initial.activeSeat;
     const owner = other(initial);
@@ -619,7 +663,7 @@ describe("dice, Island, laps and World Tour", () => {
       card: "Escape",
     });
     const saved = setPlayer(newGame(), owner, { position: 8, onIsland: true });
-    expect(getPlayer(draw(saved, "Jailbreak").state, owner).onIsland).toBe(
+    expect(getPlayer(draw(saved, "Rescue Boat").state, owner).onIsland).toBe(
       false,
     );
   });
@@ -1034,10 +1078,11 @@ describe("the original sixteen Chance cards", () => {
     const state = newGame(4, { ...CONFIG, boardRule: "country" });
     const seat = state.activeSeat;
     const grand = draw(state, "Grand Tour");
+    // The card lands on Start, so it collects the landing rate.
     expect(getPlayer(grand.state, seat)).toMatchObject({
       position: 0,
       laps: 1,
-      cash: 2_400_000,
+      cash: 2_600_000,
     });
     // Detour steps back from the first Chance square without any salary.
     const detour = draw(state, "Detour");
@@ -1152,12 +1197,12 @@ describe("the original sixteen Chance cards", () => {
     expect(getProperty(swapped, 1)).toMatchObject({ owner: seat, level: 2 });
     expect(swapped.championshipHost).toBeNull();
   });
-  it("Jailbreak releases everyone without moving them and a targetless card does nothing", () => {
+  it("Rescue Boat releases everyone without moving them and a targetless card does nothing", () => {
     const state = newGame();
     const rival = other(state);
     const freed = draw(
       setPlayer(state, rival, { position: 8, onIsland: true, islandTurns: 1 }),
-      "Jailbreak",
+      "Rescue Boat",
     ).state;
     expect(getPlayer(freed, rival)).toMatchObject({
       position: 8,

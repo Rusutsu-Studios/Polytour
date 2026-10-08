@@ -44,6 +44,7 @@ import { prepareDice, resolveDice } from "./randomness.js";
 import {
   CURRENT_STATE_VERSION,
   migrateSavedState,
+  renameChanceCardsInEvent,
 } from "./state-migrations.js";
 import { workerDiagnostics } from "./worker-diagnostics.js";
 
@@ -97,9 +98,10 @@ const LOBBY_LIFETIME = 7_200_000;
  * 10 reworks the Chance deck (see ChanceRule);
  * 11 selects a random starter, then follows the fixed clockwise seats;
  * 12 spreads initial festivals across sides and country groups;
- * 13 lets a seller who has settled their debt keep selling.
+ * 13 pays 1.5x salary for a clockwise landing exactly on Start;
+ * 14 lets a seller who has settled their debt keep selling.
  */
-const RULES_VERSION = 13;
+const RULES_VERSION = 14;
 function frozenRules(version: number | null) {
   if (
     version !== 2 &&
@@ -113,7 +115,8 @@ function frozenRules(version: number | null) {
     version !== 10 &&
     version !== 11 &&
     version !== 12 &&
-    version !== 13
+    version !== 13 &&
+    version !== 14
   )
     throw new Error("Unsupported saved rules version");
   return {
@@ -122,7 +125,7 @@ function frozenRules(version: number | null) {
     hotelPurchaseRule:
       version === 2 ? ("legacy-lap" as const) : ("staged-hotels" as const),
     sellBackPercent: version >= 4 ? (100 as const) : (50 as const),
-    sellBeyondDebt: version >= 13,
+    sellBeyondDebt: version >= 14,
     worldTourRule:
       version >= 6 ? ("free-and-own" as const) : ("free-first" as const),
     fourResortRent: version >= 8,
@@ -134,6 +137,7 @@ function frozenRules(version: number | null) {
       version >= 11 ? ("clockwise" as const) : ("shuffled" as const),
     festivalDistribution:
       version >= 12 ? ("spread" as const) : ("random" as const),
+    startLandingBonus: version >= 13,
   };
 }
 
@@ -313,11 +317,16 @@ export class GameRoom extends DurableObject<Env> {
     const chances = state.config.chanceRule;
     const turnOrder = state.config.turnOrderRule;
     const festivalDistribution = state.config.festivalDistribution;
+    const startBonus = state.config.startLandingBonus;
     if (
-      // Saves made before rules version 13 end a forced sale at zero cash.
+      // Saves through version 13 end a forced sale at zero cash.
       (rulesVersion !== null &&
         extraSales !== frozen.sellBeyondDebt &&
-        (rulesVersion >= 13 || extraSales !== undefined)) ||
+        (rulesVersion >= 14 || extraSales !== undefined)) ||
+      // Saves through version 12 retain their flat salary.
+      (rulesVersion !== null &&
+        startBonus !== frozen.startLandingBonus &&
+        (rulesVersion >= 13 || startBonus !== undefined)) ||
       // Older saves may omit the selector; their recorded festivals stay intact.
       (rulesVersion !== null &&
         festivalDistribution !== frozen.festivalDistribution &&
@@ -1121,7 +1130,9 @@ export class GameRoom extends DurableObject<Env> {
         type: "events",
         fromSeq: lastSeq + 1,
         toSeq: seq,
-        events: rows.map((row) => JSON.parse(row.json) as GameEvent),
+        events: rows.map(
+          (row) => JSON.parse(renameChanceCardsInEvent(row.json)) as GameEvent,
+        ),
         proofs: rows
           .filter((row) => row.proof)
           .map((row) => ({

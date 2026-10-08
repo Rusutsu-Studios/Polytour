@@ -27,6 +27,7 @@ export {
   roundCharge,
   roundPayout,
   ruleEconomy,
+  startLandingSalary,
 } from "./economy.js";
 export { FESTIVAL_TUNING } from "./festivals.js";
 export {

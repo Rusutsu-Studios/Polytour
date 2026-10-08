@@ -244,6 +244,17 @@ upgrade, world-championship, royal-gift and croquet cards; a Hotel hit by Forced
 Sale drops to three houses instead of being exempt. These are Polytour choices,
 not reference values. Version-8 and earlier rooms keep the original deck.
 
+### Start landing bonus: rules version 13, 6 October 2026
+
+At the user's request, a clockwise landing exactly on Start pays 150% of the
+salary (600,000 at the default) instead of the flat amount, and new rooms freeze
+`rulesVersion: 13` with `startLandingBonus: true`. A move that crosses Start and
+stops elsewhere still pays it flat, so only the stop is rewarded; Grand Tour
+lands on Start and therefore collects the bonus too. This is a Polytour choice,
+not a reference value: the reference game pays one flat salary per crossing.
+An exact landing is roughly one in thirty-two stops, so the rule is a corner
+reward rather than a balance lever. Version-10 and earlier rooms pay flat.
+
 ## Capture from the running reference before adding an exact preset
 
 | Area | Evidence needed | Current status |
@@ -284,13 +295,13 @@ separate from the reference evidence above. Existing version-4/5/6 rooms retain
 their original resort festivals, rent and settings; unmarked saved configurations
 fall back to their frozen economy.
 
-### Open-ended forced sale - rules version 13, 7 October 2026
+### Open-ended forced sale - rules version 14, 9 October 2026
 
 At the user's request, a forced sale no longer stops at the exact amount owed.
-New rooms freeze `rulesVersion: 13` with `sellBeyondDebt: true`: once the debt
+New rooms freeze `rulesVersion: 14` with `sellBeyondDebt: true`: once the debt
 clears, the sell decision stays open and the seller keeps selling as many
 properties as they like, ending the phase by declining. A timed-out or bot seat
 declines as soon as it is solvent, so the phase never drags on by itself. The
 reference game closes its sale dialog when the payment is covered, so this is an
 explicit Polytour choice about raising a cash buffer, not a parity claim. Rooms
-through version 12 keep the original behaviour and end the phase at zero.
+through version 13 keep the original behaviour and end the phase at zero.

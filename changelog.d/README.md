@@ -22,7 +22,14 @@ Name the file after your branch or change, for example `changelog.d/lobby-leave.
 ```
 
 - Headings are `### Added`, `### Changed` or `### Fixed`; use only the ones you need.
-- Each note starts with `- `. Mention the issue or pull request number when known.
+- Each note starts with `- ` and describes the change a player will see.
+  These notes appear in the game: omit issue numbers, code paths, protocol/state/rules
+  version numbers, test counts and CI details. Describe saved-match behavior plainly.
+- Internal-only documentation, tooling or CI changes use `<!-- internal -->` on its
+  own line. Keep valid headings and notes for reviewers; the fragment still counts
+  for the version bump and is consumed, but its text stays out of the game.
+  For a change with both player and internal effects, write only the player notes
+  here and explain implementation details in the PR description.
 - The first-line `<!-- bump: minor -->` marker is optional. Patch (the default)
   is for fixes, maintenance and documentation; `minor` for a feature or a
   breaking prototype change; `major` only for a deliberate stable launch.

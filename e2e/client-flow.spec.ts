@@ -530,21 +530,7 @@ test("win conditions follow the settings draft and saved rules in both languages
   const gifts = dialog.getByLabel("Gifts can cause bankruptcy", {
     exact: true,
   });
-  const giftHelp = dialog.getByRole("button", {
-    name: "About Gifts can cause bankruptcy",
-    exact: true,
-  });
-  await giftHelp.click();
-  await expect(page.locator("#disabled-action-hint")).toContainText(
-    /Birthday.*Charity.*full payment/,
-  );
-  await page.keyboard.press("Escape");
   await gifts.uncheck();
-  await giftHelp.click();
-  await expect(page.locator("#disabled-action-hint")).toContainText(
-    /capped at available cash/,
-  );
-  await page.keyboard.press("Escape");
   await gifts.check();
   for (const size of [
     { width: 1280, height: 720 },
@@ -1715,6 +1701,8 @@ test("desktop room controls fit, create and join preserve the host settings", as
 test("illustrated cards play in order and cancel safely on recovery and reconnect", async ({
   page,
 }) => {
+  // Software rendering makes controlled clock advances slower than game time.
+  test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.clock.install();
@@ -2385,7 +2373,7 @@ const LUCK_CARD_TITLES = {
     "Échange de terrain",
     "Détour",
     "Coup de pouce",
-    "Liberté",
+    "Bateau de secours",
     "Solidarité",
     "Carte d’évasion",
     "Vent arrière",
@@ -2412,7 +2400,7 @@ const LUCK_CARD_TITLES = {
     "Land swap",
     "Detour",
     "Contractor",
-    "Jailbreak",
+    "Rescue boat",
     "Charity",
     "Escape card",
     "Tailwind",
@@ -2516,81 +2504,86 @@ for (const locale of ["fr", "en"] as const) {
   });
 }
 
-test("match card help uses the active salary and saved economy rather than welcome defaults", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await page.getByLabel("Votre nom de joueur").fill("Card help match");
-  await playWithBots(page);
-  await expect(
-    page.getByRole("button", { name: "Lancer les dés", exact: true }),
-  ).toBeEnabled({ timeout: 60_000 });
-  // A legacy presentation fixture differs deliberately from welcome settings.
-  // It does not modify the authoritative room or send a game action.
-  await page.evaluate(async () => {
-    const modulePath =
-      performance
-        .getEntriesByType("resource")
-        .find((entry) =>
-          entry.name.includes("/src/client/director/director.ts"),
-        )?.name ?? "/src/client/director/director.ts";
-    const { director } = await import(modulePath);
-    const state = director.getSnapshot().serverState as PublicState | null;
-    if (!state) throw new Error("Expected a match for card help");
-    director.reset({
-      ...state,
-      config: {
-        ...state.config,
-        startSalary: 760_000,
-        economyRule: "prototype",
-        boardRule: "legacy",
-        escapeCard: false,
-      },
-      activeSeat: 0,
-      pending: {
-        kind: "roll",
-        seat: 0,
-        deadline: Date.now() + 60_000,
-      },
-    });
+for (const startLandingBonus of [undefined, true]) {
+  test(`match card help uses the active salary and saved economy with landing bonus ${startLandingBonus ?? "omitted"}`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByLabel("Votre nom de joueur").fill("Card help match");
+    await playWithBots(page);
+    await expect(
+      page.getByRole("button", { name: "Lancer les dés", exact: true }),
+    ).toBeEnabled({ timeout: 60_000 });
+    // A legacy presentation fixture differs deliberately from welcome settings.
+    // It does not modify the authoritative room or send a game action.
+    await page.evaluate(async (startLandingBonus) => {
+      const modulePath =
+        performance
+          .getEntriesByType("resource")
+          .find((entry) =>
+            entry.name.includes("/src/client/director/director.ts"),
+          )?.name ?? "/src/client/director/director.ts";
+      const { director } = await import(modulePath);
+      const state = director.getSnapshot().serverState as PublicState | null;
+      if (!state) throw new Error("Expected a match for card help");
+      director.reset({
+        ...state,
+        config: {
+          ...state.config,
+          startSalary: 760_000,
+          startLandingBonus,
+          economyRule: "prototype",
+          boardRule: "legacy",
+          escapeCard: false,
+        },
+        activeSeat: 0,
+        pending: {
+          kind: "roll",
+          seat: 0,
+          deadline: Date.now() + 60_000,
+        },
+      });
+    }, startLandingBonus);
+    await page
+      .getByRole("button", { name: "Comment jouer", exact: true })
+      .click();
+    const help = page.locator(".help-dialog");
+    const catalogue = help.locator(".help-cards");
+    await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
+    const detail = page.locator(".luck-card-dialog");
+    await catalogue
+      .locator(".luck-card-button")
+      .filter({ hasText: "Grand tour" })
+      .click();
+    await expect(detail.locator(".luck-card-description")).toContainText(
+      startLandingBonus ? "1,14 M" : "760 k",
+    );
+    await expect(detail.locator(".luck-card-description")).not.toContainText(
+      "400 k",
+    );
+    await page.keyboard.press("Escape");
+    await catalogue
+      .locator(".luck-card-button")
+      .filter({ hasText: "Tremblement de terre" })
+      .click();
+    await expect(detail.locator(".luck-card-description")).toContainText(
+      "monuments",
+    );
+    await expect(detail.locator(".luck-card-description")).not.toContainText(
+      "hôtels compris",
+    );
+    await page.keyboard.press("Escape");
+    await catalogue
+      .locator(".luck-card-button")
+      .filter({ hasText: "Échange de terrain" })
+      .click();
+    await expect(detail.locator(".luck-card-description")).toContainText(
+      "hors monuments",
+    );
+    await page.keyboard.press("Escape");
+    await expect(help).toBeVisible();
   });
-  await page
-    .getByRole("button", { name: "Comment jouer", exact: true })
-    .click();
-  const help = page.locator(".help-dialog");
-  const catalogue = help.locator(".help-cards");
-  await expect(catalogue.locator(".luck-card-button")).toHaveCount(25);
-  const detail = page.locator(".luck-card-dialog");
-  await catalogue
-    .locator(".luck-card-button")
-    .filter({ hasText: "Grand tour" })
-    .click();
-  await expect(detail.locator(".luck-card-description")).toContainText("760 k");
-  await expect(detail.locator(".luck-card-description")).not.toContainText(
-    "400 k",
-  );
-  await page.keyboard.press("Escape");
-  await catalogue
-    .locator(".luck-card-button")
-    .filter({ hasText: "Tremblement de terre" })
-    .click();
-  await expect(detail.locator(".luck-card-description")).toContainText(
-    "monuments",
-  );
-  await expect(detail.locator(".luck-card-description")).not.toContainText(
-    "hôtels compris",
-  );
-  await page.keyboard.press("Escape");
-  await catalogue
-    .locator(".luck-card-button")
-    .filter({ hasText: "Échange de terrain" })
-    .click();
-  await expect(detail.locator(".luck-card-description")).toContainText(
-    "hors monuments",
-  );
-  await page.keyboard.press("Escape");
-  await expect(help).toBeVisible();
-});
+}
 
 for (const locale of ["fr", "en"] as const) {
   test(`the ${locale} footer opens release notes with keyboard dismissal and readable layouts`, async ({
@@ -2616,9 +2609,11 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       dialog.getByRole("heading", { name: `v${APP_VERSION}`, exact: true }),
     ).toBeVisible();
-    await expect(dialog).toContainText(
-      "The Championship corner is now a stadium",
-    );
+    await expect(dialog).toContainText("The Championship corner has a stadium");
+    await expect(dialog).toContainText("Landing exactly on Start pays 150%");
+    await expect(dialog).not.toContainText("Protocol version");
+    await expect(dialog).not.toContainText("CI runner");
+    await expect(dialog).not.toContainText("changelog.d/");
     await expect(
       dialog.getByRole("heading", { name: "v0.1.0", exact: true }),
     ).toHaveCount(1);

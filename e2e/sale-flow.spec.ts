@@ -20,6 +20,7 @@ import {
 } from "../src/shared/protocol/index.js";
 import { boardScreenPoint, clickBoardSpace } from "./board-interactions.js";
 import { DESKTOP_SIZES } from "./desktop-sizes.js";
+import { chooseLanguage } from "./language.js";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -351,7 +352,16 @@ test("off-turn debtor selects highlighted cities on the board before confirming 
   await expect(page.locator(".sale-ledger")).toContainText("Argent");
   await expect(page.locator(".sale-ledger")).toContainText("260 k");
   await expect(page.locator(".sale-tile-quote")).toHaveCount(2);
-  await page.getByRole("button", { name: "Terminer les ventes" }).click();
+  await expect(
+    page.getByRole("button", { name: "Terminer les ventes" }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".local/verification/sale-settled-fr.png" });
+  await chooseLanguage(page, "en");
+  await expect(page.locator(".decision-sale")).toContainText("Sell more?");
+  await expect(page.locator(".sale-ledger")).toContainText("Cash");
+  const finish = page.getByRole("button", { name: "Finish selling" });
+  await finish.focus();
+  await page.keyboard.press("Enter");
   await expect.poll(() => room.intents.length).toBe(2);
   expect(room.intents[1].action).toEqual({ type: "Decline" });
   room.commit(1);

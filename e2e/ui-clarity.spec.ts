@@ -826,6 +826,86 @@ test("the lobby settings gear groups personal controls and restores keyboard foc
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
+for (const size of DESKTOP_SIZES) {
+  test(`everyone sees a fitted notice when a player cannot afford a city at ${size.width}x${size.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    // A frozen clock keeps the four-second hold open for slow 4K screenshots.
+    const clockTime = Date.now();
+    await page.clock.install({ time: clockTime - 60 * 60_000 });
+    await page.clock.pauseAt(clockTime);
+    const room = await decisionRoom(page, 100_000, (state) => ({
+      ...state,
+      players: state.players.map((player) =>
+        player.seat === 1 ? { ...player, cash: 640_000 } : player,
+      ),
+    }));
+    await page.keyboard.press("Escape");
+    // Let the board draw a few frames behind the notice.
+    await page.clock.runFor(1500);
+    const notice = page.locator('.notice-dialog[data-moment="notice"][open]');
+    const title = page.locator("#notice-title");
+    const fits = async () => {
+      const box = await notice.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) return;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+    };
+    room.send([
+      {
+        type: "PurchaseUnaffordable",
+        seat: 0,
+        tile: 1,
+        purchase: "buy",
+        price: 350_000,
+      },
+    ]);
+    await expect(notice).toBeVisible();
+    await expect(title).toHaveText(
+      /^Vous n’avez pas assez d’argent pour acheter \S/,
+    );
+    await expect(page.locator("#notice-description")).toHaveText(
+      "Prix 350 k · Argent 100 k",
+    );
+    await fits();
+    // The scene shows the buyer in their own colour, seat 0 here.
+    await expect(notice.locator("image")).toHaveAttribute("href", /buy-0/);
+    await page.screenshot({
+      path: `.local/verification/notice-buy-${size.width}x${size.height}.png`,
+    });
+    await page.getByRole("button", { name: "Continuer", exact: true }).click();
+    await expect(page.locator(".notice-dialog")).toHaveCount(0);
+    room.send([
+      { type: "PropertyBought", seat: 0, tile: 9, level: 2, amount: 0 },
+      {
+        type: "PurchaseUnaffordable",
+        seat: 1,
+        tile: 9,
+        purchase: "buyout",
+        price: 880_000,
+      },
+    ]);
+    await expect(title).toHaveText(
+      /^Atlas n’a pas assez d’argent pour racheter \S/,
+    );
+    await expect(page.locator("#notice-description")).toHaveText(
+      "Rachat 880 k · Argent 640 k",
+    );
+    await fits();
+    // Buyer seat 1 against owner seat 0.
+    await expect(notice.locator("image")).toHaveAttribute("href", /buyout-1-0/);
+    await page.screenshot({
+      path: `.local/verification/notice-buyout-${size.width}x${size.height}.png`,
+    });
+    await page.clock.runFor(4100);
+    await expect(page.locator(".notice-dialog")).toHaveCount(0);
+  });
+}
+
 test("own and opponent cards and taxes keep readable holds and cancel on recovery", async ({
   page,
 }) => {

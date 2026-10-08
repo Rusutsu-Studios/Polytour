@@ -27,6 +27,7 @@ import {
   isResortTile,
   PAUSE_TIMING,
   ruleEconomy,
+  startLandingSalary,
 } from "../board/index.js";
 import { selectInitialFestivals } from "./festivals.js";
 import { applyEvent, toPublic } from "./reducer.js";
@@ -75,6 +76,7 @@ export const DEFAULT_GAME_CONFIG = {
   worldTourRule: "free-and-own",
   fourResortRent: true,
   buildAfterBuyout: true,
+  startLandingBonus: true,
   escapeCard: true,
   chanceRule: "reworked",
   turnOrderRule: "clockwise",
@@ -103,6 +105,17 @@ export function worldTourRule(
 /** Saves before rules version 10 keep the original card set. */
 export function chanceRule(config: Pick<GameConfig, "chanceRule">): ChanceRule {
   return config.chanceRule ?? "original";
+}
+/**
+ * The salary an arrival on Start pays: the bonus rate from rules version 11,
+ * and the flat salary on saves made before it.
+ */
+export function arrivalSalary(
+  config: Pick<GameConfig, "startSalary" | "startLandingBonus">,
+): number {
+  return config.startLandingBonus === true
+    ? startLandingSalary(config.startSalary)
+    : config.startSalary;
 }
 /**
  * The cards a full deck holds under the match's frozen rules: every card with
@@ -392,7 +405,7 @@ export function maxBuildLevel(
 }
 /**
  * Whether a forced sale is now the seller's own choice: the debt is settled
- * and the room lets them keep raising cash. Saves before rules version 13
+ * and the room lets them keep raising cash. Saves before rules version 14
  * close the phase the moment cash reaches zero.
  */
 function optionalSale(state: PublicState, seat: Seat): boolean {
@@ -743,6 +756,8 @@ function animationBudget(events: readonly GameEvent[]): number {
           DECISION_TIMING.moneyAnimation +
           DECISION_TIMING.propertyAnimation
         );
+      case "PurchaseUnaffordable":
+        return total + DECISION_TIMING.noticeAnimation;
       case "PropertyDowngraded":
         return total + DECISION_TIMING.wreckAnimation;
       case "PropertiesSwapped":
@@ -1009,13 +1024,21 @@ function resolver(
       steps,
       laps: player.laps + crossings,
     });
-    if (crossings > 0)
+    if (crossings > 0) {
+      // A clockwise landing exactly on Start pays its crossing at the bonus
+      // rate; any earlier crossing on the same move stays at the flat salary.
+      const landed =
+        position === 0 && (state.config.startLandingBonus ?? false);
+      const amount =
+        state.config.startSalary * (crossings - (landed ? 1 : 0)) +
+        (landed ? startLandingSalary(state.config.startSalary) : 0);
       emit({
         type: "SalaryPaid",
         seat,
-        amount: state.config.startSalary * crossings,
-        cash: player.cash + state.config.startSalary * crossings,
+        amount,
+        cash: player.cash + amount,
       });
+    }
   };
   const moveTo = (seat: Seat, target: number) => {
     move(seat, clockwiseSteps(getPlayer(state, seat).position, target));
@@ -1298,7 +1321,7 @@ function resolver(
       case "Roll Again":
         secrets({ extraRoll: true });
         break;
-      case "Jailbreak":
+      case "Rescue Boat":
         for (const player of state.players)
           if (player.onIsland)
             emit({ type: "LeftIsland", seat: player.seat, method: "card" });
@@ -1346,8 +1369,23 @@ function resolver(
         const property = getProperty(state, tile.index);
         if (!property) throw new Error("Missing property state");
         if (property.owner === null) {
-          const maxLevel = maxBuildLevel(state, seat, tile.index, true);
-          open({ kind: "buy", seat, tile: tile.index, maxLevel });
+          // Without the cash for even the land, everyone sees why nothing opens.
+          const price = purchaseCost(state, tile.index, 0);
+          if (player.cash < price)
+            emit({
+              type: "PurchaseUnaffordable",
+              seat,
+              tile: tile.index,
+              purchase: "buy",
+              price,
+            });
+          else
+            open({
+              kind: "buy",
+              seat,
+              tile: tile.index,
+              maxLevel: maxBuildLevel(state, seat, tile.index, true),
+            });
         } else if (property.owner === seat) {
           offerBuild(seat, tile.index);
         } else {
@@ -1451,6 +1489,14 @@ function resolver(
             const price = buyoutPriceAt(state, task.tile, property.level);
             if (price !== null && getPlayer(state, task.seat).cash >= price)
               open({ kind: "buyout", seat: task.seat, tile: task.tile, price });
+            else if (price !== null)
+              emit({
+                type: "PurchaseUnaffordable",
+                seat: task.seat,
+                tile: task.tile,
+                purchase: "buyout",
+                price,
+              });
           }
           break;
         }
@@ -2565,6 +2611,11 @@ export function createGame(
   )
     throw new RangeError("Extra sale rule must be a boolean");
   if (
+    config.startLandingBonus !== undefined &&
+    typeof config.startLandingBonus !== "boolean"
+  )
+    throw new RangeError("Start landing bonus rule must be a boolean");
+  if (
     config.chanceRule !== undefined &&
     !["reworked", "original"].includes(config.chanceRule)
   )
@@ -2685,6 +2736,7 @@ export function createGame(
       fourResortRent: config.fourResortRent ?? true,
       buildAfterBuyout: config.buildAfterBuyout ?? true,
       escapeCard: config.escapeCard ?? true,
+      startLandingBonus: config.startLandingBonus ?? true,
       chanceRule: chances,
       turnOrderRule,
       sellBackPercent: config.sellBackPercent ?? economy.sellBackPercent,

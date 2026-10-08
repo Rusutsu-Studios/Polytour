@@ -90,7 +90,7 @@ import {
   shieldTexture,
 } from "./board-textures.js";
 import { Downtown, type DowntownHandle } from "./Downtown.js";
-import { BeachUmbrella, Landmarks } from "./Landmarks.js";
+import { BeachUmbrella, bake, Landmarks } from "./Landmarks.js";
 import { useBoardView } from "./use-board-view.js";
 
 const DEFAULT_BOARD_ROTATION = new THREE.Quaternion();
@@ -500,6 +500,125 @@ type TownsHandle = {
 const GROWTH_STAGGER = 0.16;
 const GROWTH_SPAN = 0.6;
 const growthEase = gsap.parseEase("back.out(2.2)");
+/** Every small house on the lots, at most three on each of the 32 spaces. */
+const HOUSE_CAPACITY = 96;
+
+/** A unit triangular prism, base on y = 0 and centered on z. */
+function prism() {
+  const triangle = new THREE.Shape();
+  triangle.moveTo(-0.5, 0);
+  triangle.lineTo(0.5, 0);
+  triangle.lineTo(0, 1);
+  triangle.closePath();
+  const geometry = new THREE.ExtrudeGeometry(triangle, {
+    depth: 1,
+    bevelEnabled: false,
+    steps: 1,
+  });
+  return geometry.translate(0, 0, -0.5);
+}
+
+/**
+ * The one small house of the lots, front door toward local +z. It is baked
+ * into two vertex-coloured geometries that share every instance matrix: a
+ * fixed body (walls, door, windows, chimney) and a trim (plinth, roof, ridge)
+ * whose shades are multiplied by the owner colour. It keeps few, large parts
+ * so a full board stays calm.
+ */
+function houseGeometry() {
+  const width = 0.23;
+  const depth = 0.26;
+  const wall = 0.185;
+  const rise = 0.12;
+  const eave = 0.02;
+  const thickness = 0.022;
+  const front = depth / 2;
+  const slope = Math.atan2(rise, width / 2);
+  const span = width / 2 + eave;
+  const ridge = wall + rise + Math.cos(slope) * thickness;
+  const chimneyX = 0.058;
+  const chimneyBottom = wall + rise - Math.tan(slope) * chimneyX - 0.01;
+  const chimneyTop = ridge + 0.03;
+  const box = (x: number, y: number, z: number) =>
+    new THREE.BoxGeometry(x, y, z);
+  const glass = "#3d6584";
+  const body = bake([
+    {
+      geometry: box(width, wall, depth),
+      color: "#fffaf4",
+      position: [0, wall / 2, 0],
+    },
+    {
+      geometry: prism(),
+      color: "#fffaf4",
+      position: [0, wall, 0],
+      scale: [width, rise, depth],
+    },
+    // A window and an off-centre door on the front, and two windows like it
+    // on every other wall, so the house reads from any side.
+    ...[-0.055, 0.055].map((x) => ({
+      geometry: box(0.05, 0.056, 0.01),
+      color: glass,
+      position: [x, 0.105, -front - 0.004] as const,
+    })),
+    {
+      geometry: box(0.05, 0.056, 0.01),
+      color: glass,
+      position: [-0.055, 0.105, front + 0.004],
+    },
+    {
+      geometry: box(0.06, 0.1, 0.012),
+      color: "#8b5a3c",
+      position: [0.05, 0.08, front + 0.004],
+    },
+    ...[-1, 1].flatMap((side) =>
+      [-0.07, 0.07].map((z) => ({
+        geometry: box(0.01, 0.056, 0.05),
+        color: glass,
+        position: [side * (width / 2 + 0.004), 0.105, z] as const,
+      })),
+    ),
+    // A stone chimney through the right slope.
+    {
+      geometry: box(0.044, chimneyTop - chimneyBottom, 0.044),
+      color: "#cdbca9",
+      position: [chimneyX, (chimneyTop + chimneyBottom) / 2, -0.05],
+    },
+    {
+      geometry: box(0.056, 0.018, 0.056),
+      color: "#5e5650",
+      position: [chimneyX, chimneyTop, -0.05],
+    },
+  ]);
+  const trim = bake([
+    {
+      geometry: box(width + 0.03, 0.03, depth + 0.03),
+      color: "#c8c8c8",
+      position: [0, 0.015, 0],
+    },
+    // Two roof boards resting on the gable, overhanging every wall.
+    ...[-1, 1].map((side) => ({
+      geometry: box(span / Math.cos(slope), thickness, depth + 0.05),
+      color: "#ffffff",
+      position: [
+        side * (span / 2 + (Math.sin(slope) * thickness) / 2),
+        wall +
+          rise -
+          Math.tan(slope) * (span / 2) +
+          (Math.cos(slope) * thickness) / 2,
+        0,
+      ] as const,
+      rotation: [0, 0, -side * slope] as const,
+    })),
+    // The ridge beam closes the joint between the boards.
+    {
+      geometry: box(0.04, 0.024, depth + 0.056),
+      color: "#b8b8b8",
+      position: [0, ridge - 0.006, 0],
+    },
+  ]);
+  return { body, trim };
+}
 
 function Towns({
   state,
@@ -518,34 +637,27 @@ function Towns({
   const roofs = useRef<THREE.InstancedMesh>(null);
   const windows = useRef<THREE.InstancedMesh>(null);
   const details = useRef<THREE.InstancedMesh>(null);
+  const houseBodies = useRef<THREE.InstancedMesh>(null);
+  const houseTrims = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
-  const roofGeometry = useMemo(() => {
-    const triangle = new THREE.Shape();
-    triangle.moveTo(-0.5, 0);
-    triangle.lineTo(0.5, 0);
-    triangle.lineTo(0, 1);
-    triangle.closePath();
-    const geometry = new THREE.ExtrudeGeometry(triangle, {
-      depth: 1,
-      bevelEnabled: false,
-      steps: 1,
-    });
-    geometry.translate(0, 0, -0.5);
-    return geometry;
-  }, []);
+  const roofGeometry = useMemo(prism, []);
+  const house = useMemo(houseGeometry, []);
   const draw = useCallback(
     (view: PublicState | null, growth: Growth | null) => {
       if (
         !walls.current ||
         !roofs.current ||
         !windows.current ||
-        !details.current
+        !details.current ||
+        !houseBodies.current ||
+        !houseTrims.current
       )
         return;
       let count = 0;
       let windowCount = 0;
       let detailCount = 0;
+      let houseCount = 0;
       for (const tile of board) {
         const resort = tile.kind === "resort";
         if (tile.kind !== "city" && !resort) continue;
@@ -608,6 +720,39 @@ function Towns({
         const angle = tileRotation(tile.index);
         const bandZ = buildingBandZ(tile.index);
         const [faceX, faceZ] = visibleFaces(tile.index);
+        // Width and height scales of the crew's next building, or null
+        // before it starts.
+        const stage = (): [number, number] | null => {
+          if (!growing) return [1, 1];
+          const progress = THREE.MathUtils.clamp(
+            (growing.progress - order++ * GROWTH_STAGGER) / GROWTH_SPAN,
+            0,
+            1,
+          );
+          if (progress === 0) return null;
+          // Overshoots, then settles: the building pops out of its plot.
+          return [
+            0.7 + 0.3 * Math.min(1, progress * 1.6),
+            Math.max(0.02, growthEase(progress)),
+          ];
+        };
+        const smallHouse = (plotX: number) => {
+          const scale = stage();
+          if (!scale) return;
+          const [x, z] = tilePoint(
+            tile.index,
+            plotX + (growing?.shake ?? 0),
+            bandZ,
+          );
+          // The door turns toward the camera; the side walls are alike.
+          dummy.rotation.set(0, faceZ > 0 ? angle : angle + Math.PI, 0);
+          dummy.position.set(x, LOT_TOP, z);
+          dummy.scale.set(scale[0], scale[1], scale[0]);
+          dummy.updateMatrix();
+          houseBodies.current?.setMatrixAt(houseCount, dummy.matrix);
+          houseTrims.current?.setMatrixAt(houseCount, dummy.matrix);
+          houseTrims.current?.setColorAt(houseCount++, color.set(roofColor));
+        };
         const building = (
           plotX: number,
           fullWidth: number,
@@ -616,24 +761,13 @@ function Towns({
           overhang = 0.05,
           roofHeight = level >= 4 ? 0.13 : 0.12,
         ) => {
-          let width = fullWidth;
-          let height = fullHeight;
+          const scale = stage();
+          if (!scale) return;
+          const width = fullWidth * scale[0];
+          const height = fullHeight * scale[1];
           const localX = plotX + (growing?.shake ?? 0);
           const [x, z] = tilePoint(tile.index, localX, bandZ);
           const base = LOT_TOP;
-          if (growing) {
-            const start = order * GROWTH_STAGGER;
-            const progress = THREE.MathUtils.clamp(
-              (growing.progress - start) / GROWTH_SPAN,
-              0,
-              1,
-            );
-            order += 1;
-            if (progress === 0) return;
-            // Overshoots, then settles: the building pops out of its plot.
-            height *= Math.max(0.02, growthEase(progress));
-            width *= 0.7 + 0.3 * Math.min(1, progress * 1.6);
-          }
           dummy.rotation.set(0, angle, 0);
           dummy.position.set(x, base + height / 2, z);
           dummy.scale.set(width, height, depth);
@@ -686,7 +820,7 @@ function Towns({
         } else if (level >= 1 && level <= 3) {
           const offsets =
             level === 1 ? [0] : level === 2 ? [-0.2, 0.2] : [-0.3, 0, 0.3];
-          for (const x of offsets) building(x, level === 1 ? 0.3 : 0.24, 0.22);
+          for (const x of offsets) smallHouse(x);
         } else if (level === 4) {
           building(0, 0.44, 0.44, 0.32);
           building(-0.34, 0.14, 0.2);
@@ -700,11 +834,14 @@ function Towns({
       walls.current.count = roofs.current.count = count;
       windows.current.count = windowCount;
       details.current.count = detailCount;
+      houseBodies.current.count = houseTrims.current.count = houseCount;
       for (const object of [
         walls.current,
         roofs.current,
         windows.current,
         details.current,
+        houseBodies.current,
+        houseTrims.current,
       ]) {
         object.instanceMatrix.needsUpdate = true;
         if (object.instanceColor) object.instanceColor.needsUpdate = true;
@@ -721,8 +858,29 @@ function Towns({
   }, [handle, draw]);
   useEffect(() => draw(state, null), [state, draw]);
   useEffect(() => () => roofGeometry.dispose(), [roofGeometry]);
+  useEffect(
+    () => () => {
+      house.body.dispose();
+      house.trim.dispose();
+    },
+    [house],
+  );
   return (
     <>
+      <instancedMesh
+        ref={houseBodies}
+        args={[house.body, undefined, HOUSE_CAPACITY]}
+        castShadow
+      >
+        <meshStandardMaterial vertexColors roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh
+        ref={houseTrims}
+        args={[house.trim, undefined, HOUSE_CAPACITY]}
+        castShadow
+      >
+        <meshStandardMaterial vertexColors roughness={0.75} />
+      </instancedMesh>
       <instancedMesh ref={walls} args={[undefined, undefined, 72]} castShadow>
         <boxGeometry />
         <meshStandardMaterial roughness={0.95} />
@@ -2711,6 +2869,7 @@ function SaleLabels({
 
 export default function BoardScene(props: BoardProps) {
   const { t } = useLocale();
+  const { reducedMotion } = useDirector();
   const config = props.state?.config ?? props.config;
   const layer = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -2726,7 +2885,8 @@ export default function BoardScene(props: BoardProps) {
     (x: number, y: number) => hitTest.current(x, y),
     [],
   );
-  const zoom = clampBoardZoom(props.zoom ?? 1);
+  const requestedZoom = clampBoardZoom(props.zoom ?? 1);
+  const [zoom, setZoom] = useState(requestedZoom);
   const framing = useMemo(
     () =>
       frameBoard(
@@ -2748,6 +2908,9 @@ export default function BoardScene(props: BoardProps) {
     ),
     locked: Boolean(props.viewLocked),
     zoom,
+    requestedZoom,
+    onViewZoom: setZoom,
+    reducedMotion,
     onZoom: props.onZoom,
     resetKey: props.viewResetKey,
     limits: framing.limits,

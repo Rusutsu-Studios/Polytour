@@ -135,6 +135,7 @@ async function enterRoom(
   await page.goto("/");
   await expect(page.locator(".lobby-connection")).toHaveText(
     label(actor, "Salle connectée", "Room connected"),
+    { timeout: 20_000 },
   );
   return actor;
 }

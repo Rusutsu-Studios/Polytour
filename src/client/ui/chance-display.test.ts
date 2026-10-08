@@ -16,13 +16,28 @@ afterEach(() => setLocale("fr"));
 
 describe("luck-card descriptions without a draw", () => {
   it.each(["fr", "en"] as const)(
-    "uses the configured salary in %s instead of the default amount",
+    "uses the configured landing salary in %s instead of the default amount",
     (locale) => {
       setLocale(locale);
       const config = { ...DEFAULT_GAME_CONFIG, startSalary: 760_000 };
+      // Grand Tour lands on Start, so it collects 150% of the configured salary.
+      const description = describeChanceCard("Grand Tour", config);
+      expect(description.text).toContain(locale === "fr" ? "1,14 M" : "1.14 M");
+      expect(description.text).not.toContain("400 k");
+    },
+  );
+
+  it.each(["fr", "en"] as const)(
+    "keeps the flat salary in %s on a saved match without the landing bonus",
+    (locale) => {
+      setLocale(locale);
+      const config = {
+        ...DEFAULT_GAME_CONFIG,
+        startSalary: 760_000,
+        startLandingBonus: false,
+      };
       const description = describeChanceCard("Grand Tour", config);
       expect(description.text).toContain("760 k");
-      expect(description.text).not.toContain("400 k");
     },
   );
 
@@ -173,8 +188,8 @@ describe("luck-card descriptions without a draw", () => {
         locale === "fr" ? "défaussée après usage" : "Discard it after use",
       );
       expect(
-        describeChanceCard("Jailbreak", DEFAULT_GAME_CONFIG).text,
-      ).toContain(locale === "fr" ? "Tous les joueurs" : "All players");
+        describeChanceCard("Rescue Boat", DEFAULT_GAME_CONFIG).text,
+      ).toContain(locale === "fr" ? "bateau de secours" : "rescue boat");
     },
   );
 

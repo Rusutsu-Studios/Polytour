@@ -10,6 +10,7 @@ import type { BuildLevel } from "../../shared/board/types.js";
 import {
   type Action,
   actionCost,
+  arrivalSalary,
   buyoutPriceAt,
   cashRankedOpponent,
   championshipCost,
@@ -309,9 +310,10 @@ function pickDetail(action: BoardPickAction, state: PublicState): string {
       ? `${owner.name} · ${levelName(property?.level ?? 0)}`
       : levelName(property?.level ?? 0);
   if (getBoard(state.config)[tile].kind === "start")
+    // Arriving on Start is a landing, so it collects the landing rate.
     return t(
-      `Salaire de ${money(state.config.startSalary)} à l’arrivée`,
-      `Collect ${money(state.config.startSalary)} on arrival`,
+      `Salaire de ${money(arrivalSalary(state.config))} à l’arrivée`,
+      `Collect ${money(arrivalSalary(state.config))} on arrival`,
     );
   if (owner)
     return resort

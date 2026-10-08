@@ -49,6 +49,8 @@ export type GameConfig = {
   readonly fourResortRent?: boolean;
   /** Missing on saves before rules version 8: a bought-out city is not built on. */
   readonly buildAfterBuyout?: boolean;
+  /** Missing on saves before rules version 11: landing on Start pays a flat salary. */
+  readonly startLandingBonus?: boolean;
   /** Missing on saves before rules version 9: retain the original Chance deck. */
   readonly escapeCard?: boolean;
   /** Missing on saves before rules version 10: the original card set. */
@@ -57,7 +59,7 @@ export type GameConfig = {
   readonly turnOrderRule?: "clockwise" | "shuffled";
   /** An explicit room rule wins; old prototype saves default to 50%. */
   readonly sellBackPercent?: 50 | 100;
-  /** Missing on saves before rules version 13: a forced sale stops at zero. */
+  /** Missing on saves before rules version 14: a forced sale stops at zero. */
   readonly sellBeyondDebt?: boolean;
   readonly extraRollOnDouble?: boolean;
   /** Missing on existing saves: the third consecutive double sends you to the island. */
@@ -83,7 +85,7 @@ export const LEGACY_CHANCE_CARDS = [
   "Land Swap",
   "Detour",
   "Contractor",
-  "Jailbreak",
+  "Rescue Boat",
   "Charity",
 ] as const;
 /** Reworked decks only (rules version 10). */
@@ -400,6 +402,17 @@ export type GameEvent =
       readonly previousOwner: Seat;
       readonly tile: number;
       readonly amount: number;
+    }
+  /**
+   * A player cannot pay for the city or resort they landed on: the land of a
+   * free one, or the buyout of an opponent's. Public notice only; no state change.
+   */
+  | {
+      readonly type: "PurchaseUnaffordable";
+      readonly seat: Seat;
+      readonly tile: number;
+      readonly purchase: "buy" | "buyout";
+      readonly price: number;
     }
   | {
       readonly type: "RentPaid";

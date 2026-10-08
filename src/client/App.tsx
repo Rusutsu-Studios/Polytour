@@ -1392,7 +1392,7 @@ function MatchView({
         </SceneBoundary>
       </div>
 
-      <CardMoment obscured={pauseOpen} />
+      <CardMoment obscured={pauseOpen} ownSeat={sharedScreen ? null : own} />
 
       <header className="match-topbar">
         <Logo small />
@@ -1461,7 +1461,12 @@ function MatchView({
           type="button"
           className="game-tool-button"
           aria-label={t("Recentrer le plateau", "Reset board view")}
-          title={t("Recentrer le plateau", "Reset board view")}
+          data-help-title={t("Recentrer le plateau", "Reset board view")}
+          data-help-message={t(
+            "Revenir à la vue par défaut.",
+            "Return to the default view.",
+          )}
+          data-help-pin="false"
           disabled={!boardZoomAvailable}
           disabledReason={t(
             "Le recentrage est disponible sur le plateau 3D.",
@@ -1536,7 +1541,7 @@ function MatchView({
           title={t("Comment jouer", "How to play")}
           onClick={onHelp}
         >
-          <Icon name="help" size={18} />
+          <Icon name="book" size={18} />
         </button>
         <button
           type="button"
@@ -2139,6 +2144,9 @@ function App() {
     chanceRule: room.lobby?.chanceRule ?? "reworked",
     resortFestivals: room.lobby ? resortFestivals(room.lobby) : false,
     escapeCard: room.lobby ? room.lobby.escapeCard === true : true,
+    startLandingBonus: room.lobby
+      ? room.lobby.startLandingBonus === true
+      : true,
   };
   const you = room.you?.seat ?? null;
   const leader = you !== null && you === room.lobby?.hostSeat;
@@ -2177,7 +2185,7 @@ function App() {
               className="text-button help-button"
               onClick={() => setHelpOpen(true)}
             >
-              <Icon name="help" size={18} />
+              <Icon name="book" size={18} />
               <span>{t("Comment jouer", "How to play")}</span>
             </button>
             {(credentials || invitationCode !== null) && (

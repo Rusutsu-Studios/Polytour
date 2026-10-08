@@ -246,6 +246,10 @@ async function closeInbox(inbox: Inbox): Promise<void> {
   await closed;
 }
 beforeEach(async () => {
+  // Edge throttling is covered in worker-api.test.ts; room fixtures share no quota.
+  vi.spyOn(env.ROOM_CREATION_RATE_LIMIT, "limit").mockResolvedValue({
+    success: true,
+  });
   // Each test shares the real creation gate only among its own room fixtures.
   await runInDurableObject(
     env.MATCHMAKER.getByName("room-admission"),
@@ -2935,6 +2939,7 @@ describe("Authoritative private rooms", () => {
       const {
         sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
+        startLandingBonus: _bonus,
         ...config
       } = saved.config;
       sql.exec("UPDATE meta SET v='11' WHERE k='rulesVersion'");
@@ -3021,7 +3026,7 @@ describe("Authoritative private rooms", () => {
               .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
               .toArray()[0].json,
           ) as GameState;
-          sql.exec("UPDATE meta SET v='13' WHERE k='rulesVersion'");
+          sql.exec("UPDATE meta SET v='14' WHERE k='rulesVersion'");
           sql.exec(
             "UPDATE state SET json=? WHERE id=1",
             JSON.stringify({
@@ -3057,7 +3062,86 @@ describe("Authoritative private rooms", () => {
       expect(lobby.festivalDistribution).toBe("spread");
     },
   );
-  it("freezes new rooms on rules version 13 with open-ended sales, the Escape card, the reworked deck and the current economy", async () => {
+  it.each([13, 14])(
+    "keeps version-%i forced-sale behavior after eviction",
+    async (version) => {
+      const game = await startFour();
+      const active = game.state.activeSeat;
+      const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
+      await runInDurableObject(stub, (_instance, durableState) => {
+        const sql = durableState.storage.sql;
+        const saved = JSON.parse(
+          sql
+            .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
+            .toArray()[0].json,
+        ) as GameState;
+        const { sellBeyondDebt: _extraSales, ...oldConfig } = saved.config;
+        sql.exec("UPDATE meta SET v=? WHERE k='rulesVersion'", String(version));
+        sql.exec(
+          "UPDATE state SET json=? WHERE id=1",
+          JSON.stringify({
+            ...saved,
+            config: version === 14 ? saved.config : oldConfig,
+            phase: "resolve",
+            players: saved.players.map((player) =>
+              player.seat === active
+                ? { ...player, cash: -1, properties: [1, 2] }
+                : player,
+            ),
+            properties: saved.properties.map((property) =>
+              [1, 2].includes(property.tile)
+                ? { ...property, owner: active }
+                : property,
+            ),
+            pending: {
+              kind: "sell",
+              seat: active,
+              targets: [1, 2],
+              creditor: null,
+              deadline: Date.now() + 120_000,
+            },
+            resolutionQueue: [{ kind: "finish" }],
+          }),
+        );
+      });
+      await evictDurableObject(stub);
+      const inbox = await connect(game.credentials[active]);
+      const welcome = await inbox.next("welcome");
+      if (!welcome.snapshot) throw new Error("Expected saved match snapshot");
+      expect(welcome.snapshot.config.startLandingBonus).toBe(true);
+      inbox.send({
+        type: "intent",
+        id: "settle-debt",
+        atSeq: welcome.seq,
+        action: { type: "Sell", tile: 1 },
+      });
+      const sold = await inbox.next("events");
+      const settled = sold.events.reduce(applyEvent, welcome.snapshot);
+      expect(settled.players[active].cash).toBeGreaterThanOrEqual(0);
+      if (version === 13) {
+        expect(settled.pending?.kind).not.toBe("sell");
+      } else {
+        expect(settled.pending).toMatchObject({ kind: "sell", targets: [2] });
+        await closeInbox(inbox);
+        await evictDurableObject(stub);
+        const resumed = await connect(game.credentials[active]);
+        const recovered = await resumed.next("welcome");
+        expect(recovered.snapshot?.pending).toEqual(settled.pending);
+        resumed.send({
+          type: "intent",
+          id: "finish-selling",
+          atSeq: recovered.seq,
+          action: { type: "Decline" },
+        });
+        const finished = await resumed.next("events");
+        const next = finished.events.reduce(applyEvent, settled);
+        expect(next.pending?.kind).not.toBe("sell");
+        expect(next.players[active].properties).toEqual([2]);
+      }
+    },
+  );
+
+  it("freezes new rooms on rules version 14 with open-ended sales, the Start landing bonus and the current economy", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -3073,6 +3157,7 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.festivalDistribution).toBe("spread");
     expect(game.state.config.escapeCard).toBe(true);
     expect(game.state.config.sellBeyondDebt).toBe(true);
+    expect(game.state.config.startLandingBonus).toBe(true);
     const cities = getBoard(game.state.config)
       .filter(isCityTile)
       .map((tile) => tile.index);
@@ -3091,7 +3176,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("13");
+    expect(rules).toBe("14");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
@@ -3103,6 +3188,7 @@ describe("Authoritative private rooms", () => {
     expect(welcome.lobby.sellBeyondDebt).toBe(true);
     expect(welcome.snapshot?.config.escapeCard).toBe(true);
     expect(welcome.snapshot?.config.sellBeyondDebt).toBe(true);
+    expect(welcome.snapshot?.config.startLandingBonus).toBe(true);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
     expect(welcome.snapshot?.startingTurnOrder).toEqual(
       game.state.startingTurnOrder,
@@ -3117,6 +3203,10 @@ describe("Authoritative private rooms", () => {
     { version: "8", marker: true, ownReachable: true },
     { version: "9", marker: true, ownReachable: true },
     { version: "10", marker: true, ownReachable: true },
+    { version: "11", marker: true, ownReachable: true },
+    { version: "12", marker: true, ownReachable: true },
+    { version: "13", marker: true, ownReachable: true },
+    { version: "14", marker: true, ownReachable: true },
   ])(
     "opens a version-$version World Tour with the room's frozen destinations",
     async ({ version, marker, ownReachable }) => {
@@ -3130,7 +3220,8 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
-        const { sellBeyondDebt: _extraSales, ...v12 } = saved.config;
+        const { sellBeyondDebt: _extraSales, ...v13 } = saved.config;
+        const { startLandingBonus: _bonus, ...v12 } = v13;
         const { festivalDistribution: _distribution, ...v11 } = v12;
         const { chanceRule: _chance, ...v9 } = v11;
         const { escapeCard: _escape, ...v8 } = v9;
@@ -3141,25 +3232,36 @@ describe("Authoritative private rooms", () => {
           buildAfterBuyout: _build,
           ...bare
         } = v8;
-        // Versions before 10 predate the Chance marker; before 9 the Escape
-        // card; before 8 the resort and buyout markers; before 7 the festival
-        // marker, and before 6 the World Tour marker.
+        // Versions before 13 predate the Start landing marker; before 12 the
+        // festival-distribution marker; before 10 the
+        // Chance marker; before 9 the Escape card; before 8 the resort and
+        // buyout markers; before 7 the festival marker, and before 6 the World
+        // Tour marker.
         const config =
-          version === "10"
-            ? v11
-            : version === "9"
-              ? v9
-              : version === "8"
-                ? v8
-                : version === "7"
-                  ? {
-                      ...bare,
-                      resortFestivals: saved.config.resortFestivals,
-                      worldTourRule: saved.config.worldTourRule,
-                    }
-                  : marker
-                    ? { ...bare, worldTourRule: saved.config.worldTourRule }
-                    : bare;
+          version === "14"
+            ? saved.config
+            : version === "13"
+              ? v13
+              : version === "12"
+                ? v12
+                : version === "11" || version === "10"
+                  ? v11
+                  : version === "9"
+                    ? v9
+                    : version === "8"
+                      ? v8
+                      : version === "7"
+                        ? {
+                            ...bare,
+                            resortFestivals: saved.config.resortFestivals,
+                            worldTourRule: saved.config.worldTourRule,
+                          }
+                        : marker
+                          ? {
+                              ...bare,
+                              worldTourRule: saved.config.worldTourRule,
+                            }
+                          : bare;
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
           version,
@@ -3204,6 +3306,14 @@ describe("Authoritative private rooms", () => {
       const welcome = await resumed.next("welcome");
       expect(welcome.lobby.worldTourRule).toBe(
         marker ? "free-and-own" : "free-first",
+      );
+      expect(welcome.lobby.sellBeyondDebt).toBe(version === "14");
+      expect(welcome.snapshot?.config.sellBeyondDebt).toBe(
+        version === "14" ? true : undefined,
+      );
+      expect(welcome.lobby.startLandingBonus).toBe(Number(version) >= 13);
+      expect(welcome.snapshot?.config.startLandingBonus).toBe(
+        Number(version) >= 13 ? true : undefined,
       );
       resumed.send({
         type: "intent",
@@ -3251,6 +3361,7 @@ describe("Authoritative private rooms", () => {
         sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...config
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3417,6 +3528,7 @@ describe("Authoritative private rooms", () => {
         sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3537,6 +3649,7 @@ describe("Authoritative private rooms", () => {
         sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3715,6 +3828,7 @@ describe("Authoritative private rooms", () => {
         sellBeyondDebt: _extraSales,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3832,12 +3946,13 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 11, 12, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
       // cannot carry its World Tour marker, version 6 cannot exclude resort
       // festivals, version 7 the version-8 markers, version 8 the Escape card,
-      // version 9 the reworked Chance deck, version 11 the spread marker,
-      // version 12 the open-ended sale marker, and 999 is unknown.
+      // version 9 the reworked Chance deck, versions 10-12 the Start landing
+      // bonus, version 11 the spread marker, version 13 the open-ended
+      // sale marker, and 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -3855,7 +3970,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='13' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='14' WHERE k='rulesVersion'",
       ),
     );
   });
