@@ -50,9 +50,22 @@ jobs:
           git add -A
           git commit -m "Release v$VERSION"
           git push --force origin release/next
-          if gh pr view release/next --json state --jq .state 2>/dev/null | grep -q OPEN; then
-            gh pr edit release/next --title "Release v$VERSION"
+          pr=$(gh pr list --base main --head release/next --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "Release v$VERSION"
           else
-            gh pr create --base main --head release/next --title "Release v$VERSION" \
-              --body "Folds the pending changelog fragments into CHANGELOG.md and bumps the version. Merge to release; this PR is rebuilt on every push to main."
+            if gh pr create --base main --head release/next --title "Release v$VERSION" \
+              --body "Updates the in-game release notes and application version from the pending changelog fragments. Review and merge to release; this PR is rebuilt on every push to main." \
+              2> "$RUNNER_TEMP/release-pr-error"; then
+              echo "Release PR created."
+            else
+              status=$?
+              if grep -Fq 'GitHub Actions is not permitted to create or approve pull requests (createPullRequest)' "$RUNNER_TEMP/release-pr-error"; then
+                echo "::warning::GitHub policy blocks automatic PR creation. Open the prepared release PR using the link in the job summary."
+                echo "[Open release v$VERSION PR]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...release/next?expand=1)" >> "$GITHUB_STEP_SUMMARY"
+              else
+                cat "$RUNNER_TEMP/release-pr-error" >&2
+                exit "$status"
+              fi
+            fi
           fi

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -220,6 +220,23 @@ export function validateBase(
     return baseVersion;
   }
   const baseSections = parseChangelog(baseChangelog);
+  const digest = (sections: Section[]) =>
+    createHash("sha256")
+      .update(
+        JSON.stringify(
+          sections.map(({ heading, body }) => ({ heading, body })),
+        ),
+      )
+      .digest("hex");
+  // One reviewed editorial rewrite; any other change to dated history still fails.
+  const playerNotesRewrite =
+    digest(baseSections.slice(1)) ===
+      "d39871c1a8328262f0e28eba177479f95dccae6bad3ced391523415804fb8f41" &&
+    digest(
+      release.sections.filter((section) =>
+        baseSections.slice(1).some((base) => base.version === section.version),
+      ),
+    ) === "574f999efbd56d2b33fff952ec890d35b5b622f893c2d83f5612ea149e129bb8";
   for (const shipped of baseSections.slice(1)) {
     const current = release.sections.find(
       (section) => section.version === shipped.version,
@@ -227,7 +244,7 @@ export function validateBase(
     if (
       !current ||
       current.heading !== shipped.heading ||
-      current.body !== shipped.body
+      (!playerNotesRewrite && current.body !== shipped.body)
     ) {
       throw new Error(
         `Released CHANGELOG.md section ${shipped.version} differs from ${ref}; released entries are immutable.`,
