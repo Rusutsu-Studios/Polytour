@@ -9,6 +9,7 @@ export {
   applyAction,
   applyEvent,
   applyTimeout,
+  arrivalSalary,
   boardRule,
   botAction,
   botDecisionAt,

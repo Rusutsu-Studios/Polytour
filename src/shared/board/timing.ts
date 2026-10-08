@@ -17,6 +17,8 @@ export const DECISION_TIMING = {
   jumpAnimation: 900,
   cardAnimation: 8_000,
   taxAnimation: 6_000,
+  /** The public "cannot afford" notice for a city or a buyout. */
+  noticeAnimation: 4_000,
   moneyAnimation: 650,
   propertyAnimation: 1_100,
   /** Earthquake: the city shakes, its top building sinks, the rest settle. */

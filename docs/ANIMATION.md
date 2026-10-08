@@ -42,7 +42,9 @@ verified behavior is recorded separately in [PLAYABLE_CHECKPOINT.md](PLAYABLE_CH
   touch and trackpad pinches cannot magnify the page while locked. The two reset
   buttons remain usable. Lobby previews use only Video controls.
   The accessible flat-board fallback keeps camera controls unavailable.
-  Input applies immediately without smoothing, including reduced motion.
+  Gestures apply immediately. Reset buttons and the 0 shortcut ease zoom,
+  orientation and pan back to the default view over 0.55 seconds. Reduced
+  motion resets immediately, and a new gesture interrupts the reset.
   The Director never writes this preference or the user's board transform.
   Framing, sale quotes and the floating Roll anchor share the same local transform
   and projection. View changes never cancel an event animation, advance the
@@ -227,6 +229,11 @@ decision clock; the engine reserves its full budget before the next decision or
 bot action. A `MoneyTransferred` event with reason `Tax` opens a matching
 six-second payment popup for every observer, naming the payer and exact amount.
 Its hold runs alongside the money animation and ends before the next event.
+A `PurchaseUnaffordable` event opens a four-second illustrated notice for every
+observer: a generated scene in the players' colours inside a cloud over the board,
+with the price written on its sign, and a parchment banner naming the player
+("you" on their own screen), the city, its price and their cash. See
+[CARD_ART.md](CARD_ART.md).
 Reduced motion keeps a
 static card and its instructions. Card art and prompts are documented in
 [CARD_ART.md](CARD_ART.md).

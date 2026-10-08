@@ -4,6 +4,7 @@ import {
   ruleEconomy,
 } from "../../shared/board/index.js";
 import {
+  arrivalSalary,
   type ChanceCard,
   chanceRule,
   economyRule,
@@ -408,8 +409,8 @@ export function describeChanceCard(
           "Go to Start and collect your salary.",
         ),
         text: t(
-          `Rejoignez le Départ. Le salaire de ${money(config.startSalary)} est versé si vous le franchissez.`,
-          `Move to Start. Collect ${money(config.startSalary)} salary if you pass it.`,
+          `Rejoignez le Départ. Vous vous y arrêtez, donc le salaire versé est de ${money(arrivalSalary(config))}.`,
+          `Move to Start. You land on it, so the salary paid is ${money(arrivalSalary(config))}.`,
         ),
       };
     case "Stranded":

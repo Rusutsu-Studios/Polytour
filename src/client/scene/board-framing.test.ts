@@ -57,6 +57,13 @@ describe("player board framing", () => {
     expect(camera.quaternion.equals(quaternion)).toBe(true);
     expect(camera.zoom).toBe(1.8);
   });
+  it("keeps intermediate reset zoom continuous instead of rounding to preference steps", () => {
+    const camera = initializeBoardCamera(new THREE.OrthographicCamera());
+    frameBoard(camera, 1440, 900, false, 1.347);
+    expect(camera.zoom).toBe(1.347);
+    frameBoard(camera, 1440, 900, false, 1.346);
+    expect(camera.zoom).toBe(1.346);
+  });
   it("turns gently and bounds pitch without accumulating full turns", () => {
     const gentle = rotateBoardOrientation(DEFAULT_BOARD_ORIENTATION, 120, 60);
     expect(gentle.yaw).toBeGreaterThan(0);

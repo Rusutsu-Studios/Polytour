@@ -1638,11 +1638,12 @@ input::placeholder {
   grid-column: auto;
 }
 .welcome-quick-settings .room-setting-heading {
-  display: block;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 .welcome-quick-settings .room-setting-heading label {
   display: block;
-  margin-bottom: 4px;
 }
 .welcome-quick-settings .room-setting-heading output {
   font-size: 24px;

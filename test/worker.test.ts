@@ -2932,7 +2932,11 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0].json,
       ) as GameState;
-      const { festivalDistribution: _distribution, ...config } = saved.config;
+      const {
+        festivalDistribution: _distribution,
+        startLandingBonus: _bonus,
+        ...config
+      } = saved.config;
       sql.exec("UPDATE meta SET v='11' WHERE k='rulesVersion'");
       sql.exec(
         "UPDATE state SET json=? WHERE id=1",
@@ -3017,7 +3021,7 @@ describe("Authoritative private rooms", () => {
               .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
               .toArray()[0].json,
           ) as GameState;
-          sql.exec("UPDATE meta SET v='12' WHERE k='rulesVersion'");
+          sql.exec("UPDATE meta SET v='13' WHERE k='rulesVersion'");
           sql.exec(
             "UPDATE state SET json=? WHERE id=1",
             JSON.stringify({
@@ -3053,7 +3057,7 @@ describe("Authoritative private rooms", () => {
       expect(lobby.festivalDistribution).toBe("spread");
     },
   );
-  it("freezes new rooms on rules version 12 with the Escape card, the reworked deck and the current economy", async () => {
+  it("freezes new rooms on rules version 13 with the Start landing bonus, the Escape card, the reworked deck and the current economy", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
     expect(game.state.config.hotelPurchaseRule).toBe("staged-hotels");
@@ -3068,6 +3072,7 @@ describe("Authoritative private rooms", () => {
     expect(game.state.config.resortFestivals).toBe(false);
     expect(game.state.config.festivalDistribution).toBe("spread");
     expect(game.state.config.escapeCard).toBe(true);
+    expect(game.state.config.startLandingBonus).toBe(true);
     const cities = getBoard(game.state.config)
       .filter(isCityTile)
       .map((tile) => tile.index);
@@ -3086,7 +3091,7 @@ describe("Authoritative private rooms", () => {
           .exec<{ v: string }>("SELECT v FROM meta WHERE k='rulesVersion'")
           .toArray()[0]?.v,
     );
-    expect(rules).toBe("12");
+    expect(rules).toBe("13");
     await evictDurableObject(stub);
     const resumed = await connect(game.credentials[0]);
     const welcome = await resumed.next("welcome");
@@ -3096,6 +3101,7 @@ describe("Authoritative private rooms", () => {
     expect(welcome.snapshot?.config.resortFestivals).toBe(false);
     expect(welcome.lobby.escapeCard).toBe(true);
     expect(welcome.snapshot?.config.escapeCard).toBe(true);
+    expect(welcome.snapshot?.config.startLandingBonus).toBe(true);
     expect(welcome.snapshot?.festivalTiles).toEqual(game.state.festivalTiles);
     expect(welcome.snapshot?.startingTurnOrder).toEqual(
       game.state.startingTurnOrder,
@@ -3110,6 +3116,9 @@ describe("Authoritative private rooms", () => {
     { version: "8", marker: true, ownReachable: true },
     { version: "9", marker: true, ownReachable: true },
     { version: "10", marker: true, ownReachable: true },
+    { version: "11", marker: true, ownReachable: true },
+    { version: "12", marker: true, ownReachable: true },
+    { version: "13", marker: true, ownReachable: true },
   ])(
     "opens a version-$version World Tour with the room's frozen destinations",
     async ({ version, marker, ownReachable }) => {
@@ -3123,7 +3132,8 @@ describe("Authoritative private rooms", () => {
           .exec<{ json: string }>("SELECT json FROM state WHERE id=1")
           .toArray()[0];
         const saved = JSON.parse(row.json) as GameState;
-        const { festivalDistribution: _distribution, ...v11 } = saved.config;
+        const { startLandingBonus: _bonus, ...v12 } = saved.config;
+        const { festivalDistribution: _distribution, ...v11 } = v12;
         const { chanceRule: _chance, ...v9 } = v11;
         const { escapeCard: _escape, ...v8 } = v9;
         const {
@@ -3133,25 +3143,31 @@ describe("Authoritative private rooms", () => {
           buildAfterBuyout: _build,
           ...bare
         } = v8;
-        // Versions before 10 predate the Chance marker; before 9 the Escape
-        // card; before 8 the resort and buyout markers; before 7 the festival
-        // marker, and before 6 the World Tour marker.
+        // Versions before 13 predate the Start landing marker; before 12 the
+        // festival-distribution marker; before 10 the
+        // Chance marker; before 9 the Escape card; before 8 the resort and
+        // buyout markers; before 7 the festival marker, and before 6 the World
+        // Tour marker.
         const config =
-          version === "10"
-            ? v11
-            : version === "9"
-              ? v9
-              : version === "8"
-                ? v8
-                : version === "7"
-                  ? {
-                      ...bare,
-                      resortFestivals: saved.config.resortFestivals,
-                      worldTourRule: saved.config.worldTourRule,
-                    }
-                  : marker
-                    ? { ...bare, worldTourRule: saved.config.worldTourRule }
-                    : bare;
+          version === "13"
+            ? saved.config
+            : version === "12"
+              ? v12
+              : version === "11" || version === "10"
+                ? v11
+                : version === "9"
+                  ? v9
+                  : version === "8"
+                    ? v8
+                    : version === "7"
+                      ? {
+                          ...bare,
+                          resortFestivals: saved.config.resortFestivals,
+                          worldTourRule: saved.config.worldTourRule,
+                        }
+                      : marker
+                        ? { ...bare, worldTourRule: saved.config.worldTourRule }
+                        : bare;
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
           version,
@@ -3196,6 +3212,10 @@ describe("Authoritative private rooms", () => {
       const welcome = await resumed.next("welcome");
       expect(welcome.lobby.worldTourRule).toBe(
         marker ? "free-and-own" : "free-first",
+      );
+      expect(welcome.lobby.startLandingBonus).toBe(version === "13");
+      expect(welcome.snapshot?.config.startLandingBonus).toBe(
+        version === "13" ? true : undefined,
       );
       resumed.send({
         type: "intent",
@@ -3242,6 +3262,7 @@ describe("Authoritative private rooms", () => {
         escapeCard: _escape,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...config
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3407,6 +3428,7 @@ describe("Authoritative private rooms", () => {
         escapeCard: _escape,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3526,6 +3548,7 @@ describe("Authoritative private rooms", () => {
         escapeCard: _escape,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3703,6 +3726,7 @@ describe("Authoritative private rooms", () => {
         escapeCard: _escape,
         festivalDistribution: _distribution,
         chanceRule: _chance,
+        startLandingBonus: _bonus,
         ...oldConfig
       } = saved.config;
       durableState.storage.sql.exec(
@@ -3820,11 +3844,12 @@ describe("Authoritative private rooms", () => {
   it("rejects saved games with unsupported or inconsistent frozen rules versions", async () => {
     const game = await startFour();
     const stub = env.GAME_ROOM.getByName(game.credentials[0].roomCode);
-    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 11, 999]) {
+    for (const rulesVersion of [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 999]) {
       // Versions 2 and 3 cannot use this new match's reference markers, version 5
       // cannot carry its World Tour marker, version 6 cannot exclude resort
       // festivals, version 7 the version-8 markers, version 8 the Escape card,
-      // version 9 the reworked Chance deck, version 11 the spread marker, and 999 is unknown.
+      // version 9 the reworked Chance deck, versions 10-12 the Start landing
+      // bonus, version 11 the spread marker, and 999 is unknown.
       await runInDurableObject(stub, (_instance, durableState) =>
         durableState.storage.sql.exec(
           "UPDATE meta SET v=? WHERE k='rulesVersion'",
@@ -3842,7 +3867,7 @@ describe("Authoritative private rooms", () => {
     // Restore to let normal socket close callbacks finish under the supported rules.
     await runInDurableObject(stub, (_instance, durableState) =>
       durableState.storage.sql.exec(
-        "UPDATE meta SET v='12' WHERE k='rulesVersion'",
+        "UPDATE meta SET v='13' WHERE k='rulesVersion'",
       ),
     );
   });
