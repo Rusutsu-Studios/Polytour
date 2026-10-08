@@ -392,7 +392,7 @@ lack Escape.
 | Land Swap | Optionally choose an opponent city; exchange it with your eligible city of lowest land price (not Hotels; prototype: not Landmarks) | |
 | Detour | Roll one die and move back that many tiles (before v9: 3 tiles) | |
 | Contractor | Upgrade one of your cities by 1 level for free | |
-| Jailbreak | Everyone on the Island is released | |
+| Rescue Boat | A rescue boat calls at the Island and everyone stuck there leaves | |
 | Charity | Give 100,000 to the poorest player | |
 | Escape | Leave the Island for free at the start of your trapped turn, then roll normally (v9) | ✅ |
 | Tailwind | Roll one die and move forward that many tiles (v10) | |
@@ -409,7 +409,7 @@ lack Escape.
 - Drawn, non-keep cards resolve immediately, then enter the discard pile. Keep cards
   leave the deck until used; a player can hold at most one Guardian Angel, one
   Coupon and one Escape card. Escape is added only when `escapeCard: true`, frozen
-  in new rules-version-9 rooms; saved decks and Jailbreak's immediate effect remain
+  in new rules-version-9 rooms; saved decks and Rescue Boat's immediate effect remain
   unchanged. When used, kept cards enter the discard pile. When the draw pile is empty, its
   discard pile replenishes it; held cards remain out of the draw. Each live draw
   uses fresh cryptographic rejection sampling, including from previously saved
@@ -438,7 +438,7 @@ lack Escape.
 - Contractor targets one of the drawer's non-Landmark cities and raises it exactly
   one legal level for free (Hotel still requires a completed lap); the free level
   counts toward invested value. It cannot create a Landmark, so a Hotel is not a
-  legal target. Jailbreak clears Island status without moving pawns.
+  legal target. Rescue Boat clears Island status without moving pawns.
 - Birthday payments resolve one payer at a time in `turnOrder`, and each payer may
   enter forced selling before the next payer is charged. Charity chooses the
   non-bankrupt player with the lowest cash, excluding the drawer; ties use earliest

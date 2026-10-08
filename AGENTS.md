@@ -305,7 +305,12 @@ queue. Only release pull requests consume fragments and advance the version.
 For an ordinary pull request:
 
 1. Add concrete bullet notes under `### Added`, `### Changed` or `### Fixed` in
-   its fragment, including useful issue or pull request references. Indent
+   its fragment, describing what changes for players. The notes appear in game:
+   omit Git, CI, protocol/state/rules version numbers, code paths and test counts.
+   Explain saved-match compatibility in ordinary language. Mark documentation,
+   CI and other internal-only changes with `<!-- internal -->`; they still need
+   valid notes and count toward the version bump but are omitted from player notes.
+   Keep issue/PR references in internal fragments or PR descriptions. Indent
    continuation lines for long notes. Patch is the default for fixes, maintenance
    and documentation. An optional first line `<!-- bump: minor -->` requests a
    minor release for a feature or substantial compatible improvement; use

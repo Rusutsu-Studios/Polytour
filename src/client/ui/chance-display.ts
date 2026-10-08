@@ -31,7 +31,7 @@ export const CARD_NAMES: Record<ChanceCard, string> = {
   "Land Swap": "Échange de terrain",
   Detour: "Détour",
   Contractor: "Coup de pouce",
-  Jailbreak: "Liberté",
+  "Rescue Boat": "Bateau de secours",
   Escape: "Carte d’évasion",
   Charity: "Solidarité",
   Tailwind: "Vent arrière",
@@ -58,7 +58,7 @@ const ENGLISH_CARD_NAMES: Record<ChanceCard, string> = {
   "Land Swap": "Land swap",
   Detour: "Detour",
   Contractor: "Contractor",
-  Jailbreak: "Jailbreak",
+  "Rescue Boat": "Rescue boat",
   Escape: "Escape card",
   Charity: "Charity",
   Tailwind: "Tailwind",
@@ -315,11 +315,11 @@ export function describeChanceCardDetails(
         ),
         noTarget,
       ];
-    case "Jailbreak":
+    case "Rescue Boat":
       return [
         t(
-          "Les pions restent sur place. Sans joueur détenu, la carte n’a aucun effet.",
-          "Pawns stay in place. If nobody is detained, the card has no effect.",
+          "Les pions restent sur place. Sans joueur bloqué sur l’île, la carte n’a aucun effet.",
+          "Pawns stay in place. If nobody is on the Island, the card has no effect.",
         ),
       ];
     case "Escape":
@@ -420,8 +420,8 @@ export function describeChanceCard(
         badge: t("Escale sur l’île", "Go to the Island"),
         short: t("Allez sur l’île.", "Go to the Island."),
         text: t(
-          `Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée${config.escapeCard === true ? ", avec une carte d’évasion" : ""} ou avec une libération.`,
-          `Move to the Island. Leave by rolling doubles, paying the fare${config.escapeCard === true ? ", using an escape card" : ""} or being released.`,
+          `Rejoignez l’Île paisible. Repartez avec un double, en payant la traversée${config.escapeCard === true ? ", avec une carte d’évasion" : ""} ou grâce au bateau de secours.`,
+          `Move to the Island. Leave by rolling doubles, paying the fare${config.escapeCard === true ? ", using an escape card" : ""} or when the rescue boat calls.`,
         ),
       };
     case "Jet Set":
@@ -725,15 +725,15 @@ export function describeChanceCard(
           "Choose one of your eligible cities to add one building level for free.",
         ),
       };
-    case "Jailbreak":
+    case "Rescue Boat":
       return {
         ...base,
         tone: "travel",
-        badge: t("Tout le monde repart", "Everyone is released"),
+        badge: t("Tout le monde embarque", "Everyone boards"),
         short: t("Tout le monde quitte l’île.", "Everyone leaves the Island."),
         text: t(
-          "Tous les joueurs présents sur l’Île paisible sont libérés. Ils repartent à leur tour.",
-          "All players on the Island are released. They move again on their next turn.",
+          "Un bateau de secours accoste sur l’Île paisible : tous les joueurs qui y sont bloqués rentrent. Ils repartent à leur tour.",
+          "A rescue boat calls at the Island: everyone stuck there leaves. They move again on their next turn.",
         ),
       };
     case "Escape":

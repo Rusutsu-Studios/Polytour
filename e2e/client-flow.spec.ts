@@ -2371,7 +2371,7 @@ const LUCK_CARD_TITLES = {
     "Échange de terrain",
     "Détour",
     "Coup de pouce",
-    "Liberté",
+    "Bateau de secours",
     "Solidarité",
     "Carte d’évasion",
     "Vent arrière",
@@ -2398,7 +2398,7 @@ const LUCK_CARD_TITLES = {
     "Land swap",
     "Detour",
     "Contractor",
-    "Jailbreak",
+    "Rescue boat",
     "Charity",
     "Escape card",
     "Tailwind",
@@ -2607,9 +2607,11 @@ for (const locale of ["fr", "en"] as const) {
     await expect(
       dialog.getByRole("heading", { name: `v${APP_VERSION}`, exact: true }),
     ).toBeVisible();
-    await expect(dialog).toContainText(
-      "The Championship corner is now a stadium",
-    );
+    await expect(dialog).toContainText("The Championship corner has a stadium");
+    await expect(dialog).toContainText("Landing exactly on Start pays 150%");
+    await expect(dialog).not.toContainText("Protocol version");
+    await expect(dialog).not.toContainText("CI runner");
+    await expect(dialog).not.toContainText("changelog.d/");
     await expect(
       dialog.getByRole("heading", { name: "v0.1.0", exact: true }),
     ).toHaveCount(1);

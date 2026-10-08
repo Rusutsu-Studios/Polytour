@@ -83,7 +83,7 @@ export const LEGACY_CHANCE_CARDS = [
   "Land Swap",
   "Detour",
   "Contractor",
-  "Jailbreak",
+  "Rescue Boat",
   "Charity",
 ] as const;
 /** Reworked decks only (rules version 10). */
