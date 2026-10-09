@@ -350,6 +350,9 @@ test("a guest can read each bot level but cannot cycle it", async ({
     await guest.goto(invitation.toString());
     await guest.getByLabel("Player name").fill("Difficulty guest");
     await guest.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(
+      guest.locator(".lobby-connection .connection-dot"),
+    ).toHaveAttribute("data-state", "online", { timeout: 30_000 });
     await expect(guest.locator(".seat-bot-difficulty")).toHaveCount(2);
     for (const button of await guest.locator(".seat-bot-difficulty").all()) {
       await expect(button).toBeDisabled();

@@ -798,8 +798,21 @@ for (const locale of ["fr", "en"] as const) {
     const before = rolls;
     await roll.click();
     await expect.poll(() => rolls).toBeGreaterThan(before);
+    snapshot = null;
     await page.reload();
+    // A reload can retry failed WebSocket upgrades before recovering the match.
+    await expect(page.locator(".match-connection")).toHaveAttribute(
+      "data-state",
+      "online",
+      { timeout: 30_000 },
+    );
     await expect(clock).toHaveText("∞");
+    await expect
+      .poll(() => snapshot)
+      .toMatchObject({
+        config: { timeLimitMinutes: null, decisionSeconds: 36 },
+        matchDeadline: null,
+      });
     for (const size of [
       { width: 1280, height: 720 },
       { width: 1440, height: 900 },
